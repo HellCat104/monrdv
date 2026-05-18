@@ -239,7 +239,7 @@ export default function HomePage() {
               S'inscrire gratuitement
             </Link>
             <Link
-              href="/choisir"
+              href="/login"
               className="inline-block bg-primary-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-primary-700 transition-colors border border-white/30"
             >
               Se connecter
