@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, MapPin, User, Stethoscope, Clock, Shield, Star } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 const SPECIALITES = [
   { label: 'Médecin généraliste', emoji: '🩺', color: 'bg-blue-50' },
@@ -24,6 +25,17 @@ export default function HomePage() {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [city, setCity] = useState('')
+  const [patientName, setPatientName] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        const name = user.user_metadata?.full_name || user.email?.split('@')[0] || null
+        setPatientName(name)
+      }
+    })
+  }, [])
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -56,13 +68,25 @@ export default function HomePage() {
               <span className="hidden sm:inline">Vous êtes soignant ?</span>
               <span className="sm:hidden">Soignant</span>
             </Link>
-            <Link
-              href="/choisir"
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
-            >
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">Se connecter</span>
-            </Link>
+            {patientName ? (
+              <Link
+                href="/patient/dashboard"
+                className="flex items-center gap-2 text-gray-700 hover:text-primary-600 text-sm font-medium transition-colors"
+              >
+                <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-xs">
+                  {patientName.charAt(0).toUpperCase()}
+                </div>
+                <span className="hidden sm:inline">{patientName.split(' ')[0]}</span>
+              </Link>
+            ) : (
+              <Link
+                href="/choisir"
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
+              >
+                <User className="h-4 w-4" />
+                <span className="hidden sm:inline">Se connecter</span>
+              </Link>
+            )}
           </nav>
         </div>
       </header>
