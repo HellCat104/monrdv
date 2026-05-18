@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -149,7 +150,10 @@ export default function LoginPage() {
         </Card>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          MonRDV — Prise de rendez-vous médicaux au Maroc 🇲🇦
+          Vous êtes patient ?{' '}
+          <Link href="/patient/login" className="text-primary-600 hover:underline font-medium">
+            Espace patient
+          </Link>
         </p>
       </div>
     </div>

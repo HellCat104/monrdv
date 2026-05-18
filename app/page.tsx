@@ -57,7 +57,7 @@ export default function HomePage() {
               <span className="sm:hidden">Soignant</span>
             </Link>
             <Link
-              href="/login"
+              href="/choisir"
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
             >
               <User className="h-4 w-4" />
@@ -215,7 +215,7 @@ export default function HomePage() {
               S'inscrire gratuitement
             </Link>
             <Link
-              href="/login"
+              href="/choisir"
               className="inline-block bg-primary-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-primary-700 transition-colors border border-white/30"
             >
               Se connecter

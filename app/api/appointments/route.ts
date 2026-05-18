@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     first_name,
     last_name,
     phone,
+    email,
     date,
     time,
     notes,
@@ -87,10 +88,14 @@ export async function POST(req: NextRequest) {
 
   if (existingPatient) {
     patientId = existingPatient.id
+    // Update email if patient didn't have one
+    if (email) {
+      await db.from('patients').update({ email }).eq('id', patientId).is('email', null)
+    }
   } else {
     const { data: newPatient, error: patientError } = await db
       .from('patients')
-      .insert({ doctor_id, first_name, last_name, phone: formattedPhone })
+      .insert({ doctor_id, first_name, last_name, phone: formattedPhone, email: email || null })
       .select('id')
       .single()
 

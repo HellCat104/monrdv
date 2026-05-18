@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDateShort, formatTime } from '@/lib/utils'
-import { CheckCircle2, User, Phone, MessageSquare } from 'lucide-react'
+import { CheckCircle2, User, Phone, MessageSquare, Mail } from 'lucide-react'
 import type { Doctor } from '@/types'
 
 interface BookingFormProps {
@@ -18,7 +18,7 @@ interface BookingFormProps {
 }
 
 export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSuccess }: BookingFormProps) {
-  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', notes: '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', notes: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [confirmed, setConfirmed] = useState(false)
@@ -124,6 +124,20 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
             required
           />
           <p className="text-xs text-gray-400">Vous recevrez une confirmation par SMS</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="b_email" className="flex items-center gap-1.5">
+            <Mail className="h-3 w-3" /> Email (optionnel)
+          </Label>
+          <Input
+            id="b_email"
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            placeholder="vous@exemple.ma"
+          />
+          <p className="text-xs text-gray-400">Pour retrouver vos RDV dans votre espace patient</p>
         </div>
 
         <div className="space-y-1.5">
