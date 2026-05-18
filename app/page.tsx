@@ -3,7 +3,22 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, MapPin, HelpCircle, User, Stethoscope, Clock, Shield, Star } from 'lucide-react'
+import { Search, MapPin, User, Stethoscope, Clock, Shield, Star } from 'lucide-react'
+
+const SPECIALITES = [
+  { label: 'Médecin généraliste', emoji: '🩺', color: 'bg-blue-50' },
+  { label: 'Cardiologue',          emoji: '❤️', color: 'bg-red-50' },
+  { label: 'Dermatologue',         emoji: '🔬', color: 'bg-orange-50' },
+  { label: 'Pédiatre',             emoji: '👶', color: 'bg-pink-50' },
+  { label: 'Gynécologue',          emoji: '🌸', color: 'bg-purple-50' },
+  { label: 'Ophtalmologue',        emoji: '👁️', color: 'bg-cyan-50' },
+  { label: 'Dentiste',             emoji: '🦷', color: 'bg-teal-50' },
+  { label: 'Orthopédiste',         emoji: '🦴', color: 'bg-yellow-50' },
+  { label: 'Neurologue',           emoji: '🧠', color: 'bg-indigo-50' },
+  { label: 'Pneumologue',          emoji: '🫁', color: 'bg-sky-50' },
+  { label: 'Endocrinologue',       emoji: '⚗️', color: 'bg-lime-50' },
+  { label: 'Psychiatre',           emoji: '🧘', color: 'bg-violet-50' },
+]
 
 export default function HomePage() {
   const router = useRouter()
@@ -102,6 +117,32 @@ export default function HomePage() {
                 className="bg-white/20 hover:bg-white/30 text-white text-xs px-4 py-1.5 rounded-full transition-colors"
               >
                 {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Spécialités */}
+      <section className="py-12 px-4 bg-white">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
+            Trouvez un médecin par spécialité
+          </h2>
+          <p className="text-gray-500 text-sm text-center mb-8">
+            Cliquez sur une spécialité pour voir les médecins disponibles
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {SPECIALITES.map(({ label, emoji, color }) => (
+              <button
+                key={label}
+                onClick={() => router.push(`/recherche?q=${encodeURIComponent(label)}`)}
+                className={`flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-transparent hover:border-primary-200 hover:shadow-md transition-all group ${color}`}
+              >
+                <span className="text-3xl">{emoji}</span>
+                <span className="text-sm font-semibold text-gray-800 group-hover:text-primary-600 text-center leading-tight">
+                  {label}
+                </span>
               </button>
             ))}
           </div>
