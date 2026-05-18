@@ -1,0 +1,119 @@
+// Types principaux de l'application MonRDV
+
+export interface Doctor {
+  id: string
+  name: string
+  email: string
+  phone: string
+  specialty: string
+  slug: string
+  working_hours: WorkingHours
+  appointment_duration: number // en minutes : 15, 20 ou 30
+  created_at: string
+}
+
+export interface WorkingHours {
+  monday: DaySchedule
+  tuesday: DaySchedule
+  wednesday: DaySchedule
+  thursday: DaySchedule
+  friday: DaySchedule
+  saturday: DaySchedule
+  sunday: DaySchedule
+}
+
+export interface DaySchedule {
+  enabled: boolean
+  start: string // format HH:mm
+  end: string   // format HH:mm
+}
+
+export interface Patient {
+  id: string
+  doctor_id: string
+  first_name: string
+  last_name: string
+  phone: string
+  created_at: string
+}
+
+export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled'
+
+export interface Appointment {
+  id: string
+  doctor_id: string
+  patient_id: string
+  date: string         // format YYYY-MM-DD
+  time: string         // format HH:mm
+  status: AppointmentStatus
+  notes: string | null
+  cancel_token: string | null
+  created_at: string
+  // Relations jointes
+  patient?: Patient
+}
+
+// Pour les créneaux disponibles
+export interface TimeSlot {
+  time: string    // format HH:mm
+  available: boolean
+}
+
+// Pour la réservation publique
+export interface BookingFormData {
+  first_name: string
+  last_name: string
+  phone: string
+  date: string
+  time: string
+  notes?: string
+}
+
+// Statistiques du tableau de bord
+export interface DashboardStats {
+  today_count: number
+  month_count: number
+  cancelled_count: number
+  absence_rate: number
+}
+
+// Jours de congé
+export interface VacationDay {
+  date: string // format YYYY-MM-DD
+  label: string
+}
+
+// Horaires par défaut (Maroc, lundi-vendredi 9h-18h)
+export const DEFAULT_WORKING_HOURS: WorkingHours = {
+  monday:    { enabled: true,  start: '09:00', end: '18:00' },
+  tuesday:   { enabled: true,  start: '09:00', end: '18:00' },
+  wednesday: { enabled: true,  start: '09:00', end: '18:00' },
+  thursday:  { enabled: true,  start: '09:00', end: '18:00' },
+  friday:    { enabled: true,  start: '09:00', end: '13:00' },
+  saturday:  { enabled: true,  start: '09:00', end: '13:00' },
+  sunday:    { enabled: false, start: '09:00', end: '18:00' },
+}
+
+// Correspondance noms des jours français
+export const DAY_NAMES_FR: Record<keyof WorkingHours, string> = {
+  monday:    'Lundi',
+  tuesday:   'Mardi',
+  wednesday: 'Mercredi',
+  thursday:  'Jeudi',
+  friday:    'Vendredi',
+  saturday:  'Samedi',
+  sunday:    'Dimanche',
+}
+
+// Statuts en français
+export const STATUS_LABELS: Record<AppointmentStatus, string> = {
+  pending:   'En attente',
+  confirmed: 'Confirmé',
+  cancelled: 'Annulé',
+}
+
+export const STATUS_COLORS: Record<AppointmentStatus, string> = {
+  pending:   'bg-yellow-100 text-yellow-800',
+  confirmed: 'bg-green-100 text-green-800',
+  cancelled: 'bg-red-100 text-red-800',
+}
