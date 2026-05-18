@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -18,10 +20,9 @@ export default function PatientLoginPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const supabase = createClient()
-
   async function handleGoogleLogin() {
     setLoading(true)
+    const supabase = createClient()
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -32,6 +33,7 @@ export default function PatientLoginPage() {
 
   async function handleAppleLogin() {
     setLoading(true)
+    const supabase = createClient()
     await supabase.auth.signInWithOAuth({
       provider: 'apple',
       options: {
@@ -44,6 +46,7 @@ export default function PatientLoginPage() {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
+    const supabase = createClient()
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -62,6 +65,7 @@ export default function PatientLoginPage() {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
+    const supabase = createClient()
     const formatted = phone.startsWith('+') ? phone : `+212${phone.replace(/^0/, '')}`
     const { error } = await supabase.auth.signInWithOtp({ phone: formatted })
     setLoading(false)
@@ -77,6 +81,7 @@ export default function PatientLoginPage() {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
+    const supabase = createClient()
     const formatted = phone.startsWith('+') ? phone : `+212${phone.replace(/^0/, '')}`
     const { error } = await supabase.auth.verifyOtp({ phone: formatted, token: otp, type: 'sms' })
     setLoading(false)
