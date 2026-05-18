@@ -12,6 +12,7 @@ interface Doctor {
   specialty: string
   slug: string
   phone: string
+  city: string
   appointment_duration: number
 }
 
@@ -123,10 +124,10 @@ function RechercheContent() {
                         <Clock className="h-3 w-3" />
                         Consultation {doctor.appointment_duration} min
                       </span>
-                      {doctor.phone && (
+                      {doctor.city && (
                         <span className="flex items-center gap-1">
                           <MapPin className="h-3 w-3" />
-                          {doctor.phone}
+                          {doctor.city}
                         </span>
                       )}
                     </div>

@@ -21,6 +21,7 @@ export default function InscriptionPage() {
     password: '',
     specialty: '',
     phone: '',
+    city: '',
     slug: '',
   })
 
@@ -185,6 +186,18 @@ export default function InscriptionPage() {
                     placeholder="05 22 XX XX XX"
                   />
                 </div>
+              </div>
+
+              {/* Ville */}
+              <div className="space-y-1.5">
+                <Label htmlFor="city">Ville *</Label>
+                <Input
+                  id="city"
+                  value={form.city}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                  placeholder="Casablanca"
+                  required
+                />
               </div>
 
               {/* Slug */}

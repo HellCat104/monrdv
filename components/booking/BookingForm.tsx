@@ -57,7 +57,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
 
   if (confirmed) {
     return (
-      <div className="text-center py-8 space-y-4">
+      <div className="text-center py-6 space-y-4">
         <div className="flex justify-center">
           <CheckCircle2 className="h-16 w-16 text-green-500" />
         </div>
@@ -70,6 +70,17 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
         <p className="text-gray-500 text-xs">
           Un SMS de confirmation a été envoyé sur votre téléphone.
         </p>
+        {/* CTA créer un compte */}
+        <div className="mt-4 bg-primary-50 border border-primary-100 rounded-xl p-4 text-left space-y-2">
+          <p className="text-sm font-semibold text-primary-800">Retrouvez vos RDV facilement</p>
+          <p className="text-xs text-primary-600">Créez un compte patient gratuit pour voir tous vos rendez-vous en un seul endroit.</p>
+          <a
+            href="/patient/login"
+            className="inline-block bg-primary-500 hover:bg-primary-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors mt-1"
+          >
+            Créer mon espace patient
+          </a>
+        </div>
       </div>
     )
   }

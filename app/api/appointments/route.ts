@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendConfirmationSMS } from '@/lib/twilio'
+import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
 import { formatPhoneMaroc, generateCancelToken } from '@/lib/utils'
 
 // GET /api/appointments?doctor_id=...&date=...
@@ -124,24 +125,52 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Erreur création RDV' }, { status: 500 })
   }
 
-  // Récupère les infos du médecin pour le SMS
+  // Récupère les infos du médecin pour le SMS et les emails
   const { data: doctor } = await db
     .from('doctors')
-    .select('name')
+    .select('name, email, specialty')
     .eq('id', doctor_id)
     .single()
 
-  // Envoie le SMS de confirmation (async, non-bloquant)
   const baseUrl = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || ''
+  const patientName = `${first_name} ${last_name}`
+
+  // SMS de confirmation au patient (async, non-bloquant)
   sendConfirmationSMS({
     to: formattedPhone,
-    patientName: `${first_name} ${last_name}`,
+    patientName,
     doctorName: doctor?.name ?? 'votre médecin',
     date,
     time,
     cancelToken,
     baseUrl,
   }).catch((err) => console.error('[SMS]', err))
+
+  // Email de notification au médecin
+  if (doctor?.email) {
+    sendNewAppointmentToDoctor({
+      doctorEmail: doctor.email,
+      doctorName: doctor.name,
+      patientName,
+      patientPhone: formattedPhone,
+      date,
+      time,
+      notes: notes || undefined,
+    }).catch((err) => console.error('[Email] notif médecin:', err))
+  }
+
+  // Email de confirmation au patient (si email fourni)
+  if (email && doctor) {
+    sendAppointmentConfirmationToPatient({
+      patientEmail: email,
+      patientName,
+      doctorName: doctor.name,
+      specialty: doctor.specialty,
+      date,
+      time,
+      cancelToken,
+    }).catch((err) => console.error('[Email] confirmation patient:', err))
+  }
 
   return NextResponse.json(appointment, { status: 201 })
 }

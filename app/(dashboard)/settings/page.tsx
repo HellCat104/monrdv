@@ -21,6 +21,7 @@ export default function SettingsPage() {
     name: '',
     phone: '',
     specialty: '',
+    city: '',
     appointment_duration: 30,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
   })
@@ -44,6 +45,7 @@ export default function SettingsPage() {
           name: data.name,
           phone: data.phone ?? '',
           specialty: data.specialty ?? '',
+          city: data.city ?? '',
           appointment_duration: data.appointment_duration,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
         })
@@ -74,6 +76,7 @@ export default function SettingsPage() {
           name: form.name,
           phone: form.phone,
           specialty: form.specialty,
+          city: form.city,
           appointment_duration: form.appointment_duration,
           working_hours: form.working_hours,
         })
@@ -181,6 +184,15 @@ export default function SettingsPage() {
                   placeholder="05 22 XX XX XX"
                 />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="s_city">Ville</Label>
+              <Input
+                id="s_city"
+                value={form.city}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                placeholder="Casablanca"
+              />
             </div>
           </CardContent>
         </Card>
