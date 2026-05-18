@@ -37,6 +37,33 @@ export default function LoginPage() {
         return
       }
 
+      // Admin → dashboard admin
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+        router.push('/admin')
+        router.refresh()
+        return
+      }
+
+      // Vérifie le statut du médecin
+      const { data: doctor } = await supabase
+        .from('doctors')
+        .select('status, rejection_reason')
+        .eq('email', user?.email)
+        .single()
+
+      if (doctor?.status === 'pending') {
+        await supabase.auth.signOut()
+        setError('Votre compte est en cours de vérification. Vous recevrez un email sous 24-48h.')
+        return
+      }
+
+      if (doctor?.status === 'rejected') {
+        await supabase.auth.signOut()
+        setError(`Votre demande a été refusée.${doctor.rejection_reason ? ` Motif : ${doctor.rejection_reason}` : ''} Contactez-nous pour plus d'informations.`)
+        return
+      }
+
       router.push('/dashboard')
       router.refresh()
     } catch {

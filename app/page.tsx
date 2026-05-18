@@ -34,7 +34,7 @@ export default function HomePage() {
           {/* Nav */}
           <nav className="flex items-center gap-2 sm:gap-4">
             <Link
-              href="/login"
+              href="/inscription"
               className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-full text-sm font-semibold transition-colors"
             >
               <Stethoscope className="h-4 w-4" />
@@ -166,12 +166,20 @@ export default function HomePage() {
           <p className="text-primary-100 mb-8">
             Rejoignez MonRDV et gérez vos rendez-vous facilement depuis votre téléphone.
           </p>
-          <Link
-            href="/login"
-            className="inline-block bg-white text-primary-600 font-bold px-8 py-3 rounded-xl hover:bg-primary-50 transition-colors"
-          >
-            Accéder à mon espace médecin
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              href="/inscription"
+              className="inline-block bg-white text-primary-600 font-bold px-8 py-3 rounded-xl hover:bg-primary-50 transition-colors"
+            >
+              S'inscrire gratuitement
+            </Link>
+            <Link
+              href="/login"
+              className="inline-block bg-primary-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-primary-700 transition-colors border border-white/30"
+            >
+              Se connecter
+            </Link>
+          </div>
         </div>
       </section>
 
