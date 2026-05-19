@@ -1,6 +1,8 @@
-// GET /api/admin/doctors — liste tous les médecins (admin seulement, bypass RLS)
+// GET /api/admin/doctors — liste + compteurs (admin seulement, bypass RLS)
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   // Vérifie que c'est bien l'admin connecté
@@ -12,10 +14,26 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const status = searchParams.get('status') // 'pending' | 'approved' | 'rejected' | null (= tous)
+  const status      = searchParams.get('status')  // 'pending' | 'approved' | 'rejected' | null
+  const countsOnly  = searchParams.get('counts') === '1'
 
   const adminDb = createAdminClient()
 
+  // ── Mode compteurs uniquement (3 requêtes count légères) ──────────────────
+  if (countsOnly) {
+    const [pending, approved, rejected] = await Promise.all([
+      adminDb.from('doctors').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      adminDb.from('doctors').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+      adminDb.from('doctors').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
+    ])
+    return NextResponse.json({
+      pending:  pending.count  ?? 0,
+      approved: approved.count ?? 0,
+      rejected: rejected.count ?? 0,
+    }, { headers: { 'Cache-Control': 'no-store' } })
+  }
+
+  // ── Mode liste ────────────────────────────────────────────────────────────
   let query = adminDb
     .from('doctors')
     .select('id, name, email, specialty, phone, slug, status, subscription_status, date_expiration, document_url, rejection_reason, created_at')
@@ -31,5 +49,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data ?? [])
+  return NextResponse.json(data ?? [], { headers: { 'Cache-Control': 'no-store' } })
 }

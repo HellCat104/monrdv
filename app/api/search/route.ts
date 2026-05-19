@@ -5,15 +5,19 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const q = searchParams.get('q')?.toLowerCase() || ''
-  const ville = searchParams.get('ville')?.toLowerCase() || ''
+  const q     = searchParams.get('q')?.trim() || ''
+  const ville = searchParams.get('ville')?.trim() || ''
 
   const supabase = createAdminClient()
 
+  // Filtres DB directs — approved + actif uniquement, pas de limite arbitraire
   let query = supabase
     .from('doctors')
-    .select('id, name, specialty, slug, phone, city, appointment_duration, status, subscription_status')
+    .select('id, name, specialty, slug, phone, city, appointment_duration')
+    .eq('status', 'approved')
+    .eq('subscription_status', 'actif')
     .order('name', { ascending: true })
+    .limit(50) // 50 résultats max affichés, filtres déjà appliqués côté DB
 
   if (q) {
     query = query.or(`name.ilike.%${q}%,specialty.ilike.%${q}%`)
@@ -23,24 +27,13 @@ export async function GET(req: NextRequest) {
     query = query.ilike('city', `%${ville}%`)
   }
 
-  const { data, error } = await query.limit(100)
-
-  console.log('[search] total rows:', data?.length, '| error:', error?.message)
-  console.log('[search] rows:', JSON.stringify(data?.map(d => ({ name: d.name, status: d.status, sub: d.subscription_status }))))
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Filtre côté serveur
-  const filtered = (data ?? [])
-    .filter(d => d.status === 'approved' && d.subscription_status === 'actif')
-    .map(({ status, subscription_status, ...rest }) => rest)
-
-  console.log('[search] filtered:', filtered.length)
-
-  return NextResponse.json(filtered, {
+  return NextResponse.json(data ?? [], {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',
-      'Pragma': 'no-cache',
     },
   })
 }

@@ -93,13 +93,13 @@ export default function AdminPage() {
   // ── chargement ────────────────────────────────────────────────────────────
   const loadCounts = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/doctors')
+      const res = await fetch('/api/admin/doctors?counts=1')
       if (!res.ok) return
-      const all: DoctorRow[] = await res.json()
+      const data = await res.json()
       setCounts({
-        pending:  all.filter((d) => d.status === 'pending').length,
-        approved: all.filter((d) => d.status === 'approved').length,
-        rejected: all.filter((d) => d.status === 'rejected').length,
+        pending:  data.pending  ?? 0,
+        approved: data.approved ?? 0,
+        rejected: data.rejected ?? 0,
       })
     } catch { /* silencieux */ }
   }, [])
