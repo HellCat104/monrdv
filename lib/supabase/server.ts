@@ -10,6 +10,10 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: {
+        fetch: (url: RequestInfo | URL, options: RequestInit = {}) =>
+          fetch(url, { ...options, cache: 'no-store' }),
+      },
       cookies: {
         getAll() {
           return cookieStore.getAll()
@@ -28,7 +32,7 @@ export function createClient() {
   )
 }
 
-// Client avec droits admin (service_role) — bypass total des RLS
+// Client avec droits admin (service_role) — bypass total des RLS, no cache
 export function createAdminClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,6 +41,11 @@ export function createAdminClient() {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
+      },
+      global: {
+        // Désactive le cache Vercel sur tous les appels fetch Supabase
+        fetch: (url: RequestInfo | URL, options: RequestInit = {}) =>
+          fetch(url, { ...options, cache: 'no-store' }),
       },
     }
   )
