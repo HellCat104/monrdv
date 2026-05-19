@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     .from('doctors')
     .select('id, name, specialty, slug, phone, city, appointment_duration')
     .eq('status', 'approved')
+    .eq('subscription_status', 'actif')
     .order('name', { ascending: true })
 
   if (q) {

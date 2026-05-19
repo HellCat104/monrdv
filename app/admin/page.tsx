@@ -1,17 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect, useState, useCallback } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getInitials, formatDateShort } from '@/lib/utils'
-import { CheckCircle2, XCircle, FileText, ExternalLink, Clock, Users } from 'lucide-react'
+import {
+  CheckCircle2, XCircle, FileText, Clock, Users,
+  ToggleLeft, ToggleRight, CalendarDays, LogOut, RefreshCw,
+} from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
-interface DoctorWithStatus {
+interface DoctorRow {
   id: string
   name: string
   email: string
@@ -19,116 +22,215 @@ interface DoctorWithStatus {
   phone: string
   slug: string
   status: 'pending' | 'approved' | 'rejected'
+  subscription_status: 'actif' | 'inactif'
+  date_expiration: string | null
   document_url: string | null
   rejection_reason: string | null
   created_at: string
 }
 
 const STATUS_CONFIG = {
-  pending:  { label: 'En attente', color: 'warning',   icon: Clock },
-  approved: { label: 'Approuvé',   color: 'success',   icon: CheckCircle2 },
-  rejected: { label: 'Refusé',     color: 'destructive', icon: XCircle },
+  pending:  { label: 'En attente', icon: Clock },
+  approved: { label: 'Approuvé',   icon: CheckCircle2 },
+  rejected: { label: 'Refusé',     icon: XCircle },
 } as const
 
+type Filter = 'all' | 'pending' | 'approved' | 'rejected'
+
+// ─── petit composant toast ────────────────────────────────────────────────────
+function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
+  return (
+    <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all ${
+      type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    }`}>
+      {message}
+    </div>
+  )
+}
+
 export default function AdminPage() {
-  const [doctors, setDoctors] = useState<DoctorWithStatus[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
-  const [rejectDialog, setRejectDialog] = useState<{ open: boolean; id: string; name: string }>({
-    open: false, id: '', name: '',
-  })
-  const [rejectReason, setRejectReason] = useState('')
+  const router = useRouter()
+  const [doctors, setDoctors]     = useState<DoctorRow[]>([])
+  const [counts, setCounts]       = useState({ pending: 0, approved: 0, rejected: 0 })
+  const [loading, setLoading]     = useState(true)
+  const [filter, setFilter]       = useState<Filter>('pending')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [toast, setToast]         = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
-  const supabase = createClient()
+  // Dialogs
+  const [rejectDialog, setRejectDialog]         = useState<{ open: boolean; id: string; name: string }>({ open: false, id: '', name: '' })
+  const [rejectReason, setRejectReason]         = useState('')
+  const [expirationDialog, setExpirationDialog] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: '', name: '' })
+  const [newExpiration, setNewExpiration]       = useState('')
 
-  async function loadDoctors() {
-    setLoading(true)
-    let query = supabase
-      .from('doctors')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (filter !== 'all') query = query.eq('status', filter)
-
-    const { data } = await query
-    setDoctors(data ?? [])
-    setLoading(false)
+  // ── helpers ────────────────────────────────────────────────────────────────
+  function showToast(message: string, type: 'success' | 'error') {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3000)
   }
 
-  useEffect(() => { loadDoctors() }, [filter])
-
-  async function handleApprove(id: string) {
-    setActionLoading(id)
+  async function apiFetch(id: string, body: object): Promise<boolean> {
     try {
-      await fetch(`/api/admin/doctors/${id}`, {
+      const res = await fetch(`/api/admin/doctors/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve' }),
+        body: JSON.stringify(body),
       })
-      await loadDoctors()
-    } finally {
-      setActionLoading(null)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        showToast(err.error || `Erreur ${res.status}`, 'error')
+        return false
+      }
+      return true
+    } catch {
+      showToast('Erreur réseau — réessayez', 'error')
+      return false
     }
+  }
+
+  // ── chargement ────────────────────────────────────────────────────────────
+  const loadCounts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/doctors')
+      if (!res.ok) return
+      const all: DoctorRow[] = await res.json()
+      setCounts({
+        pending:  all.filter((d) => d.status === 'pending').length,
+        approved: all.filter((d) => d.status === 'approved').length,
+        rejected: all.filter((d) => d.status === 'rejected').length,
+      })
+    } catch { /* silencieux */ }
+  }, [])
+
+  const loadDoctors = useCallback(async (f: Filter) => {
+    setLoading(true)
+    try {
+      const url = f === 'all' ? '/api/admin/doctors' : `/api/admin/doctors?status=${f}`
+      const res = await fetch(url)
+      if (!res.ok) {
+        showToast('Impossible de charger les médecins', 'error')
+        setDoctors([])
+        return
+      }
+      const data: DoctorRow[] = await res.json()
+      setDoctors(data)
+    } catch {
+      showToast('Erreur réseau', 'error')
+      setDoctors([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadCounts() }, [loadCounts])
+  useEffect(() => { loadDoctors(filter) }, [filter, loadDoctors])
+
+  async function refresh() {
+    await Promise.all([loadDoctors(filter), loadCounts()])
+  }
+
+  // ── actions ───────────────────────────────────────────────────────────────
+  async function handleApprove(id: string) {
+    setActionLoading(id)
+    const ok = await apiFetch(id, { action: 'approve' })
+    if (ok) showToast('Médecin approuvé ✓', 'success')
+    await refresh()
+    setActionLoading(null)
   }
 
   async function handleReject() {
-    setActionLoading(rejectDialog.id)
-    try {
-      await fetch(`/api/admin/doctors/${rejectDialog.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reject', rejection_reason: rejectReason }),
-      })
-      setRejectDialog({ open: false, id: '', name: '' })
-      setRejectReason('')
-      await loadDoctors()
-    } finally {
-      setActionLoading(null)
+    const { id, name } = rejectDialog
+    setActionLoading(id)
+    const ok = await apiFetch(id, { action: 'reject', rejection_reason: rejectReason })
+    if (ok) showToast(`Dr. ${name} refusé`, 'success')
+    setRejectDialog({ open: false, id: '', name: '' })
+    setRejectReason('')
+    await refresh()
+    setActionLoading(null)
+  }
+
+  async function handleToggle(id: string, name: string, currentStatus: string) {
+    setActionLoading(id)
+    const ok = await apiFetch(id, { action: 'toggle_subscription' })
+    if (ok) {
+      const next = currentStatus === 'actif' ? 'inactif' : 'actif'
+      showToast(`Dr. ${name} → ${next}`, 'success')
     }
+    await refresh()
+    setActionLoading(null)
   }
 
-  const counts = {
-    pending:  doctors.filter((d) => d.status === 'pending').length,
-    approved: doctors.filter((d) => d.status === 'approved').length,
-    rejected: doctors.filter((d) => d.status === 'rejected').length,
+  async function handleSetExpiration() {
+    const { id, name } = expirationDialog
+    setActionLoading(id)
+    const ok = await apiFetch(id, { action: 'set_expiration', date_expiration: newExpiration || null })
+    if (ok) showToast('Date d\'expiration enregistrée ✓', 'success')
+    setExpirationDialog({ open: false, id: '', name: '' })
+    setNewExpiration('')
+    await refresh()
+    setActionLoading(null)
   }
 
+  async function handleLogout() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  // ── rendu ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Gestion des médecins</h1>
-        <p className="text-gray-500 text-sm mt-1">Approuvez ou refusez les demandes d'inscription</p>
+      {/* Toast */}
+      {toast && <Toast message={toast.message} type={toast.type} />}
+
+      {/* En-tête */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Gestion des médecins</h1>
+          <p className="text-gray-500 text-sm mt-1">Approuvez ou refusez les demandes d'inscription</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={refresh}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 border rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Actualiser
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" /> Déconnexion
+          </button>
+        </div>
       </div>
 
       {/* Stats rapides */}
       <div className="grid grid-cols-3 gap-4">
-        {[
+        {([
           { key: 'pending',  label: 'En attente', color: 'bg-yellow-50 border-yellow-200 text-yellow-700' },
-          { key: 'approved', label: 'Approuvés',  color: 'bg-green-50  border-green-200  text-green-700'  },
-          { key: 'rejected', label: 'Refusés',    color: 'bg-red-50    border-red-200    text-red-700'    },
-        ].map(({ key, label, color }) => (
+          { key: 'approved', label: 'Approuvés',  color: 'bg-green-50 border-green-200 text-green-700'  },
+          { key: 'rejected', label: 'Refusés',    color: 'bg-red-50 border-red-200 text-red-700'    },
+        ] as const).map(({ key, label, color }) => (
           <button
             key={key}
-            onClick={() => setFilter(key as typeof filter)}
-            className={`rounded-xl border p-4 text-center transition-all ${color} ${filter === key ? 'ring-2 ring-offset-1 ring-gray-300' : ''}`}
+            onClick={() => setFilter(key)}
+            className={`rounded-xl border p-4 text-center transition-all ${color} ${filter === key ? 'ring-2 ring-offset-1 ring-gray-400 shadow-sm' : 'hover:shadow-sm'}`}
           >
-            <p className="text-2xl font-bold">{counts[key as keyof typeof counts]}</p>
+            <p className="text-2xl font-bold">{counts[key]}</p>
             <p className="text-xs font-medium mt-1">{label}</p>
           </button>
         ))}
       </div>
 
-      {/* Filtre */}
-      <div className="flex gap-2">
+      {/* Filtres */}
+      <div className="flex gap-2 flex-wrap">
         {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              filter === f
-                ? 'bg-gray-900 text-white'
-                : 'bg-white text-gray-600 border hover:bg-gray-50'
+              filter === f ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border hover:bg-gray-50'
             }`}
           >
             {f === 'all' ? 'Tous' : f === 'pending' ? 'En attente' : f === 'approved' ? 'Approuvés' : 'Refusés'}
@@ -136,10 +238,10 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {/* Liste des médecins */}
+      {/* Liste */}
       {loading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-white rounded-xl animate-pulse" />)}
+          {[1, 2, 3].map((i) => <div key={i} className="h-28 bg-white rounded-xl animate-pulse border" />)}
         </div>
       ) : doctors.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
@@ -149,14 +251,16 @@ export default function AdminPage() {
       ) : (
         <div className="space-y-4">
           {doctors.map((doctor) => {
-            const config = STATUS_CONFIG[doctor.status]
+            const config    = STATUS_CONFIG[doctor.status]
             const StatusIcon = config.icon
+            const isLoading  = actionLoading === doctor.id
+
             return (
-              <Card key={doctor.id} className="border border-gray-100">
+              <Card key={doctor.id} className="border border-gray-100 hover:shadow-sm transition-shadow">
                 <CardContent className="p-5">
                   <div className="flex items-start gap-4">
                     {/* Avatar */}
-                    <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-bold shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-bold text-sm shrink-0">
                       {getInitials(doctor.name.split(' ')[0], doctor.name.split(' ')[1] || 'X')}
                     </div>
 
@@ -164,33 +268,90 @@ export default function AdminPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-gray-900">Dr. {doctor.name}</span>
+
+                        {/* Badge statut inscription */}
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                           doctor.status === 'pending'  ? 'bg-yellow-100 text-yellow-700' :
-                          doctor.status === 'approved' ? 'bg-green-100 text-green-700' :
+                          doctor.status === 'approved' ? 'bg-green-100 text-green-700'   :
                           'bg-red-100 text-red-700'
                         }`}>
                           <StatusIcon className="h-3 w-3" />
                           {config.label}
                         </span>
+
+                        {/* Badge abonnement */}
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                          doctor.subscription_status === 'actif'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}>
+                          {doctor.subscription_status === 'actif' ? '● Actif' : '○ Inactif'}
+                        </span>
                       </div>
-                      <p className="text-sm text-gray-500 mt-0.5">{doctor.specialty} · {doctor.email}</p>
+
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {doctor.specialty} · {doctor.email}
+                        {doctor.phone ? ` · ${doctor.phone}` : ''}
+                      </p>
+
                       <p className="text-xs text-gray-400 mt-0.5">
                         Inscrit le {formatDateShort(doctor.created_at.split('T')[0])}
                         {doctor.rejection_reason && (
-                          <span className="ml-2 text-red-500">Motif : {doctor.rejection_reason}</span>
+                          <span className="ml-2 text-red-400">Motif : {doctor.rejection_reason}</span>
                         )}
                       </p>
+
+                      {doctor.date_expiration && (
+                        <p className={`text-xs mt-0.5 ${
+                          new Date(doctor.date_expiration) < new Date() ? 'text-red-500' :
+                          Math.ceil((new Date(doctor.date_expiration).getTime() - Date.now()) / 86400000) <= 7
+                            ? 'text-orange-500' : 'text-gray-400'
+                        }`}>
+                          Expire le {new Date(doctor.date_expiration).toLocaleDateString('fr-FR')}
+                        </p>
+                      )}
                     </div>
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                      {/* Voir le document */}
+
+                      {/* Toggle actif/inactif */}
+                      <button
+                        disabled={isLoading}
+                        onClick={() => handleToggle(doctor.id, doctor.name, doctor.subscription_status)}
+                        title={doctor.subscription_status === 'actif' ? 'Désactiver' : 'Activer'}
+                        className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                          doctor.subscription_status === 'actif'
+                            ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                            : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+                        }`}
+                      >
+                        {doctor.subscription_status === 'actif'
+                          ? <><ToggleRight className="h-3.5 w-3.5" /> Actif</>
+                          : <><ToggleLeft  className="h-3.5 w-3.5" /> Inactif</>
+                        }
+                      </button>
+
+                      {/* Expiration */}
+                      <button
+                        disabled={isLoading}
+                        onClick={() => {
+                          setExpirationDialog({ open: true, id: doctor.id, name: doctor.name })
+                          setNewExpiration(doctor.date_expiration ?? '')
+                        }}
+                        className="flex items-center gap-1 text-xs text-blue-600 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+                      >
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        Expiration
+                      </button>
+
+                      {/* Document */}
                       {doctor.document_url && (
                         <a
                           href={doctor.document_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-primary-600 hover:underline border border-primary-200 px-2 py-1.5 rounded-lg"
+                          className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 transition-colors"
                         >
                           <FileText className="h-3.5 w-3.5" />
                           Document
@@ -201,11 +362,14 @@ export default function AdminPage() {
                       {doctor.status !== 'approved' && (
                         <Button
                           size="sm"
-                          className="bg-green-500 hover:bg-green-600 h-8 text-xs px-3"
-                          disabled={actionLoading === doctor.id}
+                          className="bg-green-500 hover:bg-green-600 h-8 text-xs px-3 disabled:opacity-50"
+                          disabled={isLoading}
                           onClick={() => handleApprove(doctor.id)}
                         >
-                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                          {isLoading
+                            ? <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
+                            : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                          }
                           Approuver
                         </Button>
                       )}
@@ -215,8 +379,8 @@ export default function AdminPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="text-red-500 border-red-200 hover:bg-red-50 h-8 text-xs px-3"
-                          disabled={actionLoading === doctor.id}
+                          className="text-red-500 border-red-200 hover:bg-red-50 h-8 text-xs px-3 disabled:opacity-50"
+                          disabled={isLoading}
                           onClick={() => setRejectDialog({ open: true, id: doctor.id, name: doctor.name })}
                         >
                           <XCircle className="h-3.5 w-3.5 mr-1" />
@@ -232,8 +396,44 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Dialog refus */}
-      <Dialog open={rejectDialog.open} onOpenChange={(o) => setRejectDialog({ open: o, id: '', name: '' })}>
+      {/* Dialog — date d'expiration */}
+      <Dialog
+        open={expirationDialog.open}
+        onOpenChange={(o) => setExpirationDialog({ open: o, id: '', name: '' })}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Expiration — Dr. {expirationDialog.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">
+              Laissez vide pour aucune limite. Le médecin verra un avertissement à moins de 7 jours.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Date d&apos;expiration</Label>
+              <Input
+                type="date"
+                value={newExpiration}
+                onChange={(e) => setNewExpiration(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setExpirationDialog({ open: false, id: '', name: '' })}>
+              Annuler
+            </Button>
+            <Button onClick={handleSetExpiration} disabled={!!actionLoading}>
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — refus */}
+      <Dialog
+        open={rejectDialog.open}
+        onOpenChange={(o) => setRejectDialog({ open: o, id: '', name: '' })}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Refuser Dr. {rejectDialog.name}</DialogTitle>

@@ -16,6 +16,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .select('name, specialty')
     .eq('slug', slug)
     .eq('status', 'approved')
+    .eq('subscription_status', 'actif')
     .single()
 
   if (!doctor) return { title: 'Médecin introuvable' }
@@ -36,6 +37,7 @@ export default async function BookingPage({ params }: Props) {
     .select('*')
     .eq('slug', slug)
     .eq('status', 'approved')
+    .eq('subscription_status', 'actif')
     .single()
 
   if (!doctor) notFound()

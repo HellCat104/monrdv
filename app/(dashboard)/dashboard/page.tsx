@@ -65,6 +65,15 @@ export default async function DashboardPage() {
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
 
+  // Calcul jours restants d'abonnement
+  let daysLeft: number | null = null
+  if (doctor.date_expiration) {
+    const exp = new Date(doctor.date_expiration)
+    const now = getNowInMaroc()
+    now.setHours(0, 0, 0, 0)
+    daysLeft = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  }
+
   return (
     <div className="space-y-6">
       {/* En-tête */}
@@ -105,6 +114,21 @@ export default async function DashboardPage() {
           color={absenceRate > 20 ? 'red' : 'green'}
         />
       </div>
+
+      {/* Bandeau abonnement — visible uniquement si date_expiration définie */}
+      {daysLeft !== null && (
+        <div className={`text-sm font-medium px-4 py-2 rounded-lg border ${
+          daysLeft <= 3
+            ? 'bg-red-50 border-red-200 text-red-600'
+            : daysLeft <= 7
+            ? 'bg-orange-50 border-orange-200 text-orange-600'
+            : 'bg-gray-50 border-gray-200 text-gray-500'
+        }`}>
+          {daysLeft <= 0
+            ? '⚠️ Votre abonnement a expiré. Contactez l\'administrateur.'
+            : `⏳ Il vous reste ${daysLeft} jour${daysLeft > 1 ? 's' : ''} d'abonnement.`}
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* RDV du jour */}
