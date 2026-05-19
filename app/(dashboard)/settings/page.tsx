@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule } from '@/types'
-import { DAY_NAMES_FR, DEFAULT_WORKING_HOURS } from '@/types'
+import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS } from '@/types'
 import { Settings, Clock, Copy, Check, ExternalLink } from 'lucide-react'
 
 export default function SettingsPage() {
@@ -236,7 +236,7 @@ export default function SettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(Object.keys(form.working_hours) as (keyof WorkingHours)[]).map((day, idx) => {
+            {DAY_ORDER.map((day, idx) => {
               const schedule = form.working_hours[day]
               return (
                 <div key={day}>

@@ -94,6 +94,11 @@ export const DEFAULT_WORKING_HOURS: WorkingHours = {
   sunday:    { enabled: false, start: '09:00', end: '18:00' },
 }
 
+// Ordre fixe des jours (Lundi → Dimanche)
+export const DAY_ORDER: (keyof WorkingHours)[] = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+]
+
 // Correspondance noms des jours français
 export const DAY_NAMES_FR: Record<keyof WorkingHours, string> = {
   monday:    'Lundi',
