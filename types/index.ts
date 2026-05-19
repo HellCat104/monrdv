@@ -110,6 +110,48 @@ export const DAY_NAMES_FR: Record<keyof WorkingHours, string> = {
   sunday:    'Dimanche',
 }
 
+// Liste complète des spécialités médicales
+export const SPECIALITES_LIST = [
+  'Médecin généraliste',
+  'Cardiologue',
+  'Dermatologue',
+  'Pédiatre',
+  'Ophtalmologue',
+  'Dentiste',
+  'Neurologue',
+  'Pneumologue',
+  'Psychiatre',
+  'Rhumatologue',
+  'Urologue',
+  'Gastro-entérologue',
+  'Gynécologue',
+  'Orthopédiste',
+  'Endocrinologue',
+  'ORL (Oto-rhino-laryngologiste)',
+  'Chirurgien général',
+  'Chirurgien orthopédique',
+  'Chirurgien cardiaque',
+  'Chirurgien plasticien',
+  'Anesthésiste-réanimateur',
+  'Radiologue',
+  'Biologiste médical',
+  'Néphrologue',
+  'Hématologue',
+  'Oncologue',
+  'Infectiologue',
+  'Allergologue',
+  'Médecin du sport',
+  'Médecin urgentiste',
+  'Gériatre',
+  'Nutritionniste / Diététicien',
+  'Kinésithérapeute',
+  'Psychologue',
+  'Stomatologiste',
+  'Autre',
+] as const
+
+export type Specialite = typeof SPECIALITES_LIST[number]
+
 // Statuts en français
 export const STATUS_LABELS: Record<AppointmentStatus, string> = {
   pending:   'En attente',

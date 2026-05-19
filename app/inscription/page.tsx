@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SPECIALITES_LIST } from '@/types'
 
 export default function InscriptionPage() {
   const [step, setStep] = useState<'form' | 'success'>('form')
@@ -167,14 +169,21 @@ export default function InscriptionPage() {
               {/* Spécialité + Téléphone */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="specialty">Spécialité *</Label>
-                  <Input
-                    id="specialty"
+                  <Label>Spécialité *</Label>
+                  <Select
                     value={form.specialty}
-                    onChange={(e) => setForm({ ...form, specialty: e.target.value })}
-                    placeholder="Généraliste"
+                    onValueChange={(v) => setForm({ ...form, specialty: v })}
                     required
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choisir…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SPECIALITES_LIST.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="phone">Téléphone</Label>

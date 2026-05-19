@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule } from '@/types'
-import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS } from '@/types'
+import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST } from '@/types'
 import { Settings, Clock, Copy, Check, ExternalLink } from 'lucide-react'
 
 export default function SettingsPage() {
@@ -167,13 +167,20 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="s_specialty">Spécialité</Label>
-                <Input
-                  id="s_specialty"
+                <Label>Spécialité</Label>
+                <Select
                   value={form.specialty}
-                  onChange={(e) => setForm({ ...form, specialty: e.target.value })}
-                  placeholder="Médecin généraliste"
-                />
+                  onValueChange={(v) => setForm({ ...form, specialty: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choisir…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SPECIALITES_LIST.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="s_phone">Téléphone</Label>
