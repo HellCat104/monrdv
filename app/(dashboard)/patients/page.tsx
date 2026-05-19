@@ -2,27 +2,34 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment } from '@/types'
 import { getInitials, formatDateShort } from '@/lib/utils'
-import { Users, Search, Phone, Calendar } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check } from 'lucide-react'
 
 interface PatientWithStats extends Patient {
   appointment_count: number
   last_appointment_date: string | null
+  age?: number | null
+  notes?: string | null
 }
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<PatientWithStats[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+  const [selectedPatient, setSelectedPatient] = useState<PatientWithStats | null>(null)
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [editAge, setEditAge] = useState<string>('')
+  const [editNotes, setEditNotes] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const supabase = createClient()
 
@@ -64,9 +71,12 @@ export default function PatientsPage() {
     load()
   }, [])
 
-  async function openPatientHistory(patient: Patient) {
+  async function openPatientHistory(patient: PatientWithStats) {
     setSelectedPatient(patient)
+    setEditAge(patient.age != null ? String(patient.age) : '')
+    setEditNotes(patient.notes ?? '')
     setLoadingHistory(true)
+    setSaved(false)
 
     const { data } = await supabase
       .from('appointments')
@@ -77,6 +87,22 @@ export default function PatientsPage() {
 
     setPatientAppointments(data ?? [])
     setLoadingHistory(false)
+  }
+
+  async function savePatientNotes() {
+    if (!selectedPatient) return
+    setSaving(true)
+    await supabase
+      .from('patients')
+      .update({ age: editAge ? Number(editAge) : null, notes: editNotes || null })
+      .eq('id', selectedPatient.id)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+    // Mettre à jour localement
+    setPatients((prev) => prev.map((p) =>
+      p.id === selectedPatient.id ? { ...p, age: editAge ? Number(editAge) : null, notes: editNotes || null } : p
+    ))
   }
 
   const filtered = patients.filter((p) => {
@@ -190,6 +216,52 @@ export default function PatientsPage() {
                   <Phone className="h-3.5 w-3.5" />
                   {selectedPatient.phone}
                 </p>
+              </div>
+
+              {/* Fiche patient */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700">Fiche patient (privée)</h4>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500">Âge</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={120}
+                    value={editAge}
+                    onChange={(e) => setEditAge(e.target.value)}
+                    placeholder="Ex: 35"
+                    className="w-28"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500">Notes médicales</label>
+                  <textarea
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    placeholder="Antécédents, allergies, observations…"
+                    rows={4}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={savePatientNotes} disabled={saving}>
+                    {saving ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Sauvegarde…
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <Save className="h-3.5 w-3.5" /> Sauvegarder
+                      </span>
+                    )}
+                  </Button>
+                  {saved && (
+                    <span className="text-xs text-green-600 flex items-center gap-1">
+                      <Check className="h-3.5 w-3.5" /> Sauvegardé !
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Historique RDV */}
