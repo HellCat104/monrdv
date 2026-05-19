@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
   const password  = formData.get('password') as string
   const specialty = formData.get('specialty') as string
   const phone     = formData.get('phone') as string
+  const city      = formData.get('city') as string
   const slug      = formData.get('slug') as string
   const document  = formData.get('document') as File | null
 
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest) {
       email,
       specialty,
       phone: phone || null,
+      city: city || null,
       slug,
       status: 'pending',
       document_url: documentUrl,

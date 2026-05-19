@@ -34,6 +34,7 @@ export default async function BookingPage({ params }: Props) {
     .from('doctors')
     .select('*')
     .eq('slug', slug)
+    .eq('status', 'approved')
     .single()
 
   if (!doctor) notFound()
