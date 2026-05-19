@@ -68,27 +68,40 @@ export async function PATCH(
   // ── Approuver / Refuser ──────────────────────────────────────────────────
   const newStatus = action === 'approve' ? 'approved' : 'rejected'
 
-  const { data: doctor, error } = await adminDb
+  // 1. Récupère d'abord le médecin pour vérifier qu'il existe
+  const { data: existing, error: fetchError } = await adminDb
     .from('doctors')
-    .update({
-      status: newStatus,
-      ...(rejection_reason ? { rejection_reason } : {}),
-    })
+    .select('id, name, email')
     .eq('id', params.id)
-    .select('name, email')
     .single()
 
-  if (error || !doctor) {
-    return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
+  if (fetchError || !existing) {
+    console.error('[Admin PATCH] fetch error:', fetchError)
+    return NextResponse.json({ error: `Médecin introuvable (id: ${params.id})` }, { status: 404 })
   }
 
+  // 2. Met à jour le statut
+  const updatePayload: Record<string, string> = { status: newStatus }
+  if (rejection_reason) updatePayload.rejection_reason = rejection_reason
+
+  const { error: updateError } = await adminDb
+    .from('doctors')
+    .update(updatePayload)
+    .eq('id', params.id)
+
+  if (updateError) {
+    console.error('[Admin PATCH] update error:', updateError)
+    return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
+
+  // 3. Envoie l'email au médecin
   if (action === 'approve') {
-    sendApprovalEmail({ to: doctor.email, doctorName: doctor.name })
+    sendApprovalEmail({ to: existing.email, doctorName: existing.name })
       .catch((err) => console.error('[Email approbation]', err))
   } else {
     sendRejectionEmail({
-      to: doctor.email,
-      doctorName: doctor.name,
+      to: existing.email,
+      doctorName: existing.name,
       reason: rejection_reason,
     }).catch((err) => console.error('[Email refus]', err))
   }
