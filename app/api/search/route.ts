@@ -12,9 +12,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('doctors')
-    .select('id, name, specialty, slug, phone, city, appointment_duration')
-    .eq('status', 'approved')
-    .eq('subscription_status', 'actif')
+    .select('id, name, specialty, slug, phone, city, appointment_duration, status, subscription_status')
     .order('name', { ascending: true })
 
   if (q) {
@@ -25,9 +23,19 @@ export async function GET(req: NextRequest) {
     query = query.ilike('city', `%${ville}%`)
   }
 
-  const { data, error } = await query.limit(20)
+  const { data, error } = await query.limit(100)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json(data ?? [])
+  // Filtre côté serveur pour être sûr (les filtres Supabase peuvent être mis en cache)
+  const filtered = (data ?? [])
+    .filter(d => d.status === 'approved' && d.subscription_status === 'actif')
+    .map(({ status, subscription_status, ...rest }) => rest) // enlève les champs internes
+
+  return NextResponse.json(filtered, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache',
+    },
+  })
 }
