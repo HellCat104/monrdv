@@ -35,7 +35,8 @@ const STATUS_CONFIG = {
   rejected: { label: 'Refusé',     icon: XCircle },
 } as const
 
-type Filter = 'all' | 'pending' | 'approved' | 'rejected'
+type Filter    = 'all' | 'pending' | 'approved' | 'rejected'
+type SubFilter = 'all' | 'actif' | 'inactif'
 
 // ─── petit composant toast ────────────────────────────────────────────────────
 function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
@@ -54,6 +55,7 @@ export default function AdminPage() {
   const [counts, setCounts]       = useState({ pending: 0, approved: 0, rejected: 0 })
   const [loading, setLoading]     = useState(true)
   const [filter, setFilter]       = useState<Filter>('pending')
+  const [subFilter, setSubFilter] = useState<SubFilter>('all')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [toast, setToast]         = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
@@ -128,6 +130,11 @@ export default function AdminPage() {
   async function refresh() {
     await Promise.all([loadDoctors(filter), loadCounts()])
   }
+
+  // Médecins filtrés côté client (sub-filtre actif/inactif sur les approuvés)
+  const visibleDoctors = filter === 'approved' && subFilter !== 'all'
+    ? doctors.filter((d) => d.subscription_status === subFilter)
+    : doctors
 
   // ── actions ───────────────────────────────────────────────────────────────
   async function handleApprove(id: string) {
@@ -205,37 +212,49 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Stats rapides */}
+      {/* Stats — cartes cliquables */}
       <div className="grid grid-cols-3 gap-4">
-        {([
-          { key: 'pending',  label: 'En attente', color: 'bg-yellow-50 border-yellow-200 text-yellow-700' },
-          { key: 'approved', label: 'Approuvés',  color: 'bg-green-50 border-green-200 text-green-700'  },
-          { key: 'rejected', label: 'Refusés',    color: 'bg-red-50 border-red-200 text-red-700'    },
-        ] as const).map(({ key, label, color }) => (
-          <button
-            key={key}
-            onClick={() => setFilter(key)}
-            className={`rounded-xl border p-4 text-center transition-all ${color} ${filter === key ? 'ring-2 ring-offset-1 ring-gray-400 shadow-sm' : 'hover:shadow-sm'}`}
-          >
-            <p className="text-2xl font-bold">{counts[key]}</p>
-            <p className="text-xs font-medium mt-1">{label}</p>
-          </button>
-        ))}
-      </div>
+        <button
+          onClick={() => { setFilter('pending'); setSubFilter('all') }}
+          className={`rounded-xl border p-4 text-center transition-all bg-yellow-50 border-yellow-200 text-yellow-700 ${filter === 'pending' ? 'ring-2 ring-offset-1 ring-yellow-300 shadow-sm' : 'hover:shadow-sm'}`}
+        >
+          <p className="text-2xl font-bold">{counts.pending}</p>
+          <p className="text-xs font-medium mt-1">En attente</p>
+        </button>
 
-      {/* Filtres */}
-      <div className="flex gap-2 flex-wrap">
-        {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
+        {/* Carte verte — avec sub-filtres quand active */}
+        <div className={`rounded-xl border bg-green-50 border-green-200 text-green-700 transition-all ${filter === 'approved' ? 'ring-2 ring-offset-1 ring-green-300 shadow-sm' : 'hover:shadow-sm'}`}>
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              filter === f ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border hover:bg-gray-50'
-            }`}
+            className="w-full p-4 text-center"
+            onClick={() => { setFilter('approved'); setSubFilter('all') }}
           >
-            {f === 'all' ? 'Tous' : f === 'pending' ? 'En attente' : f === 'approved' ? 'Approuvés' : 'Refusés'}
+            <p className="text-2xl font-bold">{counts.approved}</p>
+            <p className="text-xs font-medium mt-1">Approuvés</p>
           </button>
-        ))}
+          {filter === 'approved' && (
+            <div className="flex border-t border-green-200">
+              {(['all', 'actif', 'inactif'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSubFilter(s)}
+                  className={`flex-1 py-1.5 text-xs font-medium transition-colors first:rounded-bl-xl last:rounded-br-xl ${
+                    subFilter === s ? 'bg-green-600 text-white' : 'hover:bg-green-100'
+                  }`}
+                >
+                  {s === 'all' ? 'Tous' : s === 'actif' ? 'Actifs' : 'Inactifs'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => { setFilter('rejected'); setSubFilter('all') }}
+          className={`rounded-xl border p-4 text-center transition-all bg-red-50 border-red-200 text-red-700 ${filter === 'rejected' ? 'ring-2 ring-offset-1 ring-red-300 shadow-sm' : 'hover:shadow-sm'}`}
+        >
+          <p className="text-2xl font-bold">{counts.rejected}</p>
+          <p className="text-xs font-medium mt-1">Refusés</p>
+        </button>
       </div>
 
       {/* Liste */}
@@ -243,14 +262,14 @@ export default function AdminPage() {
         <div className="space-y-3">
           {[1, 2, 3].map((i) => <div key={i} className="h-28 bg-white rounded-xl animate-pulse border" />)}
         </div>
-      ) : doctors.length === 0 ? (
+      ) : visibleDoctors.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
           <p className="text-sm">Aucun médecin dans cette catégorie</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {doctors.map((doctor) => {
+          {visibleDoctors.map((doctor) => {
             const config    = STATUS_CONFIG[doctor.status]
             const StatusIcon = config.icon
             const isLoading  = actionLoading === doctor.id
