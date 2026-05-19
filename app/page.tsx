@@ -18,7 +18,7 @@ const SPECIALITES = [
   { label: 'Psychiatre',           emoji: '🧘', color: 'bg-violet-50' },
   { label: 'Rhumatologue',         emoji: '🦴', color: 'bg-yellow-50' },
   { label: 'Urologue',             emoji: '🔬', color: 'bg-green-50' },
-  { label: 'Gastro-entérologue',   emoji: '🫃', color: 'bg-orange-50' },
+  { label: 'Gastro-entérologue',   emoji: '🩻', color: 'bg-orange-50' },
 ]
 
 export default function HomePage() {
