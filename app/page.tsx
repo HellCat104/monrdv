@@ -11,13 +11,10 @@ const SPECIALITES = [
   { label: 'Cardiologue',          emoji: '❤️', color: 'bg-red-50' },
   { label: 'Dermatologue',         emoji: '🔬', color: 'bg-orange-50' },
   { label: 'Pédiatre',             emoji: '👶', color: 'bg-pink-50' },
-  { label: 'Gynécologue',          emoji: '🌸', color: 'bg-purple-50' },
   { label: 'Ophtalmologue',        emoji: '👁️', color: 'bg-cyan-50' },
   { label: 'Dentiste',             emoji: '🦷', color: 'bg-teal-50' },
-  { label: 'Orthopédiste',         emoji: '🦴', color: 'bg-yellow-50' },
   { label: 'Neurologue',           emoji: '🧠', color: 'bg-indigo-50' },
   { label: 'Pneumologue',          emoji: '🫁', color: 'bg-sky-50' },
-  { label: 'Endocrinologue',       emoji: '⚗️', color: 'bg-lime-50' },
   { label: 'Psychiatre',           emoji: '🧘', color: 'bg-violet-50' },
 ]
 
@@ -144,7 +141,7 @@ export default function HomePage() {
 
           {/* Suggestions rapides */}
           <div className="flex flex-wrap justify-center gap-2 mt-6">
-            {['Médecin généraliste', 'Cardiologue', 'Dermatologue', 'Pédiatre', 'Gynécologue'].map((s) => (
+            {['Médecin généraliste', 'Cardiologue', 'Dermatologue', 'Pédiatre', 'Neurologue'].map((s) => (
               <button
                 key={s}
                 onClick={() => { setQuery(s); router.push(`/recherche?q=${encodeURIComponent(s)}`) }}
