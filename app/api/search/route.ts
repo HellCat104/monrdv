@@ -25,12 +25,17 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query.limit(100)
 
+  console.log('[search] total rows:', data?.length, '| error:', error?.message)
+  console.log('[search] rows:', JSON.stringify(data?.map(d => ({ name: d.name, status: d.status, sub: d.subscription_status }))))
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Filtre côté serveur pour être sûr (les filtres Supabase peuvent être mis en cache)
+  // Filtre côté serveur
   const filtered = (data ?? [])
     .filter(d => d.status === 'approved' && d.subscription_status === 'actif')
-    .map(({ status, subscription_status, ...rest }) => rest) // enlève les champs internes
+    .map(({ status, subscription_status, ...rest }) => rest)
+
+  console.log('[search] filtered:', filtered.length)
 
   return NextResponse.json(filtered, {
     headers: {
