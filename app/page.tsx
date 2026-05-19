@@ -26,13 +26,23 @@ export default function HomePage() {
   const [query, setQuery] = useState('')
   const [city, setCity] = useState('')
   const [patientName, setPatientName] = useState<string | null>(null)
+  const [dashboardUrl, setDashboardUrl] = useState('/patient/dashboard')
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
         const name = user.user_metadata?.full_name || user.email?.split('@')[0] || null
         setPatientName(name)
+
+        // Vérifie si c'est un médecin → bon lien dashboard
+        const { data: doctor } = await supabase
+          .from('doctors')
+          .select('id')
+          .eq('email', user.email)
+          .single()
+
+        setDashboardUrl(doctor ? '/dashboard' : '/patient/dashboard')
       }
     })
   }, [])
@@ -70,7 +80,7 @@ export default function HomePage() {
             </Link>
             {patientName ? (
               <Link
-                href="/patient/dashboard"
+                href={dashboardUrl}
                 className="flex items-center gap-2 text-gray-700 hover:text-primary-600 text-sm font-medium transition-colors"
               >
                 <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-xs">

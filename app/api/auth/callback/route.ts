@@ -8,9 +8,17 @@ export async function GET(req: NextRequest) {
 
   if (code) {
     const supabase = createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`)
+    const { error, data } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error && data.user) {
+      // Si c'est un médecin → rediriger vers son dashboard
+      const { data: doctor } = await supabase
+        .from('doctors')
+        .select('id')
+        .eq('email', data.user.email)
+        .single()
+
+      const destination = doctor ? '/dashboard' : next
+      return NextResponse.redirect(`${origin}${destination}`)
     }
   }
 

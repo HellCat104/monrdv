@@ -10,6 +10,17 @@ export default async function PatientLayout({ children }: { children: React.Reac
     redirect('/patient/login')
   }
 
+  // Si c'est un médecin → renvoyer vers son dashboard médecin
+  const { data: doctor } = await supabase
+    .from('doctors')
+    .select('id')
+    .eq('email', user.email)
+    .single()
+
+  if (doctor) {
+    redirect('/dashboard')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <PatientHeader userEmail={user.email ?? ''} userName={user.user_metadata?.full_name ?? ''} />
