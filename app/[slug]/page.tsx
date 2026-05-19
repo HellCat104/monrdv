@@ -15,6 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .from('doctors')
     .select('name, specialty')
     .eq('slug', slug)
+    .eq('status', 'approved')
     .single()
 
   if (!doctor) return { title: 'Médecin introuvable' }

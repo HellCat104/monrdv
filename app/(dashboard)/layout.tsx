@@ -15,6 +15,18 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
+  // Vérifie que l'utilisateur est bien un médecin approuvé
+  const { data: doctor } = await supabase
+    .from('doctors')
+    .select('id, status')
+    .eq('email', user.email)
+    .single()
+
+  if (!doctor) {
+    // C'est un patient → renvoyer vers son espace
+    redirect('/patient/dashboard')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
