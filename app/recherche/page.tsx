@@ -37,9 +37,9 @@ function RechercheContent() {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (ville) params.set('ville', ville)
-    const res = await fetch(`/api/search?${params}`)
+    const res = await fetch(`/api/search?${params}`, { cache: 'no-store' })
     const data = await res.json()
-    setDoctors(data)
+    setDoctors(Array.isArray(data) ? data : [])
     setLoading(false)
   }
 
