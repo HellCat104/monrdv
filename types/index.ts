@@ -152,6 +152,45 @@ export const SPECIALITES_LIST = [
 
 export type Specialite = typeof SPECIALITES_LIST[number]
 
+// Liste des villes du Maroc
+export const VILLES_MAROC = [
+  'Casablanca',
+  'Rabat',
+  'Marrakech',
+  'Fès',
+  'Tanger',
+  'Agadir',
+  'Meknès',
+  'Oujda',
+  'Kénitra',
+  'Tétouan',
+  'Salé',
+  'Mohammedia',
+  'El Jadida',
+  'Béni Mellal',
+  'Nador',
+  'Settat',
+  'Khouribga',
+  'Safi',
+  'Laâyoune',
+  'Essaouira',
+  'Ouarzazate',
+  'Taza',
+  'Khémisset',
+  'Berrechid',
+  'Larache',
+  'Khénifra',
+  'Dakhla',
+  'Tiznit',
+  'Taourirt',
+  'Guelmim',
+  'Errachidia',
+  'Al Hoceïma',
+  'Ifrane',
+  'Azrou',
+  'Taroudant',
+] as const
+
 // Statuts en français
 export const STATUS_LABELS: Record<AppointmentStatus, string> = {
   pending:   'En attente',

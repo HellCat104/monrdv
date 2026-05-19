@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { SPECIALITES_LIST } from '@/types'
+import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
 
 export default function InscriptionPage() {
   const [step, setStep] = useState<'form' | 'success'>('form')
@@ -199,21 +199,28 @@ export default function InscriptionPage() {
 
               {/* Ville */}
               <div className="space-y-1.5">
-                <Label htmlFor="city">Ville *</Label>
-                <Input
-                  id="city"
+                <Label>Ville *</Label>
+                <Select
                   value={form.city}
-                  onChange={(e) => setForm({ ...form, city: e.target.value })}
-                  placeholder="Casablanca"
+                  onValueChange={(v) => setForm({ ...form, city: v })}
                   required
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choisir une ville…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VILLES_MAROC.map((v) => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Slug */}
               <div className="space-y-1.5">
                 <Label htmlFor="slug">URL de votre page *</Label>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-400 shrink-0">monrdv.ma/</span>
+                  <span className="text-sm text-gray-400 shrink-0">monrdv.co.ma/</span>
                   <Input
                     id="slug"
                     value={form.slug}

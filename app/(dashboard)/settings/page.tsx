@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule } from '@/types'
-import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST } from '@/types'
+import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC } from '@/types'
 import { Settings, Clock, Copy, Check, ExternalLink } from 'lucide-react'
 
 export default function SettingsPage() {
@@ -193,13 +193,20 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="s_city">Ville</Label>
-              <Input
-                id="s_city"
+              <Label>Ville</Label>
+              <Select
                 value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-                placeholder="Casablanca"
-              />
+                onValueChange={(v) => setForm({ ...form, city: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choisir une ville…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VILLES_MAROC.map((v) => (
+                    <SelectItem key={v} value={v}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
