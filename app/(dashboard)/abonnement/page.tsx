@@ -40,8 +40,9 @@ export default function AbonnementPage() {
 
   const isLoaded = doctor !== null
   const isExpired = daysLeft !== null && daysLeft <= 0
-  const isWarning = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
-  const isGood = daysLeft === null || daysLeft > 7
+  const isRed     = daysLeft !== null && daysLeft > 0 && daysLeft <= 5
+  const isWarning = daysLeft !== null && daysLeft > 5 && daysLeft <= 15
+  const isGood    = daysLeft === null || daysLeft > 15
 
   const whatsappMessage = encodeURIComponent(
     `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement de 149 DHS pour renouveler mon abonnement.`
@@ -55,10 +56,10 @@ export default function AbonnementPage() {
       </div>
 
       {/* Statut abonnement */}
-      <Card className={`border-2 ${isExpired ? 'border-red-200 bg-red-50' : isWarning ? 'border-orange-200 bg-orange-50' : 'border-green-200 bg-green-50'}`}>
+      <Card className={`border-2 ${isExpired || isRed ? 'border-red-200 bg-red-50' : isWarning ? 'border-orange-200 bg-orange-50' : 'border-green-200 bg-green-50'}`}>
         <CardContent className="p-6">
           <div className="flex items-center gap-4">
-            {isExpired ? (
+            {isExpired || isRed ? (
               <XCircle className="h-10 w-10 text-red-500 shrink-0" />
             ) : isWarning ? (
               <AlertTriangle className="h-10 w-10 text-orange-500 shrink-0" />
@@ -66,7 +67,7 @@ export default function AbonnementPage() {
               <CheckCircle2 className="h-10 w-10 text-green-500 shrink-0" />
             )}
             <div>
-              <p className={`font-bold text-lg ${isExpired ? 'text-red-700' : isWarning ? 'text-orange-700' : 'text-green-700'}`}>
+              <p className={`font-bold text-lg ${isExpired || isRed ? 'text-red-700' : isWarning ? 'text-orange-700' : 'text-green-700'}`}>
                 {!isLoaded
                   ? 'Chargement…'
                   : isExpired
@@ -77,7 +78,7 @@ export default function AbonnementPage() {
                   ? `Actif — ${daysLeft} jours restants`
                   : 'Actif'}
               </p>
-              <p className={`text-sm mt-0.5 ${isExpired ? 'text-red-500' : isWarning ? 'text-orange-500' : 'text-green-600'}`}>
+              <p className={`text-sm mt-0.5 ${isExpired || isRed ? 'text-red-500' : isWarning ? 'text-orange-500' : 'text-green-600'}`}>
                 {doctor?.date_expiration
                   ? `${isExpired ? 'Expiré le' : 'Expire le'} ${new Date(doctor.date_expiration).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
                   : 'Aucune date d\'expiration définie — contactez le support'}
