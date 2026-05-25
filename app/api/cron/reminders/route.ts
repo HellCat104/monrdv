@@ -1,8 +1,9 @@
-// Cron job : envoie les rappels SMS 24h avant les RDV
+// Cron job : envoie les rappels SMS + Email 24h avant les RDV
 // Déclenché automatiquement par Vercel Cron (voir vercel.json)
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendReminderSMS } from '@/lib/twilio'
+import { sendReminderEmailToPatient } from '@/lib/email'
 import { format, addDays } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 import { MAROC_TZ } from '@/lib/utils'
@@ -25,8 +26,8 @@ export async function POST(req: NextRequest) {
     .from('appointments')
     .select(`
       id, date, time, cancel_token,
-      patient:patients(first_name, last_name, phone),
-      doctor:doctors(name)
+      patient:patients(first_name, last_name, phone, email),
+      doctor:doctors(name, specialty)
     `)
     .eq('date', tomorrow)
     .neq('status', 'cancelled')
@@ -36,33 +37,55 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
   }
 
-  let sent = 0
-  let failed = 0
+  let smsSent = 0, smsFailed = 0
+  let emailSent = 0, emailFailed = 0
 
-  // Envoie les rappels en parallèle (max 10 à la fois)
   const batchSize = 10
   for (let i = 0; i < (appointments ?? []).length; i += batchSize) {
     const batch = appointments!.slice(i, i + batchSize)
-    const results = await Promise.allSettled(
-      batch.map((apt) => {
-        if (!apt.patient || !apt.cancel_token) return Promise.resolve(false)
-        return sendReminderSMS({
-          to: (apt.patient as any).phone,
-          patientName: `${(apt.patient as any).first_name} ${(apt.patient as any).last_name}`,
-          doctorName: (apt.doctor as any)?.name ?? 'votre médecin',
-          date: apt.date,
-          time: apt.time,
-          cancelToken: apt.cancel_token,
-          baseUrl,
-        })
+
+    await Promise.allSettled(
+      batch.map(async (apt) => {
+        if (!apt.patient || !apt.cancel_token) return
+
+        const patient     = apt.patient as any
+        const doctor      = apt.doctor  as any
+        const patientName = `${patient.first_name} ${patient.last_name}`
+        const doctorName  = doctor?.name ?? 'votre médecin'
+
+        // ── SMS ──────────────────────────────────────────────────────────
+        try {
+          const ok = await sendReminderSMS({
+            to: patient.phone,
+            patientName,
+            doctorName,
+            date: apt.date,
+            time: apt.time,
+            cancelToken: apt.cancel_token,
+            baseUrl,
+          })
+          ok ? smsSent++ : smsFailed++
+        } catch { smsFailed++ }
+
+        // ── Email (si le patient a un email) ─────────────────────────────
+        if (patient.email) {
+          try {
+            const ok = await sendReminderEmailToPatient({
+              patientEmail: patient.email,
+              patientName,
+              doctorName,
+              specialty: doctor?.specialty ?? '',
+              date: apt.date,
+              time: apt.time,
+              cancelToken: apt.cancel_token,
+            })
+            ok ? emailSent++ : emailFailed++
+          } catch { emailFailed++ }
+        }
       })
     )
-    results.forEach((r) => {
-      if (r.status === 'fulfilled' && r.value) sent++
-      else failed++
-    })
   }
 
-  console.log(`[Cron reminders] ${sent} rappels envoyés, ${failed} échoués`)
-  return NextResponse.json({ sent, failed, date: tomorrow })
+  console.log(`[Cron reminders] SMS: ${smsSent} envoyés, ${smsFailed} échoués — Email: ${emailSent} envoyés, ${emailFailed} échoués`)
+  return NextResponse.json({ smsSent, smsFailed, emailSent, emailFailed, date: tomorrow })
 }
