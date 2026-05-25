@@ -33,8 +33,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Le mot de passe doit contenir au moins 8 caractères' }, { status: 400 })
   }
 
-  if (document.size > 5 * 1024 * 1024) {
-    return NextResponse.json({ error: 'Le fichier dépasse 5 MB' }, { status: 400 })
+  if (document.size > 10 * 1024 * 1024) {
+    return NextResponse.json({ error: 'Le fichier dépasse 10 MB' }, { status: 400 })
   }
 
   const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']

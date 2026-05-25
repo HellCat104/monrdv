@@ -252,7 +252,7 @@ export default function InscriptionPage() {
                     <>
                       <Upload className="h-8 w-8 text-gray-400" />
                       <p className="text-sm text-gray-600 font-medium">Cliquez pour uploader</p>
-                      <p className="text-xs text-gray-400">PDF, JPG, PNG (max 5 MB)</p>
+                      <p className="text-xs text-gray-400">PDF, JPG, PNG (max 10 MB)</p>
                     </>
                   )}
                   <input
