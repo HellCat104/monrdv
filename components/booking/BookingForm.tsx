@@ -15,9 +15,10 @@ interface BookingFormProps {
   selectedTime: string  // HH:mm
   onBack: () => void
   onSuccess: () => void
+  onSlotTaken: () => void
 }
 
-export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSuccess }: BookingFormProps) {
+export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
   const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', notes: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -43,6 +44,10 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
 
       if (!res.ok) {
         const data = await res.json()
+        if (res.status === 409) {
+          onSlotTaken()
+          return
+        }
         throw new Error(data.error || 'Erreur lors de la réservation')
       }
 

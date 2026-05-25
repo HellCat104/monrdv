@@ -21,6 +21,7 @@ export function BookingPageClient({ doctor }: Props) {
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [slots, setSlots] = useState<TimeSlot[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [slotTakenMsg, setSlotTakenMsg] = useState(false)
 
   // Charge les créneaux disponibles dès qu'une date est sélectionnée
   useEffect(() => {
@@ -52,6 +53,22 @@ export function BookingPageClient({ doctor }: Props) {
     if (selectedDate && selectedTime) {
       setStep('form')
     }
+  }
+
+  function handleSlotTaken() {
+    // Revient à la sélection et rafraîchit les créneaux
+    setStep('datetime')
+    setSelectedTime(null)
+    setSlotTakenMsg(true)
+    if (selectedDate) {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd')
+      setLoadingSlots(true)
+      fetch(`/api/slots?doctor_id=${doctor.id}&date=${dateStr}`)
+        .then((r) => r.json())
+        .then((data) => setSlots(data.slots ?? []))
+        .finally(() => setLoadingSlots(false))
+    }
+    setTimeout(() => setSlotTakenMsg(false), 5000)
   }
 
   const dateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''
@@ -127,6 +144,11 @@ export function BookingPageClient({ doctor }: Props) {
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           {step === 'datetime' && (
             <div className="space-y-5">
+              {slotTakenMsg && (
+                <div className="bg-orange-50 border border-orange-200 text-orange-700 text-sm font-medium px-4 py-3 rounded-xl">
+                  ⚠️ Ce créneau vient d&apos;être pris. Veuillez en choisir un autre.
+                </div>
+              )}
               <h3 className="font-semibold text-gray-800">Choisissez une date</h3>
               <DatePicker
                 workingHours={doctor.working_hours}
@@ -168,6 +190,7 @@ export function BookingPageClient({ doctor }: Props) {
               selectedTime={selectedTime}
               onBack={() => setStep('datetime')}
               onSuccess={() => setStep('success')}
+              onSlotTaken={handleSlotTaken}
             />
           )}
 
