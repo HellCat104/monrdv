@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Stethoscope, Upload, CheckCircle2, Eye, EyeOff, FileText } from 'lucide-react'
+import { Stethoscope, CheckCircle2, Eye, EyeOff, Hash } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,7 +15,6 @@ export default function InscriptionPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [file, setFile] = useState<File | null>(null)
 
   const [form, setForm] = useState({
     name: '',
@@ -25,6 +24,7 @@ export default function InscriptionPage() {
     phone: '',
     city: '',
     slug: '',
+    cnom_number: '',
   })
 
   // Génère automatiquement un slug à partir du nom
@@ -43,8 +43,8 @@ export default function InscriptionPage() {
     e.preventDefault()
     setError('')
 
-    if (!file) {
-      setError('Veuillez uploader votre diplôme ou carte professionnelle')
+    if (!form.cnom_number.trim()) {
+      setError('Veuillez entrer votre numéro CNOM')
       return
     }
 
@@ -58,7 +58,6 @@ export default function InscriptionPage() {
     try {
       const formData = new FormData()
       Object.entries(form).forEach(([k, v]) => formData.append(k, v))
-      formData.append('document', file)
 
       const res = await fetch('/api/doctors/register', {
         method: 'POST',
@@ -231,38 +230,21 @@ export default function InscriptionPage() {
                 </div>
               </div>
 
-              {/* Upload document */}
+              {/* Numéro CNOM */}
               <div className="space-y-1.5">
-                <Label>Diplôme ou carte professionnelle *</Label>
-                <label
-                  htmlFor="document"
-                  className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-6 cursor-pointer transition-colors ${
-                    file
-                      ? 'border-green-300 bg-green-50'
-                      : 'border-gray-200 hover:border-primary-300 hover:bg-primary-50'
-                  }`}
-                >
-                  {file ? (
-                    <>
-                      <FileText className="h-8 w-8 text-green-500" />
-                      <p className="text-sm font-medium text-green-700">{file.name}</p>
-                      <p className="text-xs text-green-500">Cliquez pour changer</p>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-8 w-8 text-gray-400" />
-                      <p className="text-sm text-gray-600 font-medium">Cliquez pour uploader</p>
-                      <p className="text-xs text-gray-400">PDF, JPG, PNG (max 10 MB)</p>
-                    </>
-                  )}
-                  <input
-                    id="document"
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    className="hidden"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                <Label htmlFor="cnom_number">Numéro CNOM *</Label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="cnom_number"
+                    value={form.cnom_number}
+                    onChange={(e) => setForm({ ...form, cnom_number: e.target.value })}
+                    placeholder="Ex : 12345"
+                    className="pl-9"
+                    required
                   />
-                </label>
+                </div>
+                <p className="text-xs text-gray-400">Numéro d'inscription au Conseil National de l'Ordre des Médecins du Maroc</p>
               </div>
 
               {error && (

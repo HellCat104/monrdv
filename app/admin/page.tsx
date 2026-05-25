@@ -24,7 +24,7 @@ interface DoctorRow {
   status: 'pending' | 'approved' | 'rejected'
   subscription_status: 'actif' | 'inactif'
   date_expiration: string | null
-  document_url: string | null
+  cnom_number: string | null
   rejection_reason: string | null
   created_at: string
 }
@@ -383,17 +383,12 @@ export default function AdminPage() {
                         Expiration
                       </button>
 
-                      {/* Document */}
-                      {doctor.document_url && (
-                        <a
-                          href={doctor.document_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 transition-colors"
-                        >
+                      {/* CNOM */}
+                      {doctor.cnom_number && (
+                        <span className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 px-2.5 py-1.5 rounded-lg bg-primary-50">
                           <FileText className="h-3.5 w-3.5" />
-                          Document
-                        </a>
+                          CNOM : {doctor.cnom_number}
+                        </span>
                       )}
 
                       {/* Approuver */}
