@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu,
   X,
+  CreditCard,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ const navItems = [
   { href: '/appointments',  label: 'Rendez-vous',      icon: Calendar },
   { href: '/patients',      label: 'Patients',          icon: Users },
   { href: '/settings',      label: 'Paramètres',        icon: Settings },
+  { href: '/abonnement',    label: 'Abonnement',        icon: CreditCard },
 ]
 
 export function Sidebar() {

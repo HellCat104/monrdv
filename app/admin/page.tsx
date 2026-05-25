@@ -167,6 +167,14 @@ export default function AdminPage() {
     setActionLoading(null)
   }
 
+  async function handleExtend(id: string, name: string) {
+    setActionLoading(id)
+    const ok = await apiFetch(id, { action: 'extend_subscription' })
+    if (ok) showToast(`Abonnement de Dr. ${name} renouvelé +30j ✓`, 'success')
+    await refresh()
+    setActionLoading(null)
+  }
+
   async function handleSetExpiration() {
     const { id, name } = expirationDialog
     setActionLoading(id)
@@ -349,6 +357,16 @@ export default function AdminPage() {
                           ? <><ToggleRight className="h-3.5 w-3.5" /> Actif</>
                           : <><ToggleLeft  className="h-3.5 w-3.5" /> Inactif</>
                         }
+                      </button>
+
+                      {/* Renouveler +30j */}
+                      <button
+                        disabled={isLoading}
+                        onClick={() => handleExtend(doctor.id, doctor.name)}
+                        className="flex items-center gap-1 text-xs text-green-600 border border-green-200 px-2.5 py-1.5 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
+                        title="Renouveler l'abonnement de 30 jours"
+                      >
+                        +30j
                       </button>
 
                       {/* Expiration */}

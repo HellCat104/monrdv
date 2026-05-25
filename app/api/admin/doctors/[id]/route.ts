@@ -20,7 +20,7 @@ export async function PATCH(
   const { action, rejection_reason, date_expiration } = body
   // action: 'approve' | 'reject' | 'toggle_subscription' | 'set_expiration'
 
-  if (!['approve', 'reject', 'toggle_subscription', 'set_expiration'].includes(action)) {
+  if (!['approve', 'reject', 'toggle_subscription', 'set_expiration', 'extend_subscription'].includes(action)) {
     return NextResponse.json({ error: 'Action invalide' }, { status: 400 })
   }
 
@@ -65,6 +65,30 @@ export async function PATCH(
     return NextResponse.json({ success: true })
   }
 
+  // ── Renouveler abonnement +30j ───────────────────────────────────────────
+  if (action === 'extend_subscription') {
+    const { data: current } = await adminDb
+      .from('doctors')
+      .select('date_expiration')
+      .eq('id', params.id)
+      .single()
+
+    const base = current?.date_expiration
+      ? new Date(current.date_expiration)
+      : new Date()
+    if (base < new Date()) base.setTime(new Date().getTime())
+    base.setDate(base.getDate() + 30)
+    const newExpiry = base.toISOString().split('T')[0]
+
+    const { error } = await adminDb
+      .from('doctors')
+      .update({ date_expiration: newExpiry, subscription_status: 'actif' })
+      .eq('id', params.id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true, date_expiration: newExpiry })
+  }
+
   // ── Approuver / Refuser ──────────────────────────────────────────────────
   const newStatus = action === 'approve' ? 'approved' : 'rejected'
 
@@ -80,9 +104,15 @@ export async function PATCH(
     return NextResponse.json({ error: `Médecin introuvable (id: ${params.id})` }, { status: 404 })
   }
 
-  // 2. Met à jour le statut
+  // 2. Met à jour le statut + 30 jours gratuits si approbation
   const updatePayload: Record<string, string> = { status: newStatus }
   if (rejection_reason) updatePayload.rejection_reason = rejection_reason
+  if (action === 'approve') {
+    const expiry = new Date()
+    expiry.setDate(expiry.getDate() + 30)
+    updatePayload.date_expiration = expiry.toISOString().split('T')[0]
+    updatePayload.subscription_status = 'actif'
+  }
 
   const { error: updateError } = await adminDb
     .from('doctors')
