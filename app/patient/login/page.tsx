@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-type Mode = 'home' | 'email-login' | 'email-signup' | 'phone' | 'phone-otp'
+type Mode = 'home' | 'email-login' | 'email-signup' | 'phone' | 'phone-otp' | 'forgot'
 
 export default function PatientLoginPage() {
   const router = useRouter()
@@ -43,6 +43,18 @@ export default function PatientLoginPage() {
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/api/auth/callback?next=/patient/dashboard` },
     })
+  }
+
+  // ── Mot de passe oublié ──────────────────────────────────────────────────
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true); setError(null)
+    const supabase = createClient()
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setLoading(false)
+    setSuccess('Si cet email existe, un lien de réinitialisation a été envoyé.')
   }
 
   // ── Email : connexion ────────────────────────────────────────────────────
@@ -223,13 +235,16 @@ export default function PatientLoginPage() {
               <Button type="submit" className="w-full h-11" disabled={loading}>
                 {loading ? 'Connexion…' : 'Se connecter'}
               </Button>
-              <p className="text-center text-sm text-gray-500">
-                Pas encore de compte ?{' '}
+              <div className="flex items-center justify-between text-sm">
                 <button type="button" onClick={() => { reset(); setMode('email-signup') }}
                   className="text-primary-600 font-medium hover:underline">
                   Créer un compte
                 </button>
-              </p>
+                <button type="button" onClick={() => { reset(); setMode('forgot') }}
+                  className="text-gray-400 hover:text-primary-500">
+                  Mot de passe oublié ?
+                </button>
+              </div>
             </form>
           )}
 
@@ -288,6 +303,22 @@ export default function PatientLoginPage() {
               </div>
               <Button type="submit" className="w-full h-11" disabled={loading}>
                 {loading ? 'Envoi…' : 'Envoyer le code SMS'}
+              </Button>
+            </form>
+          )}
+
+          {/* ── FORGOT PASSWORD ─────────────────────────────────────────── */}
+          {mode === 'forgot' && (
+            <form onSubmit={handleForgot} className="space-y-4">
+              <h2 className="text-lg font-bold text-gray-900">Mot de passe oublié</h2>
+              <p className="text-sm text-gray-500">Entrez votre email — vous recevrez un lien pour créer un nouveau mot de passe.</p>
+              <div className="space-y-1.5">
+                <Label>Adresse email</Label>
+                <Input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="vous@exemple.ma" required autoFocus />
+              </div>
+              <Button type="submit" className="w-full h-11" disabled={loading}>
+                {loading ? 'Envoi…' : 'Envoyer le lien'}
               </Button>
             </form>
           )}

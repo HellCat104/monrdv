@@ -145,6 +145,12 @@ export default function LoginPage() {
                   'Se connecter'
                 )}
               </Button>
+
+              <div className="text-center">
+                <Link href="/forgot-password" className="text-sm text-gray-400 hover:text-primary-500">
+                  Mot de passe oublié ?
+                </Link>
+              </div>
             </form>
           </CardContent>
         </Card>
