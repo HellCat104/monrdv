@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next'
 import { createAdminClient } from '@/lib/supabase/server'
+import { SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://monrdv.vercel.app'
@@ -29,7 +30,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     }))
 
-    return [...staticPages, ...doctorPages]
+    // Pages SEO spécialité + ville
+    const seoPages: MetadataRoute.Sitemap = []
+    for (const specialiteSlug of Object.keys(SPECIALITE_SLUGS)) {
+      for (const villeSlug of Object.keys(VILLE_SLUGS)) {
+        seoPages.push({
+          url: `${baseUrl}/medecin/${specialiteSlug}/${villeSlug}`,
+          lastModified: new Date(),
+          changeFrequency: 'weekly' as const,
+          priority: 0.7,
+        })
+      }
+    }
+
+    return [...staticPages, ...doctorPages, ...seoPages]
   } catch {
     return staticPages
   }
