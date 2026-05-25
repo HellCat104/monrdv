@@ -176,14 +176,15 @@ export default function AdminPage() {
   }
 
   async function handleSetExpiration() {
-    const { id, name } = expirationDialog
-    setActionLoading(id)
+    const id = expirationDialog.id
+    const name = expirationDialog.name
+    if (!id) return
+    setExpirationDialog({ open: false, id, name })
+    setNewExpiration('')
     const ok = await apiFetch(id, { action: 'set_expiration', date_expiration: newExpiration || null })
     if (ok) showToast('Date d\'expiration enregistrée ✓', 'success')
-    setExpirationDialog({ open: false, id: '', name: '' })
-    setNewExpiration('')
     await refresh()
-    setActionLoading(null)
+    setExpirationDialog({ open: false, id: '', name: '' })
   }
 
   async function handleLogout() {
@@ -436,7 +437,7 @@ export default function AdminPage() {
       {/* Dialog — date d'expiration */}
       <Dialog
         open={expirationDialog.open}
-        onOpenChange={(o) => setExpirationDialog({ open: o, id: '', name: '' })}
+        onOpenChange={(o) => { if (!o) setExpirationDialog(prev => ({ ...prev, open: false })) }}
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
