@@ -45,7 +45,7 @@ export default function AbonnementPage() {
   const isGood    = daysLeft === null || daysLeft > 15
 
   const whatsappMessage = encodeURIComponent(
-    `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement de 149 DHS pour renouveler mon abonnement.`
+    `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement de 199 DHS pour renouveler mon abonnement.`
   )
 
   return (
@@ -98,7 +98,7 @@ export default function AbonnementPage() {
         </CardHeader>
         <CardContent>
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-gray-900">149</span>
+            <span className="text-4xl font-bold text-gray-900">199</span>
             <span className="text-xl text-gray-500">DHS</span>
             <span className="text-gray-400 text-sm">/ mois</span>
           </div>
@@ -120,7 +120,7 @@ export default function AbonnementPage() {
           <div className="space-y-3">
             <div className="flex gap-3">
               <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
-              <p className="text-sm text-gray-700">Effectuez un virement bancaire de <strong>149 DHS</strong> sur le compte suivant :</p>
+              <p className="text-sm text-gray-700">Effectuez un virement bancaire de <strong>199 DHS</strong> sur le compte suivant :</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-4 ml-9 space-y-1 text-sm">
               <p><span className="text-gray-500">Bénéficiaire :</span> <strong>MonRDV</strong></p>

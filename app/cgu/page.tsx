@@ -82,7 +82,7 @@ export default function CGUPage() {
             <h2 className="text-xl font-semibold text-gray-800 mb-3">5. Abonnement médecin</h2>
             <p className="text-gray-600 leading-relaxed mb-3">
               L&apos;accès aux fonctionnalités professionnelles de MonRDV est soumis à un abonnement mensuel
-              de <strong>149 DHS par mois</strong>, après une période d&apos;essai gratuite de 30 jours.
+              de <strong>199 DHS par mois</strong>, après une période d&apos;essai gratuite de 30 jours.
             </p>
             <ul className="list-disc list-inside text-gray-600 space-y-2 ml-2">
               <li>Le paiement s&apos;effectue par virement bancaire</li>
