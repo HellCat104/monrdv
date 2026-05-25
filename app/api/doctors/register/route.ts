@@ -2,26 +2,44 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendAdminNotificationEmail } from '@/lib/email'
+import { sanitizeString, sanitizeEmail, sanitizeSlug, sanitizePhone, isValidEmail, isValidSlug } from '@/lib/sanitize'
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData()
 
-  const name      = formData.get('name') as string
-  const email     = formData.get('email') as string
+  const name      = sanitizeString(formData.get('name'))
+  const email     = sanitizeEmail(formData.get('email'))
   const password  = formData.get('password') as string
-  const specialty = formData.get('specialty') as string
-  const phone     = formData.get('phone') as string
-  const city      = formData.get('city') as string
-  const slug      = formData.get('slug') as string
+  const specialty = sanitizeString(formData.get('specialty'))
+  const phone     = sanitizePhone(formData.get('phone'))
+  const city      = sanitizeString(formData.get('city'))
+  const slug      = sanitizeSlug(formData.get('slug'))
   const document  = formData.get('document') as File | null
 
-  // Validation
+  // Validation stricte
   if (!name || !email || !password || !specialty || !slug || !document) {
     return NextResponse.json({ error: 'Tous les champs obligatoires doivent être remplis' }, { status: 400 })
   }
 
+  if (!isValidEmail(email)) {
+    return NextResponse.json({ error: 'Email invalide' }, { status: 400 })
+  }
+
+  if (!isValidSlug(slug)) {
+    return NextResponse.json({ error: 'URL invalide (lettres, chiffres et tirets uniquement)' }, { status: 400 })
+  }
+
+  if (password.length < 8) {
+    return NextResponse.json({ error: 'Le mot de passe doit contenir au moins 8 caractères' }, { status: 400 })
+  }
+
   if (document.size > 5 * 1024 * 1024) {
     return NextResponse.json({ error: 'Le fichier dépasse 5 MB' }, { status: 400 })
+  }
+
+  const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+  if (!allowedTypes.includes(document.type)) {
+    return NextResponse.json({ error: 'Format de fichier non autorisé (PDF, JPG, PNG uniquement)' }, { status: 400 })
   }
 
   const supabase = createAdminClient()
