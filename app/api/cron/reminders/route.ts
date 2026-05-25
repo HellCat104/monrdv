@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     console.error('[Cron reminders] Erreur Supabase:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
   }
 
   let sent = 0

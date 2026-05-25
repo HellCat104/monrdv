@@ -76,7 +76,7 @@ export async function DELETE(
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
 
   return NextResponse.json({ success: true })
 }
