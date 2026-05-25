@@ -77,11 +77,11 @@ export default function AbonnementPage() {
                   ? `Actif — ${daysLeft} jours restants`
                   : 'Actif'}
               </p>
-              {doctor?.date_expiration && (
-                <p className={`text-sm mt-0.5 ${isExpired ? 'text-red-500' : isWarning ? 'text-orange-500' : 'text-green-600'}`}>
-                  {isExpired ? 'Expiré le' : 'Expire le'} {new Date(doctor.date_expiration).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </p>
-              )}
+              <p className={`text-sm mt-0.5 ${isExpired ? 'text-red-500' : isWarning ? 'text-orange-500' : 'text-green-600'}`}>
+                {doctor?.date_expiration
+                  ? `${isExpired ? 'Expiré le' : 'Expire le'} ${new Date(doctor.date_expiration).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                  : 'Aucune date d\'expiration définie — contactez le support'}
+              </p>
             </div>
           </div>
         </CardContent>
