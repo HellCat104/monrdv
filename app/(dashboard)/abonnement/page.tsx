@@ -38,9 +38,10 @@ export default function AbonnementPage() {
     load()
   }, [])
 
+  const isLoaded = doctor !== null
   const isExpired = daysLeft !== null && daysLeft <= 0
   const isWarning = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
-  const isGood = daysLeft !== null && daysLeft > 7
+  const isGood = daysLeft === null || daysLeft > 7
 
   const whatsappMessage = encodeURIComponent(
     `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement de 149 DHS pour renouveler mon abonnement.`
@@ -66,13 +67,15 @@ export default function AbonnementPage() {
             )}
             <div>
               <p className={`font-bold text-lg ${isExpired ? 'text-red-700' : isWarning ? 'text-orange-700' : 'text-green-700'}`}>
-                {isExpired
+                {!isLoaded
+                  ? 'Chargement…'
+                  : isExpired
                   ? 'Abonnement expiré'
                   : isWarning
-                  ? `Plus que ${daysLeft} jour${daysLeft > 1 ? 's' : ''} !`
-                  : isGood
+                  ? `Plus que ${daysLeft} jour${daysLeft! > 1 ? 's' : ''} !`
+                  : daysLeft !== null
                   ? `Actif — ${daysLeft} jours restants`
-                  : 'Chargement…'}
+                  : 'Actif'}
               </p>
               {doctor?.date_expiration && (
                 <p className={`text-sm mt-0.5 ${isExpired ? 'text-red-500' : isWarning ? 'text-orange-500' : 'text-green-600'}`}>
