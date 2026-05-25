@@ -261,11 +261,14 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="bg-gray-900 text-gray-400 py-8 px-4 text-center text-sm">
         <p>© 2026 MonRDV — Prise de rendez-vous médicaux au Maroc 🇲🇦</p>
-        <p className="mt-2">
+        <div className="flex flex-wrap justify-center gap-4 mt-3 text-xs">
           <Link href="/politique-confidentialite" className="hover:text-gray-300 transition-colors underline underline-offset-2">
             Politique de confidentialité
           </Link>
-        </p>
+          <Link href="/cgu" className="hover:text-gray-300 transition-colors underline underline-offset-2">
+            CGU
+          </Link>
+        </div>
         <div className="flex items-center justify-center gap-4 mt-4">
           <a
             href="mailto:asmaadouach@gmail.com"

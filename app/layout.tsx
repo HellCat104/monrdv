@@ -5,8 +5,36 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'MonRDV — Prise de rendez-vous médical au Maroc',
-  description: 'Plateforme de gestion de rendez-vous pour cabinets médicaux au Maroc',
+  title: {
+    default: 'MonRDV — Prise de rendez-vous médical au Maroc',
+    template: '%s | MonRDV',
+  },
+  description: 'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. Médecin généraliste, cardiologue, dermatologue, pédiatre et plus — disponible 24h/24 à Casablanca, Rabat, Marrakech et partout au Maroc.',
+  keywords: ['rendez-vous médical Maroc', 'médecin en ligne Maroc', 'prise de rendez-vous médecin', 'médecin Casablanca', 'médecin Rabat', 'médecin Marrakech', 'MonRDV'],
+  authors: [{ name: 'MonRDV' }],
+  creator: 'MonRDV',
+  metadataBase: new URL('https://monrdv.vercel.app'),
+  openGraph: {
+    title: 'MonRDV — Prise de rendez-vous médical au Maroc',
+    description: 'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. Disponible 24h/24.',
+    url: 'https://monrdv.vercel.app',
+    siteName: 'MonRDV',
+    locale: 'fr_MA',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'MonRDV — Prise de rendez-vous médical au Maroc',
+    description: 'Trouvez un médecin et prenez rendez-vous en ligne au Maroc.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
+  },
   icons: {
     icon: '/favicon.ico',
   },
