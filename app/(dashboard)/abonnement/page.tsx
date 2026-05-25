@@ -28,10 +28,11 @@ export default function AbonnementPage() {
       if (data) {
         setDoctor(data)
         if (data.date_expiration) {
-          const exp = new Date(data.date_expiration)
+          const [year, month, day] = data.date_expiration.split('-').map(Number)
+          const exp = new Date(year, month - 1, day)
           const now = new Date()
           now.setHours(0, 0, 0, 0)
-          setDaysLeft(Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          setDaysLeft(Math.floor((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
         }
       }
     }
