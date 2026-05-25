@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Metadata } from 'next'
@@ -28,19 +30,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export async function generateStaticParams() {
-  // Génère les combinaisons les plus importantes pour le pre-rendering
-  const topSpecialites = ['medecin-generaliste', 'cardiologue', 'dermatologue', 'pediatre', 'dentiste', 'ophtalmologue']
-  const topVilles      = ['casablanca', 'rabat', 'marrakech', 'fes', 'tanger', 'agadir']
-
-  const params = []
-  for (const specialite of topSpecialites) {
-    for (const ville of topVilles) {
-      params.push({ specialite, ville })
-    }
-  }
-  return params
-}
 
 export default async function MedecinSpecialiteVillePage({ params }: Props) {
   const specialite = getSpecialiteFromSlug(params.specialite)
