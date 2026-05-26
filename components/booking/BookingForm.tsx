@@ -20,6 +20,7 @@ interface BookingFormProps {
 
 export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
   const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', notes: '' })
+  const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [confirmed, setConfirmed] = useState(false)
@@ -27,6 +28,10 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (!consent) {
+      setError('Vous devez accepter le traitement de vos données de santé pour continuer.')
+      return
+    }
     setLoading(true)
 
     try {
@@ -167,6 +172,27 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
             placeholder="Décrivez brièvement le motif de votre consultation…"
             rows={2}
           />
+        </div>
+
+        {/* Consentement données de santé — OBLIGATOIRE (loi 09-08) */}
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 shrink-0"
+            />
+            <span className="text-xs text-blue-800 leading-relaxed">
+              J&apos;accepte que mes données personnelles (nom, téléphone, motif) soient transmises à{' '}
+              <strong>Dr. {doctor.name}</strong> dans le seul but de gérer mon rendez-vous médical,
+              conformément à la{' '}
+              <a href="/politique-confidentialite" target="_blank" className="underline hover:text-primary-600">
+                politique de confidentialité
+              </a>.
+              Je peux retirer mon consentement à tout moment.
+            </span>
+          </label>
         </div>
 
         {error && <p className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">{error}</p>}
