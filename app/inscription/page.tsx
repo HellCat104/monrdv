@@ -15,6 +15,7 @@ export default function InscriptionPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [consentMedical, setConsentMedical] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
@@ -45,6 +46,11 @@ export default function InscriptionPage() {
 
     if (!form.cnom_number.trim()) {
       setError('Veuillez entrer votre numéro CNOM')
+      return
+    }
+
+    if (!consentMedical) {
+      setError('Vous devez accepter le stockage de vos données médicales pour continuer')
       return
     }
 
@@ -245,6 +251,29 @@ export default function InscriptionPage() {
                   />
                 </div>
                 <p className="text-xs text-gray-400">Numéro d'inscription au Conseil National de l'Ordre des Médecins du Maroc</p>
+              </div>
+
+              {/* Consentement données médicales — obligatoire loi 09-08 */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentMedical}
+                    onChange={(e) => setConsentMedical(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-500 shrink-0"
+                  />
+                  <span className="text-xs text-blue-800 leading-relaxed">
+                    J&apos;accepte le stockage de mes données professionnelles et des données médicales de mes patients
+                    sur MonRDV, conformément à la{' '}
+                    <a href="/politique-confidentialite" target="_blank" className="underline hover:text-primary-600">
+                      politique de confidentialité
+                    </a>{' '}
+                    et aux{' '}
+                    <a href="/cgu" target="_blank" className="underline hover:text-primary-600">
+                      CGU
+                    </a>.
+                  </span>
+                </label>
               </div>
 
               {error && (

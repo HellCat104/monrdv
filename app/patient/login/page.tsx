@@ -19,12 +19,13 @@ export default function PatientLoginPage() {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm]   = useState('')
-  const [phone, setPhone]       = useState('')
-  const [otp, setOtp]           = useState('')
-  const [showPwd, setShowPwd]   = useState(false)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const [success, setSuccess]   = useState<string | null>(null)
+  const [phone, setPhone]           = useState('')
+  const [otp, setOtp]               = useState('')
+  const [showPwd, setShowPwd]       = useState(false)
+  const [consentMedical, setConsentMedical] = useState(false)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [success, setSuccess]       = useState<string | null>(null)
 
   function reset() {
     setError(null); setSuccess(null); setLoading(false)
@@ -80,6 +81,7 @@ export default function PatientLoginPage() {
     e.preventDefault()
     if (password !== confirm) { setError('Les mots de passe ne correspondent pas.'); return }
     if (password.length < 6)  { setError('Le mot de passe doit contenir au moins 6 caractères.'); return }
+    if (!consentMedical)      { setError('Vous devez accepter le stockage de vos données médicales.'); return }
     setLoading(true); setError(null)
     const supabase = createClient()
     const { error } = await supabase.auth.signUp({ email, password })
@@ -275,6 +277,26 @@ export default function PatientLoginPage() {
                   onChange={e => setConfirm(e.target.value)}
                   placeholder="Répétez le mot de passe" required />
               </div>
+              {/* Consentement données médicales — obligatoire loi 09-08 */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentMedical}
+                    onChange={(e) => setConsentMedical(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-500 shrink-0"
+                  />
+                  <span className="text-xs text-blue-800 leading-relaxed">
+                    J&apos;accepte le stockage de mes données médicales (rendez-vous, motifs de consultation)
+                    conformément à la{' '}
+                    <a href="/politique-confidentialite" target="_blank" className="underline hover:text-primary-600">
+                      politique de confidentialité
+                    </a>.
+                    Je peux retirer mon consentement à tout moment depuis mon espace patient.
+                  </span>
+                </label>
+              </div>
+
               <Button type="submit" className="w-full h-11" disabled={loading}>
                 {loading ? 'Création…' : 'Créer mon compte'}
               </Button>
