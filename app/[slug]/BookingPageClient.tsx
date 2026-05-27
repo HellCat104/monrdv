@@ -126,6 +126,9 @@ export function BookingPageClient({ doctor }: Props) {
                   Consultation : {doctor.appointment_duration} min
                 </span>
               </div>
+              {doctor.bio && (
+                <p className="mt-2 text-sm text-gray-500 leading-relaxed line-clamp-3">{doctor.bio}</p>
+              )}
             </div>
           </div>
         </div>

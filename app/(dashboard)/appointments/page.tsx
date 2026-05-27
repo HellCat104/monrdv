@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import type { Appointment, Doctor, AppointmentStatus } from '@/types'
+import type { Appointment, Doctor, AppointmentStatus, AppointmentAttendance } from '@/types'
 import { Plus, Search, Calendar } from 'lucide-react'
 import { format, startOfWeek, endOfWeek, addDays, subDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -102,6 +102,29 @@ export default function AppointmentsPage() {
       body: JSON.stringify({ status }),
     })
     await loadAppointments()
+  }
+
+  async function handleAttendanceChange(id: string, attendance: AppointmentAttendance) {
+    await fetch(`/api/appointments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attendance }),
+    })
+    // Mise à jour optimiste locale
+    setAppointments((prev) =>
+      prev.map((a) => a.id === id ? { ...a, attendance } : a)
+    )
+  }
+
+  async function handleNotesChange(id: string, doctor_notes: string) {
+    await fetch(`/api/appointments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doctor_notes }),
+    })
+    setAppointments((prev) =>
+      prev.map((a) => a.id === id ? { ...a, doctor_notes } : a)
+    )
   }
 
   // Navigation dates
@@ -216,7 +239,12 @@ export default function AppointmentsPage() {
               ))}
             </div>
           ) : (
-            <AppointmentList appointments={filtered} onStatusChange={handleStatusChange} />
+            <AppointmentList
+              appointments={filtered}
+              onStatusChange={handleStatusChange}
+              onAttendanceChange={handleAttendanceChange}
+              onNotesChange={handleNotesChange}
+            />
           )}
         </CardContent>
       </Card>

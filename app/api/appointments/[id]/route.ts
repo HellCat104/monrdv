@@ -14,9 +14,11 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   const body = await req.json()
-  const { status, date, time } = body
+  const { status, date, time, doctor_notes, attendance } = body
 
-  if (!status) return NextResponse.json({ error: 'Statut manquant' }, { status: 400 })
+  if (!status && doctor_notes === undefined && attendance === undefined) {
+    return NextResponse.json({ error: 'Paramètre manquant' }, { status: 400 })
+  }
 
   // Vérifie que le RDV appartient bien au médecin connecté
   const { data: doctor } = await supabase
@@ -27,9 +29,16 @@ export async function PATCH(
 
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
 
+  const updates: Record<string, unknown> = {}
+  if (status)              updates.status       = status
+  if (date)                updates.date         = date
+  if (time)                updates.time         = time
+  if (doctor_notes !== undefined) updates.doctor_notes = doctor_notes || null
+  if (attendance !== undefined)   updates.attendance   = attendance
+
   const { data: appointment, error } = await supabase
     .from('appointments')
-    .update({ status, ...(date ? { date } : {}), ...(time ? { time } : {}) })
+    .update(updates)
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .select('*, patient:patients(*)')

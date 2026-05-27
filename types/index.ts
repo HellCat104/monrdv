@@ -10,11 +10,20 @@ export interface Doctor {
   city?: string
   address?: string
   photo_url?: string
+  bio?: string | null
   status?: string
   subscription_status?: string
   cnom_number?: string
   working_hours: WorkingHours
   appointment_duration: number // en minutes : 15, 20 ou 30
+  created_at: string
+}
+
+export interface BlockedDate {
+  id: string
+  doctor_id: string
+  date: string   // YYYY-MM-DD
+  reason: string | null
   created_at: string
 }
 
@@ -44,6 +53,7 @@ export interface Patient {
 }
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled'
+export type AppointmentAttendance = 'present' | 'absent' | 'late' | null
 
 export interface Appointment {
   id: string
@@ -53,6 +63,8 @@ export interface Appointment {
   time: string         // format HH:mm
   status: AppointmentStatus
   notes: string | null
+  doctor_notes: string | null
+  attendance: AppointmentAttendance
   cancel_token: string | null
   created_at: string
   // Relations jointes
@@ -208,4 +220,16 @@ export const STATUS_COLORS: Record<AppointmentStatus, string> = {
   pending:   'bg-yellow-100 text-yellow-800',
   confirmed: 'bg-green-100 text-green-800',
   cancelled: 'bg-red-100 text-red-800',
+}
+
+export const ATTENDANCE_LABELS: Record<NonNullable<AppointmentAttendance>, string> = {
+  present: 'Présent',
+  absent:  'Absent',
+  late:    'En retard',
+}
+
+export const ATTENDANCE_COLORS: Record<NonNullable<AppointmentAttendance>, string> = {
+  present: 'bg-green-100 text-green-700',
+  absent:  'bg-red-100 text-red-700',
+  late:    'bg-orange-100 text-orange-700',
 }

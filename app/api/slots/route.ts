@@ -36,6 +36,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ slots: [] })
   }
 
+  // Vérifie si la date est bloquée
+  const { data: blocked } = await supabase
+    .from('blocked_dates')
+    .select('id')
+    .eq('doctor_id', doctorId)
+    .eq('date', date)
+    .maybeSingle()
+
+  if (blocked) {
+    return NextResponse.json({ slots: [] })
+  }
+
   // Génère tous les créneaux du jour
   const allSlots = generateTimeSlots(
     daySchedule.start,

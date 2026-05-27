@@ -13,7 +13,8 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC } from '@/types'
-import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin } from 'lucide-react'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2 } from 'lucide-react'
+import type { BlockedDate } from '@/types'
 
 export default function SettingsPage() {
   const [doctor, setDoctor] = useState<Doctor | null>(null)
@@ -23,6 +24,7 @@ export default function SettingsPage() {
     specialty: '',
     city: '',
     address: '',
+    bio: '',
     appointment_duration: 30,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
   })
@@ -31,6 +33,10 @@ export default function SettingsPage() {
   const [copied, setCopied] = useState(false)
   const [photoUploading, setPhotoUploading] = useState(false)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
+  const [newBlockDate, setNewBlockDate] = useState('')
+  const [newBlockReason, setNewBlockReason] = useState('')
+  const [blockLoading, setBlockLoading] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -51,9 +57,18 @@ export default function SettingsPage() {
           specialty: data.specialty ?? '',
           city: data.city ?? '',
           address: data.address ?? '',
+          bio: data.bio ?? '',
           appointment_duration: data.appointment_duration,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
         })
+
+        // Charge les dates bloquées
+        const { data: blocked } = await supabase
+          .from('blocked_dates')
+          .select('*')
+          .eq('doctor_id', data.id)
+          .order('date', { ascending: true })
+        setBlockedDates(blocked ?? [])
       }
     }
     load()
@@ -83,6 +98,7 @@ export default function SettingsPage() {
           specialty: form.specialty,
           city: form.city,
           address: form.address,
+          bio: form.bio || null,
           appointment_duration: form.appointment_duration,
           working_hours: form.working_hours,
         })
@@ -105,6 +121,27 @@ export default function SettingsPage() {
     await navigator.clipboard.writeText(bookingUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function handleAddBlockedDate() {
+    if (!newBlockDate || !doctor) return
+    setBlockLoading(true)
+    const { data, error } = await supabase
+      .from('blocked_dates')
+      .insert({ doctor_id: doctor.id, date: newBlockDate, reason: newBlockReason || null })
+      .select()
+      .single()
+    setBlockLoading(false)
+    if (!error && data) {
+      setBlockedDates((prev) => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)))
+      setNewBlockDate('')
+      setNewBlockReason('')
+    }
+  }
+
+  async function handleRemoveBlockedDate(id: string) {
+    await supabase.from('blocked_dates').delete().eq('id', id)
+    setBlockedDates((prev) => prev.filter((d) => d.id !== id))
   }
 
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -271,6 +308,21 @@ export default function SettingsPage() {
               />
               <p className="text-xs text-gray-400">Affichée sur votre page de réservation publique</p>
             </div>
+
+            {/* Bio */}
+            <div className="space-y-1.5">
+              <Label htmlFor="s_bio">Présentation (optionnel)</Label>
+              <textarea
+                id="s_bio"
+                value={form.bio}
+                onChange={(e) => setForm({ ...form, bio: e.target.value })}
+                placeholder="Ex : Spécialisé en cardiologie interventionnelle, diplômé de la faculté de médecine de Casablanca…"
+                rows={3}
+                maxLength={500}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+              />
+              <p className="text-xs text-gray-400">{form.bio.length}/500 caractères · Affichée sur votre page publique</p>
+            </div>
           </CardContent>
         </Card>
 
@@ -400,6 +452,75 @@ export default function SettingsPage() {
                 </div>
               )
             })}
+          </CardContent>
+        </Card>
+
+        {/* Dates bloquées */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarOff className="h-4 w-4 text-primary-500" />
+              Dates bloquées (congés / absences)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Aucun créneau ne sera disponible pour les patients ces jours-là.
+            </p>
+
+            {/* Ajouter une date */}
+            <div className="flex gap-2 flex-wrap">
+              <Input
+                type="date"
+                value={newBlockDate}
+                onChange={(e) => setNewBlockDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-40"
+              />
+              <Input
+                value={newBlockReason}
+                onChange={(e) => setNewBlockReason(e.target.value)}
+                placeholder="Raison (optionnel)"
+                className="flex-1 min-w-[140px]"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleAddBlockedDate}
+                disabled={!newBlockDate || blockLoading}
+                className="shrink-0"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Bloquer
+              </Button>
+            </div>
+
+            {/* Liste des dates bloquées */}
+            {blockedDates.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">Aucune date bloquée</p>
+            ) : (
+              <div className="space-y-2">
+                {blockedDates.map((bd) => (
+                  <div key={bd.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <div>
+                      <span className="text-sm font-medium text-gray-800">
+                        {new Date(bd.date + 'T00:00:00').toLocaleDateString('fr-MA', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                      {bd.reason && (
+                        <span className="text-xs text-gray-400 ml-2">— {bd.reason}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBlockedDate(bd.id)}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

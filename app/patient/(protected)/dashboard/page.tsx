@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Calendar, Clock, Search, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import { formatDateShort, formatTime } from '@/lib/utils'
+import { CancelButton } from './CancelButton'
 
 interface AppointmentRow {
   id: string
@@ -179,13 +180,8 @@ function AppointmentCard({ apt, isPast = false }: { apt: AppointmentRow; isPast?
           </Link>
         )}
 
-        {apt.cancel_token && !isPast && apt.status === 'confirmed' && (
-          <Link
-            href={`/cancel-result?token=${apt.cancel_token}`}
-            className="text-xs text-red-400 hover:underline"
-          >
-            Annuler
-          </Link>
+        {!isPast && (apt.status === 'confirmed' || apt.status === 'pending') && (
+          <CancelButton appointmentId={apt.id} cancelToken={apt.cancel_token} />
         )}
       </div>
     </div>
