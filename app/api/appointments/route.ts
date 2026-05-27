@@ -11,14 +11,24 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
+  // Vérifie que le doctor_id demandé appartient bien au médecin connecté
+  const { data: doctor } = await supabase
+    .from('doctors')
+    .select('id')
+    .eq('email', user.email)
+    .single()
+
+  if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
+
   const { searchParams } = new URL(req.url)
   const doctorId = searchParams.get('doctor_id')
   const date = searchParams.get('date')
 
+  // Sécurité : ignore le doctor_id passé en param, utilise toujours celui du token auth
   let query = supabase
     .from('appointments')
     .select('*, patient:patients(*)')
-    .eq('doctor_id', doctorId!)
+    .eq('doctor_id', doctor.id)
     .order('date', { ascending: true })
     .order('time', { ascending: true })
 
