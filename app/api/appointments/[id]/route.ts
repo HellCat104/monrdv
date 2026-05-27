@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendCancellationSMS } from '@/lib/twilio'
-import { formatPhoneMaroc } from '@/lib/utils'
 
 // PATCH /api/appointments/[id] — modifie le statut (confirm/cancel)
 export async function PATCH(
