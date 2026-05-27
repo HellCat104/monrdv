@@ -156,18 +156,7 @@ export async function POST(req: NextRequest) {
     baseUrl,
   }).catch((err) => console.error('[SMS]', err))
 
-  // Email de notification au médecin
-  if (doctor?.email) {
-    sendNewAppointmentToDoctor({
-      doctorEmail: doctor.email,
-      doctorName: doctor.name,
-      patientName,
-      patientPhone: formattedPhone,
-      date,
-      time,
-      notes: notes || undefined,
-    }).catch((err) => console.error('[Email] notif médecin:', err))
-  }
+  // Pas d'email au médecin à chaque RDV — il reçoit l'agenda complet chaque matin à 7h
 
   // Email de confirmation au patient (si email fourni)
   if (email && doctor) {
