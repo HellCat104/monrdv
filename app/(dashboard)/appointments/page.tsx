@@ -176,19 +176,19 @@ export default function AppointmentsPage() {
             </div>
 
             {viewMode !== 'all' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <Button variant="outline" size="sm" onClick={() => navigate('prev')}>←</Button>
-                <span className="text-sm font-medium text-gray-700 capitalize min-w-[200px] text-center">
+                <Button variant="outline" size="sm" onClick={() => navigate('next')}>→</Button>
+                <span className="text-sm font-medium text-gray-700 capitalize text-center flex-1 min-w-0 truncate">
                   {dateLabel}
                 </span>
-                <Button variant="outline" size="sm" onClick={() => navigate('next')}>→</Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setCurrentDate(getNowInMaroc())}
-                  className="text-primary-500"
+                  className="text-primary-500 shrink-0"
                 >
-                  Aujourd&apos;hui
+                  Auj.
                 </Button>
               </div>
             )}
@@ -196,7 +196,7 @@ export default function AppointmentsPage() {
 
           {/* Recherche + filtre statut */}
           <div className="flex gap-3 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
+            <div className="relative flex-1 min-w-[160px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 value={searchQuery}

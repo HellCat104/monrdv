@@ -24,7 +24,7 @@ export default async function PatientLayout({ children }: { children: React.Reac
   return (
     <div className="min-h-screen bg-gray-50">
       <PatientHeader userEmail={user.email ?? ''} userName={user.user_metadata?.full_name ?? ''} />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
         {children}
       </main>
     </div>

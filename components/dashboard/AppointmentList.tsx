@@ -118,7 +118,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
 
               {/* Boutons présence — uniquement pour les RDV confirmés */}
               {apt.status === 'confirmed' && onAttendanceChange && (
-                <div className="flex gap-1.5 mt-2 flex-wrap">
+                <div className="flex gap-1.5 mt-2 flex-wrap max-w-full">
                   <button
                     onClick={() => handleAttendance(apt.id, apt.attendance === 'present' ? null : 'present')}
                     className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${

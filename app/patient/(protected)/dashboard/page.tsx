@@ -139,50 +139,54 @@ function AppointmentCard({ apt, isPast = false }: { apt: AppointmentRow; isPast?
   const StatusIcon = status.Icon
 
   return (
-    <div className={`bg-white rounded-2xl border p-5 flex items-start gap-4 ${isPast ? 'border-gray-100' : 'border-primary-100 shadow-sm'}`}>
-      {/* Date block */}
-      <div className={`shrink-0 rounded-xl p-3 text-center min-w-[56px] ${isPast ? 'bg-gray-100' : 'bg-primary-50'}`}>
-        <p className={`text-xl font-bold leading-none ${isPast ? 'text-gray-500' : 'text-primary-700'}`}>
-          {new Date(apt.date + 'T00:00:00').getDate()}
-        </p>
-        <p className={`text-xs font-medium mt-0.5 ${isPast ? 'text-gray-400' : 'text-primary-500'}`}>
-          {new Date(apt.date + 'T00:00:00').toLocaleString('fr-MA', { month: 'short' })}
-        </p>
-      </div>
+    <div className={`bg-white rounded-2xl border p-4 sm:p-5 ${isPast ? 'border-gray-100' : 'border-primary-100 shadow-sm'}`}>
+      <div className="flex items-start gap-3 sm:gap-4">
+        {/* Date block */}
+        <div className={`shrink-0 rounded-xl p-2.5 sm:p-3 text-center w-12 sm:w-14 ${isPast ? 'bg-gray-100' : 'bg-primary-50'}`}>
+          <p className={`text-lg sm:text-xl font-bold leading-none ${isPast ? 'text-gray-500' : 'text-primary-700'}`}>
+            {new Date(apt.date + 'T00:00:00').getDate()}
+          </p>
+          <p className={`text-xs font-medium mt-0.5 ${isPast ? 'text-gray-400' : 'text-primary-500'}`}>
+            {new Date(apt.date + 'T00:00:00').toLocaleString('fr-MA', { month: 'short' })}
+          </p>
+        </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-900">
-          Dr. {apt.doctor?.name ?? '—'}
-        </p>
-        <p className="text-sm text-gray-500">{apt.doctor?.specialty}</p>
-        <p className="text-sm text-gray-600 mt-1 font-medium">
-          {formatDateShort(apt.date)} · {formatTime(apt.time)}
-        </p>
-        {apt.notes && (
-          <p className="text-xs text-gray-400 mt-1 italic truncate">"{apt.notes}"</p>
-        )}
-      </div>
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-gray-900 text-sm sm:text-base truncate">
+                Dr. {apt.doctor?.name ?? '—'}
+              </p>
+              <p className="text-xs sm:text-sm text-gray-500">{apt.doctor?.specialty}</p>
+            </div>
+            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${status.color}`}>
+              <StatusIcon className="h-3 w-3" />
+              <span className="hidden xs:inline">{status.label}</span>
+            </span>
+          </div>
 
-      {/* Status + actions */}
-      <div className="shrink-0 flex flex-col items-end gap-2">
-        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${status.color}`}>
-          <StatusIcon className="h-3 w-3" />
-          {status.label}
-        </span>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1 font-medium">
+            {formatDateShort(apt.date)} · {formatTime(apt.time)}
+          </p>
+          {apt.notes && (
+            <p className="text-xs text-gray-400 mt-1 italic truncate">"{apt.notes}"</p>
+          )}
 
-        {apt.doctor?.slug && !isPast && apt.status !== 'cancelled' && (
-          <Link
-            href={`/${apt.doctor.slug}`}
-            className="text-xs text-primary-600 hover:underline"
-          >
-            Reprendre RDV
-          </Link>
-        )}
-
-        {!isPast && (apt.status === 'confirmed' || apt.status === 'pending') && (
-          <CancelButton appointmentId={apt.id} cancelToken={apt.cancel_token} />
-        )}
+          {/* Actions */}
+          {(!isPast && apt.status !== 'cancelled') && (
+            <div className="flex items-center gap-3 mt-2">
+              {apt.doctor?.slug && (
+                <Link href={`/${apt.doctor.slug}`} className="text-xs text-primary-600 hover:underline">
+                  Reprendre RDV
+                </Link>
+              )}
+              {(apt.status === 'confirmed' || apt.status === 'pending') && (
+                <CancelButton appointmentId={apt.id} cancelToken={apt.cancel_token} />
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -185,18 +185,18 @@ export default function HomePage() {
 
       {/* Stats */}
       <section className="bg-white border-b border-gray-100 py-8 px-4">
-        <div className="max-w-4xl mx-auto grid grid-cols-3 gap-6 text-center">
+        <div className="max-w-4xl mx-auto grid grid-cols-3 gap-4 text-center">
           <div>
-            <p className="text-3xl font-bold text-primary-500">500+</p>
-            <p className="text-sm text-gray-500 mt-1">Médecins inscrits</p>
+            <p className="text-2xl sm:text-3xl font-bold text-primary-500">500+</p>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">Médecins</p>
           </div>
           <div>
-            <p className="text-3xl font-bold text-primary-500">10k+</p>
-            <p className="text-sm text-gray-500 mt-1">RDV pris</p>
+            <p className="text-2xl sm:text-3xl font-bold text-primary-500">10k+</p>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">RDV pris</p>
           </div>
           <div>
-            <p className="text-3xl font-bold text-primary-500">20+</p>
-            <p className="text-sm text-gray-500 mt-1">Villes au Maroc</p>
+            <p className="text-2xl sm:text-3xl font-bold text-primary-500">20+</p>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">Villes</p>
           </div>
         </div>
       </section>
