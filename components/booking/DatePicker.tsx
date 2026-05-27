@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import { fr } from 'date-fns/locale'
-import { addDays, isBefore, startOfDay, getDay } from 'date-fns'
+import { addDays, isBefore, startOfDay, getDay, startOfTomorrow } from 'date-fns'
 import 'react-day-picker/dist/style.css'
 import type { WorkingHours } from '@/types'
 
@@ -21,10 +21,11 @@ const DAY_MAP: Record<number, keyof WorkingHours> = {
 
 export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates = [] }: DatePickerProps) {
   const today = startOfDay(new Date())
+  const tomorrow = startOfTomorrow() // RDV le jour même non autorisé
 
-  // Désactive les jours de repos et les dates passées
+  // Désactive aujourd'hui, les jours passés et les jours de repos
   function isDisabled(date: Date): boolean {
-    if (isBefore(date, today)) return true
+    if (isBefore(date, tomorrow)) return true
     const dayKey = DAY_MAP[getDay(date)]
     if (!workingHours[dayKey]?.enabled) return true
     return disabledDates.some(
@@ -40,7 +41,7 @@ export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates
         onSelect={onSelect}
         disabled={isDisabled}
         locale={fr}
-        fromDate={today}
+        fromDate={tomorrow}
         toDate={addDays(today, 60)} // 2 mois à l'avance max
         showOutsideDays={false}
         className="mx-auto"

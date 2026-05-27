@@ -60,6 +60,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Champs obligatoires manquants' }, { status: 400 })
   }
 
+  // Interdit les RDV le jour même
+  const today = new Date().toISOString().split('T')[0]
+  if (date <= today) {
+    return NextResponse.json({ error: 'Les réservations le jour même ne sont pas acceptées' }, { status: 400 })
+  }
+
   // Pour les réservations du médecin, vérifie l'authentification
   const supabase = createClient()
   if (!isPublic) {
