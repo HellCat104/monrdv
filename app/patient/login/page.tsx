@@ -22,6 +22,7 @@ export default function PatientLoginPage() {
   const [phone, setPhone]           = useState('')
   const [otp, setOtp]               = useState('')
   const [showPwd, setShowPwd]       = useState(false)
+  const [consentCGU, setConsentCGU] = useState(false)
   const [consentMedical, setConsentMedical] = useState(false)
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState<string | null>(null)
@@ -81,6 +82,7 @@ export default function PatientLoginPage() {
     e.preventDefault()
     if (password !== confirm) { setError('Les mots de passe ne correspondent pas.'); return }
     if (password.length < 6)  { setError('Le mot de passe doit contenir au moins 6 caractères.'); return }
+    if (!consentCGU)          { setError('Vous devez accepter les CGU pour continuer.'); return }
     if (!consentMedical)      { setError('Vous devez accepter le stockage de vos données médicales.'); return }
     setLoading(true); setError(null)
     const supabase = createClient()
@@ -277,6 +279,25 @@ export default function PatientLoginPage() {
                   onChange={e => setConfirm(e.target.value)}
                   placeholder="Répétez le mot de passe" required />
               </div>
+              {/* CGU — obligatoire */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentCGU}
+                    onChange={(e) => setConsentCGU(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-500 shrink-0"
+                  />
+                  <span className="text-xs text-gray-700 leading-relaxed">
+                    J&apos;ai lu et j&apos;accepte les{' '}
+                    <a href="/cgu" target="_blank" className="underline text-primary-600 hover:text-primary-700">
+                      Conditions Générales d&apos;Utilisation
+                    </a>{' '}
+                    de MonRDV. *
+                  </span>
+                </label>
+              </div>
+
               {/* Consentement données médicales — obligatoire loi 09-08 */}
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
                 <label className="flex items-start gap-2.5 cursor-pointer">

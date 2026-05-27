@@ -15,6 +15,7 @@ export default function InscriptionPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [consentCGU, setConsentCGU] = useState(false)
   const [consentMedical, setConsentMedical] = useState(false)
 
   const [form, setForm] = useState({
@@ -46,6 +47,11 @@ export default function InscriptionPage() {
 
     if (!form.cnom_number.trim()) {
       setError('Veuillez entrer votre numéro CNOM')
+      return
+    }
+
+    if (!consentCGU) {
+      setError('Vous devez accepter les CGU pour continuer')
       return
     }
 
@@ -251,6 +257,25 @@ export default function InscriptionPage() {
                   />
                 </div>
                 <p className="text-xs text-gray-400">Numéro d'inscription au Conseil National de l'Ordre des Médecins du Maroc</p>
+              </div>
+
+              {/* Case CGU — séparée du consentement médical */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={consentCGU}
+                    onChange={(e) => setConsentCGU(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-500 shrink-0"
+                  />
+                  <span className="text-xs text-gray-700 leading-relaxed">
+                    J&apos;ai lu et j&apos;accepte les{' '}
+                    <a href="/cgu" target="_blank" className="underline text-primary-600 hover:text-primary-700">
+                      Conditions Générales d&apos;Utilisation
+                    </a>{' '}
+                    de MonRDV. *
+                  </span>
+                </label>
               </div>
 
               {/* Consentement données médicales — obligatoire loi 09-08 */}
