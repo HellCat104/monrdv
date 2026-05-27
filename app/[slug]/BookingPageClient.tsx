@@ -92,20 +92,35 @@ export function BookingPageClient({ doctor }: Props) {
         {/* Carte médecin */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <div className="flex items-start gap-4">
-            {/* Avatar */}
-            <div className="w-16 h-16 rounded-2xl bg-primary-100 flex items-center justify-center shrink-0">
-              <Stethoscope className="h-8 w-8 text-primary-500" />
-            </div>
+            {/* Avatar ou photo */}
+            {doctor.photo_url ? (
+              <img
+                src={doctor.photo_url}
+                alt={`Dr. ${doctor.name}`}
+                className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-gray-100"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-primary-100 flex items-center justify-center shrink-0">
+                <span className="text-2xl font-bold text-primary-600">
+                  {doctor.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
             <div>
               <h2 className="text-xl font-bold text-gray-900">Dr. {doctor.name}</h2>
               <p className="text-primary-600 font-medium text-sm mt-0.5">{doctor.specialty}</p>
               <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 flex-wrap">
-                {doctor.phone && (
+                {doctor.address ? (
                   <span className="flex items-center gap-1">
                     <MapPin className="h-3 w-3" />
-                    {doctor.phone}
+                    {doctor.address}
                   </span>
-                )}
+                ) : doctor.city ? (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {doctor.city}
+                  </span>
+                ) : null}
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   Consultation : {doctor.appointment_duration} min

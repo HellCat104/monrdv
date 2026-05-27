@@ -7,6 +7,12 @@ export interface Doctor {
   phone: string
   specialty: string
   slug: string
+  city?: string
+  address?: string
+  photo_url?: string
+  status?: string
+  subscription_status?: string
+  cnom_number?: string
   working_hours: WorkingHours
   appointment_duration: number // en minutes : 15, 20 ou 30
   created_at: string

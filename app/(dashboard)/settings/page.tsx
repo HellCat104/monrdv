@@ -13,7 +13,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC } from '@/types'
-import { Settings, Clock, Copy, Check, ExternalLink } from 'lucide-react'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin } from 'lucide-react'
 
 export default function SettingsPage() {
   const [doctor, setDoctor] = useState<Doctor | null>(null)
@@ -22,12 +22,15 @@ export default function SettingsPage() {
     phone: '',
     specialty: '',
     city: '',
+    address: '',
     appointment_duration: 30,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
   })
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -41,11 +44,13 @@ export default function SettingsPage() {
         .single()
       if (data) {
         setDoctor(data)
+        setPhotoUrl(data.photo_url ?? null)
         setForm({
           name: data.name,
           phone: data.phone ?? '',
           specialty: data.specialty ?? '',
           city: data.city ?? '',
+          address: data.address ?? '',
           appointment_duration: data.appointment_duration,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
         })
@@ -77,6 +82,7 @@ export default function SettingsPage() {
           phone: form.phone,
           specialty: form.specialty,
           city: form.city,
+          address: form.address,
           appointment_duration: form.appointment_duration,
           working_hours: form.working_hours,
         })
@@ -99,6 +105,48 @@ export default function SettingsPage() {
     await navigator.clipboard.writeText(bookingUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !doctor) return
+
+    // Validation côté client
+    if (!file.type.startsWith('image/')) {
+      alert('Veuillez sélectionner une image (JPG, PNG, WebP)')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('L\'image ne doit pas dépasser 2 Mo')
+      return
+    }
+
+    setPhotoUploading(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${doctor.id}.${ext}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('doctor-photos')
+        .upload(path, file, { upsert: true, contentType: file.type })
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('doctor-photos')
+        .getPublicUrl(path)
+
+      // Ajoute un timestamp pour invalider le cache
+      const urlWithTs = `${publicUrl}?t=${Date.now()}`
+
+      await supabase.from('doctors').update({ photo_url: publicUrl }).eq('id', doctor.id)
+      setPhotoUrl(urlWithTs)
+    } catch {
+      alert('Erreur lors de l\'upload. Réessayez.')
+    } finally {
+      setPhotoUploading(false)
+      e.target.value = ''
+    }
   }
 
   if (!doctor) {
@@ -207,6 +255,67 @@ export default function SettingsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Adresse du cabinet */}
+            <div className="space-y-1.5">
+              <Label htmlFor="s_address" className="flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                Adresse du cabinet
+              </Label>
+              <Input
+                id="s_address"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                placeholder="123 Rue Mohammed V, Casablanca"
+              />
+              <p className="text-xs text-gray-400">Affichée sur votre page de réservation publique</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Photo de profil */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Camera className="h-4 w-4 text-primary-500" />
+              Photo de profil
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-5">
+              {/* Aperçu */}
+              <div className="shrink-0">
+                {photoUrl ? (
+                  <img
+                    src={photoUrl}
+                    alt="Photo de profil"
+                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-2xl font-bold border-2 border-gray-200">
+                    {form.name.charAt(0).toUpperCase() || 'D'}
+                  </div>
+                )}
+              </div>
+              {/* Upload */}
+              <div className="space-y-2">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handlePhotoUpload}
+                    disabled={photoUploading}
+                  />
+                  <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium transition-colors
+                    ${photoUploading ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-50 bg-white cursor-pointer'}`}>
+                    <Camera className="h-4 w-4 text-gray-500" />
+                    {photoUploading ? 'Upload en cours…' : photoUrl ? 'Changer la photo' : 'Ajouter une photo'}
+                  </span>
+                </label>
+                <p className="text-xs text-gray-400">JPG, PNG ou WebP · Max 2 Mo</p>
+              </div>
             </div>
           </CardContent>
         </Card>
