@@ -29,21 +29,25 @@ export default function HomePageClient() {
   const [dashboardUrl, setDashboardUrl] = useState('/patient/dashboard')
 
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (user) {
-        const name = user.user_metadata?.full_name || user.email?.split('@')[0] || null
-        setPatientName(name)
+    // Différé de 100ms pour ne pas bloquer le rendu initial de la page
+    const timer = setTimeout(() => {
+      const supabase = createClient()
+      supabase.auth.getUser().then(async ({ data: { user } }) => {
+        if (user) {
+          const name = user.user_metadata?.full_name || user.email?.split('@')[0] || null
+          setPatientName(name)
 
-        const { data: doctor } = await supabase
-          .from('doctors')
-          .select('id')
-          .eq('email', user.email)
-          .single()
+          const { data: doctor } = await supabase
+            .from('doctors')
+            .select('id')
+            .eq('email', user.email)
+            .single()
 
-        setDashboardUrl(doctor ? '/dashboard' : '/patient/dashboard')
-      }
-    })
+          setDashboardUrl(doctor ? '/dashboard' : '/patient/dashboard')
+        }
+      })
+    }, 100)
+    return () => clearTimeout(timer)
   }, [])
 
   function handleSearch(e: React.FormEvent) {

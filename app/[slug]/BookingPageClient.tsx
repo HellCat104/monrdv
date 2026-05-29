@@ -2,11 +2,25 @@
 
 import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
-import { DatePicker } from '@/components/booking/DatePicker'
+import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import { TimeSlots } from '@/components/booking/TimeSlots'
 import { BookingForm } from '@/components/booking/BookingForm'
 import { Stethoscope, MapPin, Clock } from 'lucide-react'
 import type { Doctor, TimeSlot } from '@/types'
+
+// Chargement différé du calendrier — réduit le JS initial de ~30 kB
+const DatePicker = dynamic(
+  () => import('@/components/booking/DatePicker').then((m) => m.DatePicker),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 bg-gray-50 rounded-xl animate-pulse flex items-center justify-center">
+        <span className="text-sm text-gray-400">Chargement du calendrier…</span>
+      </div>
+    ),
+  }
+)
 
 interface Props {
   doctor: Doctor
@@ -94,10 +108,13 @@ export function BookingPageClient({ doctor }: Props) {
           <div className="flex items-start gap-4">
             {/* Avatar ou photo */}
             {doctor.photo_url ? (
-              <img
+              <Image
                 src={doctor.photo_url}
                 alt={`Dr. ${doctor.name}`}
+                width={64}
+                height={64}
                 className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-gray-100"
+                priority
               />
             ) : (
               <div className="w-16 h-16 rounded-2xl bg-primary-100 flex items-center justify-center shrink-0">

@@ -1,4 +1,5 @@
 // Page publique de réservation — accessible via /dr-hassan ou /slug-medecin
+import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { BookingPageClient } from './BookingPageClient'
@@ -11,15 +12,21 @@ interface Props {
   params: { slug: string }
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+// Mise en cache React — une seule requête DB par rendu même si appelée plusieurs fois
+const getDoctor = cache(async (slug: string) => {
   const supabase = createClient()
-  const slug = params.slug.replace(/^dr-/, '')
-  const { data: doctor } = await supabase
+  const { data } = await supabase
     .from('doctors')
-    .select('name, specialty, city, bio')
+    .select('*')
     .eq('slug', slug)
     .eq('status', 'approved')
     .single()
+  return data
+})
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const slug = params.slug.replace(/^dr-/, '')
+  const doctor = await getDoctor(slug)
 
   if (!doctor) return { title: 'Médecin introuvable | MonRDV', robots: { index: false } }
 
@@ -54,15 +61,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function BookingPage({ params }: Props) {
-  const supabase = createClient()
   const slug = params.slug.replace(/^dr-/, '')
-
-  const { data: doctor } = await supabase
-    .from('doctors')
-    .select('*')
-    .eq('slug', slug)
-    .eq('status', 'approved')
-    .single()
+  // Réutilise le cache React — pas de 2ème requête DB
+  const doctor = await getDoctor(slug)
 
   if (!doctor) notFound()
 

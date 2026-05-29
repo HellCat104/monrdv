@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  // Récupère les infos du médecin (horaires + durée)
+  // Requête 1 : infos médecin (nécessaire avant les autres pour vérifier le jour)
   const { data: doctor, error: doctorError } = await supabase
     .from('doctors')
     .select('working_hours, appointment_duration')
@@ -27,46 +27,49 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
   }
 
-  // Vérifie si le jour est ouvert
+  // Vérifie si le jour est ouvert — court-circuit si fermé
   const parsedDate = parseISO(date)
   const dayKey = getDayKey(parsedDate)
   const daySchedule = doctor.working_hours[dayKey]
 
   if (!daySchedule?.enabled) {
-    return NextResponse.json({ slots: [] })
+    return NextResponse.json({ slots: [] }, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' },
+    })
   }
 
-  // Vérifie si la date est bloquée
-  const { data: blocked } = await supabase
-    .from('blocked_dates')
-    .select('id')
-    .eq('doctor_id', doctorId)
-    .eq('date', date)
-    .maybeSingle()
+  // Requêtes 2 & 3 en parallèle — dates bloquées + créneaux réservés
+  const [blockedResult, bookedResult] = await Promise.all([
+    supabase
+      .from('blocked_dates')
+      .select('id')
+      .eq('doctor_id', doctorId)
+      .eq('date', date)
+      .maybeSingle(),
+    supabase
+      .from('appointments')
+      .select('time')
+      .eq('doctor_id', doctorId)
+      .eq('date', date)
+      .neq('status', 'cancelled'),
+  ])
 
-  if (blocked) {
-    return NextResponse.json({ slots: [] })
+  if (blockedResult.data) {
+    return NextResponse.json({ slots: [] }, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' },
+    })
   }
 
-  // Génère tous les créneaux du jour
   const allSlots = generateTimeSlots(
     daySchedule.start,
     daySchedule.end,
     doctor.appointment_duration
   )
 
-  // Récupère les créneaux déjà réservés
-  const { data: booked } = await supabase
-    .from('appointments')
-    .select('time')
-    .eq('doctor_id', doctorId)
-    .eq('date', date)
-    .neq('status', 'cancelled')
-
-  const bookedTimes = (booked ?? []).map((b) => b.time.substring(0, 5))
-
-  // Construit la liste avec disponibilité
+  const bookedTimes = (bookedResult.data ?? []).map((b) => b.time.substring(0, 5))
   const slots = getAvailableSlots(allSlots, bookedTimes)
 
-  return NextResponse.json({ slots })
+  return NextResponse.json({ slots }, {
+    headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
+  })
 }
