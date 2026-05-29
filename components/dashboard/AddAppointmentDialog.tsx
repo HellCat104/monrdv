@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -41,7 +40,6 @@ export function AddAppointmentDialog({
     phone: '',
     date: '',
     time: '',
-    notes: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -75,7 +73,7 @@ export function AddAppointmentDialog({
       }
       onSuccess()
       onOpenChange(false)
-      setForm({ first_name: '', last_name: '', phone: '', date: '', time: '', notes: '' })
+      setForm({ first_name: '', last_name: '', phone: '', date: '', time: '' })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {
@@ -158,17 +156,6 @@ export function AddAppointmentDialog({
                 <p className="text-xs text-red-500">Jour de repos</p>
               )}
             </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="notes">Motif de consultation</Label>
-            <Textarea
-              id="notes"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Consultation générale, suivi, urgence…"
-              rows={2}
-            />
           </div>
 
           {error && <p className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">{error}</p>}

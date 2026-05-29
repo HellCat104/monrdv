@@ -116,17 +116,6 @@ export default function AppointmentsPage() {
     )
   }
 
-  async function handleNotesChange(id: string, doctor_notes: string) {
-    await fetch(`/api/appointments/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ doctor_notes }),
-    })
-    setAppointments((prev) =>
-      prev.map((a) => a.id === id ? { ...a, doctor_notes } : a)
-    )
-  }
-
   // Navigation dates
   function navigate(direction: 'prev' | 'next') {
     if (viewMode === 'day') {
@@ -243,7 +232,6 @@ export default function AppointmentsPage() {
               appointments={filtered}
               onStatusChange={handleStatusChange}
               onAttendanceChange={handleAttendanceChange}
-              onNotesChange={handleNotesChange}
             />
           )}
         </CardContent>

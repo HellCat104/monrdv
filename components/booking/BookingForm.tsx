@@ -4,9 +4,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { formatDateShort, formatTime } from '@/lib/utils'
-import { CheckCircle2, User, Phone, MessageSquare, Mail } from 'lucide-react'
+import { CheckCircle2, User, Phone, Mail } from 'lucide-react'
 import type { Doctor } from '@/types'
 
 interface BookingFormProps {
@@ -19,7 +18,7 @@ interface BookingFormProps {
 }
 
 export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
-  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', notes: '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '' })
   const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -159,19 +158,6 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
             placeholder="vous@exemple.ma"
           />
           <p className="text-xs text-gray-400">Pour retrouver vos RDV dans votre espace patient</p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="b_notes" className="flex items-center gap-1.5">
-            <MessageSquare className="h-3 w-3" /> Motif (optionnel)
-          </Label>
-          <Textarea
-            id="b_notes"
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Décrivez brièvement le motif de votre consultation…"
-            rows={2}
-          />
         </div>
 
         {/* Consentement données de santé — OBLIGATOIRE (loi 09-08) */}
