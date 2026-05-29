@@ -107,9 +107,9 @@ export default async function DashboardPage() {
           color="orange"
         />
         <StatsCard
-          title="Taux d'absence"
+          title="Patients absents"
           value={`${absenceRate}%`}
-          subtitle={monthTotal > 0 ? `sur ${monthTotal} RDV` : 'aucun RDV'}
+          subtitle={monthTotal > 0 ? `sur ${monthTotal} RDV ce mois` : 'aucun RDV'}
           icon={Users}
           color={absenceRate > 20 ? 'red' : 'green'}
         />

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { formatDateShort, formatTime, getInitials } from '@/lib/utils'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance } from '@/types'
-import { Phone, Clock, X, UserCheck, UserX, Timer } from 'lucide-react'
+import { Phone, Clock, UserCheck, UserX, Timer } from 'lucide-react'
 
 interface AppointmentListProps {
   appointments: Appointment[]
@@ -143,7 +143,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     className="text-red-500 border-red-200 hover:bg-red-50 h-8 px-2 text-xs"
                     onClick={() => setConfirmDialog({ open: true, id: apt.id, action: 'cancelled', label: 'annuler' })}
                   >
-                    <X className="h-3 w-3" />
+                    Annuler
                   </Button>
                 </div>
               )}

@@ -198,9 +198,21 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Paramètres</h1>
-        <p className="text-sm text-gray-500 mt-1">Configurez votre cabinet</p>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Paramètres</h1>
+          <p className="text-sm text-gray-500 mt-1">Configurez votre cabinet</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button type="submit" form="settings-form" disabled={loading}>
+            {loading ? 'Sauvegarde…' : '💾 Enregistrer'}
+          </Button>
+          {saved && (
+            <span className="text-sm text-green-600 flex items-center gap-1">
+              <Check className="h-4 w-4" /> Sauvegardé !
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Lien de réservation */}
@@ -230,7 +242,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <form onSubmit={handleSave} className="space-y-6">
+      <form id="settings-form" onSubmit={handleSave} className="space-y-6">
         {/* Informations du cabinet */}
         <Card>
           <CardHeader className="pb-3">

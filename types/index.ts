@@ -211,7 +211,7 @@ export const VILLES_MAROC = [
 
 // Statuts en français
 export const STATUS_LABELS: Record<AppointmentStatus, string> = {
-  pending:   'En attente',
+  pending:   'À confirmer',
   confirmed: 'Confirmé',
   cancelled: 'Annulé',
 }

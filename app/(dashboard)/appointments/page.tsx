@@ -177,7 +177,7 @@ export default function AppointmentsPage() {
                   onClick={() => setCurrentDate(getNowInMaroc())}
                   className="text-primary-500 shrink-0"
                 >
-                  Auj.
+                  Aujourd&apos;hui
                 </Button>
               </div>
             )}
@@ -202,10 +202,10 @@ export default function AppointmentsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tous les statuts</SelectItem>
-                <SelectItem value="pending">En attente</SelectItem>
-                <SelectItem value="confirmed">Confirmé</SelectItem>
-                <SelectItem value="cancelled">Annulé</SelectItem>
+                <SelectItem value="all">Tous les rendez-vous</SelectItem>
+                <SelectItem value="pending">À confirmer</SelectItem>
+                <SelectItem value="confirmed">Confirmés</SelectItem>
+                <SelectItem value="cancelled">Annulés</SelectItem>
               </SelectContent>
             </Select>
           </div>
