@@ -23,6 +23,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly',
       priority: 0.7,
     },
+    // Note : /recherche est intentionnellement absent (noindex — résultats dynamiques)
     {
       url: `${baseUrl}/politique-confidentialite`,
       lastModified: new Date(),
