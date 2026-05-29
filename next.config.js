@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const { withSentryConfig } = require('@sentry/nextjs')
 
 const securityHeaders = [
   // Anti-clickjacking : empêche d'intégrer le site dans une iframe
@@ -55,4 +56,14 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+module.exports = withSentryConfig(nextConfig, {
+  // Organisation et projet Sentry (optionnel — pour les source maps)
+  silent: true,
+  // Désactive le tunnel Sentry pour ne pas alourdir le bundle
+  tunnelRoute: undefined,
+  // Ne pas envoyer les source maps au build (économise du temps)
+  widenClientFileUpload: false,
+  hideSourceMaps: true,
+  disableLogger: true,
+  automaticVercelMonitors: false,
+})
