@@ -43,11 +43,22 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json()
   const { phone, email } = body
 
+  // Validation format
+  const phoneRegex = /^\+?[\d\s\-().]{7,20}$/
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  if (phone && !phoneRegex.test(String(phone).trim())) {
+    return NextResponse.json({ error: 'Format de téléphone invalide' }, { status: 400 })
+  }
+  if (email && !emailRegex.test(String(email).trim())) {
+    return NextResponse.json({ error: 'Format d\'email invalide' }, { status: 400 })
+  }
+
   const adminDb = createAdminClient()
 
   const updates: Record<string, string> = {}
-  if (phone) updates.phone = phone
-  if (email) updates.email = email
+  if (phone) updates.phone = String(phone).trim().substring(0, 20)
+  if (email) updates.email = String(email).trim().substring(0, 254)
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'Aucune donnée à mettre à jour' }, { status: 400 })

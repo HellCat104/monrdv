@@ -38,13 +38,16 @@ export default function LoginPage() {
         return
       }
 
-      // Admin → dashboard admin
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+      // Admin → dashboard admin (vérifié côté serveur, ADMIN_EMAIL non exposé au client)
+      const meRes = await fetch('/api/auth/me')
+      const meData = await meRes.json()
+      if (meData.isAdmin) {
         router.push('/admin')
         router.refresh()
         return
       }
+
+      const { data: { user } } = await supabase.auth.getUser()
 
       // Vérifie le statut du médecin
       const { data: doctor } = await supabase

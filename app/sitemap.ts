@@ -1,50 +1,87 @@
 import { MetadataRoute } from 'next'
-import { createAdminClient } from '@/lib/supabase/server'
 import { SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://monrdv.vercel.app'
+// IMPORTANT : force la génération à la requête (pas au build)
+// Evite le crash si les env vars Supabase ne sont pas dispo au build time sur Vercel
+export const dynamic = 'force-dynamic'
+export const revalidate = 3600 // Re-généré toutes les heures max
 
-  // Pages statiques
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://monrdv.vercel.app').replace(/\/$/, '')
+
+  // Pages statiques indexables (toujours disponibles, pas de DB)
   const staticPages: MetadataRoute.Sitemap = [
-    { url: baseUrl, lastModified: new Date(), changeFrequency: 'weekly', priority: 1 },
-    { url: `${baseUrl}/recherche`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.8 },
-    { url: `${baseUrl}/inscription`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${baseUrl}/politique-confidentialite`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
-    { url: `${baseUrl}/cgu`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
+    {
+      url: baseUrl,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 1.0,
+    },
+    {
+      url: `${baseUrl}/inscription`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/politique-confidentialite`,
+      lastModified: new Date(),
+      changeFrequency: 'yearly',
+      priority: 0.2,
+    },
+    {
+      url: `${baseUrl}/cgu`,
+      lastModified: new Date(),
+      changeFrequency: 'yearly',
+      priority: 0.2,
+    },
   ]
 
-  // Pages dynamiques des médecins approuvés
+  // Pages SEO spécialité × ville (statiques, pas de DB)
+  const seoPages: MetadataRoute.Sitemap = []
+  for (const specialiteSlug of Object.keys(SPECIALITE_SLUGS)) {
+    for (const villeSlug of Object.keys(VILLE_SLUGS)) {
+      seoPages.push({
+        url: `${baseUrl}/medecin/${specialiteSlug}/${villeSlug}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.7,
+      })
+    }
+  }
+
+  // Pages dynamiques des médecins (nécessite Supabase)
+  let doctorPages: MetadataRoute.Sitemap = []
   try {
-    const supabase = createAdminClient()
-    const { data: doctors } = await supabase
-      .from('doctors')
-      .select('slug, updated_at')
-      .eq('status', 'approved')
-      .eq('subscription_status', 'actif')
+    // Import dynamique pour éviter tout crash au build time
+    const { createAdminClient } = await import('@/lib/supabase/server')
 
-    const doctorPages: MetadataRoute.Sitemap = (doctors ?? []).map((doc) => ({
-      url: `${baseUrl}/dr-${doc.slug}`,
-      lastModified: new Date(doc.updated_at ?? new Date()),
-      changeFrequency: 'weekly' as const,
-      priority: 0.9,
-    }))
+    // Vérifie que les env vars sont bien présentes avant d'appeler Supabase
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.warn('[Sitemap] Variables Supabase manquantes — pages médecins omises')
+    } else {
+      const supabase = createAdminClient()
+      const { data: doctors, error } = await supabase
+        .from('doctors')
+        .select('slug, updated_at')
+        .eq('status', 'approved')
+        .eq('subscription_status', 'actif')
 
-    // Pages SEO spécialité + ville
-    const seoPages: MetadataRoute.Sitemap = []
-    for (const specialiteSlug of Object.keys(SPECIALITE_SLUGS)) {
-      for (const villeSlug of Object.keys(VILLE_SLUGS)) {
-        seoPages.push({
-          url: `${baseUrl}/medecin/${specialiteSlug}/${villeSlug}`,
-          lastModified: new Date(),
+      if (error) {
+        console.error('[Sitemap] Erreur Supabase:', error.message)
+      } else {
+        doctorPages = (doctors ?? []).map((doc) => ({
+          url: `${baseUrl}/dr-${doc.slug}`,
+          lastModified: new Date(doc.updated_at ?? new Date()),
           changeFrequency: 'weekly' as const,
-          priority: 0.7,
-        })
+          priority: 0.9,
+        }))
       }
     }
-
-    return [...staticPages, ...doctorPages, ...seoPages]
-  } catch {
-    return staticPages
+  } catch (err) {
+    // Ne jamais crasher le sitemap à cause de la DB — les pages statiques suffisent
+    console.error('[Sitemap] Exception lors de la récupération des médecins:', err)
   }
+
+  return [...staticPages, ...doctorPages, ...seoPages]
 }

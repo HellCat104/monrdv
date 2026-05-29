@@ -93,9 +93,10 @@ export function formatPhoneMaroc(phone: string): string {
   return `+212${cleaned}`
 }
 
-// Génère un token unique pour l'annulation
+// Génère un token cryptographiquement sécurisé pour l'annulation
 export function generateCancelToken(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36)
+  const { randomBytes } = require('crypto')
+  return randomBytes(32).toString('hex')
 }
 
 // Retourne les initiales d'un nom

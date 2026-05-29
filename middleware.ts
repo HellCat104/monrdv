@@ -7,7 +7,15 @@ export async function middleware(req: NextRequest) {
 
   // ── Rate limiting simple sur les routes sensibles ─────────────────────────
   const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown'
-  const sensitiveRoutes = ['/api/doctors/register', '/api/auth', '/patient/login']
+  const sensitiveRoutes = [
+    '/api/doctors/register',
+    '/api/auth',
+    '/patient/login',
+    '/api/appointments',  // création de RDV publics
+    '/api/slots',         // consultation des créneaux
+    '/api/search',        // recherche de médecins
+    '/api/cancel',        // annulation de RDV
+  ]
   if (sensitiveRoutes.some((r) => pathname.startsWith(r))) {
     const key = `rl:${ip}:${pathname}`
     const now = Date.now()

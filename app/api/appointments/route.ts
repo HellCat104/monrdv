@@ -60,6 +60,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Champs obligatoires manquants' }, { status: 400 })
   }
 
+  // Sanitisation et limites de longueur pour les champs texte
+  const sanitize = (s: string) => s.trim().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+  const safeFirst  = sanitize(first_name).substring(0, 100)
+  const safeLast   = sanitize(last_name).substring(0, 100)
+  const safePhone  = sanitize(phone).substring(0, 20)
+  const safeEmail  = email ? sanitize(email).substring(0, 254) : undefined
+  const safeNotes  = notes ? sanitize(notes).substring(0, 500) : undefined
+
+  // Validation format date (YYYY-MM-DD) et heure (HH:MM)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
+    return NextResponse.json({ error: 'Format de date ou heure invalide' }, { status: 400 })
+  }
+
   // Interdit les RDV le jour même
   const today = new Date().toISOString().split('T')[0]
   if (date <= today) {
@@ -76,6 +89,21 @@ export async function POST(req: NextRequest) {
   // Utilise le client admin pour les réservations publiques (bypass RLS)
   const db = isPublic ? createAdminClient() : supabase
 
+  // Vérifie que le médecin existe, est approuvé et a un abonnement actif
+  const { data: doctorCheck } = await db
+    .from('doctors')
+    .select('id, status, subscription_status')
+    .eq('id', doctor_id)
+    .single()
+
+  if (!doctorCheck || doctorCheck.status !== 'approved') {
+    return NextResponse.json({ error: 'Ce médecin n\'accepte pas les réservations en ligne' }, { status: 403 })
+  }
+
+  if (doctorCheck.subscription_status !== 'actif') {
+    return NextResponse.json({ error: 'Ce médecin n\'accepte pas les réservations en ligne' }, { status: 403 })
+  }
+
   // Vérifie que le créneau n'est pas déjà pris
   const { data: existing } = await db
     .from('appointments')
@@ -90,7 +118,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ce créneau est déjà réservé' }, { status: 409 })
   }
 
-  const formattedPhone = formatPhoneMaroc(phone)
+  const formattedPhone = formatPhoneMaroc(safePhone)
   const cancelToken = generateCancelToken()
 
   // Trouve ou crée le patient
@@ -106,13 +134,13 @@ export async function POST(req: NextRequest) {
   if (existingPatient) {
     patientId = existingPatient.id
     // Update email if patient didn't have one
-    if (email) {
-      await db.from('patients').update({ email }).eq('id', patientId).is('email', null)
+    if (safeEmail) {
+      await db.from('patients').update({ email: safeEmail }).eq('id', patientId).is('email', null)
     }
   } else {
     const { data: newPatient, error: patientError } = await db
       .from('patients')
-      .insert({ doctor_id, first_name, last_name, phone: formattedPhone, email: email || null })
+      .insert({ doctor_id, first_name: safeFirst, last_name: safeLast, phone: formattedPhone, email: safeEmail || null })
       .select('id')
       .single()
 
@@ -131,7 +159,7 @@ export async function POST(req: NextRequest) {
       date,
       time,
       status: 'confirmed',
-      notes: notes || null,
+      notes: safeNotes || null,
       cancel_token: cancelToken,
     })
     .select('*')
@@ -149,7 +177,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   const baseUrl = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || ''
-  const patientName = `${first_name} ${last_name}`
+  const patientName = `${safeFirst} ${safeLast}`
 
   // SMS de confirmation au patient (async, non-bloquant)
   sendConfirmationSMS({

@@ -1,5 +1,7 @@
 'use client'
 
+// Note : les pages 'use client' ne peuvent pas exporter metadata directement.
+// Le metadata est géré par app/recherche/layout.tsx
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'

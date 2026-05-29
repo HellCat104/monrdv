@@ -45,7 +45,8 @@ export async function PATCH(
       .eq('id', params.id)
 
     if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 })
+      console.error('[Admin] toggle_subscription error:', updateErr)
+      return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, subscription_status: newSubStatus })
@@ -59,7 +60,8 @@ export async function PATCH(
       .eq('id', params.id)
 
     if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 })
+      console.error('[Admin] set_expiration error:', updateErr)
+      return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
@@ -121,7 +123,7 @@ export async function PATCH(
 
   if (updateError) {
     console.error('[Admin PATCH] update error:', updateError)
-    return NextResponse.json({ error: updateError.message }, { status: 500 })
+    return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
   }
 
   // 3. Envoie l'email au médecin

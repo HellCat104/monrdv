@@ -4,28 +4,39 @@ import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://monrdv.ma'
+
 export const metadata: Metadata = {
   title: {
-    default: 'MonRDV — Prise de rendez-vous médical au Maroc',
+    default: 'MonRDV — Prise de rendez-vous médical en ligne au Maroc',
     template: '%s | MonRDV',
   },
-  description: 'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. Médecin généraliste, cardiologue, dermatologue, pédiatre et plus — disponible 24h/24 à Casablanca, Rabat, Marrakech et partout au Maroc.',
-  keywords: ['rendez-vous médical Maroc', 'médecin en ligne Maroc', 'prise de rendez-vous médecin', 'médecin Casablanca', 'médecin Rabat', 'médecin Marrakech', 'MonRDV'],
+  description:
+    'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. Médecin généraliste, cardiologue, dermatologue, pédiatre — confirmation SMS immédiate, disponible 24h/24 à Casablanca, Rabat, Marrakech.',
+  keywords: [
+    'rendez-vous médical Maroc',
+    'médecin en ligne Maroc',
+    'prise de rendez-vous médecin',
+    'médecin Casablanca',
+    'médecin Rabat',
+    'médecin Marrakech',
+    'MonRDV',
+  ],
   authors: [{ name: 'MonRDV' }],
   creator: 'MonRDV',
-  metadataBase: new URL('https://monrdv.vercel.app'),
+  metadataBase: new URL(APP_URL),
   openGraph: {
-    title: 'MonRDV — Prise de rendez-vous médical au Maroc',
-    description: 'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. Disponible 24h/24.',
-    url: 'https://monrdv.vercel.app',
+    title: 'MonRDV — Prise de rendez-vous médical en ligne au Maroc',
+    description: 'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. Confirmation immédiate, 24h/24.',
+    url: APP_URL,
     siteName: 'MonRDV',
     locale: 'fr_MA',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MonRDV — Prise de rendez-vous médical au Maroc',
-    description: 'Trouvez un médecin et prenez rendez-vous en ligne au Maroc.',
+    title: 'MonRDV — Prise de rendez-vous médical en ligne au Maroc',
+    description: 'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. 24h/24.',
   },
   robots: {
     index: true,
@@ -33,6 +44,9 @@ export const metadata: Metadata = {
     googleBot: {
       index: true,
       follow: true,
+      'max-snippet': -1,
+      'max-image-preview': 'large',
+      'max-video-preview': -1,
     },
   },
   icons: {

@@ -1,6 +1,12 @@
 // Page affichée après annulation d'un RDV via le lien SMS
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { CancelResultContent } from './CancelResultContent'
+
+export const metadata: Metadata = {
+  title: 'Annulation de rendez-vous — MonRDV',
+  robots: { index: false, follow: false },
+}
 
 export default function CancelResultPage() {
   return (

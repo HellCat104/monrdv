@@ -5,25 +5,51 @@ import { BookingPageClient } from './BookingPageClient'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://monrdv.ma'
+
 interface Props {
   params: { slug: string }
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = createClient()
-  const slug = params.slug.replace('dr-', '')
+  const slug = params.slug.replace(/^dr-/, '')
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('name, specialty')
+    .select('name, specialty, city, bio')
     .eq('slug', slug)
     .eq('status', 'approved')
     .single()
 
-  if (!doctor) return { title: 'Médecin introuvable' }
+  if (!doctor) return { title: 'Médecin introuvable | MonRDV', robots: { index: false } }
+
+  const cityPart = doctor.city ? ` à ${doctor.city}` : ''
+  const title = `Dr. ${doctor.name} — ${doctor.specialty}${cityPart} | MonRDV`
+  const description = doctor.bio
+    ? `${doctor.bio.substring(0, 120)}… Prenez rendez-vous en ligne avec Dr. ${doctor.name}${cityPart} sur MonRDV.`
+    : `Prenez rendez-vous en ligne avec Dr. ${doctor.name}, ${doctor.specialty}${cityPart}. Confirmation immédiate, disponible 24h/24 sur MonRDV.`
+
+  const canonicalSlug = params.slug.startsWith('dr-') ? params.slug : `dr-${params.slug}`
 
   return {
-    title: `RDV avec Dr. ${doctor.name} — MonRDV`,
-    description: `Prenez rendez-vous en ligne avec Dr. ${doctor.name}, ${doctor.specialty}.`,
+    title,
+    description,
+    keywords: [
+      `Dr. ${doctor.name}`,
+      `${doctor.specialty}${cityPart}`,
+      `rendez-vous ${doctor.specialty}`,
+      `médecin ${doctor.city ?? 'Maroc'}`,
+      'MonRDV',
+    ],
+    alternates: {
+      canonical: `${APP_URL}/${canonicalSlug}`,
+    },
+    openGraph: {
+      title,
+      description,
+      url: `${APP_URL}/${canonicalSlug}`,
+      type: 'profile',
+    },
   }
 }
 
@@ -31,7 +57,6 @@ export default async function BookingPage({ params }: Props) {
   const supabase = createClient()
   const slug = params.slug.replace(/^dr-/, '')
 
-  // Vérifie si le médecin existe (approuvé)
   const { data: doctor } = await supabase
     .from('doctors')
     .select('*')
@@ -39,7 +64,6 @@ export default async function BookingPage({ params }: Props) {
     .eq('status', 'approved')
     .single()
 
-  // Médecin introuvable → 404
   if (!doctor) notFound()
 
   // Médecin inactif → page d'erreur propre
@@ -75,5 +99,51 @@ export default async function BookingPage({ params }: Props) {
     )
   }
 
-  return <BookingPageClient doctor={doctor} />
+  // Données structurées JSON-LD — Physician schema pour Google
+  const cityPart = doctor.city ? ` à ${doctor.city}` : ''
+  const canonicalSlug = `dr-${slug}`
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Physician',
+    name: `Dr. ${doctor.name}`,
+    medicalSpecialty: doctor.specialty,
+    description: doctor.bio ?? `${doctor.specialty}${cityPart}. Prise de rendez-vous en ligne sur MonRDV.`,
+    url: `${APP_URL}/${canonicalSlug}`,
+    ...(doctor.city && {
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: doctor.city,
+        addressCountry: 'MA',
+        ...(doctor.address && { streetAddress: doctor.address }),
+      },
+    }),
+    ...(doctor.phone && { telephone: doctor.phone }),
+    ...(doctor.photo_url && { image: doctor.photo_url }),
+    availableService: {
+      '@type': 'MedicalTherapy',
+      name: 'Consultation médicale',
+    },
+    potentialAction: {
+      '@type': 'ReserveAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${APP_URL}/${canonicalSlug}`,
+        actionPlatform: ['https://schema.org/DesktopWebPlatform', 'https://schema.org/MobileWebPlatform'],
+      },
+      result: {
+        '@type': 'Reservation',
+        name: 'Rendez-vous médical',
+      },
+    },
+  }
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <BookingPageClient doctor={doctor} />
+    </>
+  )
 }

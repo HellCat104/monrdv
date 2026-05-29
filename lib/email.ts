@@ -13,6 +13,17 @@ function getResend() {
 const FROM_EMAIL = process.env.EMAIL_FROM || 'MonRDV <noreply@monrdv.ma>'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
+// Échappe les caractères HTML pour éviter les XSS dans les emails
+function h(s: string | undefined | null): string {
+  if (!s) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 // Email envoyé au médecin quand son compte est approuvé
 export async function sendApprovalEmail(params: {
   to: string
@@ -32,7 +43,7 @@ export async function sendApprovalEmail(params: {
             <h1 style="color: white; margin: 0; font-size: 24px;">MonRDV 🇲🇦</h1>
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #111827;">Bienvenue Dr. ${params.doctorName} !</h2>
+            <h2 style="color: #111827;">Bienvenue Dr. ${h(params.doctorName)} !</h2>
             <p style="color: #6b7280;">Votre compte a été <strong style="color: #16a34a;">approuvé</strong> par notre équipe.</p>
             <p style="color: #6b7280;">Vous pouvez maintenant vous connecter à votre tableau de bord et commencer à recevoir des rendez-vous en ligne.</p>
             <div style="text-align: center; margin: 32px 0;">
@@ -75,9 +86,9 @@ export async function sendRejectionEmail(params: {
             <h1 style="color: white; margin: 0; font-size: 24px;">MonRDV 🇲🇦</h1>
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
-            <h2 style="color: #111827;">Dr. ${params.doctorName},</h2>
+            <h2 style="color: #111827;">Dr. ${h(params.doctorName)},</h2>
             <p style="color: #6b7280;">Votre demande d'inscription n'a pas pu être approuvée.</p>
-            ${params.reason ? `<p style="color: #6b7280;"><strong>Motif :</strong> ${params.reason}</p>` : ''}
+            ${params.reason ? `<p style="color: #6b7280;"><strong>Motif :</strong> ${h(params.reason)}</p>` : ''}
             <p style="color: #6b7280;">Vous pouvez soumettre une nouvelle demande avec les documents requis.</p>
             <div style="text-align: center; margin: 32px 0;">
               <a href="${APP_URL}/inscription"
@@ -120,14 +131,14 @@ export async function sendNewAppointmentToDoctor(params: {
             <h1 style="color: white; margin: 0; font-size: 22px;">Nouveau rendez-vous 📅</h1>
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
-            <p style="color: #374151;">Bonjour Dr. ${params.doctorName},</p>
+            <p style="color: #374151;">Bonjour Dr. ${h(params.doctorName)},</p>
             <p style="color: #374151;">Un nouveau rendez-vous a été pris via MonRDV :</p>
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-              <tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1; border-radius: 6px 0 0 6px;">Patient</td><td style="padding: 10px 14px;">${params.patientName}</td></tr>
-              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Téléphone</td><td style="padding: 10px 14px;">${params.patientPhone}</td></tr>
-              <tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1;">Date</td><td style="padding: 10px 14px;">${params.date}</td></tr>
-              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Heure</td><td style="padding: 10px 14px;">${params.time}</td></tr>
-              ${params.notes ? `<tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1;">Motif</td><td style="padding: 10px 14px;">${params.notes}</td></tr>` : ''}
+              <tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1; border-radius: 6px 0 0 6px;">Patient</td><td style="padding: 10px 14px;">${h(params.patientName)}</td></tr>
+              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Téléphone</td><td style="padding: 10px 14px;">${h(params.patientPhone)}</td></tr>
+              <tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1;">Date</td><td style="padding: 10px 14px;">${h(params.date)}</td></tr>
+              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Heure</td><td style="padding: 10px 14px;">${h(params.time)}</td></tr>
+              ${params.notes ? `<tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1;">Motif</td><td style="padding: 10px 14px;">${h(params.notes)}</td></tr>` : ''}
             </table>
             <div style="text-align: center; margin: 24px 0;">
               <a href="${APP_URL}/appointments"
@@ -160,7 +171,7 @@ export async function sendAppointmentConfirmationToPatient(params: {
   const resend = getResend()
   if (!resend) return false
 
-  const cancelUrl = `${APP_URL}/cancel-result?token=${params.cancelToken}`
+  const cancelUrl = `${APP_URL}/cancel-result?token=${encodeURIComponent(params.cancelToken)}`
 
   try {
     await resend.emails.send({
@@ -173,12 +184,12 @@ export async function sendAppointmentConfirmationToPatient(params: {
             <h1 style="color: white; margin: 0; font-size: 22px;">Rendez-vous confirmé ✅</h1>
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
-            <p style="color: #374151;">Bonjour ${params.patientName},</p>
+            <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
             <p style="color: #374151;">Votre rendez-vous est bien confirmé :</p>
             <div style="background: #f0f9ff; border-left: 4px solid #0EA5E9; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
-              <p style="margin: 4px 0; color: #374151;"><strong>Médecin :</strong> Dr. ${params.doctorName} — ${params.specialty}</p>
-              <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${params.date}</p>
-              <p style="margin: 4px 0; color: #374151;"><strong>Heure :</strong> ${params.time}</p>
+              <p style="margin: 4px 0; color: #374151;"><strong>Médecin :</strong> Dr. ${h(params.doctorName)} — ${h(params.specialty)}</p>
+              <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${h(params.date)}</p>
+              <p style="margin: 4px 0; color: #374151;"><strong>Heure :</strong> ${h(params.time)}</p>
             </div>
             <p style="color: #6b7280; font-size: 14px;">Vous recevrez également un rappel par SMS la veille de votre rendez-vous.</p>
             <p style="text-align: center; margin: 28px 0;">
@@ -209,7 +220,7 @@ export async function sendReminderEmailToPatient(params: {
   const resend = getResend()
   if (!resend) return false
 
-  const cancelUrl = `${APP_URL}/cancel-result?token=${params.cancelToken}`
+  const cancelUrl = `${APP_URL}/cancel-result?token=${encodeURIComponent(params.cancelToken)}`
 
   try {
     await resend.emails.send({
@@ -222,12 +233,12 @@ export async function sendReminderEmailToPatient(params: {
             <h1 style="color: white; margin: 0; font-size: 22px;">Rappel de rendez-vous ⏰</h1>
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
-            <p style="color: #374151;">Bonjour ${params.patientName},</p>
+            <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
             <p style="color: #374151;">Nous vous rappelons que vous avez un rendez-vous <strong>demain</strong> :</p>
             <div style="background: #f0f9ff; border-left: 4px solid #0EA5E9; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
-              <p style="margin: 4px 0; color: #374151;"><strong>Médecin :</strong> Dr. ${params.doctorName} — ${params.specialty}</p>
-              <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${params.date}</p>
-              <p style="margin: 4px 0; color: #374151;"><strong>Heure :</strong> ${params.time}</p>
+              <p style="margin: 4px 0; color: #374151;"><strong>Médecin :</strong> Dr. ${h(params.doctorName)} — ${h(params.specialty)}</p>
+              <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${h(params.date)}</p>
+              <p style="margin: 4px 0; color: #374151;"><strong>Heure :</strong> ${h(params.time)}</p>
             </div>
             <p style="color: #6b7280; font-size: 14px;">Si vous ne pouvez pas vous présenter, merci d'annuler votre rendez-vous.</p>
             <p style="text-align: center; margin: 28px 0;">
@@ -271,10 +282,10 @@ export async function sendDailyAgendaToDoctor(params: {
         <tbody>
           ${params.appointments.map((apt, i) => `
             <tr style="background:${i % 2 === 0 ? 'white' : '#f9fafb'};">
-              <td style="padding:10px 14px; font-weight:bold; color:#374151;">${apt.time}</td>
-              <td style="padding:10px 14px; color:#374151;">${apt.patientName}</td>
-              <td style="padding:10px 14px; color:#374151;">${apt.phone}</td>
-              <td style="padding:10px 14px; color:#6b7280; font-size:13px;">${apt.notes || '—'}</td>
+              <td style="padding:10px 14px; font-weight:bold; color:#374151;">${h(apt.time)}</td>
+              <td style="padding:10px 14px; color:#374151;">${h(apt.patientName)}</td>
+              <td style="padding:10px 14px; color:#374151;">${h(apt.phone)}</td>
+              <td style="padding:10px 14px; color:#6b7280; font-size:13px;">${h(apt.notes) || '—'}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -297,8 +308,8 @@ export async function sendDailyAgendaToDoctor(params: {
             <h1 style="color: white; margin: 0; font-size: 20px;">Agenda du jour 📅</h1>
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
-            <p style="color: #374151;">Bonjour Dr. ${params.doctorName},</p>
-            <p style="color: #374151;">Voici votre agenda pour le <strong>${params.date}</strong> :</p>
+            <p style="color: #374151;">Bonjour Dr. ${h(params.doctorName)},</p>
+            <p style="color: #374151;">Voici votre agenda pour le <strong>${h(params.date)}</strong> :</p>
             ${appointmentsHtml}
             <div style="text-align: center; margin: 24px 0;">
               <a href="${APP_URL}/appointments"
@@ -339,9 +350,9 @@ export async function sendAdminNotificationEmail(params: {
             <h1 style="color: white; margin: 0;">Nouvelle inscription</h1>
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
-            <p><strong>Nom :</strong> Dr. ${params.doctorName}</p>
-            <p><strong>Email :</strong> ${params.doctorEmail}</p>
-            <p><strong>Spécialité :</strong> ${params.specialty}</p>
+            <p><strong>Nom :</strong> Dr. ${h(params.doctorName)}</p>
+            <p><strong>Email :</strong> ${h(params.doctorEmail)}</p>
+            <p><strong>Spécialité :</strong> ${h(params.specialty)}</p>
             <div style="text-align: center; margin: 32px 0;">
               <a href="${APP_URL}/admin"
                 style="background: #0EA5E9; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold;">
