@@ -226,9 +226,14 @@ export default function PolitiqueConfidentialite() {
                         <td className="p-3 border border-gray-200">Information optionnelle pour le médecin</td>
                       </tr>
                       <tr className="bg-gray-50">
-                        <td className="p-3 border border-gray-200">Notes médicales (saisies par le médecin)</td>
+                        <td className="p-3 border border-gray-200">Âge (espace patient)</td>
                         <td className="p-3 border border-gray-200 text-center">⬜ Non</td>
-                        <td className="p-3 border border-gray-200">Notes internes, visibles uniquement par le médecin</td>
+                        <td className="p-3 border border-gray-200">Profil patient, visible uniquement par le patient</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 border border-gray-200">Historique des rendez-vous</td>
+                        <td className="p-3 border border-gray-200 text-center">✅ Oui</td>
+                        <td className="p-3 border border-gray-200">Consultation via l&apos;espace patient personnel</td>
                       </tr>
                     </tbody>
                   </table>
@@ -278,7 +283,7 @@ export default function PolitiqueConfidentialite() {
                   <tbody>
                     <tr>
                       <td className="p-3 border border-gray-200">Gestion de la prise de rendez-vous</td>
-                      <td className="p-3 border border-gray-200">Exécution du service (consentement)</td>
+                      <td className="p-3 border border-gray-200">Exécution du contrat de service (art. 3-3° loi 09-08)</td>
                     </tr>
                     <tr className="bg-gray-50">
                       <td className="p-3 border border-gray-200">Envoi de SMS de confirmation et rappels</td>
