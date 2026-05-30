@@ -187,23 +187,6 @@ export default function HomePageClient() {
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="bg-white border-b border-gray-100 py-8 px-4" aria-label="Chiffres clés MonRDV">
-        <div className="max-w-4xl mx-auto grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-2xl sm:text-3xl font-bold text-primary-500">500+</p>
-            <p className="text-xs sm:text-sm text-gray-500 mt-1">Médecins</p>
-          </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-bold text-primary-500">10k+</p>
-            <p className="text-xs sm:text-sm text-gray-500 mt-1">RDV pris</p>
-          </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-bold text-primary-500">20+</p>
-            <p className="text-xs sm:text-sm text-gray-500 mt-1">Villes</p>
-          </div>
-        </div>
-      </section>
 
       {/* Avantages */}
       <section className="py-16 px-4 bg-gray-50">
@@ -223,8 +206,8 @@ export default function HomePageClient() {
               <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <Shield className="h-7 w-7 text-green-500" aria-hidden="true" />
               </div>
-              <h3 className="font-semibold text-gray-900 mb-2">Confirmation SMS</h3>
-              <p className="text-sm text-gray-500">Recevez une confirmation et un rappel par SMS avant votre RDV.</p>
+              <h3 className="font-semibold text-gray-900 mb-2">Confirmation par email</h3>
+              <p className="text-sm text-gray-500">Recevez une confirmation et un rappel par email avant votre RDV.</p>
             </div>
             <div className="text-center">
               <div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-4">

@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'MonRDV — Prise de rendez-vous médical en ligne au Maroc',
     description:
-      'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. Confirmation SMS immédiate, 24h/24.',
+      'Trouvez un médecin et prenez rendez-vous en ligne au Maroc. Confirmation immédiate par email, 24h/24.',
     url: APP_URL,
     siteName: 'MonRDV',
     locale: 'fr_MA',
