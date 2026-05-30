@@ -1,7 +1,6 @@
 // API : liste et création de rendez-vous
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { sendConfirmationSMS } from '@/lib/twilio'
 import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
 import { formatPhoneMaroc, generateCancelToken } from '@/lib/utils'
 
@@ -180,17 +179,6 @@ export async function POST(req: NextRequest) {
 
   const baseUrl = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || ''
   const patientName = `${safeFirst} ${safeLast}`
-
-  // SMS de confirmation au patient (async, non-bloquant)
-  sendConfirmationSMS({
-    to: formattedPhone,
-    patientName,
-    doctorName: doctor?.name ?? 'votre médecin',
-    date,
-    time,
-    cancelToken,
-    baseUrl,
-  }).catch((err) => console.error('[SMS]', err))
 
   // Email de notification au médecin (nouveau RDV)
   if (doctor) {

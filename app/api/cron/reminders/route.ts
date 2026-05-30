@@ -1,10 +1,9 @@
-// Cron job : envoie les rappels SMS + Email 24h avant les RDV
+// Cron job : envoie les rappels email le matin du RDV (skip si RDV pris le jour même)
 // Déclenché automatiquement par Vercel Cron (voir vercel.json)
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { sendReminderSMS } from '@/lib/twilio'
 import { sendReminderEmailToPatient } from '@/lib/email'
-import { format, addDays } from 'date-fns'
+import { format, startOfDay } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 import { MAROC_TZ } from '@/lib/utils'
 
@@ -17,28 +16,28 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  // Date de demain au Maroc
-  const tomorrow = format(addDays(toZonedTime(new Date(), MAROC_TZ), 1), 'yyyy-MM-dd')
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+  // Date d'aujourd'hui au Maroc
+  const nowMaroc = toZonedTime(new Date(), MAROC_TZ)
+  const today = format(nowMaroc, 'yyyy-MM-dd')
+  const todayStart = startOfDay(nowMaroc)
 
-  // Récupère tous les RDV de demain non annulés
+  // Récupère tous les RDV d'aujourd'hui non annulés avec email patient
   const { data: appointments, error } = await supabase
     .from('appointments')
     .select(`
-      id, date, time, cancel_token,
-      patient:patients(first_name, last_name, phone, email),
+      id, date, time, cancel_token, created_at,
+      patient:patients(first_name, last_name, email),
       doctor:doctors(name, specialty)
     `)
-    .eq('date', tomorrow)
+    .eq('date', today)
     .neq('status', 'cancelled')
 
   if (error) {
     console.error('[Cron reminders] Erreur Supabase:', error)
-    return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
+    return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
   }
 
-  let smsSent = 0, smsFailed = 0
-  let emailSent = 0, emailFailed = 0
+  let sent = 0, skipped = 0, failed = 0
 
   const batchSize = 10
   for (let i = 0; i < (appointments ?? []).length; i += batchSize) {
@@ -46,46 +45,36 @@ export async function POST(req: NextRequest) {
 
     await Promise.allSettled(
       batch.map(async (apt) => {
-        if (!apt.patient || !apt.cancel_token) return
+        const patient = apt.patient as any
+        const doctor  = apt.doctor  as any
 
-        const patient     = apt.patient as any
-        const doctor      = apt.doctor  as any
+        // Skip si pas d'email patient
+        if (!patient?.email) { skipped++; return }
+
+        // Skip si RDV pris aujourd'hui (patient vient de réserver, pas besoin de rappel)
+        const createdAtMaroc = toZonedTime(new Date(apt.created_at), MAROC_TZ)
+        if (createdAtMaroc >= todayStart) { skipped++; return }
+
         const patientName = `${patient.first_name} ${patient.last_name}`
-        const doctorName  = doctor?.name ?? 'votre médecin'
+        const doctorName  = doctor?.name    ?? 'votre médecin'
+        const specialty   = doctor?.specialty ?? ''
 
-        // ── SMS ──────────────────────────────────────────────────────────
         try {
-          const ok = await sendReminderSMS({
-            to: patient.phone,
+          const ok = await sendReminderEmailToPatient({
+            patientEmail: patient.email,
             patientName,
             doctorName,
+            specialty,
             date: apt.date,
             time: apt.time,
             cancelToken: apt.cancel_token,
-            baseUrl,
           })
-          ok ? smsSent++ : smsFailed++
-        } catch { smsFailed++ }
-
-        // ── Email (si le patient a un email) ─────────────────────────────
-        if (patient.email) {
-          try {
-            const ok = await sendReminderEmailToPatient({
-              patientEmail: patient.email,
-              patientName,
-              doctorName,
-              specialty: doctor?.specialty ?? '',
-              date: apt.date,
-              time: apt.time,
-              cancelToken: apt.cancel_token,
-            })
-            ok ? emailSent++ : emailFailed++
-          } catch { emailFailed++ }
-        }
+          ok ? sent++ : failed++
+        } catch { failed++ }
       })
     )
   }
 
-  console.log(`[Cron reminders] SMS: ${smsSent} envoyés, ${smsFailed} échoués — Email: ${emailSent} envoyés, ${emailFailed} échoués`)
-  return NextResponse.json({ smsSent, smsFailed, emailSent, emailFailed, date: tomorrow })
+  console.log(`[Cron reminders] Email: ${sent} envoyés, ${skipped} ignorés, ${failed} échoués — date: ${today}`)
+  return NextResponse.json({ sent, skipped, failed, date: today })
 }

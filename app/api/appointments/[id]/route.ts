@@ -1,7 +1,7 @@
 // API : mise à jour et suppression d'un RDV
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendCancellationSMS } from '@/lib/twilio'
+import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor } from '@/lib/email'
 
 // PATCH /api/appointments/[id] — modifie le statut (confirm/cancel)
 export async function PATCH(
@@ -47,15 +47,32 @@ export async function PATCH(
     return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
   }
 
-  // Envoie un SMS d'annulation si le statut devient "cancelled"
+  // Emails d'annulation si le statut devient "cancelled"
   if (status === 'cancelled' && appointment.patient) {
-    sendCancellationSMS({
-      to: appointment.patient.phone,
-      patientName: `${appointment.patient.first_name} ${appointment.patient.last_name}`,
-      doctorName: doctor.name,
-      date: appointment.date,
-      time: appointment.time,
-    }).catch((err) => console.error('[SMS annulation]', err))
+    const patientName = `${appointment.patient.first_name} ${appointment.patient.last_name}`
+    const { data: doctorFull } = await supabase.from('doctors').select('email, specialty').eq('id', doctor.id).single()
+
+    if (appointment.patient.email) {
+      sendCancellationEmailToPatient({
+        patientEmail: appointment.patient.email,
+        patientName,
+        doctorName: doctor.name,
+        specialty: doctorFull?.specialty ?? '',
+        date: appointment.date,
+        time: appointment.time,
+      }).catch((err) => console.error('[Email] annulation patient:', err))
+    }
+
+    if (doctorFull?.email) {
+      sendCancellationEmailToDoctor({
+        doctorEmail: doctorFull.email,
+        doctorName: doctor.name,
+        patientName,
+        patientPhone: appointment.patient.phone,
+        date: appointment.date,
+        time: appointment.time,
+      }).catch((err) => console.error('[Email] annulation médecin:', err))
+    }
   }
 
   return NextResponse.json(appointment)

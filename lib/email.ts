@@ -191,7 +191,7 @@ export async function sendAppointmentConfirmationToPatient(params: {
               <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${h(params.date)}</p>
               <p style="margin: 4px 0; color: #374151;"><strong>Heure :</strong> ${h(params.time)}</p>
             </div>
-            <p style="color: #6b7280; font-size: 14px;">Vous recevrez également un rappel par SMS la veille de votre rendez-vous.</p>
+            <p style="color: #6b7280; font-size: 14px;">Vous recevrez un rappel par email le matin de votre rendez-vous.</p>
             <p style="text-align: center; margin: 28px 0;">
               <a href="${cancelUrl}" style="color: #ef4444; font-size: 13px;">Annuler ce rendez-vous</a>
             </p>
@@ -226,7 +226,7 @@ export async function sendReminderEmailToPatient(params: {
     await resend.emails.send({
       from: FROM_EMAIL,
       to: params.patientEmail,
-      subject: `⏰ Rappel — Votre RDV demain avec Dr. ${params.doctorName}`,
+      subject: `⏰ Rappel — Votre RDV aujourd'hui avec Dr. ${params.doctorName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
@@ -234,7 +234,7 @@ export async function sendReminderEmailToPatient(params: {
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
             <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
-            <p style="color: #374151;">Nous vous rappelons que vous avez un rendez-vous <strong>demain</strong> :</p>
+            <p style="color: #374151;">Nous vous rappelons que vous avez un rendez-vous <strong>aujourd'hui</strong> :</p>
             <div style="background: #f0f9ff; border-left: 4px solid #0EA5E9; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
               <p style="margin: 4px 0; color: #374151;"><strong>Médecin :</strong> Dr. ${h(params.doctorName)} — ${h(params.specialty)}</p>
               <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${h(params.date)}</p>
@@ -325,6 +325,102 @@ export async function sendDailyAgendaToDoctor(params: {
     return true
   } catch (error) {
     console.error('[Email] Erreur agenda quotidien:', error)
+    return false
+  }
+}
+
+// Email envoyé au patient quand son RDV est annulé
+export async function sendCancellationEmailToPatient(params: {
+  patientEmail: string
+  patientName: string
+  doctorName: string
+  specialty: string
+  date: string
+  time: string
+}): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.patientEmail,
+      subject: `❌ Votre RDV avec Dr. ${params.doctorName} a été annulé`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #ef4444; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 22px;">Rendez-vous annulé ❌</h1>
+          </div>
+          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
+            <p style="color: #374151;">Votre rendez-vous a été annulé :</p>
+            <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+              <p style="margin: 4px 0; color: #374151;"><strong>Médecin :</strong> Dr. ${h(params.doctorName)} — ${h(params.specialty)}</p>
+              <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${h(params.date)}</p>
+              <p style="margin: 4px 0; color: #374151;"><strong>Heure :</strong> ${h(params.time)}</p>
+            </div>
+            <p style="color: #6b7280; font-size: 14px;">Si vous souhaitez reprendre rendez-vous, vous pouvez réserver directement en ligne.</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${APP_URL}" style="background: #0EA5E9; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px;">
+                Prendre un nouveau RDV
+              </a>
+            </div>
+            <p style="color: #9ca3af; font-size: 12px; text-align: center;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+          </div>
+        </div>
+      `,
+    })
+    return true
+  } catch (error) {
+    console.error('[Email] Erreur annulation patient:', error)
+    return false
+  }
+}
+
+// Email envoyé au médecin quand un patient annule son RDV
+export async function sendCancellationEmailToDoctor(params: {
+  doctorEmail: string
+  doctorName: string
+  patientName: string
+  patientPhone: string
+  date: string
+  time: string
+}): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.doctorEmail,
+      subject: `❌ Annulation RDV — ${params.patientName} le ${params.date} à ${params.time}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #ef4444; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 22px;">Annulation de rendez-vous ❌</h1>
+          </div>
+          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="color: #374151;">Bonjour Dr. ${h(params.doctorName)},</p>
+            <p style="color: #374151;">Un patient a annulé son rendez-vous :</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr style="background: #fef2f2;"><td style="padding: 10px 14px; font-weight: bold; color: #dc2626;">Patient</td><td style="padding: 10px 14px;">${h(params.patientName)}</td></tr>
+              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Téléphone</td><td style="padding: 10px 14px;">${h(params.patientPhone)}</td></tr>
+              <tr style="background: #fef2f2;"><td style="padding: 10px 14px; font-weight: bold; color: #dc2626;">Date</td><td style="padding: 10px 14px;">${h(params.date)}</td></tr>
+              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Heure</td><td style="padding: 10px 14px;">${h(params.time)}</td></tr>
+            </table>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${APP_URL}/appointments" style="background: #0EA5E9; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+                Voir mon agenda
+              </a>
+            </div>
+            <p style="color: #9ca3af; font-size: 12px; text-align: center;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+          </div>
+        </div>
+      `,
+    })
+    return true
+  } catch (error) {
+    console.error('[Email] Erreur annulation médecin:', error)
     return false
   }
 }
