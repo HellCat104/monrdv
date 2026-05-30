@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDateShort, formatTime } from '@/lib/utils'
-import { CheckCircle2, User, Phone, MessageSquare, Mail } from 'lucide-react'
+import { CheckCircle2, User, Phone, MessageSquare, Mail, Hash } from 'lucide-react'
 import type { Doctor } from '@/types'
 
 interface BookingFormProps {
@@ -19,7 +19,7 @@ interface BookingFormProps {
 }
 
 export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
-  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', notes: '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', age: '', notes: '' })
   const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -43,6 +43,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
           date: selectedDate,
           time: selectedTime,
           ...form,
+          age: form.age ? parseInt(form.age, 10) : undefined,
           public: true, // indique que c'est une réservation publique
         }),
       })
@@ -159,6 +160,22 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
             placeholder="vous@exemple.ma"
           />
           <p className="text-xs text-gray-400">Pour retrouver vos RDV dans votre espace patient</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="b_age" className="flex items-center gap-1.5">
+            <Hash className="h-3 w-3" /> Âge *
+          </Label>
+          <Input
+            id="b_age"
+            type="number"
+            min={1}
+            max={120}
+            value={form.age}
+            onChange={(e) => setForm({ ...form, age: e.target.value })}
+            placeholder="35"
+            required
+          />
         </div>
 
         <div className="space-y-1.5">

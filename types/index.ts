@@ -49,6 +49,8 @@ export interface Patient {
   first_name: string
   last_name: string
   phone: string
+  email?: string | null
+  age?: number | null
   created_at: string
 }
 
@@ -82,6 +84,8 @@ export interface BookingFormData {
   first_name: string
   last_name: string
   phone: string
+  email?: string
+  age?: number
   date: string
   time: string
   notes?: string

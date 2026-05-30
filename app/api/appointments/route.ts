@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     last_name,
     phone,
     email,
+    age,
     date,
     time,
     notes,
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
   const safePhone  = sanitize(phone).substring(0, 20)
   const safeEmail  = email ? sanitize(email).substring(0, 254) : undefined
   const safeNotes  = notes ? sanitize(notes).substring(0, 500) : undefined
+  const safeAge    = age && Number.isInteger(age) && age > 0 && age <= 120 ? age : undefined
 
   // Validation format date (YYYY-MM-DD) et heure (HH:MM)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
@@ -140,7 +142,7 @@ export async function POST(req: NextRequest) {
   } else {
     const { data: newPatient, error: patientError } = await db
       .from('patients')
-      .insert({ doctor_id, first_name: safeFirst, last_name: safeLast, phone: formattedPhone, email: safeEmail || null })
+      .insert({ doctor_id, first_name: safeFirst, last_name: safeLast, phone: formattedPhone, email: safeEmail || null, age: safeAge || null })
       .select('id')
       .single()
 
@@ -190,7 +192,18 @@ export async function POST(req: NextRequest) {
     baseUrl,
   }).catch((err) => console.error('[SMS]', err))
 
-  // Pas d'email au médecin à chaque RDV — il reçoit l'agenda complet chaque matin à 7h
+  // Email de notification au médecin (nouveau RDV)
+  if (doctor) {
+    sendNewAppointmentToDoctor({
+      doctorEmail: doctor.email,
+      doctorName: doctor.name,
+      patientName,
+      patientPhone: formattedPhone,
+      date,
+      time,
+      notes: safeNotes,
+    }).catch((err) => console.error('[Email] notif médecin:', err))
+  }
 
   // Email de confirmation au patient (si email fourni)
   if (email && doctor) {
