@@ -24,6 +24,51 @@ function h(s: string | undefined | null): string {
     .replace(/'/g, '&#39;')
 }
 
+// Email envoyé au médecin juste après son inscription (en attente de validation)
+export async function sendPendingEmail(params: {
+  to: string
+  doctorName: string
+}): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.to,
+      subject: '⏳ Votre compte MonRDV a bien été créé',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">MonRDV 🇲🇦</h1>
+          </div>
+          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <h2 style="color: #111827;">Bienvenue Dr. ${h(params.doctorName)} !</h2>
+            <p style="color: #6b7280;">Votre compte a bien été créé. Notre équipe va vérifier votre dossier et activer votre compte dans les plus brefs délais.</p>
+            <div style="background: #fef9c3; border-left: 4px solid #eab308; padding: 16px 20px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+              <p style="margin: 0; color: #92400e; font-size: 14px;">⏳ Votre compte est en cours de validation. Vous recevrez un email dès qu'il sera activé.</p>
+            </div>
+            <p style="color: #6b7280; font-size: 14px;">En attendant, vous pouvez vous connecter et configurer votre profil (horaires, spécialité, adresse).</p>
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${APP_URL}/login"
+                style="background: #0EA5E9; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+                Accéder à mon espace
+              </a>
+            </div>
+            <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+              MonRDV — Prise de rendez-vous médicaux au Maroc
+            </p>
+          </div>
+        </div>
+      `,
+    })
+    return true
+  } catch (error) {
+    console.error('[Email] Erreur email pending:', error)
+    return false
+  }
+}
+
 // Email envoyé au médecin quand son compte est approuvé
 export async function sendApprovalEmail(params: {
   to: string

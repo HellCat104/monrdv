@@ -1,7 +1,7 @@
 // API : inscription d'un nouveau médecin
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { sendAdminNotificationEmail } from '@/lib/email'
+import { sendAdminNotificationEmail, sendPendingEmail } from '@/lib/email'
 import { sanitizeString, sanitizeEmail, sanitizeSlug, sanitizePhone, isValidEmail, isValidSlug } from '@/lib/sanitize'
 
 export async function POST(req: NextRequest) {
@@ -84,6 +84,10 @@ export async function POST(req: NextRequest) {
   // Notifie l'admin par email
   sendAdminNotificationEmail({ doctorName: name, doctorEmail: email, specialty })
     .catch((err) => console.error('[Email admin]', err))
+
+  // Email de bienvenue au médecin (en attente de validation)
+  sendPendingEmail({ to: email, doctorName: name })
+    .catch((err) => console.error('[Email pending]', err))
 
   return NextResponse.json({ success: true }, { status: 201 })
 }
