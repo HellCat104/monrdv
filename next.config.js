@@ -64,6 +64,4 @@ module.exports = withSentryConfig(nextConfig, {
   // Ne pas envoyer les source maps au build (économise du temps)
   widenClientFileUpload: false,
   hideSourceMaps: true,
-  disableLogger: true,
-  automaticVercelMonitors: false,
 })
