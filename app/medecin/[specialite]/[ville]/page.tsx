@@ -53,7 +53,7 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
     '@type': 'MedicalBusiness',
     'name': `${specialite} à ${ville} — MonRDV`,
     'description': `Liste de ${specialite.toLowerCase()} à ${ville} disponibles sur MonRDV`,
-    'url': `https://monrdv.vercel.app/medecin/${params.specialite}/${params.ville}`,
+    'url': `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'}/medecin/${params.specialite}/${params.ville}`,
     'areaServed': ville,
     'medicalSpecialty': specialite,
   }
