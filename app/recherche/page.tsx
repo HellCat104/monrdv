@@ -23,6 +23,7 @@ function RechercheContent() {
   const router = useRouter()
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [query, setQuery] = useState(searchParams.get('q') || '')
   const [city, setCity] = useState(searchParams.get('ville') || '')
 
@@ -36,13 +37,28 @@ function RechercheContent() {
 
   async function fetchDoctors(q: string, ville: string) {
     setLoading(true)
-    const params = new URLSearchParams()
-    if (q) params.set('q', q)
-    if (ville) params.set('ville', ville)
-    const res = await fetch(`/api/search?${params}`)
-    const data = await res.json()
-    setDoctors(Array.isArray(data) ? data : [])
-    setLoading(false)
+    setError('')
+
+    try {
+      const params = new URLSearchParams()
+      if (q) params.set('q', q)
+      if (ville) params.set('ville', ville)
+
+      const res = await fetch(`/api/search?${params}`)
+      const text = await res.text()
+      const data = text ? JSON.parse(text) : null
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'Erreur recherche')
+      }
+
+      setDoctors(Array.isArray(data) ? data : [])
+    } catch {
+      setDoctors([])
+      setError('La recherche ne fonctionne pas pour le moment. Réessayez dans quelques instants ou contactez-nous sur WhatsApp.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   function handleSearch(e: React.FormEvent) {
@@ -91,6 +107,21 @@ function RechercheContent() {
           {loading ? 'Recherche…' : `${doctors.length} médecin(s) trouvé(s)`}
           {query && ` pour "${query}"`}
         </p>
+
+        {error && (
+          <div className="bg-red-50 border border-red-100 text-red-700 rounded-2xl p-4 mb-4 text-sm leading-relaxed">
+            <p className="font-semibold">Recherche indisponible</p>
+            <p className="mt-1">{error}</p>
+            <a
+              href="https://wa.me/32465383121"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block mt-3 text-red-800 underline underline-offset-2 font-medium"
+            >
+              Contacter sur WhatsApp
+            </a>
+          </div>
+        )}
 
         {loading ? (
           <div className="space-y-4">
