@@ -16,7 +16,7 @@ export async function POST(
   const { data: patientRecords } = await adminDb
     .from('patients')
     .select('id')
-    .or(`user_id.eq.${user.id}${user.email ? `,email.eq.${user.email}` : ''}`)
+    .eq('user_id', user.id)
 
   const patientIds = (patientRecords ?? []).map((p: { id: string }) => p.id)
   if (patientIds.length === 0) {

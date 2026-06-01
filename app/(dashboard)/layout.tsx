@@ -23,8 +23,11 @@ export default async function DashboardLayout({
     .single()
 
   if (!doctor) {
-    // C'est un patient → renvoyer vers son espace
     redirect('/patient/dashboard')
+  }
+
+  if (doctor.status !== 'approved') {
+    redirect('/login')
   }
 
   return (

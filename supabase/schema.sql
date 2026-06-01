@@ -57,8 +57,7 @@ CREATE TABLE appointments (
   notes        TEXT,
   cancel_token TEXT UNIQUE,              -- token pour annulation par SMS
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  -- Contrainte : un seul RDV par créneau par médecin (hors annulés)
-  CONSTRAINT unique_slot UNIQUE NULLS NOT DISTINCT (doctor_id, date, time)
+  -- Les RDV annules restent dans l'historique et ne bloquent pas le creneau.
 );
 
 -- Index pour les requêtes fréquentes
@@ -66,6 +65,8 @@ CREATE INDEX idx_appointments_doctor_date ON appointments(doctor_id, date);
 CREATE INDEX idx_appointments_cancel_token ON appointments(cancel_token);
 CREATE INDEX idx_patients_doctor_phone ON patients(doctor_id, phone);
 CREATE INDEX idx_appointments_status ON appointments(status);
+CREATE UNIQUE INDEX unique_active_slot ON appointments(doctor_id, date, time)
+  WHERE status <> 'cancelled';
 
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS) — Isolation multi-tenant

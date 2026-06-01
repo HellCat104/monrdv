@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
+const rateLimitStore = new Map<string, { count: number; start: number }>()
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
 
   // ── Rate limiting simple sur les routes sensibles ─────────────────────────
-  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown'
+  const ip = (req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip') ?? 'unknown').trim()
   const sensitiveRoutes = [
     '/api/doctors/register',
     '/api/auth',
@@ -21,20 +23,14 @@ export async function middleware(req: NextRequest) {
     const now = Date.now()
     const windowMs = 60_000 // 1 minute
     const maxRequests = 10
+    const current = rateLimitStore.get(key)
 
-    // Utilise les cookies pour tracker (simple, sans Redis)
-    const rlCookie = req.cookies.get(key)
     let count = 1
     let windowStart = now
 
-    if (rlCookie) {
-      try {
-        const parsed = JSON.parse(rlCookie.value)
-        if (now - parsed.start < windowMs) {
-          count = parsed.count + 1
-          windowStart = parsed.start
-        }
-      } catch { /* reset */ }
+    if (current && now - current.start < windowMs) {
+      count = current.count + 1
+      windowStart = current.start
     }
 
     if (count > maxRequests) {
@@ -44,11 +40,13 @@ export async function middleware(req: NextRequest) {
       })
     }
 
-    res.cookies.set(key, JSON.stringify({ count, start: windowStart }), {
-      maxAge: 60,
-      httpOnly: true,
-      sameSite: 'strict',
-    })
+    rateLimitStore.set(key, { count, start: windowStart })
+
+    if (rateLimitStore.size > 10_000) {
+      rateLimitStore.forEach((value, storedKey) => {
+        if (now - value.start >= windowMs) rateLimitStore.delete(storedKey)
+      })
+    }
   }
 
   // ── Protection des routes privées ────────────────────────────────────────

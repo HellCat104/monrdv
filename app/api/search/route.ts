@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const q     = searchParams.get('q')?.trim() || ''
-  const ville = searchParams.get('ville')?.trim() || ''
+  const q     = sanitizeSearchParam(searchParams.get('q'))
+  const ville = sanitizeSearchParam(searchParams.get('ville'))
 
   const supabase = createAdminClient()
 
@@ -37,4 +37,12 @@ export async function GET(req: NextRequest) {
       'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
     },
   })
+}
+
+function sanitizeSearchParam(value: string | null): string {
+  return (value ?? '')
+    .trim()
+    .replace(/[%,()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .slice(0, 80)
 }

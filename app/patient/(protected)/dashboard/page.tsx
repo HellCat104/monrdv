@@ -33,20 +33,11 @@ export default async function PatientDashboardPage() {
 
   const adminDb = createAdminClient()
 
-  // Auto-link: attach user_id to existing patient records with this email
-  if (user.email) {
-    await adminDb
-      .from('patients')
-      .update({ user_id: user.id })
-      .eq('email', user.email)
-      .is('user_id', null)
-  }
-
-  // Fetch all patient records for this user
+  // Fetch only patient records explicitly linked to this authenticated user.
   const { data: patientRecords } = await adminDb
     .from('patients')
     .select('id')
-    .or(`user_id.eq.${user.id}${user.email ? `,email.eq.${user.email}` : ''}`)
+    .eq('user_id', user.id)
 
   const patientIds = (patientRecords ?? []).map((p: { id: string }) => p.id)
 
@@ -96,7 +87,7 @@ export default async function PatientDashboardPage() {
           <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
           <p className="font-medium text-gray-700">Aucun rendez-vous trouvé</p>
           <p className="text-sm text-gray-400 mt-1">
-            Vos futurs rendez-vous apparaîtront ici automatiquement si vous utilisez le même email ou téléphone lors de la réservation.
+            Vos futurs rendez-vous apparaîtront ici lorsque le rendez-vous est lié à votre compte patient.
           </p>
         </div>
       )}

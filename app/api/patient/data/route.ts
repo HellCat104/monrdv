@@ -13,7 +13,7 @@ export async function GET() {
   const { data: patients } = await adminDb
     .from('patients')
     .select('id, first_name, last_name, phone, email, created_at')
-    .or(`user_id.eq.${user.id}${user.email ? `,email.eq.${user.email}` : ''}`)
+    .eq('user_id', user.id)
 
   const patientIds = (patients ?? []).map((p: any) => p.id)
 
@@ -67,7 +67,7 @@ export async function PATCH(req: NextRequest) {
   await adminDb
     .from('patients')
     .update(updates)
-    .or(`user_id.eq.${user.id}${user.email ? `,email.eq.${user.email}` : ''}`)
+    .eq('user_id', user.id)
 
   return NextResponse.json({ success: true })
 }
@@ -84,7 +84,7 @@ export async function DELETE() {
   const { data: patients } = await adminDb
     .from('patients')
     .select('id')
-    .or(`user_id.eq.${user.id}${user.email ? `,email.eq.${user.email}` : ''}`)
+    .eq('user_id', user.id)
 
   const patientIds = (patients ?? []).map((p: any) => p.id)
 

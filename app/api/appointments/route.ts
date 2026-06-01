@@ -2,7 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
-import { formatPhoneMaroc, generateCancelToken } from '@/lib/utils'
+import { formatPhoneMaroc, generateCancelToken, generateTimeSlots, getDayKey, getNowInMaroc } from '@/lib/utils'
+import { format } from 'date-fns'
 
 // GET /api/appointments?doctor_id=...&date=...
 export async function GET(req: NextRequest) {
@@ -75,16 +76,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Interdit les RDV le jour même
-  const today = new Date().toISOString().split('T')[0]
+  const today = format(getNowInMaroc(), 'yyyy-MM-dd')
   if (date <= today) {
     return NextResponse.json({ error: 'Les réservations le jour même ne sont pas acceptées' }, { status: 400 })
   }
 
   // Pour les réservations du médecin, vérifie l'authentification
   const supabase = createClient()
+  const { data: { user: bookingUser } } = await supabase.auth.getUser()
   if (!isPublic) {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    if (!bookingUser) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   }
 
   // Utilise le client admin pour les réservations publiques (bypass RLS)
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
   // Vérifie que le médecin existe, est approuvé et a un abonnement actif
   const { data: doctorCheck } = await db
     .from('doctors')
-    .select('id, status, subscription_status')
+    .select('id, status, subscription_status, working_hours, appointment_duration')
     .eq('id', doctor_id)
     .single()
 
@@ -103,6 +104,36 @@ export async function POST(req: NextRequest) {
 
   if (doctorCheck.subscription_status !== 'actif') {
     return NextResponse.json({ error: 'Ce médecin n\'accepte pas les réservations en ligne' }, { status: 403 })
+  }
+
+  // Vérifie côté serveur que le créneau demandé est réellement réservable.
+  const parsedDate = new Date(`${date}T00:00:00`)
+  const dayKey = getDayKey(parsedDate)
+  const daySchedule = doctorCheck.working_hours?.[dayKey]
+
+  if (!daySchedule?.enabled) {
+    return NextResponse.json({ error: 'Ce jour n\'est pas ouvert à la réservation' }, { status: 400 })
+  }
+
+  const validSlots = generateTimeSlots(
+    daySchedule.start,
+    daySchedule.end,
+    doctorCheck.appointment_duration
+  )
+
+  if (!validSlots.includes(time)) {
+    return NextResponse.json({ error: 'Ce créneau n\'est pas disponible' }, { status: 400 })
+  }
+
+  const { data: blockedDate } = await db
+    .from('blocked_dates')
+    .select('id')
+    .eq('doctor_id', doctor_id)
+    .eq('date', date)
+    .maybeSingle()
+
+  if (blockedDate) {
+    return NextResponse.json({ error: 'Cette date n\'est pas disponible' }, { status: 400 })
   }
 
   // Vérifie que le créneau n'est pas déjà pris
@@ -121,6 +152,11 @@ export async function POST(req: NextRequest) {
 
   const formattedPhone = formatPhoneMaroc(safePhone)
   const cancelToken = generateCancelToken()
+  const shouldLinkPatientToUser =
+    !!bookingUser && (
+      (!!safeEmail && bookingUser.email === safeEmail) ||
+      (!!bookingUser.phone && bookingUser.phone === formattedPhone)
+    )
 
   // Trouve ou crée le patient
   let patientId: string
@@ -134,14 +170,24 @@ export async function POST(req: NextRequest) {
 
   if (existingPatient) {
     patientId = existingPatient.id
-    // Update email if patient didn't have one
     if (safeEmail) {
       await db.from('patients').update({ email: safeEmail }).eq('id', patientId).is('email', null)
+    }
+    if (shouldLinkPatientToUser) {
+      await db.from('patients').update({ user_id: bookingUser.id }).eq('id', patientId).is('user_id', null)
     }
   } else {
     const { data: newPatient, error: patientError } = await db
       .from('patients')
-      .insert({ doctor_id, first_name: safeFirst, last_name: safeLast, phone: formattedPhone, email: safeEmail || null, age: safeAge || null })
+      .insert({
+        doctor_id,
+        first_name: safeFirst,
+        last_name: safeLast,
+        phone: formattedPhone,
+        email: safeEmail || null,
+        age: safeAge || null,
+        user_id: shouldLinkPatientToUser ? bookingUser.id : null,
+      })
       .select('id')
       .single()
 
