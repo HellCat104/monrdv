@@ -6,7 +6,7 @@ import { BookingPageClient } from './BookingPageClient'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://monrdv.ma'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 
 interface Props {
   params: { slug: string }

@@ -2,7 +2,7 @@
 import type { Metadata } from 'next'
 import HomePageClient from './HomePageClient'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://monrdv.ma'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 
 export const metadata: Metadata = {
   title: 'MonRDV — Prise de rendez-vous médical en ligne au Maroc',

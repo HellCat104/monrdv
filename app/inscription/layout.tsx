@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   keywords: ['inscription médecin Maroc', 'logiciel rendez-vous médecin', 'agenda médical en ligne Maroc'],
   robots: { index: true, follow: true },
   alternates: {
-    canonical: `${process.env.NEXT_PUBLIC_APP_URL || 'https://monrdv.ma'}/inscription`,
+    canonical: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'}/inscription`,
   },
 }
 

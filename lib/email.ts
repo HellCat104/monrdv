@@ -10,7 +10,7 @@ function getResend() {
   return new Resend(apiKey)
 }
 
-const FROM_EMAIL = process.env.EMAIL_FROM || 'MonRDV <noreply@monrdv.ma>'
+const FROM_EMAIL = process.env.EMAIL_FROM || 'MonRDV <noreply@monrdv.co.ma>'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
 // Échappe les caractères HTML pour éviter les XSS dans les emails
