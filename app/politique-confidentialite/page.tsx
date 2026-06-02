@@ -152,14 +152,14 @@ export default function PolitiqueConfidentialite() {
                 <p><strong>Responsable du traitement :</strong> Asma Adouach</p>
                 <p>
                   <strong>Email :</strong>{' '}
-                  <a href="mailto:privacy@monrdv.co.ma" className="text-green-700 hover:underline">
-                    privacy@monrdv.co.ma
+                  <a href="mailto:asmaadouach@gmail.com" className="text-green-700 hover:underline">
+                    asmaadouach@gmail.com
                   </a>
                 </p>
                 <p>
                   <strong>Contact général :</strong>{' '}
-                  <a href="mailto:contact@monrdv.co.ma" className="text-green-700 hover:underline">
-                    contact@monrdv.co.ma
+                  <a href="mailto:asmaadouach@gmail.com" className="text-green-700 hover:underline">
+                    asmaadouach@gmail.com
                   </a>
                 </p>
                 <p><strong>Pays :</strong> Royaume du Maroc</p>
@@ -574,8 +574,8 @@ export default function PolitiqueConfidentialite() {
                     <p className="font-semibold text-gray-800 text-sm mb-1">Par email</p>
                     <p className="text-sm text-gray-600">
                       Envoyez votre demande à{' '}
-                      <a href="mailto:privacy@monrdv.co.ma" className="text-green-700 hover:underline">
-                        privacy@monrdv.co.ma
+                      <a href="mailto:asmaadouach@gmail.com" className="text-green-700 hover:underline">
+                        asmaadouach@gmail.com
                       </a>{' '}
                       en précisant : votre nom complet, le type de droit que vous souhaitez exercer,
                       et une pièce d&apos;identité pour vérification.
@@ -670,8 +670,8 @@ export default function PolitiqueConfidentialite() {
                 MonRDV ne collecte pas sciemment de données personnelles de mineurs de manière autonome.
                 Si vous constatez qu&apos;un mineur a fourni des données sans autorisation parentale,
                 contactez-nous à{' '}
-                <a href="mailto:privacy@monrdv.co.ma" className="text-green-700 hover:underline">
-                  privacy@monrdv.co.ma
+                <a href="mailto:asmaadouach@gmail.com" className="text-green-700 hover:underline">
+                  asmaadouach@gmail.com
                 </a>{' '}
                 pour suppression immédiate.
               </p>
@@ -729,14 +729,14 @@ export default function PolitiqueConfidentialite() {
               <div className="bg-gray-50 rounded-xl p-5 text-sm text-gray-700 space-y-2">
                 <p>
                   🔒 <strong>Email dédié protection des données :</strong>{' '}
-                  <a href="mailto:privacy@monrdv.co.ma" className="text-green-700 hover:underline">
-                    privacy@monrdv.co.ma
+                  <a href="mailto:asmaadouach@gmail.com" className="text-green-700 hover:underline">
+                    asmaadouach@gmail.com
                   </a>
                 </p>
                 <p>
                   📧 <strong>Email général :</strong>{' '}
-                  <a href="mailto:contact@monrdv.co.ma" className="text-green-700 hover:underline">
-                    contact@monrdv.co.ma
+                  <a href="mailto:asmaadouach@gmail.com" className="text-green-700 hover:underline">
+                    asmaadouach@gmail.com
                   </a>
                 </p>
                 <p>⏱ <strong>Délai de réponse :</strong> 30 jours maximum (conformément à la loi 09-08)</p>
