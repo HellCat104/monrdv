@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { AddAppointmentDialog } from '@/components/dashboard/AddAppointmentDialog'
@@ -19,6 +20,7 @@ import { getNowInMaroc } from '@/lib/utils'
 type ViewMode = 'day' | 'week' | 'all'
 
 export default function AppointmentsPage() {
+  const router = useRouter()
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [doctor, setDoctor] = useState<Doctor | null>(null)
   const [loading, setLoading] = useState(true)
@@ -232,6 +234,7 @@ export default function AppointmentsPage() {
               appointments={filtered}
               onStatusChange={handleStatusChange}
               onAttendanceChange={handleAttendanceChange}
+              onViewPatient={(patientId) => router.push(`/patients?patient=${patientId}`)}
             />
           )}
         </CardContent>

@@ -6,15 +6,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { formatDateShort, formatTime, getInitials } from '@/lib/utils'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance } from '@/types'
-import { Phone, Clock, UserCheck, UserX, Timer } from 'lucide-react'
+import { Phone, Clock, UserCheck, UserX, Timer, User } from 'lucide-react'
 
 interface AppointmentListProps {
   appointments: Appointment[]
   onStatusChange?: (id: string, status: AppointmentStatus) => Promise<void>
   onAttendanceChange?: (id: string, attendance: AppointmentAttendance) => Promise<void>
+  onViewPatient?: (patientId: string) => void
 }
 
-export function AppointmentList({ appointments, onStatusChange, onAttendanceChange }: AppointmentListProps) {
+export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onViewPatient }: AppointmentListProps) {
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean; id: string; action: 'confirmed' | 'cancelled'; label: string
   }>({ open: false, id: '', action: 'confirmed', label: '' })
@@ -147,6 +148,15 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   </Button>
                 </div>
               )}
+              {/* Voir la fiche patient */}
+              {onViewPatient && apt.patient_id && (
+                <button
+                  onClick={() => onViewPatient(apt.patient_id)}
+                  className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline mt-0.5"
+                >
+                  <User className="h-3 w-3" /> Voir la fiche patient
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -160,7 +170,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
           </DialogHeader>
           <p className="text-sm text-gray-600">
             Voulez-vous vraiment <strong>{confirmDialog.label}</strong> ce rendez-vous ?
-            {confirmDialog.action === 'cancelled' && ' Un SMS sera envoyé au patient.'}
+            {confirmDialog.action === 'cancelled' && ' Un email sera envoyé au patient.'}
           </p>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}>

@@ -78,9 +78,11 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
           <strong>{formatDateShort(selectedDate)}</strong> à{' '}
           <strong>{formatTime(selectedTime)}</strong>.
         </p>
-        <p className="text-gray-500 text-xs">
-          Un SMS de confirmation a été envoyé sur votre téléphone.
-        </p>
+        {form.email && (
+          <p className="text-gray-500 text-xs">
+            Un email de confirmation a été envoyé à <strong>{form.email}</strong>.
+          </p>
+        )}
         {/* CTA créer un compte */}
         <div className="mt-4 bg-primary-50 border border-primary-100 rounded-xl p-4 text-left space-y-2">
           <p className="text-sm font-semibold text-primary-800">Retrouvez vos RDV facilement</p>
@@ -90,6 +92,21 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
             className="inline-block bg-primary-500 hover:bg-primary-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors mt-1"
           >
             Créer mon espace patient
+          </a>
+        </div>
+        {/* Navigation */}
+        <div className="flex flex-col sm:flex-row gap-2 pt-2">
+          <a
+            href="/"
+            className="flex-1 border border-gray-200 hover:border-gray-300 text-gray-700 font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors text-center"
+          >
+            Retour à l&apos;accueil
+          </a>
+          <a
+            href="/recherche"
+            className="flex-1 border border-gray-200 hover:border-gray-300 text-gray-700 font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors text-center"
+          >
+            Prendre un autre RDV
           </a>
         </div>
       </div>

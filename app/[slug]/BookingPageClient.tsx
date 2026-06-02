@@ -92,13 +92,15 @@ export function BookingPageClient({ doctor }: Props) {
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-500 rounded-xl flex items-center justify-center">
-            <span className="text-white font-bold text-sm">M</span>
-          </div>
-          <div>
-            <h1 className="font-bold text-gray-900 text-sm leading-tight">MonRDV</h1>
-            <p className="text-xs text-gray-400">Prise de rendez-vous en ligne</p>
-          </div>
+          <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <div className="w-10 h-10 bg-primary-500 rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-sm">M</span>
+            </div>
+            <div>
+              <h1 className="font-bold text-gray-900 text-sm leading-tight">MonRDV</h1>
+              <p className="text-xs text-gray-400">Prise de rendez-vous en ligne</p>
+            </div>
+          </a>
         </div>
       </header>
 
