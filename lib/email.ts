@@ -216,7 +216,7 @@ export async function sendAppointmentConfirmationToPatient(params: {
   const resend = getResend()
   if (!resend) return false
 
-  const cancelUrl = `${APP_URL}/cancel-result?token=${encodeURIComponent(params.cancelToken)}`
+  const cancelUrl = `${APP_URL}/api/cancel/${encodeURIComponent(params.cancelToken)}`
 
   try {
     await resend.emails.send({
@@ -265,7 +265,7 @@ export async function sendReminderEmailToPatient(params: {
   const resend = getResend()
   if (!resend) return false
 
-  const cancelUrl = `${APP_URL}/cancel-result?token=${encodeURIComponent(params.cancelToken)}`
+  const cancelUrl = `${APP_URL}/api/cancel/${encodeURIComponent(params.cancelToken)}`
 
   try {
     await resend.emails.send({
