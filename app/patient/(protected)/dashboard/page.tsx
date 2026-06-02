@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Calendar, Clock, Search, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
-import { formatDateShort, formatTime } from '@/lib/utils'
+import { formatDateShort, formatTime, getNowInMaroc } from '@/lib/utils'
+import { format } from 'date-fns'
 import { CancelButton } from './CancelButton'
 
 interface AppointmentRow {
@@ -45,7 +46,8 @@ export default async function PatientDashboardPage() {
   let past: AppointmentRow[] = []
 
   if (patientIds.length > 0) {
-    const today = new Date().toISOString().split('T')[0]
+    // Date + heure actuelles au Maroc (format comparable : yyyy-MM-ddTHH:mm:ss)
+    const nowStr = format(getNowInMaroc(), "yyyy-MM-dd'T'HH:mm:ss")
 
     const { data: allApts } = await adminDb
       .from('appointments')
@@ -55,8 +57,10 @@ export default async function PatientDashboardPage() {
       .order('time', { ascending: false })
 
     const apts = (allApts ?? []) as unknown as AppointmentRow[]
-    upcoming = apts.filter((a) => a.date >= today && a.status !== 'cancelled').reverse()
-    past     = apts.filter((a) => a.date <  today || a.status === 'cancelled')
+    // Compare date + heure (un RDV passé aujourd'hui doit aller dans l'historique)
+    const dt = (a: AppointmentRow) => `${a.date}T${a.time}`
+    upcoming = apts.filter((a) => dt(a) >= nowStr && a.status !== 'cancelled').reverse()
+    past     = apts.filter((a) => dt(a) <  nowStr || a.status === 'cancelled')
   }
 
   return (
