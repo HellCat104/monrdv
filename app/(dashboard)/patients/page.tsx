@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment } from '@/types'
 import { getInitials, formatDateShort } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2 } from 'lucide-react'
 
 interface PatientWithStats extends Patient {
   appointment_count: number
@@ -40,6 +40,10 @@ export default function PatientsPage() {
   const [newPatient, setNewPatient] = useState({ first_name: '', last_name: '', phone: '', notes: '' })
   const [addingPatient, setAddingPatient] = useState(false)
   const [addError, setAddError] = useState('')
+
+  // Suppression d'un patient
+  const [deleteConfirm, setDeleteConfirm] = useState<PatientWithStats | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const supabase = createClient()
 
@@ -159,6 +163,16 @@ export default function PatientsPage() {
     setNewPatient({ first_name: '', last_name: '', phone: '', notes: '' })
     setLoading(true)
     await load()
+  }
+
+  async function handleDeletePatient() {
+    if (!deleteConfirm) return
+    setDeleting(true)
+    await supabase.from('patients').delete().eq('id', deleteConfirm.id)
+    setDeleting(false)
+    setPatients((prev) => prev.filter((p) => p.id !== deleteConfirm.id))
+    setDeleteConfirm(null)
+    setSelectedPatient(null)
   }
 
   const filtered = patients.filter((p) => {
@@ -430,6 +444,51 @@ export default function PatientsPage() {
                 ) : (
                   <AppointmentList appointments={patientAppointments} />
                 )}
+              </div>
+
+              {/* Zone de suppression */}
+              <div className="border-t border-gray-100 pt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-500 border-red-200 hover:bg-red-50"
+                  onClick={() => setDeleteConfirm(selectedPatient)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Supprimer ce patient
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation suppression */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(o) => !o && setDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" /> Supprimer le patient
+            </DialogTitle>
+          </DialogHeader>
+          {deleteConfirm && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Voulez-vous vraiment supprimer <strong>{deleteConfirm.first_name} {deleteConfirm.last_name}</strong> ?
+              </p>
+              <p className="text-xs text-red-500 bg-red-50 p-3 rounded-lg">
+                ⚠️ Cette action est définitive. Tout l&apos;historique de rendez-vous de ce patient sera également supprimé.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setDeleteConfirm(null)} className="flex-1">
+                  Annuler
+                </Button>
+                <Button
+                  onClick={handleDeletePatient}
+                  disabled={deleting}
+                  className="flex-1 bg-red-500 hover:bg-red-600"
+                >
+                  {deleting ? 'Suppression…' : 'Supprimer'}
+                </Button>
               </div>
             </div>
           )}
