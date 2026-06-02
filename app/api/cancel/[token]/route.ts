@@ -28,29 +28,36 @@ export async function GET(
   const doctor  = appointment.doctor  as any
   const patientName = `${patient?.first_name ?? ''} ${patient?.last_name ?? ''}`.trim()
 
-  // Email de confirmation au patient
+  // Emails — AWAIT obligatoire en serverless (sinon tués avant l'envoi)
+  const emailTasks: Promise<unknown>[] = []
+
   if (patient?.email) {
-    sendCancellationEmailToPatient({
-      patientEmail: patient.email,
-      patientName,
-      doctorName:  doctor?.name     ?? '',
-      specialty:   doctor?.specialty ?? '',
-      date: appointment.date,
-      time: appointment.time,
-    }).catch((err) => console.error('[Email] annulation patient:', err))
+    emailTasks.push(
+      sendCancellationEmailToPatient({
+        patientEmail: patient.email,
+        patientName,
+        doctorName:  doctor?.name     ?? '',
+        specialty:   doctor?.specialty ?? '',
+        date: appointment.date,
+        time: appointment.time,
+      }).catch((err) => console.error('[Email] annulation patient:', err))
+    )
   }
 
-  // Email de notification au médecin
   if (doctor?.email) {
-    sendCancellationEmailToDoctor({
-      doctorEmail:  doctor.email,
-      doctorName:   doctor.name     ?? '',
-      patientName,
-      patientPhone: patient?.phone  ?? '',
-      date: appointment.date,
-      time: appointment.time,
-    }).catch((err) => console.error('[Email] annulation médecin:', err))
+    emailTasks.push(
+      sendCancellationEmailToDoctor({
+        doctorEmail:  doctor.email,
+        doctorName:   doctor.name     ?? '',
+        patientName,
+        patientPhone: patient?.phone  ?? '',
+        date: appointment.date,
+        time: appointment.time,
+      }).catch((err) => console.error('[Email] annulation médecin:', err))
+    )
   }
+
+  await Promise.allSettled(emailTasks)
 
   const url = new URL('/cancel-result', req.url)
   url.searchParams.set('status', 'success')

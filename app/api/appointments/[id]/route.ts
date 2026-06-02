@@ -52,27 +52,36 @@ export async function PATCH(
     const patientName = `${appointment.patient.first_name} ${appointment.patient.last_name}`
     const { data: doctorFull } = await supabase.from('doctors').select('email, specialty').eq('id', doctor.id).single()
 
+    // AWAIT obligatoire en serverless (sinon tués avant l'envoi)
+    const emailTasks: Promise<unknown>[] = []
+
     if (appointment.patient.email) {
-      sendCancellationEmailToPatient({
-        patientEmail: appointment.patient.email,
-        patientName,
-        doctorName: doctor.name,
-        specialty: doctorFull?.specialty ?? '',
-        date: appointment.date,
-        time: appointment.time,
-      }).catch((err) => console.error('[Email] annulation patient:', err))
+      emailTasks.push(
+        sendCancellationEmailToPatient({
+          patientEmail: appointment.patient.email,
+          patientName,
+          doctorName: doctor.name,
+          specialty: doctorFull?.specialty ?? '',
+          date: appointment.date,
+          time: appointment.time,
+        }).catch((err) => console.error('[Email] annulation patient:', err))
+      )
     }
 
     if (doctorFull?.email) {
-      sendCancellationEmailToDoctor({
-        doctorEmail: doctorFull.email,
-        doctorName: doctor.name,
-        patientName,
-        patientPhone: appointment.patient.phone,
-        date: appointment.date,
-        time: appointment.time,
-      }).catch((err) => console.error('[Email] annulation médecin:', err))
+      emailTasks.push(
+        sendCancellationEmailToDoctor({
+          doctorEmail: doctorFull.email,
+          doctorName: doctor.name,
+          patientName,
+          patientPhone: appointment.patient.phone,
+          date: appointment.date,
+          time: appointment.time,
+        }).catch((err) => console.error('[Email] annulation médecin:', err))
+      )
     }
+
+    await Promise.allSettled(emailTasks)
   }
 
   return NextResponse.json(appointment)

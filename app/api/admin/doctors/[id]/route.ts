@@ -126,12 +126,12 @@ export async function PATCH(
     return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
   }
 
-  // 3. Envoie l'email au médecin
+  // 3. Envoie l'email au médecin — AWAIT obligatoire en serverless
   if (action === 'approve') {
-    sendApprovalEmail({ to: existing.email, doctorName: existing.name })
+    await sendApprovalEmail({ to: existing.email, doctorName: existing.name })
       .catch((err) => console.error('[Email approbation]', err))
   } else {
-    sendRejectionEmail({
+    await sendRejectionEmail({
       to: existing.email,
       doctorName: existing.name,
       reason: rejection_reason,

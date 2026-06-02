@@ -226,31 +226,41 @@ export async function POST(req: NextRequest) {
   const baseUrl = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || ''
   const patientName = `${safeFirst} ${safeLast}`
 
+  // Envoi des emails — AWAIT obligatoire en serverless, sinon la fonction
+  // se termine avant que l'email parte (les promesses non attendues sont tuées).
+  const emailTasks: Promise<unknown>[] = []
+
   // Email de notification au médecin (nouveau RDV)
   if (doctor) {
-    sendNewAppointmentToDoctor({
-      doctorEmail: doctor.email,
-      doctorName: doctor.name,
-      patientName,
-      patientPhone: formattedPhone,
-      date,
-      time,
-      notes: safeNotes,
-    }).catch((err) => console.error('[Email] notif médecin:', err))
+    emailTasks.push(
+      sendNewAppointmentToDoctor({
+        doctorEmail: doctor.email,
+        doctorName: doctor.name,
+        patientName,
+        patientPhone: formattedPhone,
+        date,
+        time,
+        notes: safeNotes,
+      }).catch((err) => console.error('[Email] notif médecin:', err))
+    )
   }
 
   // Email de confirmation au patient (si email fourni)
   if (email && doctor) {
-    sendAppointmentConfirmationToPatient({
-      patientEmail: email,
-      patientName,
-      doctorName: doctor.name,
-      specialty: doctor.specialty,
-      date,
-      time,
-      cancelToken,
-    }).catch((err) => console.error('[Email] confirmation patient:', err))
+    emailTasks.push(
+      sendAppointmentConfirmationToPatient({
+        patientEmail: email,
+        patientName,
+        doctorName: doctor.name,
+        specialty: doctor.specialty,
+        date,
+        time,
+        cancelToken,
+      }).catch((err) => console.error('[Email] confirmation patient:', err))
+    )
   }
+
+  await Promise.allSettled(emailTasks)
 
   return NextResponse.json(appointment, { status: 201 })
 }

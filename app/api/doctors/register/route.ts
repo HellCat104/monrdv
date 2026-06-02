@@ -81,13 +81,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Erreur lors de la création du profil' }, { status: 500 })
   }
 
-  // Notifie l'admin par email
-  sendAdminNotificationEmail({ doctorName: name, doctorEmail: email, specialty })
-    .catch((err) => console.error('[Email admin]', err))
-
-  // Email de bienvenue au médecin (en attente de validation)
-  sendPendingEmail({ to: email, doctorName: name })
-    .catch((err) => console.error('[Email pending]', err))
+  // Emails — AWAIT obligatoire en serverless (sinon tués avant l'envoi)
+  await Promise.allSettled([
+    // Notifie l'admin par email
+    sendAdminNotificationEmail({ doctorName: name, doctorEmail: email, specialty })
+      .catch((err) => console.error('[Email admin]', err)),
+    // Email de bienvenue au médecin (en attente de validation)
+    sendPendingEmail({ to: email, doctorName: name })
+      .catch((err) => console.error('[Email pending]', err)),
+  ])
 
   return NextResponse.json({ success: true }, { status: 201 })
 }
