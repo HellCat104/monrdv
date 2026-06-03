@@ -16,6 +16,7 @@ interface Doctor {
   phone: string
   city: string
   appointment_duration: number
+  photo_url?: string | null
 }
 
 function RechercheContent() {
@@ -143,10 +144,19 @@ function RechercheContent() {
                 className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all"
               >
                 <div className="flex items-start gap-4">
-                  {/* Avatar */}
-                  <div className="w-14 h-14 rounded-2xl bg-primary-100 flex items-center justify-center shrink-0">
-                    <Stethoscope className="h-7 w-7 text-primary-500" />
-                  </div>
+                  {/* Avatar / Photo */}
+                  {doctor.photo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={doctor.photo_url}
+                      alt={`Dr. ${doctor.name}`}
+                      className="w-14 h-14 rounded-2xl object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl bg-primary-100 flex items-center justify-center shrink-0">
+                      <Stethoscope className="h-7 w-7 text-primary-500" />
+                    </div>
+                  )}
 
                   {/* Infos */}
                   <div className="flex-1 min-w-0">

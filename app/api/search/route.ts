@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   // Filtres DB directs — approved + actif uniquement, pas de limite arbitraire
   let query = supabase
     .from('doctors')
-    .select('id, name, specialty, slug, phone, city, appointment_duration')
+    .select('id, name, specialty, slug, phone, city, appointment_duration, photo_url')
     .eq('status', 'approved')
     .eq('subscription_status', 'actif')
     .order('name', { ascending: true })
