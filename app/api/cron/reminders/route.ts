@@ -7,7 +7,7 @@ import { format, startOfDay } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 import { MAROC_TZ } from '@/lib/utils'
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   // Vérifie le secret Cron pour éviter les appels non autorisés
   const authHeader = req.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

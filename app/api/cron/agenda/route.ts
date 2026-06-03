@@ -14,7 +14,7 @@ const JS_DAY_TO_KEY: Record<number, keyof WorkingHours> = {
   4: 'thursday', 5: 'friday', 6: 'saturday',
 }
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
