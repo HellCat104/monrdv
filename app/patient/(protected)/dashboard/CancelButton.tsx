@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface CancelButtonProps {
@@ -12,6 +12,13 @@ export function CancelButton({ appointmentId, cancelToken }: CancelButtonProps) 
   const router = useRouter()
   const [step, setStep] = useState<'idle' | 'confirm' | 'loading'>('idle')
   const [error, setError] = useState('')
+
+  // Réinitialise l'état si le composant est réutilisé pour un autre RDV
+  // (évite que "Annulation…" reste collé sur un RDV qui remonte dans la liste)
+  useEffect(() => {
+    setStep('idle')
+    setError('')
+  }, [appointmentId])
 
   async function handleCancel() {
     setStep('loading')
