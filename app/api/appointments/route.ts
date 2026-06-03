@@ -61,6 +61,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Champs obligatoires manquants' }, { status: 400 })
   }
 
+  // Pour les réservations publiques (patient), l'email est obligatoire
+  // (seul moyen d'envoyer confirmation + rappel)
+  if (isPublic) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+      return NextResponse.json({ error: 'Un email valide est obligatoire pour recevoir votre confirmation et votre rappel' }, { status: 400 })
+    }
+  }
+
   // Sanitisation et limites de longueur pour les champs texte
   const sanitize = (s: string) => s.trim().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
   const safeFirst  = sanitize(first_name).substring(0, 100)
@@ -158,21 +166,26 @@ export async function POST(req: NextRequest) {
       (!!bookingUser.phone && bookingUser.phone === formattedPhone)
     )
 
-  // Trouve ou crée le patient
+  // Trouve ou crée le patient — dédoublonnage par NOM + PRÉNOM (insensible à la casse)
+  // pour un même médecin (un patient peut utiliser des numéros différents).
   let patientId: string
 
   const { data: existingPatient } = await db
     .from('patients')
     .select('id')
     .eq('doctor_id', doctor_id)
-    .eq('phone', formattedPhone)
-    .single()
+    .ilike('first_name', safeFirst)
+    .ilike('last_name', safeLast)
+    .limit(1)
+    .maybeSingle()
 
   if (existingPatient) {
     patientId = existingPatient.id
-    if (safeEmail) {
-      await db.from('patients').update({ email: safeEmail }).eq('id', patientId).is('email', null)
-    }
+    // Met à jour le téléphone et l'email avec les dernières valeurs fournies
+    const updates: Record<string, unknown> = { phone: formattedPhone }
+    if (safeEmail) updates.email = safeEmail
+    if (safeAge) updates.age = safeAge
+    await db.from('patients').update(updates).eq('id', patientId)
     if (shouldLinkPatientToUser) {
       await db.from('patients').update({ user_id: bookingUser.id }).eq('id', patientId).is('user_id', null)
     }

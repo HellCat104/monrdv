@@ -118,6 +118,12 @@ export default function InscriptionPage() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Inscription médecin</h1>
           <p className="text-gray-500 text-sm mt-1">Rejoignez MonRDV et gérez vos rendez-vous</p>
+          <div className="mt-4 inline-flex items-center gap-2 text-sm bg-white border border-gray-200 rounded-full px-4 py-2 shadow-sm">
+            <span className="text-gray-500">Vous avez déjà un compte ?</span>
+            <Link href="/login" className="text-primary-600 hover:underline font-semibold">
+              Se connecter
+            </Link>
+          </div>
         </div>
 
         <Card className="shadow-xl border-0">

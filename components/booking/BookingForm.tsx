@@ -162,12 +162,12 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
             placeholder="06 12 34 56 78"
             required
           />
-          <p className="text-xs text-gray-400">Vous recevrez une confirmation par SMS</p>
+          <p className="text-xs text-gray-400">Numéro où vous joindre</p>
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="b_email" className="flex items-center gap-1.5">
-            <Mail className="h-3 w-3" /> Email (optionnel)
+            <Mail className="h-3 w-3" /> Email *
           </Label>
           <Input
             id="b_email"
@@ -175,8 +175,9 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
             placeholder="vous@exemple.ma"
+            required
           />
-          <p className="text-xs text-gray-400">Pour retrouver vos RDV dans votre espace patient</p>
+          <p className="text-xs text-gray-400">Indispensable pour recevoir votre confirmation et votre rappel</p>
         </div>
 
         <div className="space-y-1.5">
