@@ -279,6 +279,17 @@ export default function SettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Email de connexion (lecture seule) */}
+            <div className="space-y-1.5">
+              <Label>Email de connexion</Label>
+              <Input value={doctor?.email ?? ''} disabled className="bg-gray-50 text-gray-500" />
+              <p className="text-xs text-gray-400">
+                C&apos;est votre identifiant de connexion. Pour le modifier, contactez-nous à{' '}
+                <a href="mailto:asmaadouach@gmail.com?subject=Changement%20d%27email%20MonRDV" className="text-primary-500 hover:underline">
+                  asmaadouach@gmail.com
+                </a>
+              </p>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="s_name">Nom complet *</Label>
               <Input
