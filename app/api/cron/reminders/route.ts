@@ -1,9 +1,9 @@
-// Cron job : envoie les rappels email le matin du RDV (skip si RDV pris le jour même)
+// Cron job : envoie les rappels email 24h avant le RDV (la veille)
 // Déclenché automatiquement par Vercel Cron (voir vercel.json)
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendReminderEmailToPatient } from '@/lib/email'
-import { format, startOfDay } from 'date-fns'
+import { format, addDays, startOfDay } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 import { MAROC_TZ } from '@/lib/utils'
 
@@ -16,12 +16,12 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  // Date d'aujourd'hui au Maroc
+  // Rappel envoyé la VEILLE : on cible les RDV de DEMAIN au Maroc
   const nowMaroc = toZonedTime(new Date(), MAROC_TZ)
-  const today = format(nowMaroc, 'yyyy-MM-dd')
   const todayStart = startOfDay(nowMaroc)
+  const targetDate = format(addDays(nowMaroc, 1), 'yyyy-MM-dd')
 
-  // Récupère tous les RDV d'aujourd'hui non annulés avec email patient
+  // Récupère tous les RDV de demain non annulés avec email patient
   const { data: appointments, error } = await supabase
     .from('appointments')
     .select(`
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       patient:patients(first_name, last_name, email),
       doctor:doctors(name, specialty)
     `)
-    .eq('date', today)
+    .eq('date', targetDate)
     .neq('status', 'cancelled')
 
   if (error) {
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         // Skip si pas d'email patient
         if (!patient?.email) { skipped++; return }
 
-        // Skip si RDV pris aujourd'hui (patient vient de réserver, pas besoin de rappel)
+        // Skip si RDV pris aujourd'hui (le patient vient de recevoir sa confirmation)
         const createdAtMaroc = toZonedTime(new Date(apt.created_at), MAROC_TZ)
         if (createdAtMaroc >= todayStart) { skipped++; return }
 
@@ -75,6 +75,6 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  console.log(`[Cron reminders] Email: ${sent} envoyés, ${skipped} ignorés, ${failed} échoués — date: ${today}`)
-  return NextResponse.json({ sent, skipped, failed, date: today })
+  console.log(`[Cron reminders] Email: ${sent} envoyés, ${skipped} ignorés, ${failed} échoués — date: ${targetDate}`)
+  return NextResponse.json({ sent, skipped, failed, date: targetDate })
 }

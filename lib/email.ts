@@ -236,7 +236,7 @@ export async function sendAppointmentConfirmationToPatient(params: {
               <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${h(params.date)}</p>
               <p style="margin: 4px 0; color: #374151;"><strong>Heure :</strong> ${h(params.time)}</p>
             </div>
-            <p style="color: #6b7280; font-size: 14px;">Vous recevrez un rappel par email le matin de votre rendez-vous.</p>
+            <p style="color: #6b7280; font-size: 14px;">Vous recevrez un rappel par email la veille de votre rendez-vous.</p>
             <p style="text-align: center; margin: 28px 0;">
               <a href="${cancelUrl}" style="color: #ef4444; font-size: 13px;">Annuler ce rendez-vous</a>
             </p>
@@ -271,7 +271,7 @@ export async function sendReminderEmailToPatient(params: {
     await resend.emails.send({
       from: FROM_EMAIL,
       to: params.patientEmail,
-      subject: `⏰ Rappel — Votre RDV aujourd'hui avec Dr. ${params.doctorName}`,
+      subject: `⏰ Rappel — Votre RDV demain avec Dr. ${params.doctorName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
@@ -279,7 +279,7 @@ export async function sendReminderEmailToPatient(params: {
           </div>
           <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
             <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
-            <p style="color: #374151;">Nous vous rappelons que vous avez un rendez-vous <strong>aujourd'hui</strong> :</p>
+            <p style="color: #374151;">Nous vous rappelons que vous avez un rendez-vous <strong>demain</strong> :</p>
             <div style="background: #f0f9ff; border-left: 4px solid #0EA5E9; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
               <p style="margin: 4px 0; color: #374151;"><strong>Médecin :</strong> Dr. ${h(params.doctorName)} — ${h(params.specialty)}</p>
               <p style="margin: 4px 0; color: #374151;"><strong>Date :</strong> ${h(params.date)}</p>
