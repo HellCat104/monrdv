@@ -50,6 +50,16 @@ export default function InscriptionPage() {
       return
     }
 
+    if (!form.specialty) {
+      setError('Veuillez choisir votre spécialité')
+      return
+    }
+
+    if (!form.city) {
+      setError('Veuillez choisir votre ville')
+      return
+    }
+
     if (!consentCGU) {
       setError('Vous devez accepter les CGU pour continuer')
       return

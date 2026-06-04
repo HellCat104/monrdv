@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
   const cnom_number = sanitizeString(formData.get('cnom_number'))
 
   // Validation stricte
-  if (!name || !email || !password || !specialty || !slug || !cnom_number) {
-    return NextResponse.json({ error: 'Tous les champs obligatoires doivent être remplis' }, { status: 400 })
+  if (!name || !email || !password || !specialty || !slug || !cnom_number || !city) {
+    return NextResponse.json({ error: 'Tous les champs obligatoires doivent être remplis (dont la ville)' }, { status: 400 })
   }
 
   if (!isValidEmail(email)) {
