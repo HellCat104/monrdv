@@ -34,11 +34,14 @@ export function formatTime(time: string): string {
   return time.substring(0, 5)
 }
 
-// Génère tous les créneaux horaires d'une journée selon les horaires du médecin
+// Génère tous les créneaux horaires d'une journée selon les horaires du médecin.
+// Exclut les créneaux qui chevauchent la pause déjeuner (si définie).
 export function generateTimeSlots(
   startTime: string,
   endTime: string,
-  durationMinutes: number
+  durationMinutes: number,
+  breakStart?: string,
+  breakEnd?: string
 ): string[] {
   const slots: string[] = []
   const baseDate = new Date(2000, 0, 1) // date fictive pour le calcul
@@ -46,11 +49,21 @@ export function generateTimeSlots(
   let current = parse(startTime, 'HH:mm', baseDate)
   const end = parse(endTime, 'HH:mm', baseDate)
 
+  // Pause déjeuner (optionnelle) — valide seulement si les deux champs sont remplis
+  const hasBreak = !!breakStart && !!breakEnd
+  const bStart = hasBreak ? parse(breakStart!, 'HH:mm', baseDate) : null
+  const bEnd   = hasBreak ? parse(breakEnd!,   'HH:mm', baseDate) : null
+
   while (isBefore(current, end)) {
     const next = addMinutes(current, durationMinutes)
     // Vérifie que le créneau entier rentre dans les horaires
     if (!isAfter(next, end)) {
-      slots.push(format(current, 'HH:mm'))
+      // Exclut si le créneau chevauche la pause : (current < bEnd) && (next > bStart)
+      const overlapsBreak =
+        bStart && bEnd && isBefore(current, bEnd) && isAfter(next, bStart)
+      if (!overlapsBreak) {
+        slots.push(format(current, 'HH:mm'))
+      }
     }
     current = next
   }

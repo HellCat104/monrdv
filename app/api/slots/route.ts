@@ -63,7 +63,9 @@ export async function GET(req: NextRequest) {
   const allSlots = generateTimeSlots(
     daySchedule.start,
     daySchedule.end,
-    doctor.appointment_duration
+    doctor.appointment_duration,
+    daySchedule.breakStart,
+    daySchedule.breakEnd
   )
 
   const bookedTimes = (bookedResult.data ?? []).map((b) => b.time.substring(0, 5))

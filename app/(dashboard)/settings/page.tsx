@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
   const [newBlockDate, setNewBlockDate] = useState('')
+  const [newBlockEndDate, setNewBlockEndDate] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
   const [blockLoading, setBlockLoading] = useState(false)
   const supabase = createClient()
@@ -126,15 +127,41 @@ export default function SettingsPage() {
   async function handleAddBlockedDate() {
     if (!newBlockDate || !doctor) return
     setBlockLoading(true)
+
+    // Construit la liste des dates entre début et fin (incluses).
+    // Si pas de date de fin, on bloque juste un seul jour.
+    const start = newBlockDate
+    const end = newBlockEndDate && newBlockEndDate >= newBlockDate ? newBlockEndDate : newBlockDate
+    const dates: string[] = []
+    const cur = new Date(start + 'T00:00:00')
+    const last = new Date(end + 'T00:00:00')
+    while (cur <= last) {
+      dates.push(cur.toISOString().split('T')[0])
+      cur.setDate(cur.getDate() + 1)
+    }
+
+    // Évite les doublons avec les dates déjà bloquées
+    const already = new Set(blockedDates.map((b) => b.date))
+    const toInsert = dates
+      .filter((d) => !already.has(d))
+      .map((d) => ({ doctor_id: doctor.id, date: d, reason: newBlockReason || null }))
+
+    if (toInsert.length === 0) {
+      setBlockLoading(false)
+      setNewBlockDate(''); setNewBlockEndDate(''); setNewBlockReason('')
+      return
+    }
+
     const { data, error } = await supabase
       .from('blocked_dates')
-      .insert({ doctor_id: doctor.id, date: newBlockDate, reason: newBlockReason || null })
+      .insert(toInsert)
       .select()
-      .single()
+
     setBlockLoading(false)
     if (!error && data) {
-      setBlockedDates((prev) => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)))
+      setBlockedDates((prev) => [...prev, ...data].sort((a, b) => a.date.localeCompare(b.date)))
       setNewBlockDate('')
+      setNewBlockEndDate('')
       setNewBlockReason('')
     }
   }
@@ -428,9 +455,9 @@ export default function SettingsPage() {
               return (
                 <div key={day}>
                   {idx > 0 && <Separator className="mb-3" />}
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-start gap-4">
                     {/* Activer/désactiver le jour */}
-                    <div className="flex items-center gap-2 w-32 shrink-0">
+                    <div className="flex items-center gap-2 w-32 shrink-0 pt-1.5">
                       <Switch
                         checked={schedule.enabled}
                         onCheckedChange={(v) => updateDaySchedule(day, 'enabled', v)}
@@ -442,23 +469,52 @@ export default function SettingsPage() {
 
                     {/* Horaires si activé */}
                     {schedule.enabled ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="time"
-                          value={schedule.start}
-                          onChange={(e) => updateDaySchedule(day, 'start', e.target.value)}
-                          className="w-28 text-sm"
-                        />
-                        <span className="text-gray-400 text-sm">—</span>
-                        <Input
-                          type="time"
-                          value={schedule.end}
-                          onChange={(e) => updateDaySchedule(day, 'end', e.target.value)}
-                          className="w-28 text-sm"
-                        />
+                      <div className="space-y-2">
+                        {/* Horaire d'ouverture */}
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="time"
+                            value={schedule.start}
+                            onChange={(e) => updateDaySchedule(day, 'start', e.target.value)}
+                            className="w-28 text-sm"
+                          />
+                          <span className="text-gray-400 text-sm">—</span>
+                          <Input
+                            type="time"
+                            value={schedule.end}
+                            onChange={(e) => updateDaySchedule(day, 'end', e.target.value)}
+                            className="w-28 text-sm"
+                          />
+                        </div>
+                        {/* Pause déjeuner (optionnelle) */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-gray-400 w-16">Pause :</span>
+                          <Input
+                            type="time"
+                            value={schedule.breakStart ?? ''}
+                            onChange={(e) => updateDaySchedule(day, 'breakStart', e.target.value)}
+                            className="w-28 text-sm"
+                          />
+                          <span className="text-gray-400 text-sm">—</span>
+                          <Input
+                            type="time"
+                            value={schedule.breakEnd ?? ''}
+                            onChange={(e) => updateDaySchedule(day, 'breakEnd', e.target.value)}
+                            className="w-28 text-sm"
+                          />
+                          {(schedule.breakStart || schedule.breakEnd) && (
+                            <button
+                              type="button"
+                              onClick={() => { updateDaySchedule(day, 'breakStart', ''); updateDaySchedule(day, 'breakEnd', '') }}
+                              className="text-xs text-gray-400 hover:text-red-500"
+                            >
+                              Retirer
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ) : (
-                      <span className="text-sm text-gray-400">Fermé</span>
+                      <span className="text-sm text-gray-400 pt-1.5">Fermé</span>
                     )}
                   </div>
                 </div>
@@ -477,16 +533,25 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-gray-500">
-              Aucun créneau ne sera disponible pour les patients ces jours-là.
+              Aucun créneau ne sera disponible pour les patients ces jours-là. Pour des vacances, indiquez une date de fin.
             </p>
 
-            {/* Ajouter une date */}
-            <div className="flex gap-2 flex-wrap">
+            {/* Ajouter une date ou une période */}
+            <div className="flex gap-2 flex-wrap items-center">
+              <span className="text-xs text-gray-400">Du</span>
               <Input
                 type="date"
                 value={newBlockDate}
                 onChange={(e) => setNewBlockDate(e.target.value)}
                 min={new Date().toISOString().split('T')[0]}
+                className="w-40"
+              />
+              <span className="text-xs text-gray-400">au (optionnel)</span>
+              <Input
+                type="date"
+                value={newBlockEndDate}
+                onChange={(e) => setNewBlockEndDate(e.target.value)}
+                min={newBlockDate || new Date().toISOString().split('T')[0]}
                 className="w-40"
               />
               <Input
@@ -503,7 +568,7 @@ export default function SettingsPage() {
                 className="shrink-0"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                Bloquer
+                {blockLoading ? 'Blocage…' : 'Bloquer'}
               </Button>
             </div>
 

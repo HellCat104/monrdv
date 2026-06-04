@@ -126,7 +126,9 @@ export async function POST(req: NextRequest) {
   const validSlots = generateTimeSlots(
     daySchedule.start,
     daySchedule.end,
-    doctorCheck.appointment_duration
+    doctorCheck.appointment_duration,
+    daySchedule.breakStart,
+    daySchedule.breakEnd
   )
 
   if (!validSlots.includes(time)) {

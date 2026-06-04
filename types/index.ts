@@ -41,6 +41,8 @@ export interface DaySchedule {
   enabled: boolean
   start: string // format HH:mm
   end: string   // format HH:mm
+  breakStart?: string // début pause déjeuner (optionnel) — format HH:mm
+  breakEnd?: string   // fin pause déjeuner (optionnel) — format HH:mm
 }
 
 export interface Patient {
