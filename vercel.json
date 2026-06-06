@@ -1,4 +1,0 @@
-{
-  "_comment": "Crons gérés par cron-job.org (externe, fiable) — pas par Vercel Hobby (déclenchement imprévisible). Voir /api/cron/agenda et /api/cron/reminders.",
-  "crons": []
-}
