@@ -233,6 +233,11 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (aptError || !appointment) {
+    // Race condition : le créneau a été pris entre la vérification et l'insertion.
+    // L'index unique (unique_active_slot) renvoie le code Postgres 23505.
+    if (aptError?.code === '23505') {
+      return NextResponse.json({ error: 'Ce créneau vient d\'être réservé. Veuillez en choisir un autre.' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Erreur création RDV' }, { status: 500 })
   }
 
