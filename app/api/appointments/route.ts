@@ -173,14 +173,16 @@ export async function POST(req: NextRequest) {
       (!!bookingUser.phone && bookingUser.phone === formattedPhone)
     )
 
-  // Trouve ou crée le patient — dédoublonnage par NOM + PRÉNOM (insensible à la casse)
-  // pour un même médecin (un patient peut utiliser des numéros différents).
+  // Trouve ou crée le patient — dédoublonnage par NOM + PRÉNOM + TÉLÉPHONE
+  // (insensible à la casse) pour un même médecin. Le téléphone est l'identifiant
+  // fiable : deux homonymes avec des numéros différents = deux personnes distinctes.
   let patientId: string
 
   const { data: existingPatient } = await db
     .from('patients')
     .select('id')
     .eq('doctor_id', doctor_id)
+    .eq('phone', formattedPhone)
     .ilike('first_name', safeFirst)
     .ilike('last_name', safeLast)
     .limit(1)
@@ -188,11 +190,13 @@ export async function POST(req: NextRequest) {
 
   if (existingPatient) {
     patientId = existingPatient.id
-    // Met à jour le téléphone et l'email avec les dernières valeurs fournies
-    const updates: Record<string, unknown> = { phone: formattedPhone }
+    // Complète email/âge si fournis — on NE touche PAS au téléphone (clé d'identité)
+    const updates: Record<string, unknown> = {}
     if (safeEmail) updates.email = safeEmail
     if (safeAge) updates.age = safeAge
-    await db.from('patients').update(updates).eq('id', patientId)
+    if (Object.keys(updates).length > 0) {
+      await db.from('patients').update(updates).eq('id', patientId)
+    }
     if (shouldLinkPatientToUser) {
       await db.from('patients').update({ user_id: bookingUser.id }).eq('id', patientId).is('user_id', null)
     }
