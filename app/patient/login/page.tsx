@@ -6,12 +6,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Stethoscope, Mail, Phone, ChevronRight, ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { Stethoscope, Mail, ChevronRight, ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-type Mode = 'home' | 'email-login' | 'email-signup' | 'phone' | 'phone-otp' | 'forgot'
+type Mode = 'home' | 'email-login' | 'email-signup' | 'forgot'
 
 export default function PatientLoginPage() {
   const router = useRouter()
@@ -19,8 +19,6 @@ export default function PatientLoginPage() {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm]   = useState('')
-  const [phone, setPhone]           = useState('')
-  const [otp, setOtp]               = useState('')
   const [showPwd, setShowPwd]       = useState(false)
   const [consentCGU, setConsentCGU] = useState(false)
   const [consentMedical, setConsentMedical] = useState(false)
@@ -106,37 +104,6 @@ export default function PatientLoginPage() {
     }
   }
 
-  // ── Téléphone : envoi OTP ────────────────────────────────────────────────
-  async function handleSendOtp(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true); setError(null)
-    const supabase = createClient()
-    const formatted = phone.startsWith('+') ? phone : `+212${phone.replace(/^0/, '')}`
-    const { error } = await supabase.auth.signInWithOtp({ phone: formatted })
-    setLoading(false)
-    if (error) {
-      setError('Numéro invalide ou service indisponible.')
-    } else {
-      setMode('phone-otp')
-      setSuccess(`Code envoyé au ${formatted}`)
-    }
-  }
-
-  // ── Téléphone : vérification OTP ─────────────────────────────────────────
-  async function handleVerifyOtp(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true); setError(null)
-    const supabase = createClient()
-    const formatted = phone.startsWith('+') ? phone : `+212${phone.replace(/^0/, '')}`
-    const { error } = await supabase.auth.verifyOtp({ phone: formatted, token: otp, type: 'sms' })
-    setLoading(false)
-    if (error) {
-      setError('Code incorrect ou expiré.')
-    } else {
-      router.push('/patient/dashboard')
-    }
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-blue-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -202,14 +169,6 @@ export default function PatientLoginPage() {
                 className="w-full flex items-center gap-3 border-2 border-gray-200 hover:border-primary-300 hover:bg-primary-50 rounded-xl px-4 py-3.5 transition-all font-medium text-gray-700 text-sm">
                 <Mail className="h-5 w-5 text-primary-500 shrink-0" />
                 Continuer avec Email
-                <ChevronRight className="h-4 w-4 ml-auto text-gray-400" />
-              </button>
-
-              {/* Téléphone */}
-              <button onClick={() => { reset(); setMode('phone') }}
-                className="w-full flex items-center gap-3 border-2 border-gray-200 hover:border-primary-300 hover:bg-primary-50 rounded-xl px-4 py-3.5 transition-all font-medium text-gray-700 text-sm">
-                <Phone className="h-5 w-5 text-primary-500 shrink-0" />
-                Continuer avec Téléphone
                 <ChevronRight className="h-4 w-4 ml-auto text-gray-400" />
               </button>
             </div>
@@ -331,25 +290,6 @@ export default function PatientLoginPage() {
             </form>
           )}
 
-          {/* ── PHONE OTP ───────────────────────────────────────────────── */}
-          {mode === 'phone' && (
-            <form onSubmit={handleSendOtp} className="space-y-4">
-              <h2 className="text-lg font-bold text-gray-900">Connexion par téléphone</h2>
-              <p className="text-sm text-gray-500">Entrez votre numéro — vous recevrez un code SMS.</p>
-              <div className="space-y-1.5">
-                <Label>Numéro de téléphone</Label>
-                <div className="flex gap-2">
-                  <span className="flex items-center px-3 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-600 font-medium shrink-0">🇲🇦 +212</span>
-                  <Input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                    placeholder="06 12 34 56 78" required autoFocus />
-                </div>
-              </div>
-              <Button type="submit" className="w-full h-11" disabled={loading}>
-                {loading ? 'Envoi…' : 'Envoyer le code SMS'}
-              </Button>
-            </form>
-          )}
-
           {/* ── FORGOT PASSWORD ─────────────────────────────────────────── */}
           {mode === 'forgot' && (
             <form onSubmit={handleForgot} className="space-y-4">
@@ -362,20 +302,6 @@ export default function PatientLoginPage() {
               </div>
               <Button type="submit" className="w-full h-11" disabled={loading}>
                 {loading ? 'Envoi…' : 'Envoyer le lien'}
-              </Button>
-            </form>
-          )}
-
-          {mode === 'phone-otp' && (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <h2 className="text-lg font-bold text-gray-900">Code de vérification</h2>
-              <p className="text-sm text-gray-500">Entrez le code à 6 chiffres reçu par SMS.</p>
-              <Input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6}
-                value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456" required autoFocus
-                className="text-center text-2xl tracking-widest font-bold" />
-              <Button type="submit" className="w-full h-11" disabled={loading}>
-                {loading ? 'Vérification…' : 'Se connecter'}
               </Button>
             </form>
           )}
