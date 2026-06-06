@@ -18,16 +18,33 @@ export default function ResetPasswordPage() {
   const [done, setDone]           = useState(false)
   const [error, setError]         = useState('')
   const [ready, setReady]         = useState(false)
+  const [linkError, setLinkError] = useState(false)
 
   useEffect(() => {
-    // Supabase injecte le token dans le hash de l'URL
     const supabase = createClient()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setReady(true)
+    let resolved = false
+
+    const markReady = () => { resolved = true; setReady(true) }
+
+    // 1) Le token du hash a peut-être DÉJÀ été traité avant qu'on s'abonne :
+    //    on vérifie tout de suite si une session existe.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) markReady()
+    })
+
+    // 2) Sinon, on écoute l'événement (au cas où il arrive juste après)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || session) {
+        markReady()
       }
     })
-    return () => subscription.unsubscribe()
+
+    // 3) Filet de sécurité : si rien après 5s, le lien est invalide/expiré
+    const timeout = setTimeout(() => {
+      if (!resolved) setLinkError(true)
+    }, 5000)
+
+    return () => { subscription.unsubscribe(); clearTimeout(timeout) }
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -54,6 +71,24 @@ export default function ResetPasswordPage() {
       setDone(true)
       setTimeout(() => router.push('/login'), 3000)
     }
+  }
+
+  if (linkError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-blue-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md text-center bg-white rounded-2xl shadow-xl p-8 space-y-4">
+          <div className="text-5xl">⚠️</div>
+          <h1 className="text-xl font-bold text-gray-900">Lien invalide ou expiré</h1>
+          <p className="text-sm text-gray-500">
+            Ce lien de réinitialisation n&apos;est plus valide. Demandez-en un nouveau.
+          </p>
+          <a href="/forgot-password"
+            className="inline-block bg-primary-500 hover:bg-primary-600 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-colors">
+            Demander un nouveau lien
+          </a>
+        </div>
+      </div>
+    )
   }
 
   if (!ready) {
