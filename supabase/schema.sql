@@ -67,8 +67,9 @@ CREATE TABLE patients (
   email      TEXT,
   user_id    UUID REFERENCES auth.users(id) ON DELETE SET NULL, -- compte patient lié (optionnel)
   age        INTEGER,
-  notes      TEXT,                                       -- notes privées du médecin
-  UNIQUE(doctor_id, phone)                               -- un patient unique par médecin (téléphone)
+  notes      TEXT                                        -- notes privées du médecin
+  -- Pas de contrainte UNIQUE(doctor_id, phone) : le dédoublonnage est géré
+  -- dans le code (nom + téléphone). Permet aux familles de partager un numéro.
 );
 
 -- ------------------------------------------------------------
