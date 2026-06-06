@@ -613,13 +613,12 @@ export default function SettingsPage() {
               />
               <Button
                 type="button"
-                variant="outline"
                 onClick={handleAddBlockedDate}
                 disabled={!newBlockDate || blockLoading}
                 className="shrink-0"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                {blockLoading ? 'Blocage…' : 'Bloquer'}
+                {blockLoading ? 'Enregistrement…' : 'Confirmer le congé'}
               </Button>
             </div>
 
