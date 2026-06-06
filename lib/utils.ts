@@ -90,6 +90,13 @@ export function getDayKey(date: Date): keyof WorkingHours {
   return days[date.getDay()]
 }
 
+// Vérifie qu'un numéro est un numéro marocain valide (fixe ou mobile).
+// Format normalisé attendu : +212 suivi de 5/6/7 puis 8 chiffres.
+export function isValidPhoneMaroc(phone: string): boolean {
+  const formatted = formatPhoneMaroc(phone)
+  return /^\+212[567]\d{8}$/.test(formatted)
+}
+
 // Formate un numéro de téléphone marocain
 export function formatPhoneMaroc(phone: string): string {
   const cleaned = phone.replace(/\D/g, '')

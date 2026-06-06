@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
-import { formatPhoneMaroc, generateCancelToken, generateTimeSlots, getDayKey, getNowInMaroc } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, generateTimeSlots, getDayKey, getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
 
 // GET /api/appointments?doctor_id=...&date=...
@@ -77,6 +77,11 @@ export async function POST(req: NextRequest) {
   const safeEmail  = email ? sanitize(email).substring(0, 254) : undefined
   const safeNotes  = notes ? sanitize(notes).substring(0, 500) : undefined
   const safeAge    = age && Number.isInteger(age) && age > 0 && age <= 120 ? age : undefined
+
+  // Validation du numéro de téléphone marocain
+  if (!isValidPhoneMaroc(safePhone)) {
+    return NextResponse.json({ error: 'Numéro de téléphone invalide (format marocain attendu, ex: 0612345678)' }, { status: 400 })
+  }
 
   // Validation format date (YYYY-MM-DD) et heure (HH:MM)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {

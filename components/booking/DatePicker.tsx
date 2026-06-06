@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import { fr } from 'date-fns/locale'
-import { addDays, isBefore, startOfDay, getDay, startOfTomorrow } from 'date-fns'
+import { addDays, getDay, format, parseISO } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import 'react-day-picker/dist/style.css'
 import type { WorkingHours } from '@/types'
 
@@ -20,16 +21,22 @@ const DAY_MAP: Record<number, keyof WorkingHours> = {
 }
 
 export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates = [] }: DatePickerProps) {
-  const today = startOfDay(new Date())
-  const tomorrow = startOfTomorrow() // RDV le jour même non autorisé
+  // Calculé en HEURE MAROC (pas l'heure du navigateur) pour rester cohérent
+  // avec le serveur — un patient à l'étranger ne doit pas pouvoir choisir un
+  // jour que le serveur refusera ensuite.
+  const MAROC_TZ = 'Africa/Casablanca'
+  const todayMaroc = formatInTimeZone(new Date(), MAROC_TZ, 'yyyy-MM-dd') // ex: "2026-06-04"
+  const tomorrowMaroc = format(addDays(parseISO(todayMaroc), 1), 'yyyy-MM-dd')
 
   // Désactive aujourd'hui, les jours passés et les jours de repos
+  // Comparaison par date calendaire (string) — immunisé contre les décalages de fuseau
   function isDisabled(date: Date): boolean {
-    if (isBefore(date, tomorrow)) return true
+    const dateStr = format(date, 'yyyy-MM-dd')
+    if (dateStr < tomorrowMaroc) return true
     const dayKey = DAY_MAP[getDay(date)]
     if (!workingHours[dayKey]?.enabled) return true
     return disabledDates.some(
-      (d) => d.toDateString() === date.toDateString()
+      (d) => format(d, 'yyyy-MM-dd') === dateStr
     )
   }
 
@@ -41,8 +48,8 @@ export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates
         onSelect={onSelect}
         disabled={isDisabled}
         locale={fr}
-        fromDate={tomorrow}
-        toDate={addDays(today, 60)} // 2 mois à l'avance max
+        fromDate={parseISO(tomorrowMaroc)}
+        toDate={addDays(parseISO(todayMaroc), 60)} // 2 mois à l'avance max
         showOutsideDays={false}
         className="mx-auto"
         classNames={{
