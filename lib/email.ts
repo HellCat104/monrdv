@@ -510,3 +510,43 @@ export async function sendAdminNotificationEmail(params: {
     return false
   }
 }
+
+// Email de réinitialisation de mot de passe (envoyé via Resend, pas via Supabase SMTP)
+export async function sendPasswordResetEmail(params: {
+  to: string
+  resetUrl: string
+}): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.to,
+      subject: '🔑 Réinitialisation de votre mot de passe MonRDV',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 22px;">Réinitialisation du mot de passe 🔑</h1>
+          </div>
+          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="color: #374151;">Bonjour,</p>
+            <p style="color: #374151;">Vous avez demandé à réinitialiser votre mot de passe MonRDV. Cliquez sur le bouton ci-dessous pour en créer un nouveau :</p>
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${params.resetUrl}"
+                style="background: #0EA5E9; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+                Créer un nouveau mot de passe
+              </a>
+            </div>
+            <p style="color: #6b7280; font-size: 13px;">Ce lien expire dans 1 heure. Si vous n'avez pas fait cette demande, ignorez cet email — votre mot de passe reste inchangé.</p>
+            <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-top: 24px;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+          </div>
+        </div>
+      `,
+    })
+    return true
+  } catch (error) {
+    console.error('[Email] Erreur reset mot de passe:', error)
+    return false
+  }
+}

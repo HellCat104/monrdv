@@ -49,10 +49,13 @@ export default function PatientLoginPage() {
   async function handleForgot(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true); setError(null)
-    const supabase = createClient()
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
+    try {
+      await fetch('/api/auth/reset-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+    } catch { /* on affiche un succès générique quoi qu'il arrive */ }
     setLoading(false)
     setSuccess('Si cet email existe, un lien de réinitialisation a été envoyé.')
   }

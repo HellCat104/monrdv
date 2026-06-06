@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,17 +19,21 @@ export default function ForgotPasswordPage() {
     setError('')
     setLoading(true)
 
-    const supabase = createClient()
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
-
-    setLoading(false)
-
-    if (err) {
-      setError('Une erreur est survenue. Vérifiez votre email.')
-    } else {
-      setSent(true)
+    try {
+      const res = await fetch('/api/auth/reset-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      setLoading(false)
+      if (res.ok) {
+        setSent(true)
+      } else {
+        setError('Une erreur est survenue. Vérifiez votre email.')
+      }
+    } catch {
+      setLoading(false)
+      setError('Une erreur est survenue. Réessayez.')
     }
   }
 
