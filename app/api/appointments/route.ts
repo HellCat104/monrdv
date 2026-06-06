@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
-import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, generateTimeSlots, getDayKey, getNowInMaroc } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, generateTimeSlots, getDayKey, getNowInMaroc, getDayBreaks } from '@/lib/utils'
 import { format } from 'date-fns'
 
 // GET /api/appointments?doctor_id=...&date=...
@@ -119,36 +119,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ce médecin n\'accepte pas les réservations en ligne' }, { status: 403 })
   }
 
-  // Vérifie côté serveur que le créneau demandé est réellement réservable.
-  const parsedDate = new Date(`${date}T00:00:00`)
-  const dayKey = getDayKey(parsedDate)
-  const daySchedule = doctorCheck.working_hours?.[dayKey]
+  // Restrictions de créneau — UNIQUEMENT pour les réservations publiques (patients).
+  // Le médecin reste maître de son agenda : il peut réserver pendant sa pause,
+  // un jour fermé ou un jour de congé (cas d'urgence, faveur, etc.).
+  if (isPublic) {
+    const parsedDate = new Date(`${date}T00:00:00`)
+    const dayKey = getDayKey(parsedDate)
+    const daySchedule = doctorCheck.working_hours?.[dayKey]
 
-  if (!daySchedule?.enabled) {
-    return NextResponse.json({ error: 'Ce jour n\'est pas ouvert à la réservation' }, { status: 400 })
-  }
+    if (!daySchedule?.enabled) {
+      return NextResponse.json({ error: 'Ce jour n\'est pas ouvert à la réservation' }, { status: 400 })
+    }
 
-  const validSlots = generateTimeSlots(
-    daySchedule.start,
-    daySchedule.end,
-    doctorCheck.appointment_duration,
-    daySchedule.breakStart,
-    daySchedule.breakEnd
-  )
+    const validSlots = generateTimeSlots(
+      daySchedule.start,
+      daySchedule.end,
+      doctorCheck.appointment_duration,
+      getDayBreaks(daySchedule)
+    )
 
-  if (!validSlots.includes(time)) {
-    return NextResponse.json({ error: 'Ce créneau n\'est pas disponible' }, { status: 400 })
-  }
+    if (!validSlots.includes(time)) {
+      return NextResponse.json({ error: 'Ce créneau n\'est pas disponible' }, { status: 400 })
+    }
 
-  const { data: blockedDate } = await db
-    .from('blocked_dates')
-    .select('id')
-    .eq('doctor_id', doctor_id)
-    .eq('date', date)
-    .maybeSingle()
+    const { data: blockedDate } = await db
+      .from('blocked_dates')
+      .select('id')
+      .eq('doctor_id', doctor_id)
+      .eq('date', date)
+      .maybeSingle()
 
-  if (blockedDate) {
-    return NextResponse.json({ error: 'Cette date n\'est pas disponible' }, { status: 400 })
+    if (blockedDate) {
+      return NextResponse.json({ error: 'Cette date n\'est pas disponible' }, { status: 400 })
+    }
   }
 
   // Vérifie que le créneau n'est pas déjà pris

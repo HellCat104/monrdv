@@ -85,6 +85,36 @@ export default function SettingsPage() {
     }))
   }
 
+  // Récupère les pauses d'un jour (nouveau format breaks[] + ancien breakStart/breakEnd)
+  function getBreaks(day: keyof WorkingHours): { start: string; end: string }[] {
+    const d = form.working_hours[day]
+    if (d.breaks && d.breaks.length > 0) return d.breaks
+    if (d.breakStart && d.breakEnd) return [{ start: d.breakStart, end: d.breakEnd }]
+    return []
+  }
+
+  function setBreaks(day: keyof WorkingHours, breaks: { start: string; end: string }[]) {
+    setForm((prev) => {
+      const d = { ...prev.working_hours[day], breaks }
+      // Nettoie l'ancien format pour éviter toute ambiguïté
+      delete (d as { breakStart?: string }).breakStart
+      delete (d as { breakEnd?: string }).breakEnd
+      return { ...prev, working_hours: { ...prev.working_hours, [day]: d } }
+    })
+  }
+
+  function addBreak(day: keyof WorkingHours) {
+    setBreaks(day, [...getBreaks(day), { start: '13:00', end: '15:00' }])
+  }
+
+  function removeBreak(day: keyof WorkingHours, index: number) {
+    setBreaks(day, getBreaks(day).filter((_, i) => i !== index))
+  }
+
+  function updateBreak(day: keyof WorkingHours, index: number, field: 'start' | 'end', value: string) {
+    setBreaks(day, getBreaks(day).map((b, i) => (i === index ? { ...b, [field]: value } : b)))
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!doctor) return
@@ -498,32 +528,41 @@ export default function SettingsPage() {
                             className="w-28 text-sm"
                           />
                         </div>
-                        {/* Pause déjeuner (optionnelle) */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs text-gray-400 w-16">Pause :</span>
-                          <Input
-                            type="time"
-                            value={schedule.breakStart ?? ''}
-                            onChange={(e) => updateDaySchedule(day, 'breakStart', e.target.value)}
-                            className="w-28 text-sm"
-                          />
-                          <span className="text-gray-400 text-sm">—</span>
-                          <Input
-                            type="time"
-                            value={schedule.breakEnd ?? ''}
-                            onChange={(e) => updateDaySchedule(day, 'breakEnd', e.target.value)}
-                            className="w-28 text-sm"
-                          />
-                          {(schedule.breakStart || schedule.breakEnd) && (
+                        {/* Pauses (multiples) */}
+                        {getBreaks(day).map((br, i) => (
+                          <div key={i} className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-gray-400 w-16">Pause :</span>
+                            <Input
+                              type="time"
+                              value={br.start}
+                              onChange={(e) => updateBreak(day, i, 'start', e.target.value)}
+                              className="w-28 text-sm"
+                            />
+                            <span className="text-gray-400 text-sm">—</span>
+                            <Input
+                              type="time"
+                              value={br.end}
+                              onChange={(e) => updateBreak(day, i, 'end', e.target.value)}
+                              className="w-28 text-sm"
+                            />
                             <button
                               type="button"
-                              onClick={() => { updateDaySchedule(day, 'breakStart', ''); updateDaySchedule(day, 'breakEnd', '') }}
-                              className="text-xs text-gray-400 hover:text-red-500"
+                              onClick={() => removeBreak(day, i)}
+                              className="text-gray-400 hover:text-red-500"
+                              aria-label="Retirer cette pause"
                             >
-                              Retirer
+                              <Trash2 className="h-4 w-4" />
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        ))}
+                        {/* Bouton ajouter une pause */}
+                        <button
+                          type="button"
+                          onClick={() => addBreak(day)}
+                          className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Ajouter une pause
+                        </button>
                       </div>
                     ) : (
                       <span className="text-sm text-gray-400 pt-1.5">Fermé</span>

@@ -3,7 +3,7 @@ import { twMerge } from 'tailwind-merge'
 import { format, parse, addMinutes, isBefore, isAfter, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz'
-import type { WorkingHours, TimeSlot } from '@/types'
+import type { WorkingHours, TimeSlot, DaySchedule, TimeBreak } from '@/types'
 
 // Fuseau horaire Maroc (GMT+1)
 export const MAROC_TZ = 'Africa/Casablanca'
@@ -37,12 +37,21 @@ export function formatTime(time: string): string {
 
 // Génère tous les créneaux horaires d'une journée selon les horaires du médecin.
 // Exclut les créneaux qui chevauchent la pause déjeuner (si définie).
+// Normalise les pauses d'un jour : nouveau format (breaks[]) + ancien (breakStart/breakEnd)
+export function getDayBreaks(day: DaySchedule | null | undefined): TimeBreak[] {
+  if (!day) return []
+  const list = (day.breaks ?? []).filter((b) => b && b.start && b.end)
+  if (list.length === 0 && day.breakStart && day.breakEnd) {
+    return [{ start: day.breakStart, end: day.breakEnd }]
+  }
+  return list
+}
+
 export function generateTimeSlots(
   startTime: string,
   endTime: string,
   durationMinutes: number,
-  breakStart?: string,
-  breakEnd?: string
+  breaks: TimeBreak[] = []
 ): string[] {
   const slots: string[] = []
   const baseDate = new Date(2000, 0, 1) // date fictive pour le calcul
@@ -50,18 +59,19 @@ export function generateTimeSlots(
   let current = parse(startTime, 'HH:mm', baseDate)
   const end = parse(endTime, 'HH:mm', baseDate)
 
-  // Pause déjeuner (optionnelle) — valide seulement si les deux champs sont remplis
-  const hasBreak = !!breakStart && !!breakEnd
-  const bStart = hasBreak ? parse(breakStart!, 'HH:mm', baseDate) : null
-  const bEnd   = hasBreak ? parse(breakEnd!,   'HH:mm', baseDate) : null
+  // Pré-parse toutes les pauses valides
+  const parsedBreaks = breaks
+    .filter((b) => b && b.start && b.end)
+    .map((b) => ({ s: parse(b.start, 'HH:mm', baseDate), e: parse(b.end, 'HH:mm', baseDate) }))
 
   while (isBefore(current, end)) {
     const next = addMinutes(current, durationMinutes)
     // Vérifie que le créneau entier rentre dans les horaires
     if (!isAfter(next, end)) {
-      // Exclut si le créneau chevauche la pause : (current < bEnd) && (next > bStart)
-      const overlapsBreak =
-        bStart && bEnd && isBefore(current, bEnd) && isAfter(next, bStart)
+      // Exclut si le créneau chevauche UNE des pauses : (current < pauseFin) && (next > pauseDébut)
+      const overlapsBreak = parsedBreaks.some(
+        (b) => isBefore(current, b.e) && isAfter(next, b.s)
+      )
       if (!overlapsBreak) {
         slots.push(format(current, 'HH:mm'))
       }

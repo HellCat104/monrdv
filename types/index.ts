@@ -37,12 +37,19 @@ export interface WorkingHours {
   sunday: DaySchedule
 }
 
+export interface TimeBreak {
+  start: string // format HH:mm
+  end: string   // format HH:mm
+}
+
 export interface DaySchedule {
   enabled: boolean
   start: string // format HH:mm
   end: string   // format HH:mm
-  breakStart?: string // début pause déjeuner (optionnel) — format HH:mm
-  breakEnd?: string   // fin pause déjeuner (optionnel) — format HH:mm
+  breaks?: TimeBreak[] // pauses multiples (déjeuner, etc.)
+  // Ancien format (compatibilité) — ne plus utiliser, lu via getDayBreaks()
+  breakStart?: string
+  breakEnd?: string
 }
 
 export interface Patient {

@@ -1,7 +1,7 @@
 // API : créneaux horaires disponibles pour une date donnée
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { generateTimeSlots, getAvailableSlots, getDayKey } from '@/lib/utils'
+import { generateTimeSlots, getAvailableSlots, getDayKey, getDayBreaks } from '@/lib/utils'
 import { parseISO } from 'date-fns'
 
 // GET /api/slots?doctor_id=...&date=YYYY-MM-DD
@@ -64,8 +64,7 @@ export async function GET(req: NextRequest) {
     daySchedule.start,
     daySchedule.end,
     doctor.appointment_duration,
-    daySchedule.breakStart,
-    daySchedule.breakEnd
+    getDayBreaks(daySchedule)
   )
 
   const bookedTimes = (bookedResult.data ?? []).map((b) => b.time.substring(0, 5))
