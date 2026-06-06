@@ -1,16 +1,19 @@
-// API : gestion des dates bloquées par le médecin
+// API : dates bloquées (congés) d'un médecin — pour la page de réservation publique
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
+import { formatInTimeZone } from 'date-fns-tz'
 
 // GET /api/blocked-dates?doctor_id=...
-// Utilisé par la page de réservation publique (slots) — retourne uniquement les dates, pas les raisons
+// Retourne les dates bloquées (pour griser le calendrier) + les messages
+// publics laissés par le médecin pour ses congés à venir.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const doctorId = searchParams.get('doctor_id')
   if (!doctorId) return NextResponse.json({ error: 'doctor_id manquant' }, { status: 400 })
 
-  // Vérifie que le médecin existe et est approuvé avant de retourner ses dates
-  const supabase = createClient()
+  const supabase = createAdminClient()
+
+  // Vérifie que le médecin existe et est approuvé
   const { data: doctor } = await supabase
     .from('doctors')
     .select('id')
@@ -18,12 +21,25 @@ export async function GET(req: NextRequest) {
     .eq('status', 'approved')
     .single()
 
-  if (!doctor) return NextResponse.json({ blocked: [] })
+  if (!doctor) return NextResponse.json({ blocked: [], notices: [] })
 
   const { data } = await supabase
     .from('blocked_dates')
-    .select('date')
+    .select('date, reason')
     .eq('doctor_id', doctorId)
 
-  return NextResponse.json({ blocked: (data ?? []).map((d: { date: string }) => d.date) })
+  const rows = (data ?? []) as { date: string; reason: string | null }[]
+  const blocked = rows.map((d) => d.date)
+
+  // Messages publics des congés à VENIR (aujourd'hui inclus), heure Maroc
+  const today = formatInTimeZone(new Date(), 'Africa/Casablanca', 'yyyy-MM-dd')
+  const notices = Array.from(
+    new Set(
+      rows
+        .filter((d) => d.date >= today && d.reason && d.reason.trim())
+        .map((d) => d.reason!.trim())
+    )
+  )
+
+  return NextResponse.json({ blocked, notices })
 }

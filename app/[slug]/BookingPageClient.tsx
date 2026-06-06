@@ -36,6 +36,19 @@ export function BookingPageClient({ doctor }: Props) {
   const [slots, setSlots] = useState<TimeSlot[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [slotTakenMsg, setSlotTakenMsg] = useState(false)
+  const [blockedDates, setBlockedDates] = useState<Date[]>([])
+  const [vacationNotices, setVacationNotices] = useState<string[]>([])
+
+  // Charge les congés du médecin (dates à griser + messages publics)
+  useEffect(() => {
+    fetch(`/api/blocked-dates?doctor_id=${doctor.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setBlockedDates((data.blocked ?? []).map((d: string) => new Date(d + 'T00:00:00')))
+        setVacationNotices(data.notices ?? [])
+      })
+      .catch(() => {})
+  }, [doctor.id])
 
   // Charge les créneaux disponibles dès qu'une date est sélectionnée
   useEffect(() => {
@@ -187,10 +200,21 @@ export function BookingPageClient({ doctor }: Props) {
                 </div>
               )}
               <h3 className="font-semibold text-gray-800">Choisissez une date</h3>
+              {vacationNotices.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm px-4 py-3 rounded-xl space-y-1">
+                  {vacationNotices.map((notice, i) => (
+                    <p key={i} className="flex items-start gap-2">
+                      <span aria-hidden="true">ℹ️</span>
+                      <span>{notice}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
               <DatePicker
                 workingHours={doctor.working_hours}
                 selectedDate={selectedDate}
                 onSelect={handleDateSelect}
+                disabledDates={blockedDates}
               />
 
               {selectedDate && (

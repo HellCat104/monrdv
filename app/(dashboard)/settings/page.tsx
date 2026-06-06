@@ -568,7 +568,7 @@ export default function SettingsPage() {
               <Input
                 value={newBlockReason}
                 onChange={(e) => setNewBlockReason(e.target.value)}
-                placeholder="Raison (optionnel)"
+                placeholder="Message affiché aux patients (ex : En congé, retour le 21 juin)"
                 className="flex-1 min-w-[140px]"
               />
               <Button
