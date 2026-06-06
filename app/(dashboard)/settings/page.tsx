@@ -200,10 +200,11 @@ export default function SettingsPage() {
         .from('doctor-photos')
         .getPublicUrl(path)
 
-      // Ajoute un timestamp pour invalider le cache
+      // Ajoute un timestamp pour invalider le cache (stocké en base aussi,
+      // sinon l'ancienne photo reste affichée partout via le cache CDN)
       const urlWithTs = `${publicUrl}?t=${Date.now()}`
 
-      await supabase.from('doctors').update({ photo_url: publicUrl }).eq('id', doctor.id)
+      await supabase.from('doctors').update({ photo_url: urlWithTs }).eq('id', doctor.id)
       setPhotoUrl(urlWithTs)
     } catch {
       alert('Erreur lors de l\'upload. Réessayez.')

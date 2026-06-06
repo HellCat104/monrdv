@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { format, parse, addMinutes, isBefore, isAfter, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
 import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz'
 import type { WorkingHours, TimeSlot } from '@/types'
 
@@ -20,7 +21,7 @@ export function getNowInMaroc(): Date {
 // Formate une date en français
 export function formatDateFr(date: Date | string): string {
   const d = typeof date === 'string' ? parseISO(date) : date
-  return formatInTimeZone(d, MAROC_TZ, 'EEEE d MMMM yyyy', { locale: undefined })
+  return formatInTimeZone(d, MAROC_TZ, 'EEEE d MMMM yyyy', { locale: fr })
 }
 
 // Formate une date courte (ex: "18/05/2026")

@@ -261,14 +261,22 @@ export function BookingPageClient({ doctor }: Props) {
               <h3 className="text-xl font-bold text-gray-900">Rendez-vous confirmé !</h3>
               <p className="text-gray-600 text-sm">
                 Votre RDV avec <strong>Dr. {doctor.name}</strong> a bien été enregistré.
-                Un SMS de confirmation vous a été envoyé.
+                Un email de confirmation vous a été envoyé.
               </p>
-              <button
-                onClick={() => { setStep('datetime'); setSelectedDate(undefined); setSelectedTime(null) }}
-                className="text-primary-500 text-sm underline hover:no-underline"
-              >
-                Prendre un autre rendez-vous
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+                <button
+                  onClick={() => { setStep('datetime'); setSelectedDate(undefined); setSelectedTime(null) }}
+                  className="border border-gray-200 hover:border-gray-300 text-gray-700 font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  Prendre un autre rendez-vous
+                </button>
+                <a
+                  href="/"
+                  className="border border-gray-200 hover:border-gray-300 text-gray-700 font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  Retour à l&apos;accueil
+                </a>
+              </div>
             </div>
           )}
         </div>
