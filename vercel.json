@@ -1,12 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/agenda",
-      "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/reminders",
-      "schedule": "0 8 * * *"
-    }
-  ]
+  "_comment": "Crons gérés par cron-job.org (externe, fiable) — pas par Vercel Hobby (déclenchement imprévisible). Voir /api/cron/agenda et /api/cron/reminders.",
+  "crons": []
 }
