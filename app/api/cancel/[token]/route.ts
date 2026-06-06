@@ -1,10 +1,11 @@
 // API : annulation de RDV via le lien email
+// POST uniquement — un GET ne doit jamais muter (les scanners d'emails préchargent les liens)
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor } from '@/lib/email'
 
-// GET /api/cancel/[token] — annule le RDV et redirige vers une page de confirmation
-export async function GET(
+// POST /api/cancel/[token] — annule le RDV (déclenché par un clic explicite sur la page /annuler)
+export async function POST(
   req: NextRequest,
   { params }: { params: { token: string } }
 ) {
@@ -19,9 +20,7 @@ export async function GET(
     .single()
 
   if (error || !appointment) {
-    const url = new URL('/cancel-result', req.url)
-    url.searchParams.set('status', 'error')
-    return NextResponse.redirect(url)
+    return NextResponse.json({ error: 'Lien invalide ou rendez-vous déjà annulé' }, { status: 404 })
   }
 
   const patient = appointment.patient as any
@@ -59,9 +58,5 @@ export async function GET(
 
   await Promise.allSettled(emailTasks)
 
-  const url = new URL('/cancel-result', req.url)
-  url.searchParams.set('status', 'success')
-  url.searchParams.set('date', appointment.date)
-  url.searchParams.set('time', appointment.time)
-  return NextResponse.redirect(url)
+  return NextResponse.json({ success: true, date: appointment.date, time: appointment.time })
 }
