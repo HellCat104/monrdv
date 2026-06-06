@@ -7,6 +7,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, MapPin, Clock, Stethoscope, ArrowLeft, Calendar } from 'lucide-react'
 import { Suspense } from 'react'
+import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
 
 interface Doctor {
   id: string
@@ -26,23 +27,27 @@ function RechercheContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState(searchParams.get('q') || '')
+  const [specialite, setSpecialite] = useState(searchParams.get('specialite') || '')
   const [city, setCity] = useState(searchParams.get('ville') || '')
 
   useEffect(() => {
     const q = searchParams.get('q') || ''
+    const spec = searchParams.get('specialite') || ''
     const ville = searchParams.get('ville') || ''
     setQuery(q)
+    setSpecialite(spec)
     setCity(ville)
-    fetchDoctors(q, ville)
+    fetchDoctors(q, spec, ville)
   }, [searchParams])
 
-  async function fetchDoctors(q: string, ville: string) {
+  async function fetchDoctors(q: string, spec: string, ville: string) {
     setLoading(true)
     setError('')
 
     try {
       const params = new URLSearchParams()
       if (q) params.set('q', q)
+      if (spec) params.set('specialite', spec)
       if (ville) params.set('ville', ville)
 
       const res = await fetch(`/api/search?${params}`)
@@ -66,6 +71,7 @@ function RechercheContent() {
     e.preventDefault()
     const params = new URLSearchParams()
     if (query) params.set('q', query)
+    if (specialite) params.set('specialite', specialite)
     if (city) params.set('ville', city)
     router.push(`/recherche?${params}`)
   }
@@ -81,22 +87,48 @@ function RechercheContent() {
             </Link>
             <span className="font-bold text-lg">MonRDV</span>
           </div>
-          <form onSubmit={handleSearch} className="bg-white rounded-xl p-1.5 flex gap-2">
-            <div className="flex items-center gap-2 flex-1 px-3">
+          <form onSubmit={handleSearch} className="bg-white rounded-xl p-2 flex flex-col sm:flex-row gap-2">
+            {/* Spécialité (liste déroulante) */}
+            <select
+              value={specialite}
+              onChange={(e) => setSpecialite(e.target.value)}
+              className="flex-1 text-gray-800 text-sm outline-none bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100"
+            >
+              <option value="">Toutes spécialités</option>
+              {SPECIALITES_LIST.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+
+            {/* Ville (liste déroulante) */}
+            <select
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="flex-1 text-gray-800 text-sm outline-none bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100"
+            >
+              <option value="">Toutes les villes</option>
+              {VILLES_MAROC.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+
+            {/* Nom du médecin (texte libre) */}
+            <div className="flex items-center gap-2 flex-1 px-3 bg-gray-50 rounded-lg border border-gray-100">
               <Search className="h-4 w-4 text-gray-400 shrink-0" />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Spécialité, médecin…"
-                className="flex-1 text-gray-800 text-sm outline-none placeholder-gray-400"
+                placeholder="Nom du médecin…"
+                className="flex-1 text-gray-800 text-sm outline-none placeholder-gray-400 bg-transparent py-2.5"
               />
             </div>
+
             <button
               type="submit"
-              className="bg-primary-500 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+              className="bg-primary-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shrink-0"
             >
-              OK
+              Rechercher
             </button>
           </form>
         </div>

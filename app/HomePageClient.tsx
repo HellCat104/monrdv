@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, MapPin, User, Stethoscope, Clock, Shield, Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
 
 const SPECIALITES = [
   { label: 'Médecin généraliste', emoji: '🩺', color: 'bg-blue-50' },
@@ -24,6 +25,7 @@ const SPECIALITES = [
 export default function HomePageClient() {
   const router = useRouter()
   const [query, setQuery] = useState('')
+  const [specialite, setSpecialite] = useState('')
   const [city, setCity] = useState('')
   const [patientName, setPatientName] = useState<string | null>(null)
   const [dashboardUrl, setDashboardUrl] = useState('/patient/dashboard')
@@ -53,8 +55,9 @@ export default function HomePageClient() {
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     const params = new URLSearchParams()
-    if (query) params.set('q', query)
+    if (specialite) params.set('specialite', specialite)
     if (city) params.set('ville', city)
+    if (query) params.set('q', query)
     router.push(`/recherche?${params.toString()}`)
   }
 
@@ -114,28 +117,36 @@ export default function HomePageClient() {
 
           {/* Barre de recherche */}
           <form onSubmit={handleSearch} className="bg-white rounded-2xl p-2 flex flex-col sm:flex-row gap-2 shadow-2xl max-w-3xl mx-auto" role="search" aria-label="Rechercher un médecin">
-            <div className="flex items-center gap-3 flex-1 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors">
-              <Search className="h-5 w-5 text-gray-400 shrink-0" aria-hidden="true" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Nom, spécialité, établissement…"
-                className="flex-1 text-gray-800 placeholder-gray-400 outline-none text-sm bg-transparent"
-                aria-label="Spécialité ou nom du médecin"
-              />
+            {/* Spécialité (liste déroulante) */}
+            <div className="flex items-center gap-2 flex-1 px-3 rounded-xl">
+              <Stethoscope className="h-5 w-5 text-gray-400 shrink-0" aria-hidden="true" />
+              <select
+                value={specialite}
+                onChange={(e) => setSpecialite(e.target.value)}
+                className="flex-1 text-gray-800 outline-none text-sm bg-transparent py-3"
+                aria-label="Spécialité"
+              >
+                <option value="">Toutes spécialités</option>
+                {SPECIALITES_LIST.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </div>
             <div className="w-px bg-gray-200 hidden sm:block" />
-            <div className="flex items-center gap-3 flex-1 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors">
+            {/* Ville (liste déroulante) */}
+            <div className="flex items-center gap-2 flex-1 px-3 rounded-xl">
               <MapPin className="h-5 w-5 text-gray-400 shrink-0" aria-hidden="true" />
-              <input
-                type="text"
+              <select
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
-                placeholder="Ville (ex: Casablanca)"
-                className="flex-1 text-gray-800 placeholder-gray-400 outline-none text-sm bg-transparent"
+                className="flex-1 text-gray-800 outline-none text-sm bg-transparent py-3"
                 aria-label="Ville"
-              />
+              >
+                <option value="">Toutes les villes</option>
+                {VILLES_MAROC.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
             </div>
             <button
               type="submit"
@@ -145,12 +156,26 @@ export default function HomePageClient() {
             </button>
           </form>
 
+          {/* Recherche par nom (optionnel) */}
+          <div className="max-w-3xl mx-auto mt-3 flex items-center gap-2 bg-white/15 rounded-xl px-4">
+            <Search className="h-4 w-4 text-white/70 shrink-0" aria-hidden="true" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(e as unknown as React.FormEvent) }}
+              placeholder="Ou cherchez directement par nom de médecin…"
+              className="flex-1 text-white placeholder-white/60 outline-none text-sm bg-transparent py-2.5"
+              aria-label="Nom du médecin"
+            />
+          </div>
+
           {/* Suggestions rapides */}
           <div className="flex flex-wrap justify-center gap-2 mt-6">
             {['Médecin généraliste', 'Cardiologue', 'Dermatologue', 'Pédiatre', 'Neurologue'].map((s) => (
               <button
                 key={s}
-                onClick={() => { setQuery(s); router.push(`/recherche?q=${encodeURIComponent(s)}`) }}
+                onClick={() => router.push(`/recherche?specialite=${encodeURIComponent(s)}`)}
                 className="bg-white/20 hover:bg-white/30 text-white text-xs px-4 py-1.5 rounded-full transition-colors"
               >
                 {s}
@@ -173,7 +198,7 @@ export default function HomePageClient() {
             {SPECIALITES.map(({ label, emoji, color }) => (
               <button
                 key={label}
-                onClick={() => router.push(`/recherche?q=${encodeURIComponent(label)}`)}
+                onClick={() => router.push(`/recherche?specialite=${encodeURIComponent(label)}`)}
                 className={`flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-transparent hover:border-primary-200 hover:shadow-md transition-all group ${color}`}
                 aria-label={`Chercher un ${label}`}
               >

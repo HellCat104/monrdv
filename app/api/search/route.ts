@@ -3,40 +3,48 @@ import { createAdminClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
+const CACHE = { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' }
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const q     = sanitizeSearchParam(searchParams.get('q'))
-  const ville = sanitizeSearchParam(searchParams.get('ville'))
+  const q          = sanitizeSearchParam(searchParams.get('q'))          // nom du médecin (texte libre)
+  const specialite = sanitizeSearchParam(searchParams.get('specialite')) // valeur exacte (liste)
+  const ville      = sanitizeSearchParam(searchParams.get('ville'))      // valeur exacte (liste)
 
   const supabase = createAdminClient()
 
-  // Filtres DB directs — approved + actif uniquement, pas de limite arbitraire
+  // 1) Essaie la fonction RPC (recherche insensible aux accents sur le nom)
+  const { data, error } = await supabase.rpc('search_doctors', {
+    p_q: q,
+    p_specialite: specialite,
+    p_ville: ville,
+  })
+
+  if (!error) {
+    return NextResponse.json(data ?? [], { headers: CACHE })
+  }
+
+  // 2) Repli si la fonction n'existe pas encore : recherche classique (toujours fonctionnelle)
   let query = supabase
     .from('doctors')
     .select('id, name, specialty, slug, phone, city, appointment_duration, photo_url')
     .eq('status', 'approved')
     .eq('subscription_status', 'actif')
     .order('name', { ascending: true })
-    .limit(50) // 50 résultats max affichés, filtres déjà appliqués côté DB
+    .limit(50)
 
-  if (q) {
-    query = query.or(`name.ilike.%${q}%,specialty.ilike.%${q}%`)
+  if (specialite) query = query.eq('specialty', specialite)
+  if (ville)      query = query.eq('city', ville)
+  if (q)          query = query.ilike('name', `%${q}%`)
+
+  const { data: fallbackData, error: fallbackError } = await query
+
+  if (fallbackError) {
+    console.error('[Search] fallback error:', fallbackError)
+    return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
   }
 
-  if (ville) {
-    query = query.ilike('city', `%${ville}%`)
-  }
-
-  const { data, error } = await query
-
-  if (error) return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
-
-  return NextResponse.json(data ?? [], {
-    headers: {
-      // Cache 60s sur le CDN Vercel — recherches répétées servies instantanément
-      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
-    },
-  })
+  return NextResponse.json(fallbackData ?? [], { headers: CACHE })
 }
 
 function sanitizeSearchParam(value: string | null): string {
