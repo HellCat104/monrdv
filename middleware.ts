@@ -74,10 +74,9 @@ export async function middleware(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
-      const loginUrl = isAdmin
-        ? new URL('/login', req.url)
-        : new URL('/patient/login', req.url)
-      return NextResponse.redirect(loginUrl)
+      // Ces routes (dashboard, settings, appointments, patients, abonnement, admin)
+      // sont toutes des routes médecin/admin → login médecin, jamais patient.
+      return NextResponse.redirect(new URL('/login', req.url))
     }
 
     // Vérifie que l'admin est bien l'admin
