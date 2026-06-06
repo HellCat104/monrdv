@@ -22,29 +22,33 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const supabase = createClient()
-    let resolved = false
 
-    const markReady = () => { resolved = true; setReady(true) }
+    async function initSession() {
+      // 1) Une session est-elle déjà active ? (token déjà traité)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) { setReady(true); return }
 
-    // 1) Le token du hash a peut-être DÉJÀ été traité avant qu'on s'abonne :
-    //    on vérifie tout de suite si une session existe.
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) markReady()
-    })
+      // 2) Sinon, on lit le token directement dans le hash de l'URL et on
+      //    établit la session manuellement (déterministe, sans course de timing).
+      const hash = window.location.hash.startsWith('#')
+        ? window.location.hash.substring(1)
+        : window.location.hash
+      const params = new URLSearchParams(hash)
+      const access_token = params.get('access_token')
+      const refresh_token = params.get('refresh_token')
 
-    // 2) Sinon, on écoute l'événement (au cas où il arrive juste après)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || session) {
-        markReady()
+      if (access_token && refresh_token) {
+        const { error: setErr } = await supabase.auth.setSession({ access_token, refresh_token })
+        if (setErr) { setLinkError(true); return }
+        setReady(true)
+        return
       }
-    })
 
-    // 3) Filet de sécurité : si rien après 5s, le lien est invalide/expiré
-    const timeout = setTimeout(() => {
-      if (!resolved) setLinkError(true)
-    }, 5000)
+      // 3) Pas de token exploitable → lien invalide/expiré
+      setLinkError(true)
+    }
 
-    return () => { subscription.unsubscribe(); clearTimeout(timeout) }
+    initSession()
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
