@@ -208,7 +208,7 @@ export default function PolitiqueConfidentialite() {
                       <tr className="bg-gray-50">
                         <td className="p-3 border border-gray-200">Numéro de téléphone</td>
                         <td className="p-3 border border-gray-200 text-center">✅ Oui</td>
-                        <td className="p-3 border border-gray-200">Confirmation et rappels SMS</td>
+                        <td className="p-3 border border-gray-200">Permettre au médecin de contacter le patient</td>
                       </tr>
                       <tr>
                         <td className="p-3 border border-gray-200">Adresse email</td>
@@ -286,7 +286,7 @@ export default function PolitiqueConfidentialite() {
                       <td className="p-3 border border-gray-200">Exécution du contrat de service (art. 3-3° loi 09-08)</td>
                     </tr>
                     <tr className="bg-gray-50">
-                      <td className="p-3 border border-gray-200">Envoi de SMS de confirmation et rappels</td>
+                      <td className="p-3 border border-gray-200">Envoi d&apos;emails de confirmation et rappels</td>
                       <td className="p-3 border border-gray-200">Consentement explicite lors de la réservation</td>
                     </tr>
                     <tr>
@@ -317,7 +317,7 @@ export default function PolitiqueConfidentialite() {
               </p>
               <ul className="list-disc list-inside text-gray-600 space-y-2 ml-1">
                 <li>Permettre la prise de rendez-vous médicaux en ligne entre patients et médecins</li>
-                <li>Envoyer des confirmations et rappels de rendez-vous par SMS et/ou email</li>
+                <li>Envoyer des confirmations et rappels de rendez-vous par email</li>
                 <li>Permettre aux médecins de gérer leur agenda, leurs patients et leurs disponibilités</li>
                 <li>Vérifier les qualifications et l&apos;identité des professionnels de santé inscrits</li>
                 <li>Gérer la facturation des abonnements des médecins</li>
@@ -374,12 +374,8 @@ export default function PolitiqueConfidentialite() {
                     what: 'Sous-traitant technique assurant le stockage sécurisé. Accès limité à l\'infrastructure, sans accès aux données au sens métier.'
                   },
                   {
-                    who: '📱 Twilio (SMS)',
-                    what: 'Reçoit le numéro de téléphone et le contenu du SMS de confirmation/rappel uniquement pour l\'envoi. Données non conservées au-delà de la transmission.'
-                  },
-                  {
                     who: '📧 Resend (emails)',
-                    what: 'Reçoit l\'adresse email et le contenu de l\'email de confirmation. Données non conservées au-delà de la transmission.'
+                    what: 'Service d\'envoi d\'emails (hébergé dans l\'Union européenne). Reçoit l\'adresse email et le contenu de l\'email de confirmation/rappel uniquement pour l\'envoi. Données non conservées au-delà de la transmission.'
                   },
                 ].map(({ who, what }) => (
                   <div key={who} className="bg-gray-50 rounded-xl p-4 flex gap-3">
@@ -423,16 +419,10 @@ export default function PolitiqueConfidentialite() {
                       <td className="p-3 border border-gray-200">USA / UE (Edge Network)</td>
                     </tr>
                     <tr>
-                      <td className="p-3 border border-gray-200 font-medium">Twilio</td>
-                      <td className="p-3 border border-gray-200">Envoi de SMS</td>
-                      <td className="p-3 border border-gray-200">Numéro de téléphone, contenu SMS</td>
-                      <td className="p-3 border border-gray-200">USA (transmission uniquement)</td>
-                    </tr>
-                    <tr className="bg-gray-50">
                       <td className="p-3 border border-gray-200 font-medium">Resend</td>
                       <td className="p-3 border border-gray-200">Envoi d&apos;emails transactionnels</td>
                       <td className="p-3 border border-gray-200">Adresse email, contenu email</td>
-                      <td className="p-3 border border-gray-200">USA (transmission uniquement)</td>
+                      <td className="p-3 border border-gray-200">UE (eu-west-1, Irlande)</td>
                     </tr>
                   </tbody>
                 </table>

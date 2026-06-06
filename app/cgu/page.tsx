@@ -177,7 +177,7 @@ export default function CGUPage() {
                   <li>La recherche de médecins par spécialité et/ou ville</li>
                   <li>La consultation des disponibilités en temps réel</li>
                   <li>La réservation d&apos;un créneau de consultation</li>
-                  <li>L&apos;envoi de confirmations et rappels par SMS</li>
+                  <li>L&apos;envoi de confirmations et rappels par email</li>
                   <li>La gestion d&apos;agenda pour les professionnels de santé</li>
                   <li>Un espace patient sécurisé pour consulter et annuler ses rendez-vous</li>
                 </ul>
@@ -286,9 +286,9 @@ export default function CGUPage() {
             <Section id="rdv" number="8" title="Prise de rendez-vous">
               <ul className="list-disc list-inside text-gray-600 space-y-2 ml-1">
                 <li>Les réservations sont acceptées à partir du <strong>lendemain</strong> de la date de prise de rendez-vous (aucune réservation le jour même)</li>
-                <li>Un SMS de confirmation est envoyé au patient après chaque réservation</li>
-                <li>Un rappel SMS est envoyé la veille du rendez-vous</li>
-                <li>Le patient peut annuler son rendez-vous via le lien inclus dans le SMS ou depuis son espace patient</li>
+                <li>Un email de confirmation est envoyé au patient après chaque réservation</li>
+                <li>Un rappel par email est envoyé la veille du rendez-vous</li>
+                <li>Le patient peut annuler son rendez-vous via le lien inclus dans l&apos;email ou depuis son espace patient</li>
                 <li>En cas d&apos;annulation par le médecin, le patient en est informé dans les meilleurs délais</li>
                 <li>MonRDV ne peut être tenu responsable des absences, retards ou annulations de dernière minute</li>
               </ul>
@@ -313,7 +313,7 @@ export default function CGUPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-green-500 mt-0.5">✓</span>
-                    Agenda illimité, notifications SMS patients
+                    Agenda illimité, notifications email patients
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-green-500 mt-0.5">✓</span>
@@ -408,7 +408,7 @@ export default function CGUPage() {
                   <li>Des interruptions de service dues à la force majeure</li>
                   <li>Des informations inexactes délibérément fournies par les utilisateurs</li>
                   <li>Des dommages indirects résultant de l&apos;utilisation ou de l&apos;impossibilité d&apos;utiliser la Plateforme</li>
-                  <li>Des pannes ou indisponibilités des services tiers (opérateurs télécom, SMS, hébergement)</li>
+                  <li>Des pannes ou indisponibilités des services tiers (hébergement, service d&apos;envoi d&apos;emails)</li>
                 </ul>
               </SubSection>
 
