@@ -299,7 +299,7 @@ export default function CGUPage() {
               <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">199<br/>DH</span>
+                    <span className="text-white font-bold text-sm">299<br/>DH</span>
                   </div>
                   <div>
                     <p className="font-bold text-gray-900 text-lg">Abonnement mensuel</p>
@@ -336,7 +336,7 @@ export default function CGUPage() {
 
               <SubSection title="Facturation et paiement :">
                 <ul className="list-disc list-inside text-gray-600 space-y-1.5 ml-1">
-                  <li>Le montant de l&apos;abonnement est de <strong>199 DHS (dirhams marocains) par mois</strong>, toutes taxes comprises</li>
+                  <li>Le montant de l&apos;abonnement est de <strong>299 DHS (dirhams marocains) par mois</strong>, toutes taxes comprises</li>
                   <li>Le paiement s&apos;effectue par <strong>virement bancaire</strong> au début de chaque période mensuelle</li>
                   <li>Une facture est émise et envoyée par email à chaque règlement</li>
                   <li>L&apos;abonnement est renouvelé automatiquement chaque mois sauf résiliation explicite</li>
