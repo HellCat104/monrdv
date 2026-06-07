@@ -146,6 +146,7 @@ export const SPECIALITES_LIST = [
   'Médecin généraliste',
   'Cardiologue',
   'Dermatologue',
+  'Médecine esthétique',
   'Pédiatre',
   'Ophtalmologue',
   'Dentiste',

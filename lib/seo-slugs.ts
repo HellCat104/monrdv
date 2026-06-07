@@ -7,6 +7,7 @@ export const SPECIALITE_SLUGS: Record<string, string> = {
   'medecin-generaliste':      'Médecin généraliste',
   'cardiologue':               'Cardiologue',
   'dermatologue':              'Dermatologue',
+  'medecine-esthetique':       'Médecine esthétique',
   'pediatre':                  'Pédiatre',
   'ophtalmologue':             'Ophtalmologue',
   'dentiste':                  'Dentiste',
