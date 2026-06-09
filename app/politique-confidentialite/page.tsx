@@ -149,7 +149,7 @@ export default function PolitiqueConfidentialite() {
               <div className="bg-gray-50 rounded-xl p-5 text-sm text-gray-700 space-y-1.5">
                 <p><strong>Nom de la plateforme :</strong> MonRDV</p>
                 <p><strong>Statut juridique :</strong> Auto-entrepreneur, Maroc</p>
-                <p><strong>Responsable du traitement :</strong> Asma Adouach</p>
+                <p><strong>Responsable du traitement :</strong> MonRDV</p>
                 <p>
                   <strong>Email :</strong>{' '}
                   <a href="mailto:asmaadouach@gmail.com" className="text-green-700 hover:underline">

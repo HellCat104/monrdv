@@ -132,7 +132,7 @@ export default function CGUPage() {
               <div className="bg-gray-50 rounded-xl p-5 text-sm text-gray-700 space-y-1">
                 <p><strong>Dénomination :</strong> MonRDV</p>
                 <p><strong>Statut juridique :</strong> Auto-entrepreneur</p>
-                <p><strong>Responsable :</strong> Asma Adouach</p>
+                <p><strong>Responsable :</strong> MonRDV</p>
                 <p><strong>Pays d'exploitation :</strong> Maroc 🇲🇦</p>
                 <p>
                   <strong>Contact :</strong>{' '}
