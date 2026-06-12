@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { generateTimeSlots } from '@/lib/utils'
+import { generateTimeSlots, getDayBreaks } from '@/lib/utils'
 import type { Doctor } from '@/types'
 
 interface AddAppointmentDialogProps {
@@ -55,7 +55,7 @@ export function AddAppointmentDialog({
   const dayKey = selectedDate ? dayNames[selectedDate.getDay()] : null
   const daySchedule = dayKey ? doctor.working_hours[dayKey] : null
   const timeSlots = daySchedule?.enabled
-    ? generateTimeSlots(daySchedule.start, daySchedule.end, doctor.appointment_duration)
+    ? generateTimeSlots(daySchedule.start, daySchedule.end, doctor.appointment_duration, getDayBreaks(daySchedule))
     : []
 
   async function handleSubmit(e: React.FormEvent) {

@@ -93,6 +93,54 @@ export function getAvailableSlots(
   }))
 }
 
+// ── Créneaux à durée variable (motifs de consultation) ──────────────────────
+// Un RDV existant occupe l'intervalle [time, time + duration). Un candidat est
+// disponible si son intervalle complet ne chevauche ni pause ni RDV existant.
+export interface OccupiedInterval {
+  time: string      // HH:mm ou HH:mm:ss
+  duration: number  // minutes
+}
+
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':')
+  return parseInt(h, 10) * 60 + parseInt(m, 10)
+}
+
+export function getSlotsForDuration(
+  startTime: string,
+  endTime: string,
+  duration: number,       // durée du RDV à placer (selon le motif)
+  gridStep: number,       // pas de la grille (durée de base du médecin)
+  breaks: TimeBreak[] = [],
+  occupied: OccupiedInterval[] = []
+): TimeSlot[] {
+  const start = toMinutes(startTime)
+  const end = toMinutes(endTime)
+  // Grille : ne jamais dépasser la durée demandée (motif court → plus de créneaux)
+  const step = Math.max(5, Math.min(gridStep || 30, duration))
+
+  const parsedBreaks = breaks
+    .filter((b) => b && b.start && b.end)
+    .map((b) => ({ s: toMinutes(b.start), e: toMinutes(b.end) }))
+
+  const parsedOcc = occupied.map((o) => {
+    const s = toMinutes(o.time)
+    return { s, e: s + (o.duration || gridStep || 30) }
+  })
+
+  const slots: TimeSlot[] = []
+  for (let t = start; t + duration <= end; t += step) {
+    const tEnd = t + duration
+    // Chevauche une pause → on ne propose pas du tout le créneau
+    if (parsedBreaks.some((b) => t < b.e && tEnd > b.s)) continue
+    const taken = parsedOcc.some((o) => t < o.e && tEnd > o.s)
+    const hh = String(Math.floor(t / 60)).padStart(2, '0')
+    const mm = String(t % 60).padStart(2, '0')
+    slots.push({ time: `${hh}:${mm}`, available: !taken })
+  }
+  return slots
+}
+
 // Retourne le nom du jour de la semaine en anglais (clé WorkingHours)
 export function getDayKey(date: Date): keyof WorkingHours {
   const days: (keyof WorkingHours)[] = [

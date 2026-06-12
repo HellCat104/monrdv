@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   CreditCard,
+  BarChart3,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ const navItems = [
   { href: '/dashboard',     label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/appointments',  label: 'Rendez-vous',      icon: Calendar },
   { href: '/patients',      label: 'Patients',          icon: Users },
+  { href: '/statistiques',  label: 'Statistiques',      icon: BarChart3 },
   { href: '/settings',      label: 'Paramètres',        icon: Settings },
   { href: '/abonnement',    label: 'Abonnement',        icon: CreditCard },
 ]

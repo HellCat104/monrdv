@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
-import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, generateTimeSlots, getDayKey, getNowInMaroc, getDayBreaks } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks } from '@/lib/utils'
 import { format } from 'date-fns'
 
 // GET /api/appointments?doctor_id=...&date=...
@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
     date,
     time,
     notes,
+    consultation_type_id,
     public: isPublic,
   } = body
 
@@ -119,6 +120,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Ce médecin n\'accepte pas les réservations en ligne' }, { status: 403 })
   }
 
+  // Résout la durée du RDV côté serveur (jamais confiance au client) :
+  // durée du motif choisi si valide, sinon durée de base du médecin.
+  let appointmentDuration = doctorCheck.appointment_duration
+  let safeTypeId: string | null = null
+  if (consultation_type_id) {
+    const { data: ctype } = await db
+      .from('consultation_types')
+      .select('id, duration_minutes')
+      .eq('id', consultation_type_id)
+      .eq('doctor_id', doctor_id)
+      .eq('active', true)
+      .maybeSingle()
+    if (ctype) {
+      appointmentDuration = ctype.duration_minutes
+      safeTypeId = ctype.id
+    }
+  }
+
+  // RDV existants du jour (intervalles occupés, durées variables)
+  const { data: dayAppointments } = await db
+    .from('appointments')
+    .select('time, duration_minutes')
+    .eq('doctor_id', doctor_id)
+    .eq('date', date)
+    .neq('status', 'cancelled')
+
+  const occupied = (dayAppointments ?? []).map((a) => ({
+    time: a.time.substring(0, 5),
+    duration: a.duration_minutes || doctorCheck.appointment_duration,
+  }))
+
   // Restrictions de créneau — UNIQUEMENT pour les réservations publiques (patients).
   // Le médecin reste maître de son agenda : il peut réserver pendant sa pause,
   // un jour fermé ou un jour de congé (cas d'urgence, faveur, etc.).
@@ -131,15 +163,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ce jour n\'est pas ouvert à la réservation' }, { status: 400 })
     }
 
-    const validSlots = generateTimeSlots(
+    const slots = getSlotsForDuration(
       daySchedule.start,
       daySchedule.end,
+      appointmentDuration,
       doctorCheck.appointment_duration,
-      getDayBreaks(daySchedule)
+      getDayBreaks(daySchedule),
+      occupied
     )
 
-    if (!validSlots.includes(time)) {
+    const slot = slots.find((s) => s.time === time)
+    if (!slot) {
       return NextResponse.json({ error: 'Ce créneau n\'est pas disponible' }, { status: 400 })
+    }
+    if (!slot.available) {
+      return NextResponse.json({ error: 'Ce créneau est déjà réservé' }, { status: 409 })
     }
 
     const { data: blockedDate } = await db
@@ -152,20 +190,18 @@ export async function POST(req: NextRequest) {
     if (blockedDate) {
       return NextResponse.json({ error: 'Cette date n\'est pas disponible' }, { status: 400 })
     }
-  }
-
-  // Vérifie que le créneau n'est pas déjà pris
-  const { data: existing } = await db
-    .from('appointments')
-    .select('id')
-    .eq('doctor_id', doctor_id)
-    .eq('date', date)
-    .eq('time', time)
-    .neq('status', 'cancelled')
-    .single()
-
-  if (existing) {
-    return NextResponse.json({ error: 'Ce créneau est déjà réservé' }, { status: 409 })
+  } else {
+    // Médecin : pas de restriction d'horaires, mais on bloque quand même
+    // le chevauchement avec un RDV existant (pas deux patients en même temps).
+    const newStart = parseInt(time.slice(0, 2), 10) * 60 + parseInt(time.slice(3, 5), 10)
+    const newEnd = newStart + appointmentDuration
+    const overlaps = occupied.some((o) => {
+      const s = parseInt(o.time.slice(0, 2), 10) * 60 + parseInt(o.time.slice(3, 5), 10)
+      return newStart < s + o.duration && newEnd > s
+    })
+    if (overlaps) {
+      return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant' }, { status: 409 })
+    }
   }
 
   const formattedPhone = formatPhoneMaroc(safePhone)
@@ -235,6 +271,8 @@ export async function POST(req: NextRequest) {
       status: 'confirmed',
       notes: safeNotes || null,
       cancel_token: cancelToken,
+      consultation_type_id: safeTypeId,
+      duration_minutes: appointmentDuration,
     })
     .select('*')
     .single()

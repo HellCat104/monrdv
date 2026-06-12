@@ -1,14 +1,16 @@
-// API : créneaux horaires disponibles pour une date donnée
+// API : créneaux horaires disponibles pour une date donnée.
+// Supporte les motifs de consultation à durée variable (?type=<consultation_type_id>).
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { generateTimeSlots, getAvailableSlots, getDayKey, getDayBreaks } from '@/lib/utils'
+import { getSlotsForDuration, getDayKey, getDayBreaks, type OccupiedInterval } from '@/lib/utils'
 import { parseISO } from 'date-fns'
 
-// GET /api/slots?doctor_id=...&date=YYYY-MM-DD
+// GET /api/slots?doctor_id=...&date=YYYY-MM-DD[&type=<uuid>]
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const doctorId = searchParams.get('doctor_id')
   const date = searchParams.get('date')
+  const typeId = searchParams.get('type')
 
   if (!doctorId || !date) {
     return NextResponse.json({ error: 'Paramètres manquants' }, { status: 400 })
@@ -38,7 +40,20 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // Requêtes 2 & 3 en parallèle — dates bloquées + créneaux réservés
+  // Durée du RDV : celle du motif choisi, sinon la durée de base du médecin
+  let duration = doctor.appointment_duration
+  if (typeId) {
+    const { data: ctype } = await supabase
+      .from('consultation_types')
+      .select('duration_minutes')
+      .eq('id', typeId)
+      .eq('doctor_id', doctorId)
+      .eq('active', true)
+      .maybeSingle()
+    if (ctype?.duration_minutes) duration = ctype.duration_minutes
+  }
+
+  // Requêtes 2 & 3 en parallèle — dates bloquées + RDV existants (avec leurs durées)
   const [blockedResult, bookedResult] = await Promise.all([
     supabase
       .from('blocked_dates')
@@ -48,7 +63,7 @@ export async function GET(req: NextRequest) {
       .maybeSingle(),
     supabase
       .from('appointments')
-      .select('time')
+      .select('time, duration_minutes')
       .eq('doctor_id', doctorId)
       .eq('date', date)
       .neq('status', 'cancelled'),
@@ -60,15 +75,20 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const allSlots = generateTimeSlots(
+  // Chaque RDV existant occupe [time, time + sa durée) — durée de base si absente
+  const occupied: OccupiedInterval[] = (bookedResult.data ?? []).map((b) => ({
+    time: b.time.substring(0, 5),
+    duration: b.duration_minutes || doctor.appointment_duration,
+  }))
+
+  const slots = getSlotsForDuration(
     daySchedule.start,
     daySchedule.end,
+    duration,
     doctor.appointment_duration,
-    getDayBreaks(daySchedule)
+    getDayBreaks(daySchedule),
+    occupied
   )
-
-  const bookedTimes = (bookedResult.data ?? []).map((b) => b.time.substring(0, 5))
-  const slots = getAvailableSlots(allSlots, bookedTimes)
 
   return NextResponse.json({ slots }, {
     headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },

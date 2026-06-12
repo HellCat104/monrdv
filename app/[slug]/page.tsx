@@ -67,6 +67,15 @@ export default async function BookingPage({ params }: Props) {
 
   if (!doctor) notFound()
 
+  // Motifs de consultation du médecin (RLS : lecture publique des motifs actifs)
+  const supabase = createClient()
+  const { data: consultationTypes } = await supabase
+    .from('consultation_types')
+    .select('id, doctor_id, name, duration_minutes, active, created_at')
+    .eq('doctor_id', doctor.id)
+    .eq('active', true)
+    .order('created_at', { ascending: true })
+
   // Médecin inactif → page d'erreur propre
   if (doctor.subscription_status !== 'actif') {
     return (
@@ -144,7 +153,7 @@ export default async function BookingPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <BookingPageClient doctor={doctor} />
+      <BookingPageClient doctor={doctor} consultationTypes={consultationTypes ?? []} />
     </>
   )
 }

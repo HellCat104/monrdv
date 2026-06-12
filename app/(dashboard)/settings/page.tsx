@@ -11,9 +11,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import type { Doctor, WorkingHours, DaySchedule } from '@/types'
+import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC } from '@/types'
-import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2 } from 'lucide-react'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 
 export default function SettingsPage() {
@@ -38,6 +38,11 @@ export default function SettingsPage() {
   const [newBlockEndDate, setNewBlockEndDate] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
   const [blockLoading, setBlockLoading] = useState(false)
+  // Motifs de consultation (durées variables)
+  const [consultTypes, setConsultTypes] = useState<ConsultationType[]>([])
+  const [newTypeName, setNewTypeName] = useState('')
+  const [newTypeDuration, setNewTypeDuration] = useState('30')
+  const [typeLoading, setTypeLoading] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -70,10 +75,45 @@ export default function SettingsPage() {
           .eq('doctor_id', data.id)
           .order('date', { ascending: true })
         setBlockedDates(blocked ?? [])
+
+        // Charge les motifs de consultation
+        const { data: types } = await supabase
+          .from('consultation_types')
+          .select('*')
+          .eq('doctor_id', data.id)
+          .eq('active', true)
+          .order('created_at', { ascending: true })
+        setConsultTypes(types ?? [])
       }
     }
     load()
   }, [])
+
+  async function handleAddConsultType() {
+    if (!doctor || !newTypeName.trim()) return
+    setTypeLoading(true)
+    const { data, error } = await supabase
+      .from('consultation_types')
+      .insert({
+        doctor_id: doctor.id,
+        name: newTypeName.trim().substring(0, 80),
+        duration_minutes: parseInt(newTypeDuration, 10) || 30,
+      })
+      .select()
+      .single()
+    setTypeLoading(false)
+    if (!error && data) {
+      setConsultTypes((prev) => [...prev, data])
+      setNewTypeName('')
+      setNewTypeDuration('30')
+    }
+  }
+
+  async function handleRemoveConsultType(id: string) {
+    // Désactivation (pas de suppression) : les anciens RDV gardent leur motif
+    await supabase.from('consultation_types').update({ active: false }).eq('id', id)
+    setConsultTypes((prev) => prev.filter((t) => t.id !== id))
+  }
 
   function updateDaySchedule(day: keyof WorkingHours, field: keyof DaySchedule, value: string | boolean) {
     setForm((prev) => ({
@@ -479,6 +519,80 @@ export default function SettingsPage() {
                 </SelectContent>
               </Select>
               <p className="text-sm text-gray-500">par consultation</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Motifs de consultation (durées variables) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary-500" />
+              Motifs de consultation
+            </CardTitle>
+            <p className="text-xs text-gray-400 mt-1">
+              Optionnel — si vous définissez des motifs, le patient choisit le sien à la réservation
+              et la durée du créneau s&apos;adapte automatiquement (ex : Première consultation 45 min, Suivi 15 min).
+              Sans motif, la durée par défaut ci-dessus s&apos;applique.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Liste des motifs */}
+            {consultTypes.length > 0 && (
+              <div className="space-y-2">
+                {consultTypes.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-sm font-medium text-gray-800 truncate">{t.name}</span>
+                      <span className="text-xs text-primary-600 bg-primary-50 rounded-full px-2 py-0.5 shrink-0">
+                        {t.duration_minutes} min
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveConsultType(t.id)}
+                      className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                      title="Supprimer ce motif"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Ajout d'un motif */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                value={newTypeName}
+                onChange={(e) => setNewTypeName(e.target.value)}
+                placeholder="Ex : Première consultation"
+                className="flex-1"
+              />
+              <Select value={newTypeDuration} onValueChange={setNewTypeDuration}>
+                <SelectTrigger className="w-36 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 minutes</SelectItem>
+                  <SelectItem value="15">15 minutes</SelectItem>
+                  <SelectItem value="20">20 minutes</SelectItem>
+                  <SelectItem value="30">30 minutes</SelectItem>
+                  <SelectItem value="45">45 minutes</SelectItem>
+                  <SelectItem value="60">1 heure</SelectItem>
+                  <SelectItem value="90">1h30</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleAddConsultType}
+                disabled={!newTypeName.trim() || typeLoading}
+                className="shrink-0"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                {typeLoading ? 'Ajout…' : 'Ajouter le motif'}
+              </Button>
             </div>
           </CardContent>
         </Card>

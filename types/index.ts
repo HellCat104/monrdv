@@ -60,6 +60,31 @@ export interface Patient {
   phone: string
   email?: string | null
   age?: number | null
+  // Dossier médical enrichi
+  allergies?: string | null
+  chronic_conditions?: string | null
+  current_treatments?: string | null
+  notes?: string | null
+  created_at: string
+}
+
+// Motif de consultation configurable par le médecin (durée propre)
+export interface ConsultationType {
+  id: string
+  doctor_id: string
+  name: string
+  duration_minutes: number
+  active: boolean
+  created_at: string
+}
+
+// Note de consultation (historique chronologique du dossier patient)
+export interface ConsultationNote {
+  id: string
+  doctor_id: string
+  patient_id: string
+  appointment_id?: string | null
+  note: string
   created_at: string
 }
 
@@ -77,9 +102,16 @@ export interface Appointment {
   doctor_notes: string | null
   attendance: AppointmentAttendance
   cancel_token: string | null
+  // Motif + durée (variable selon le motif choisi)
+  consultation_type_id?: string | null
+  duration_minutes?: number | null
+  // Paiement
+  amount_paid?: number | null
+  paid_at?: string | null
   created_at: string
   // Relations jointes
   patient?: Patient
+  consultation_type?: ConsultationType | null
 }
 
 // Pour les créneaux disponibles

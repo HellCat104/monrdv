@@ -2,24 +2,31 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { formatDateShort, formatTime, getInitials } from '@/lib/utils'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance } from '@/types'
-import { Phone, Clock, UserCheck, UserX, Timer, User } from 'lucide-react'
+import { Phone, Clock, UserCheck, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList } from 'lucide-react'
 
 interface AppointmentListProps {
   appointments: Appointment[]
   onStatusChange?: (id: string, status: AppointmentStatus) => Promise<void>
   onAttendanceChange?: (id: string, attendance: AppointmentAttendance) => Promise<void>
+  onPayment?: (id: string, amount: number | null) => Promise<void>
   onViewPatient?: (patientId: string) => void
 }
 
-export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onViewPatient }: AppointmentListProps) {
+export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment, onViewPatient }: AppointmentListProps) {
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean; id: string; action: 'confirmed' | 'cancelled'; label: string
   }>({ open: false, id: '', action: 'confirmed', label: '' })
   const [loading, setLoading] = useState(false)
+  // Dialog de saisie du montant payé
+  const [payDialog, setPayDialog] = useState<{ open: boolean; id: string; amount: string }>(
+    { open: false, id: '', amount: '' }
+  )
+  const [paying, setPaying] = useState(false)
 
   async function handleAction() {
     setLoading(true)
@@ -33,6 +40,24 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
 
   async function handleAttendance(id: string, attendance: AppointmentAttendance) {
     await onAttendanceChange?.(id, attendance)
+  }
+
+  // "Patient arrivé" → marque présent puis ouvre directement la fiche patient
+  async function handleArrived(apt: Appointment) {
+    await onAttendanceChange?.(apt.id, 'present')
+    if (apt.patient_id) onViewPatient?.(apt.patient_id)
+  }
+
+  async function handleConfirmPayment() {
+    const amount = parseFloat(payDialog.amount.replace(',', '.'))
+    if (isNaN(amount) || amount < 0) return
+    setPaying(true)
+    try {
+      await onPayment?.(payDialog.id, amount)
+      setPayDialog({ open: false, id: '', amount: '' })
+    } finally {
+      setPaying(false)
+    }
   }
 
   if (appointments.length === 0) {
@@ -77,6 +102,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {formatDateShort(apt.date)} à {formatTime(apt.time)}
+                  {apt.duration_minutes ? ` (${apt.duration_minutes} min)` : ''}
                 </span>
                 {apt.patient && (
                   <span className="flex items-center gap-1">
@@ -84,7 +110,55 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     {apt.patient.phone}
                   </span>
                 )}
+                {(apt.consultation_type?.name || apt.notes) && (
+                  <span className="flex items-center gap-1">
+                    <ClipboardList className="h-3 w-3" />
+                    {apt.consultation_type?.name || apt.notes}
+                  </span>
+                )}
+                {apt.amount_paid != null && (
+                  <span className="flex items-center gap-1 text-green-600 font-medium">
+                    <Wallet className="h-3 w-3" />
+                    {apt.amount_paid} DH payés
+                  </span>
+                )}
               </div>
+
+              {/* Patient arrivé + Payé — actions rapides du jour */}
+              {apt.status === 'confirmed' && (
+                <div className="flex gap-1.5 mt-2 flex-wrap max-w-full">
+                  {onAttendanceChange && (
+                    <button
+                      onClick={() => handleArrived(apt)}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium"
+                    >
+                      <DoorOpen className="h-3 w-3" /> Patient arrivé
+                    </button>
+                  )}
+                  {onPayment && (
+                    <button
+                      onClick={() => setPayDialog({ open: true, id: apt.id, amount: apt.amount_paid != null ? String(apt.amount_paid) : '' })}
+                      className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors font-medium ${
+                        apt.amount_paid != null
+                          ? 'bg-green-100 text-green-700 border-green-200'
+                          : 'border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-600'
+                      }`}
+                    >
+                      <Wallet className="h-3 w-3" /> {apt.amount_paid != null ? 'Modifier paiement' : 'Payé'}
+                    </button>
+                  )}
+                  {apt.amount_paid != null && (
+                    <a
+                      href={`/facture/${apt.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-primary-300 hover:text-primary-600 transition-colors font-medium"
+                    >
+                      <Printer className="h-3 w-3" /> Facture
+                    </a>
+                  )}
+                </div>
+              )}
 
               {/* Boutons présence — uniquement pour les RDV confirmés */}
               {apt.status === 'confirmed' && onAttendanceChange && (
@@ -182,6 +256,49 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
               className={confirmDialog.action === 'cancelled' ? 'bg-red-500 hover:bg-red-600' : ''}
             >
               {loading ? 'En cours…' : 'Confirmer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog saisie du montant payé */}
+      <Dialog open={payDialog.open} onOpenChange={(open) => setPayDialog((prev) => ({ ...prev, open }))}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Montant encaissé</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                autoFocus
+                value={payDialog.amount}
+                onChange={(e) => setPayDialog((prev) => ({ ...prev, amount: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmPayment() }}
+                placeholder="0"
+                className="pr-12 text-lg"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">DH</span>
+            </div>
+            {payDialog.amount && (
+              <button
+                type="button"
+                onClick={async () => { await onPayment?.(payDialog.id, null); setPayDialog({ open: false, id: '', amount: '' }) }}
+                className="text-xs text-gray-400 hover:text-red-500"
+              >
+                Annuler le paiement
+              </button>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPayDialog({ open: false, id: '', amount: '' })}>
+              Retour
+            </Button>
+            <Button onClick={handleConfirmPayment} disabled={paying || !payDialog.amount} className="bg-green-600 hover:bg-green-700">
+              {paying ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
           </DialogFooter>
         </DialogContent>

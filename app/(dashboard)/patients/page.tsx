@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment } from '@/types'
 import { getInitials, formatDateShort } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2 } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill } from 'lucide-react'
 
 interface PatientWithStats extends Patient {
   appointment_count: number
@@ -32,6 +32,9 @@ export default function PatientsPage() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [editAge, setEditAge] = useState<string>('')
   const [editNotes, setEditNotes] = useState<string>('')
+  const [editAllergies, setEditAllergies] = useState<string>('')
+  const [editChronic, setEditChronic] = useState<string>('')
+  const [editTreatments, setEditTreatments] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -101,6 +104,9 @@ export default function PatientsPage() {
     setSelectedPatient(patient)
     setEditAge(patient.age != null ? String(patient.age) : '')
     setEditNotes(patient.notes ?? '')
+    setEditAllergies(patient.allergies ?? '')
+    setEditChronic(patient.chronic_conditions ?? '')
+    setEditTreatments(patient.current_treatments ?? '')
     setLoadingHistory(true)
     setSaved(false)
 
@@ -118,15 +124,22 @@ export default function PatientsPage() {
   async function savePatientNotes() {
     if (!selectedPatient) return
     setSaving(true)
+    const updates = {
+      age: editAge ? Number(editAge) : null,
+      notes: editNotes || null,
+      allergies: editAllergies || null,
+      chronic_conditions: editChronic || null,
+      current_treatments: editTreatments || null,
+    }
     await supabase
       .from('patients')
-      .update({ age: editAge ? Number(editAge) : null, notes: editNotes || null })
+      .update(updates)
       .eq('id', selectedPatient.id)
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
     setPatients((prev) => prev.map((p) =>
-      p.id === selectedPatient.id ? { ...p, age: editAge ? Number(editAge) : null, notes: editNotes || null } : p
+      p.id === selectedPatient.id ? { ...p, ...updates } : p
     ))
   }
 
@@ -365,6 +378,17 @@ export default function PatientsPage() {
                 </p>
               </div>
 
+              {/* Alerte allergies — visible immédiatement à l'ouverture */}
+              {editAllergies.trim() && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <span className="font-semibold text-red-700">Allergies : </span>
+                    <span className="text-red-600">{editAllergies}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Stats présence */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-green-50 rounded-lg p-3 text-center">
@@ -400,12 +424,48 @@ export default function PatientsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs text-gray-500">Notes médicales</label>
+                  <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-red-400" /> Allergies
+                  </label>
+                  <textarea
+                    value={editAllergies}
+                    onChange={(e) => setEditAllergies(e.target.value)}
+                    placeholder="Ex: Pénicilline, arachides…"
+                    rows={2}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <HeartPulse className="h-3.5 w-3.5 text-orange-400" /> Antécédents / maladies chroniques
+                  </label>
+                  <textarea
+                    value={editChronic}
+                    onChange={(e) => setEditChronic(e.target.value)}
+                    placeholder="Ex: Diabète type 2, hypertension…"
+                    rows={2}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <Pill className="h-3.5 w-3.5 text-blue-400" /> Traitements en cours
+                  </label>
+                  <textarea
+                    value={editTreatments}
+                    onChange={(e) => setEditTreatments(e.target.value)}
+                    placeholder="Ex: Metformine 1000mg, …"
+                    rows={2}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500">Notes / observations</label>
                   <textarea
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
-                    placeholder="Antécédents, allergies, observations…"
-                    rows={4}
+                    placeholder="Observations diverses…"
+                    rows={3}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
                 </div>

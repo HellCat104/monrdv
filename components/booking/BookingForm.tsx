@@ -7,12 +7,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDateShort, formatTime } from '@/lib/utils'
 import { CheckCircle2, User, Phone, MessageSquare, Mail, Hash } from 'lucide-react'
-import type { Doctor } from '@/types'
+import type { Doctor, ConsultationType } from '@/types'
 
 interface BookingFormProps {
   doctor: Doctor
   selectedDate: string  // YYYY-MM-DD
   selectedTime: string  // HH:mm
+  consultationType?: ConsultationType | null
   onBack: () => void
   onSuccess: () => void
   onSlotTaken: () => void
@@ -26,7 +27,7 @@ interface MyProfile {
   age: number | null
 }
 
-export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
+export function BookingForm({ doctor, selectedDate, selectedTime, consultationType, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
   const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', age: '', notes: '' })
   const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -94,6 +95,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
           time: selectedTime,
           ...form,
           age: form.age ? parseInt(form.age, 10) : undefined,
+          consultation_type_id: consultationType?.id ?? undefined,
           public: true, // indique que c'est une réservation publique
         }),
       })
@@ -172,6 +174,11 @@ export function BookingForm({ doctor, selectedDate, selectedTime, onBack, onSucc
           {formatDateShort(selectedDate)} à {formatTime(selectedTime)}
         </p>
         <p className="text-xs text-primary-600">Dr. {doctor.name} — {doctor.specialty}</p>
+        {consultationType && (
+          <p className="text-xs text-primary-600 mt-0.5">
+            Motif : <strong>{consultationType.name}</strong> ({consultationType.duration_minutes} min)
+          </p>
+        )}
       </div>
 
       {/* Choix pour qui — uniquement si patient connecté */}

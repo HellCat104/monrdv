@@ -6,8 +6,8 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { TimeSlots } from '@/components/booking/TimeSlots'
 import { BookingForm } from '@/components/booking/BookingForm'
-import { Stethoscope, MapPin, Clock } from 'lucide-react'
-import type { Doctor, TimeSlot } from '@/types'
+import { Stethoscope, MapPin, Clock, ClipboardList } from 'lucide-react'
+import type { Doctor, TimeSlot, ConsultationType } from '@/types'
 
 // Chargement différé du calendrier — réduit le JS initial de ~30 kB
 const DatePicker = dynamic(
@@ -24,12 +24,13 @@ const DatePicker = dynamic(
 
 interface Props {
   doctor: Doctor
+  consultationTypes?: ConsultationType[]
 }
 
 // Étapes de réservation
 type Step = 'datetime' | 'form' | 'success'
 
-export function BookingPageClient({ doctor }: Props) {
+export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
   const [step, setStep] = useState<Step>('datetime')
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
@@ -38,6 +39,9 @@ export function BookingPageClient({ doctor }: Props) {
   const [slotTakenMsg, setSlotTakenMsg] = useState(false)
   const [blockedDates, setBlockedDates] = useState<Date[]>([])
   const [vacationNotices, setVacationNotices] = useState<string[]>([])
+  // Motif de consultation choisi (obligatoire si le médecin en a défini)
+  const hasTypes = consultationTypes.length > 0
+  const [selectedType, setSelectedType] = useState<ConsultationType | null>(null)
 
   // Charge les congés du médecin (dates à griser + messages publics)
   useEffect(() => {
@@ -51,6 +55,7 @@ export function BookingPageClient({ doctor }: Props) {
   }, [doctor.id])
 
   // Charge les créneaux disponibles dès qu'une date est sélectionnée
+  // (et recharge si le motif change — la durée des créneaux en dépend)
   useEffect(() => {
     if (!selectedDate) {
       setSlots([])
@@ -62,11 +67,12 @@ export function BookingPageClient({ doctor }: Props) {
     setSelectedTime(null)
     setLoadingSlots(true)
 
-    fetch(`/api/slots?doctor_id=${doctor.id}&date=${dateStr}`)
+    const typeParam = selectedType ? `&type=${selectedType.id}` : ''
+    fetch(`/api/slots?doctor_id=${doctor.id}&date=${dateStr}${typeParam}`)
       .then((r) => r.json())
       .then((data) => setSlots(data.slots ?? []))
       .finally(() => setLoadingSlots(false))
-  }, [selectedDate, doctor.id])
+  }, [selectedDate, doctor.id, selectedType])
 
   function handleDateSelect(date: Date | undefined) {
     setSelectedDate(date)
@@ -90,7 +96,8 @@ export function BookingPageClient({ doctor }: Props) {
     if (selectedDate) {
       const dateStr = format(selectedDate, 'yyyy-MM-dd')
       setLoadingSlots(true)
-      fetch(`/api/slots?doctor_id=${doctor.id}&date=${dateStr}`)
+      const typeParam = selectedType ? `&type=${selectedType.id}` : ''
+      fetch(`/api/slots?doctor_id=${doctor.id}&date=${dateStr}${typeParam}`)
         .then((r) => r.json())
         .then((data) => setSlots(data.slots ?? []))
         .finally(() => setLoadingSlots(false))
@@ -199,6 +206,39 @@ export function BookingPageClient({ doctor }: Props) {
                   ⚠️ Ce créneau vient d&apos;être pris. Veuillez en choisir un autre.
                 </div>
               )}
+
+              {/* Choix du motif (si le médecin a défini des motifs) */}
+              {hasTypes && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-primary-500" />
+                    Motif de votre visite
+                  </h3>
+                  <div className="grid gap-2">
+                    {consultationTypes.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setSelectedType(t)}
+                        className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 text-left transition-all ${
+                          selectedType?.id === t.id
+                            ? 'border-primary-500 bg-primary-50'
+                            : 'border-gray-200 hover:border-primary-200'
+                        }`}
+                      >
+                        <span className={`text-sm font-medium ${selectedType?.id === t.id ? 'text-primary-700' : 'text-gray-700'}`}>
+                          {t.name}
+                        </span>
+                        <span className="text-xs text-gray-400 shrink-0 ml-3">{t.duration_minutes} min</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Calendrier — affiché après le choix du motif (ou direct si pas de motifs) */}
+              {(!hasTypes || selectedType) && (
+                <>
               <h3 className="font-semibold text-gray-800">Choisissez une date</h3>
               {vacationNotices.length > 0 && (
                 <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm px-4 py-3 rounded-xl space-y-1">
@@ -216,6 +256,8 @@ export function BookingPageClient({ doctor }: Props) {
                 onSelect={handleDateSelect}
                 disabledDates={blockedDates}
               />
+                </>
+              )}
 
               {selectedDate && (
                 <>
@@ -249,6 +291,7 @@ export function BookingPageClient({ doctor }: Props) {
               doctor={doctor}
               selectedDate={dateStr}
               selectedTime={selectedTime}
+              consultationType={selectedType}
               onBack={() => setStep('datetime')}
               onSuccess={() => setStep('success')}
               onSlotTaken={handleSlotTaken}

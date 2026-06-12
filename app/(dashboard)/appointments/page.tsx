@@ -55,7 +55,7 @@ export default function AppointmentsPage() {
     try {
       let query = supabase
         .from('appointments')
-        .select('*, patient:patients(*)')
+        .select('*, patient:patients(*), consultation_type:consultation_types(*)')
         .eq('doctor_id', doctor.id)
         .order('date', { ascending: true })
         .order('time', { ascending: true })
@@ -115,6 +115,20 @@ export default function AppointmentsPage() {
     // Mise à jour optimiste locale
     setAppointments((prev) =>
       prev.map((a) => a.id === id ? { ...a, attendance } : a)
+    )
+  }
+
+  // Enregistre le montant payé (null = annuler le paiement)
+  async function handlePayment(id: string, amount: number | null) {
+    await fetch(`/api/appointments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount_paid: amount }),
+    })
+    setAppointments((prev) =>
+      prev.map((a) => a.id === id
+        ? { ...a, amount_paid: amount, paid_at: amount !== null ? new Date().toISOString() : null }
+        : a)
     )
   }
 
@@ -234,6 +248,7 @@ export default function AppointmentsPage() {
               appointments={filtered}
               onStatusChange={handleStatusChange}
               onAttendanceChange={handleAttendanceChange}
+              onPayment={handlePayment}
               onViewPatient={(patientId) => router.push(`/patients?patient=${patientId}`)}
             />
           )}
