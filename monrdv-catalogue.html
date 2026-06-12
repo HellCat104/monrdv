@@ -3,329 +3,226 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MonRDV — Catalogue Produit</title>
+<title>MonRDV — Votre cabinet, en ligne</title>
 <style>
   :root{
-    --ink:#0f172a; --muted:#64748b; --soft:#94a3b8;
-    --brand:#2563eb; --brand-d:#1d4ed8; --brand-soft:#eff6ff;
-    --teal:#0d9488; --teal-soft:#f0fdfa;
-    --line:#e2e8f0; --bg:#f8fafc; --white:#fff;
+    --ink:#0f2230; --body:#475c6b; --soft:#90a4b3;
+    --sky:#0EA5E9; --sky-d:#0369a1; --sky-50:#f0f9ff; --sky-100:#e0f2fe;
+    --line:#e6eef4; --white:#fff;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.55;-webkit-font-smoothing:antialiased}
-  .page{width:210mm;min-height:297mm;margin:0 auto 14px;background:var(--white);padding:18mm 16mm;position:relative;overflow:hidden}
-  .num{position:absolute;top:14mm;right:16mm;font-size:11px;letter-spacing:.12em;color:var(--soft);text-transform:uppercase;font-weight:600}
-  .kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--brand);font-weight:700;margin-bottom:14px}
-  h1{font-size:40px;line-height:1.1;font-weight:800;letter-spacing:-.02em}
-  h2{font-size:27px;line-height:1.15;font-weight:800;letter-spacing:-.01em;margin-bottom:6px}
-  h2 .accent{color:var(--brand)}
-  h3{font-size:15px;font-weight:700;margin-bottom:4px}
-  p{color:var(--muted);font-size:14px}
-  .lead{font-size:16px;color:#334155;max-width:62ch}
-  .foot{position:absolute;bottom:12mm;left:16mm;right:16mm;display:flex;justify-content:space-between;font-size:10px;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;border-top:1px solid var(--line);padding-top:8px}
-  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px}
-  .logo .mark{width:34px;height:34px;border-radius:9px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-  .card{border:1px solid var(--line);border-radius:14px;padding:16px 16px 15px;background:var(--white)}
-  .card .ico{width:30px;height:30px;border-radius:8px;background:var(--brand-soft);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:9px}
-  .card.teal .ico{background:var(--teal-soft);color:var(--teal)}
-  .card p{font-size:12.5px}
-  .pill{display:inline-block;font-size:11px;font-weight:700;color:var(--brand);background:var(--brand-soft);border-radius:999px;padding:3px 10px}
-  ul.feat{list-style:none;margin-top:10px}
-  ul.feat li{position:relative;padding-left:20px;margin-bottom:9px;font-size:13.5px;color:#334155}
-  ul.feat li::before{content:"";position:absolute;left:0;top:7px;width:8px;height:8px;border-radius:50%;background:var(--brand)}
-  ul.feat li b{color:var(--ink)}
-  .big-stat{display:flex;gap:26px;margin:22px 0 6px;flex-wrap:wrap}
-  .big-stat .s b{display:block;font-size:30px;font-weight:800;color:var(--brand);line-height:1}
-  .big-stat .s span{font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.08em}
-  .split{display:grid;grid-template-columns:1.1fr .9fr;gap:26px;align-items:start}
-  .mock{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--bg)}
-  .mock .bar{height:30px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:5px;padding:0 11px}
-  .mock .bar i{width:9px;height:9px;border-radius:50%;background:#e2e8f0;display:inline-block}
-  .mock .body{padding:13px}
-  .row{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:8px}
-  .row .av{width:26px;height:26px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
-  .row .meta{flex:1;min-width:0}
-  .row .meta b{font-size:12px;display:block}
-  .row .meta span{font-size:10.5px;color:var(--soft)}
-  .tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px}
-  .tag.green{background:#dcfce7;color:#15803d}.tag.amber{background:#ffedd5;color:#c2410c}.tag.blue{background:var(--brand-soft);color:var(--brand)}
-  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-  .cal .d{aspect-ratio:1;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:9px;color:#475569;padding:3px;position:relative}
-  .cal .d.on{border-color:var(--brand)}
-  .cal .d .c{position:absolute;bottom:3px;left:3px;right:3px;font-size:7.5px;font-weight:700;color:var(--brand);background:var(--brand-soft);border-radius:3px;text-align:center;padding:1px}
-  .why{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px}
-  .why .w{border-left:3px solid var(--brand);padding:2px 0 2px 14px}
-  .why .w b{font-size:14px}
-  .why .w p{font-size:12.5px;margin-top:2px}
-  .cover{background:linear-gradient(150deg,#0b1f4d 0%,#1d4ed8 55%,#0d9488 130%);color:#fff;display:flex;flex-direction:column;justify-content:space-between}
-  .cover .num{color:rgba(255,255,255,.55)}
-  .cover h1{font-size:46px;max-width:16ch}
-  .cover .logo{color:#fff}.cover .logo .mark{background:#fff;color:var(--brand)}
-  .cover .tagline{font-size:18px;color:rgba(255,255,255,.92);max-width:52ch;margin-top:18px;line-height:1.5}
-  .cover .meta-row{display:flex;gap:40px;border-top:1px solid rgba(255,255,255,.25);padding-top:18px}
-  .cover .meta-row b{display:block;font-size:13px}.cover .meta-row span{font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.1em;text-transform:uppercase}
-  .compare{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
-  .compare th,.compare td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
-  .compare th{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--soft)}
-  .compare td.y{color:var(--teal);font-weight:700}.compare td.n{color:var(--soft)}
-  .compare tr td:first-child{color:#334155}
-  .banner{background:var(--brand-soft);border:1px solid #dbeafe;border-radius:14px;padding:16px 18px;margin-top:16px}
-  .banner b{color:var(--brand-d)}
-  .contact{background:linear-gradient(150deg,#0b1f4d,#1d4ed8);color:#fff}
-  .contact h2{color:#fff}.contact .lead{color:rgba(255,255,255,.9)}
-  .contact .c{display:flex;gap:40px;margin-top:24px;flex-wrap:wrap}
-  .contact .c div span{font-size:10.5px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.1em;display:block}
-  .contact .c div b{font-size:16px;font-weight:700}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:#eef5fb;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .page{width:210mm;min-height:297mm;margin:0 auto 16px;background:var(--white);padding:20mm 18mm;position:relative;overflow:hidden}
+  .tag{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--sky);font-weight:700;margin-bottom:16px}
+  h1{font-size:42px;line-height:1.08;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+  h2{font-size:30px;line-height:1.12;font-weight:800;letter-spacing:-.015em;color:var(--ink)}
+  h2 .l{color:var(--sky)}
+  h3{font-size:15.5px;font-weight:700;color:var(--ink)}
+  p{color:var(--body);font-size:14.5px}
+  .lead{font-size:17px;color:var(--body);max-width:60ch;line-height:1.6}
+  .pgfoot{position:absolute;bottom:13mm;left:18mm;right:18mm;display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--soft);letter-spacing:.05em;border-top:1px solid var(--line);padding-top:9px}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:19px;color:var(--ink)}
+  .brand .m{width:36px;height:36px;border-radius:11px;background:var(--sky);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 6px 16px rgba(14,165,233,.35)}
+  .ico{width:42px;height:42px;border-radius:12px;background:var(--sky-50);display:flex;align-items:center;justify-content:center;margin-bottom:13px}
+  .ico svg{width:21px;height:21px;stroke:var(--sky);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .ico.fill{background:var(--sky)}.ico.fill svg{stroke:#fff}
+
+  /* COVER */
+  .cover{background:
+      radial-gradient(120% 80% at 85% -10%, #d6efff 0%, rgba(214,239,255,0) 55%),
+      radial-gradient(90% 70% at -10% 110%, #e6f6ff 0%, rgba(230,246,255,0) 60%),
+      #fff;
+      display:flex;flex-direction:column;justify-content:space-between}
+  .cover .blob{position:absolute;border-radius:50%;filter:blur(2px);opacity:.5}
+  .cover h1{font-size:48px;max-width:15ch;margin-top:6px}
+  .cover .sub{font-size:18.5px;color:var(--body);max-width:48ch;margin-top:20px;line-height:1.6}
+  .cover .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:30px}
+  .chip{font-size:12.5px;font-weight:600;color:var(--sky-d);background:var(--sky-50);border:1px solid var(--sky-100);border-radius:999px;padding:7px 15px;display:flex;align-items:center;gap:7px}
+  .chip svg{width:14px;height:14px;stroke:var(--sky);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .cover .row{display:flex;justify-content:space-between;align-items:flex-end}
+  .cover .url{font-size:13px;color:var(--soft);letter-spacing:.04em}
+
+  /* PILLARS */
+  .pillars{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:26px}
+  .pill{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:22px 20px}
+  .pill h3{margin-bottom:6px}.pill p{font-size:13.5px}
+
+  /* DAY TIMELINE */
+  .day{margin-top:24px;position:relative;padding-left:26px}
+  .day::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:linear-gradient(var(--sky-100),var(--sky-100))}
+  .step{position:relative;padding:0 0 20px 0}
+  .step::before{content:"";position:absolute;left:-23px;top:4px;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--sky)}
+  .step .t{font-size:11.5px;font-weight:700;color:var(--sky);letter-spacing:.04em}
+  .step h3{margin:2px 0 2px}
+  .step p{font-size:13.5px}
+
+  /* GET (grouped benefits) */
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:24px}
+  .col h3{display:flex;align-items:center;gap:9px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--sky-d);margin-bottom:12px}
+  .col ul{list-style:none}
+  .col li{position:relative;padding-left:22px;margin-bottom:11px;font-size:13.5px;color:var(--body)}
+  .col li::before{content:"";position:absolute;left:0;top:6px;width:13px;height:13px;border-radius:50%;background:var(--sky-50);box-shadow:inset 0 0 0 2px var(--sky)}
+  .col li b{color:var(--ink);font-weight:600}
+
+  /* TRUST */
+  .trust{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+  .tcard{background:var(--sky-50);border:1px solid var(--sky-100);border-radius:16px;padding:18px 20px}
+  .tcard h3{font-size:14.5px;margin-bottom:4px}.tcard p{font-size:13px}
+
+  /* QUOTE strip */
+  .strip{margin-top:26px;background:linear-gradient(100deg,var(--sky) 0%,#38bdf8 100%);border-radius:18px;padding:26px 28px;color:#fff;box-shadow:0 14px 30px rgba(14,165,233,.28)}
+  .strip p{color:#fff;font-size:17px;font-weight:600;line-height:1.45;max-width:52ch}
+  .strip span{display:block;margin-top:8px;font-size:13px;color:rgba(255,255,255,.85);font-weight:500}
+
+  /* CONTACT */
+  .contact{background:
+      radial-gradient(120% 80% at 80% -10%, #d6efff 0%, rgba(214,239,255,0) 55%), #fff;
+      display:flex;flex-direction:column;justify-content:space-between}
+  .contact .big{font-size:34px;font-weight:800;letter-spacing:-.015em;max-width:18ch;margin-top:6px}
+  .contact .cta{display:inline-flex;align-items:center;gap:10px;background:var(--sky);color:#fff;font-weight:700;font-size:15px;padding:14px 24px;border-radius:13px;margin-top:24px;box-shadow:0 12px 26px rgba(14,165,233,.35)}
+  .contact .cta svg{width:17px;height:17px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .contact .info{display:flex;gap:46px;margin-top:32px;flex-wrap:wrap}
+  .contact .info span{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--soft);display:block;margin-bottom:2px}
+  .contact .info b{font-size:16px;color:var(--ink)}
+
   @media print{
     body{background:#fff}
-    .page{margin:0;box-shadow:none;page-break-after:always;width:auto;min-height:auto;height:297mm}
+    .page{margin:0;width:auto;min-height:auto;height:297mm;page-break-after:always}
     .page:last-child{page-break-after:auto}
+    .strip,.cover,.contact{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
-  @media screen and (max-width:760px){.page{width:auto;padding:24px 18px}h1,.cover h1{font-size:30px}.split,.grid2,.grid3,.why{grid-template-columns:1fr}}
+  @media screen and (max-width:760px){.page{width:auto;padding:26px 20px}h1,.cover h1{font-size:32px}.pillars,.cols,.trust{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
 <!-- COVER -->
 <section class="page cover">
-  <div>
-    <div class="logo"><span class="mark">M</span> MonRDV</div>
-    <div class="num">Catalogue produit · V1.0 · 2026</div>
+  <div class="blob" style="width:240px;height:240px;background:#bfe7ff;top:-60px;right:-40px"></div>
+  <div class="row">
+    <div class="brand"><span class="m">M</span> MonRDV</div>
+    <div class="url">Prise de rendez-vous médical · Maroc</div>
   </div>
   <div>
-    <div class="kicker" style="color:#bfdbfe">Prise de rendez-vous &amp; gestion de cabinet</div>
-    <h1>Remplissez votre agenda. Gérez votre cabinet. Au même endroit.</h1>
-    <p class="tagline">La plateforme marocaine qui amène les patients à votre cabinet — réservation en ligne 24h/24 — et qui gère ensuite tout le reste : dossiers, encaissements, ordonnances et factures.</p>
+    <div class="tag">Pour les médecins qui veulent souffler</div>
+    <h1>Votre cabinet,<br>en ligne.</h1>
+    <p class="sub">Vos patients vous trouvent et réservent seuls, à toute heure. Vous gardez le contrôle de votre agenda — et du temps pour ce qui compte vraiment : soigner.</p>
+    <div class="chips">
+      <span class="chip"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Réservation 24h/24</span>
+      <span class="chip"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Rappels automatiques</span>
+      <span class="chip"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg> Toutes spécialités</span>
+    </div>
   </div>
-  <div class="meta-row">
-    <div><b>monrdv.co.ma</b><span>En ligne</span></div>
-    <div><b>Toutes spécialités</b><span>Configurable</span></div>
-    <div><b>Conforme loi 09-08</b><span>Données de santé</span></div>
-  </div>
+  <div class="pgfoot" style="border:none;color:var(--soft)"><span>www.monrdv.co.ma</span><span>Présentation · 2026</span></div>
 </section>
 
-<!-- VISION -->
+<!-- PROMISE + PILLARS -->
 <section class="page">
-  <div class="num">01 · Vision</div>
-  <div class="kicker">Pourquoi MonRDV</div>
-  <h2>Deux métiers, <span class="accent">un seul outil</span>.</h2>
-  <p class="lead">La plupart des logiciels gèrent l'intérieur du cabinet mais laissent l'agenda se remplir tout seul. MonRDV fait les deux : il <b>attire le patient</b> via une page de réservation publique référencée sur Google, puis il <b>orchestre la consultation</b> de l'arrivée du patient jusqu'à la facture.</p>
-  <div class="big-stat">
-    <div class="s"><b>24/7</b><span>Réservation en ligne</span></div>
-    <div class="s"><b>0</b><span>Installation requise</span></div>
-    <div class="s"><b>∞</b><span>Spécialités</span></div>
+  <div class="tag">Ce que ça change pour vous</div>
+  <h2>Vous soignez. <span class="l">On s'occupe du reste.</span></h2>
+  <p class="lead" style="margin-top:10px">Entre les appels pour fixer un rendez-vous, les absences de dernière minute et la paperasse de fin de journée, l'administratif grignote votre temps. MonRDV reprend cette charge à sa source.</p>
+  <div class="pillars">
+    <div class="pill">
+      <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+      <h3>Un agenda qui se remplit</h3>
+      <p>Votre page de réservation, visible sur Google, ouverte jour et nuit. Le patient choisit son créneau, vous le validez d'un coup d'œil.</p>
+    </div>
+    <div class="pill">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+      <h3>Moins d'absences</h3>
+      <p>Chaque patient reçoit une confirmation puis un rappel par email, automatiquement. Moins d'oublis, moins de créneaux perdus.</p>
+    </div>
+    <div class="pill">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M19 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><path d="M16 11h.01M3 10h18"/></svg></div>
+      <h3>Le cabinet géré, sans paperasse</h3>
+      <p>Dossiers, ordonnances, encaissements et factures réunis au même endroit. Tout suit le patient, automatiquement.</p>
+    </div>
   </div>
-  <div class="grid2" style="margin-top:18px">
-    <div class="card"><div class="ico">🔎</div><h3>Trouvé sur Google</h3><p>Chaque médecin a une page publique optimisée (SEO, ville, spécialité). Le patient vous trouve et réserve en quelques secondes.</p></div>
-    <div class="card"><div class="ico">⏰</div><h3>Rappels automatiques</h3><p>Confirmation et rappel par email envoyés tout seuls. Moins d'oublis, moins de créneaux perdus.</p></div>
-    <div class="card teal"><div class="ico">🩺</div><h3>Pensé par spécialité</h3><p>Motifs, durées et tarifs propres à chaque cabinet. Un dentiste et un pédiatre partent du même produit.</p></div>
-    <div class="card teal"><div class="ico">🔒</div><h3>Sécurisé par conception</h3><p>Cloisonnement strict des données par médecin (RLS), consentement horodaté, conforme à la loi 09-08.</p></div>
+  <div class="strip">
+    <p>« Un beau logiciel ne sert à rien si l'agenda reste vide. »</p>
+    <span>MonRDV commence par vous amener des patients — la gestion vient ensuite, naturellement.</span>
   </div>
-  <div class="foot"><span>MonRDV · Gestion de cabinet médical</span><span>03</span></div>
+  <div class="pgfoot"><span>MonRDV · Votre cabinet, en ligne</span><span>02</span></div>
 </section>
 
-<!-- MODULES -->
+<!-- A DAY WITH MONRDV -->
 <section class="page">
-  <div class="num">02 · Modules</div>
-  <div class="kicker">Tout le parcours</div>
-  <h2>De la <span class="accent">réservation</span> à la <span class="accent">facture</span>.</h2>
-  <p class="lead">Chaque brique fonctionne avec les autres — le même dossier patient alimente l'agenda, les ordonnances et la facturation.</p>
-  <div class="grid3" style="margin-top:18px">
-    <div class="card"><div class="ico">📅</div><h3>Réservation en ligne</h3><p>Page publique, choix du motif, créneaux en temps réel.</p></div>
-    <div class="card"><div class="ico">🗓️</div><h3>Agenda intelligent</h3><p>Vues jour / semaine / mois, durées variables, anti-chevauchement.</p></div>
-    <div class="card"><div class="ico">👥</div><h3>Dossier patient</h3><p>Antécédents, allergies, traitements, documents.</p></div>
-    <div class="card"><div class="ico">📝</div><h3>Notes de consultation</h3><p>Historique daté, suivi dans le temps.</p></div>
-    <div class="card"><div class="ico">💊</div><h3>Ordonnances</h3><p>Rédaction et impression à l'en-tête du praticien.</p></div>
-    <div class="card"><div class="ico">💰</div><h3>Encaissement</h3><p>Paiements partiels, mode de règlement, suivi du reste dû.</p></div>
-    <div class="card"><div class="ico">🧾</div><h3>Factures &amp; reçus</h3><p>Imprimables, aux normes (ICE / INPE).</p></div>
-    <div class="card"><div class="ico">📊</div><h3>Statistiques</h3><p>Revenus jour / mois, assiduité, export comptable.</p></div>
-    <div class="card"><div class="ico">⚙️</div><h3>Paramètres cabinet</h3><p>Horaires, congés, motifs, tarifs, profil.</p></div>
+  <div class="tag">Le quotidien</div>
+  <h2>Une journée <span class="l">avec MonRDV</span>.</h2>
+  <p class="lead" style="margin-top:10px">Du premier café à la fermeture, voici comment l'outil travaille pour vous — sans que vous y pensiez.</p>
+  <div class="day">
+    <div class="step"><div class="t">PENDANT LA NUIT</div><h3>Un patient réserve en ligne</h3><p>Il a trouvé votre page, choisi le motif « Première consultation », réservé à 9h00. Vous le découvrez le matin, déjà dans votre agenda.</p></div>
+    <div class="step"><div class="t">LA VEILLE AU SOIR</div><h3>Le rappel part tout seul</h3><p>Un email de rappel a été envoyé automatiquement. Le patient sait qu'il a rendez-vous — vous n'avez décroché aucun téléphone.</p></div>
+    <div class="step"><div class="t">9H00</div><h3>« Patient arrivé »</h3><p>Un clic et sa fiche s'ouvre : ses allergies s'affichent en rouge, son historique est là. Vous consultez l'esprit tranquille.</p></div>
+    <div class="step"><div class="t">9H30</div><h3>Note &amp; ordonnance</h3><p>Vous ajoutez une note datée au dossier et imprimez l'ordonnance à votre en-tête, en quelques secondes.</p></div>
+    <div class="step"><div class="t">9H40</div><h3>Encaissement</h3><p>Le patient règle 200 sur 300 DH par carte. Le reste à payer est suivi automatiquement, la facture est prête à imprimer.</p></div>
+    <div class="step"><div class="t">LE SOIR</div><h3>Vous voyez où vous en êtes</h3><p>Revenu du jour, du mois, taux de présence — d'un coup d'œil. Et l'export comptable est à un clic.</p></div>
   </div>
-  <div class="foot"><span>MonRDV · Gestion de cabinet médical</span><span>04</span></div>
+  <div class="pgfoot"><span>MonRDV · Votre cabinet, en ligne</span><span>03</span></div>
 </section>
 
-<!-- BOOKING (differentiator) -->
+<!-- WHAT YOU GET -->
 <section class="page">
-  <div class="num">03 · Réservation en ligne</div>
-  <div class="kicker">Ce qui nous distingue</div>
-  <h2>Un agenda qui <span class="accent">se remplit tout seul</span>.</h2>
-  <div class="split" style="margin-top:18px">
-    <div>
-      <p class="lead">Votre page publique est une vraie destination patient : il choisit le motif de sa visite, voit les créneaux réellement disponibles et reçoit sa confirmation par email — sans appel, sans attente.</p>
-      <ul class="feat">
-        <li><b>Page médecin référencée</b> par ville et spécialité (SEO).</li>
-        <li><b>Choix du motif</b> → la durée du créneau s'adapte automatiquement.</li>
-        <li><b>Confirmation + rappel email</b> envoyés automatiquement.</li>
-        <li><b>Annulation sécurisée</b> par le patient via lien unique.</li>
-        <li><b>Anti-doublon</b> : deux patients ne peuvent jamais réserver le même créneau.</li>
+  <div class="tag">Tout est inclus</div>
+  <h2>Ce que vous <span class="l">obtenez</span>.</h2>
+  <p class="lead" style="margin-top:10px">Trois faces d'un même outil — pensées pour fonctionner ensemble.</p>
+  <div class="cols">
+    <div class="col">
+      <h3><span class="ico" style="width:28px;height:28px;margin:0"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span> Côté patients</h3>
+      <ul>
+        <li><b>Page de réservation</b> à votre nom, référencée sur Google</li>
+        <li><b>Choix du motif</b> &amp; créneaux en temps réel</li>
+        <li><b>Confirmations &amp; rappels</b> par email</li>
+        <li><b>Annulation autonome</b> et sécurisée</li>
       </ul>
     </div>
-    <div class="mock">
-      <div class="bar"><i></i><i></i><i></i></div>
-      <div class="body">
-        <div style="font-size:11px;font-weight:700;margin-bottom:8px">Dr. Bennani — Pédiatre</div>
-        <div class="row"><span class="tag blue">Première consultation · 45 min</span></div>
-        <div class="row"><span class="tag blue" style="background:#fff;border:1px solid var(--line);color:#475569">Suivi · 15 min</span></div>
-        <div style="font-size:10px;color:var(--soft);margin:10px 0 6px;text-transform:uppercase;letter-spacing:.08em">Créneaux · Mar. 16 juin</div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap">
-          <span class="tag blue">09:00</span><span class="tag green">09:45</span><span class="tag blue">10:30</span><span class="tag blue">11:15</span>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="banner"><b>L'argument clé :</b> un beau logiciel de gestion ne sert à rien si l'agenda est vide. MonRDV est d'abord un canal d'acquisition de patients — la gestion vient par-dessus.</div>
-  <div class="foot"><span>MonRDV · Gestion de cabinet médical</span><span>05</span></div>
-</section>
-
-<!-- AGENDA -->
-<section class="page">
-  <div class="num">04 · Agenda</div>
-  <div class="kicker">Planification</div>
-  <h2>Un planning qui <span class="accent">anticipe</span>.</h2>
-  <div class="split" style="margin-top:18px">
-    <div>
-      <p class="lead">Trois niveaux de lecture, des durées qui s'adaptent au motif, et une protection en base de données contre les doubles réservations.</p>
-      <ul class="feat">
-        <li><b>Jour · Semaine · Mois</b> — du détail à la vue d'ensemble.</li>
-        <li><b>Durées variables</b> selon le motif de consultation.</li>
-        <li><b>« Patient arrivé »</b> ouvre directement la fiche du patient.</li>
-        <li><b>Congés &amp; pauses</b> configurables, jours fermés respectés.</li>
-        <li><b>Anti-chevauchement</b> garanti par la base, pas seulement l'écran.</li>
+    <div class="col">
+      <h3><span class="ico" style="width:28px;height:28px;margin:0"><svg viewBox="0 0 24 24"><path d="M19 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><path d="M3 10h18"/></svg></span> Côté cabinet</h3>
+      <ul>
+        <li><b>Agenda</b> jour / semaine / mois, durées variables</li>
+        <li><b>Dossier patient</b> : allergies, antécédents, traitements</li>
+        <li><b>Notes de consultation</b> datées</li>
+        <li><b>Documents</b> : analyses &amp; radios, stockés en sécurité</li>
+        <li><b>Ordonnances</b> imprimables à votre en-tête</li>
       </ul>
     </div>
-    <div class="mock">
-      <div class="bar"><i></i><i></i><i></i></div>
-      <div class="body">
-        <div style="font-size:11px;font-weight:700;margin-bottom:8px">Juin 2026</div>
-        <div class="cal" style="margin-bottom:6px">
-          <div style="font-size:8px;color:var(--soft);text-align:center">L</div><div style="font-size:8px;color:var(--soft);text-align:center">M</div><div style="font-size:8px;color:var(--soft);text-align:center">M</div><div style="font-size:8px;color:var(--soft);text-align:center">J</div><div style="font-size:8px;color:var(--soft);text-align:center">V</div><div style="font-size:8px;color:var(--soft);text-align:center">S</div><div style="font-size:8px;color:var(--soft);text-align:center">D</div>
-        </div>
-        <div class="cal">
-          <div class="d">9</div><div class="d on">10<span class="c">5</span></div><div class="d">11<span class="c">3</span></div><div class="d">12<span class="c">8</span></div><div class="d">13</div><div class="d" style="background:#f8fafc">14</div><div class="d" style="background:#f8fafc">15</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="foot"><span>MonRDV · Gestion de cabinet médical</span><span>06</span></div>
-</section>
-
-<!-- PATIENT 360 -->
-<section class="page">
-  <div class="num">05 · Patients</div>
-  <div class="kicker">Dossier unifié</div>
-  <h2>Chaque patient, <span class="accent">parfaitement suivi</span>.</h2>
-  <div class="split" style="margin-top:18px">
-    <div>
-      <p class="lead">Un dossier qui rassemble tout : coordonnées, antécédents critiques, historique des visites, notes datées, ordonnances et documents.</p>
-      <ul class="feat">
-        <li><b>Allergies en première ligne</b> — affichées en rouge dès l'ouverture, jamais ratées.</li>
-        <li><b>Antécédents &amp; traitements</b> en cours, modifiables à tout moment.</li>
-        <li><b>Notes de consultation datées</b> — un vrai journal de suivi.</li>
-        <li><b>Documents</b> : analyses, radios scannées, ordonnances — stockage chiffré privé.</li>
-        <li><b>Statistiques d'assiduité</b> (présences, retards, absences).</li>
+    <div class="col">
+      <h3><span class="ico" style="width:28px;height:28px;margin:0"><svg viewBox="0 0 24 24"><path d="M19 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><path d="M16 11h.01"/></svg></span> Côté revenus</h3>
+      <ul>
+        <li><b>Encaissement</b> &amp; paiements partiels</li>
+        <li><b>Tarifs</b> par motif, pré-remplis</li>
+        <li><b>Factures &amp; reçus</b> aux normes (ICE / INPE)</li>
+        <li><b>Statistiques</b> revenus &amp; assiduité</li>
+        <li><b>Export comptable</b> en un clic</li>
       </ul>
     </div>
-    <div class="mock">
-      <div class="bar"><i></i><i></i><i></i></div>
-      <div class="body">
-        <div class="row"><span class="av">MA</span><div class="meta"><b>Mohammed Alami</b><span>35 ans · 06 12 •• •• 78</span></div></div>
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 10px;font-size:11px;color:#b91c1c;margin-bottom:8px"><b>⚠ Allergies :</b> Pénicilline</div>
-        <div class="row"><div class="meta"><b>12/06 — Angine</b><span>Repos 3j, paracétamol</span></div><span class="tag green">Note</span></div>
-        <div class="row"><div class="meta"><b>analyse-sang.pdf</b><span>05/06/2026</span></div><span class="tag blue">📎 Doc</span></div>
-      </div>
-    </div>
   </div>
-  <div class="foot"><span>MonRDV · Gestion de cabinet médical</span><span>07</span></div>
+  <div class="pgfoot"><span>MonRDV · Votre cabinet, en ligne</span><span>04</span></div>
 </section>
 
-<!-- ENCAISSEMENT + FACTURE -->
-<section class="page">
-  <div class="num">06 · Argent</div>
-  <div class="kicker">Encaissement &amp; facturation</div>
-  <h2>L'argent, <span class="accent">en toute simplicité</span>.</h2>
-  <div class="split" style="margin-top:18px">
-    <div>
-      <p class="lead">Encaissez en un clic depuis l'agenda, gérez les paiements partiels, et générez une facture conforme prête à imprimer.</p>
-      <ul class="feat">
-        <li><b>Paiements partiels</b> : total dû, encaissé, reste à payer suivi automatiquement.</li>
-        <li><b>Mode de règlement</b> : espèces, carte, chèque, virement.</li>
-        <li><b>Tarif pré-rempli</b> depuis le motif de consultation.</li>
-        <li><b>Facture / reçu</b> imprimable aux normes marocaines (ICE / INPE).</li>
-        <li><b>Export comptable</b> CSV de tous les paiements en un clic.</li>
-      </ul>
-    </div>
-    <div class="mock">
-      <div class="bar"><i></i><i></i><i></i></div>
-      <div class="body">
-        <div style="font-size:11px;font-weight:700;margin-bottom:10px">Encaissement</div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:6px"><span>Total dû</span><b>300 DH</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:6px"><span>Encaissé (Carte)</span><b>200 DH</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#c2410c;font-weight:700;border-top:1px solid var(--line);padding-top:8px"><span>Reste à payer</span><span>100 DH</span></div>
-        <div style="margin-top:10px;display:flex;gap:5px"><span class="tag amber">Partiel</span><span class="tag blue">🧾 Facture</span></div>
-      </div>
-    </div>
-  </div>
-  <div class="foot"><span>MonRDV · Gestion de cabinet médical</span><span>08</span></div>
-</section>
-
-<!-- SECURITE -->
-<section class="page">
-  <div class="num">07 · Sécurité &amp; conformité</div>
-  <div class="kicker">Confiance par conception</div>
-  <h2>Conçu pour la <span class="accent">confiance médicale</span>.</h2>
-  <p class="lead">Les données de santé sont ce qu'un cabinet a de plus sensible. MonRDV les traite comme telles, à chaque niveau.</p>
-  <div class="grid2" style="margin-top:18px">
-    <div class="card"><h3>Cloisonnement strict par médecin</h3><p>Chaque praticien n'accède qu'à ses propres patients, notes et documents — appliqué au niveau de la base de données (RLS), pas seulement l'écran.</p></div>
-    <div class="card"><h3>Documents chiffrés &amp; privés</h3><p>Les fichiers patients vivent dans un stockage privé, accessibles uniquement via des liens signés temporaires.</p></div>
-    <div class="card"><h3>Consentement horodaté</h3><p>Chaque réservation enregistre le consentement du patient au traitement de ses données — conforme à la loi 09-08 (CNDP).</p></div>
-    <div class="card"><h3>Droit à l'effacement</h3><p>La suppression d'un compte patient efface réellement ses données personnelles et médicales.</p></div>
-  </div>
-  <div class="banner">Transport chiffré (TLS) · authentification sur chaque requête · secrets gérés hors du code · hébergement cloud managé.</div>
-  <div class="foot"><span>MonRDV · Gestion de cabinet médical</span><span>09</span></div>
-</section>
-
-<!-- POURQUOI / DIFFERENCIATION -->
-<section class="page">
-  <div class="num">08 · Pourquoi MonRDV</div>
-  <div class="kicker">Différenciation</div>
-  <h2>Pas un logiciel de plus. <span class="accent">Votre porte d'entrée patient.</span></h2>
-  <div class="why" style="margin-top:18px">
-    <div class="w"><b>01 · On remplit l'agenda, pas seulement on le gère.</b><p>Réservation en ligne référencée sur Google : les patients vous trouvent et réservent seuls, 24h/24.</p></div>
-    <div class="w"><b>02 · Zéro friction.</b><p>Inscription, lien partagé, premiers RDV le jour même. Aucune installation, aucune formation lourde.</p></div>
-    <div class="w"><b>03 · Rappels automatiques inclus.</b><p>Confirmations et rappels par email — moins d'absences, plus de revenus.</p></div>
-    <div class="w"><b>04 · Un dossier unifié.</b><p>Réservation, dossier, ordonnance, encaissement et facture dans un seul flux cohérent.</p></div>
-    <div class="w"><b>05 · Pensé pour le Maroc.</b><p>Factures ICE / INPE, conformité loi 09-08, langue française, fuseau marocain.</p></div>
-    <div class="w"><b>06 · Toutes spécialités.</b><p>Motifs, durées et tarifs configurables — du généraliste au dentiste, sans logiciel dédié.</p></div>
-  </div>
-  <table class="compare">
-    <tr><th>Capacité</th><th>MonRDV</th><th>Logiciel de gestion classique</th></tr>
-    <tr><td>Réservation en ligne par le patient</td><td class="y">Oui</td><td class="n">Rare</td></tr>
-    <tr><td>Page publique référencée (SEO)</td><td class="y">Oui</td><td class="n">Non</td></tr>
-    <tr><td>Rappels automatiques par email</td><td class="y">Oui</td><td class="n">Variable</td></tr>
-    <tr><td>Dossier, ordonnance, facturation</td><td class="y">Oui</td><td class="y">Oui</td></tr>
-    <tr><td>Mise en route sans installation</td><td class="y">Oui</td><td class="n">Non</td></tr>
-  </table>
-  <div class="foot"><span>MonRDV · Gestion de cabinet médical</span><span>10</span></div>
-</section>
-
-<!-- CONTACT -->
+<!-- TRUST + CONTACT (same page, light) -->
 <section class="page contact">
   <div>
-    <div class="logo" style="color:#fff"><span class="mark">M</span> MonRDV</div>
-    <div class="num">Contact</div>
+    <div class="brand"><span class="m">M</span> MonRDV</div>
+    <div class="tag" style="margin-top:26px">Vos données en confiance</div>
+    <h2>Sérieux là où <span class="l">ça compte</span>.</h2>
+    <div class="trust">
+      <div class="tcard"><h3>Chaque cabinet, isolé</h3><p>Vous n'accédez qu'à vos propres patients et dossiers — garanti au cœur du système.</p></div>
+      <div class="tcard"><h3>Documents protégés</h3><p>Les fichiers de vos patients sont privés, accessibles uniquement par vous via un lien sécurisé.</p></div>
+      <div class="tcard"><h3>Conforme loi 09-08</h3><p>Consentement enregistré, droit à l'effacement respecté — comme l'exige la CNDP.</p></div>
+      <div class="tcard"><h3>Sans installation</h3><p>Tout fonctionne dans le navigateur. Aucun logiciel à installer, aucune maintenance.</p></div>
+    </div>
   </div>
   <div>
-    <div class="kicker" style="color:#bfdbfe">Prêt à démarrer ?</div>
-    <h2>Mettons votre cabinet en ligne.</h2>
-    <p class="lead">Créez votre page, partagez votre lien, recevez vos premiers rendez-vous dès aujourd'hui — puis gérez tout votre cabinet au même endroit.</p>
-    <div class="c">
-      <div><span>Web</span><b>www.monrdv.co.ma</b></div>
+    <div class="tag" style="margin-bottom:6px">Prêt à essayer ?</div>
+    <div class="big">Mettez votre cabinet en ligne aujourd'hui.</div>
+    <div class="cta"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg> www.monrdv.co.ma</div>
+    <div class="info">
+      <div><span>En ligne</span><b>www.monrdv.co.ma</b></div>
       <div><span>Couverture</span><b>Maroc · Toutes spécialités</b></div>
     </div>
   </div>
-  <div class="foot" style="color:rgba(255,255,255,.5);border-top-color:rgba(255,255,255,.2)"><span>© 2026 MonRDV · Tous droits réservés</span><span>Catalogue V1.0 · Français</span></div>
+  <div class="pgfoot"><span>© 2026 MonRDV</span><span>Présentation · Français</span></div>
 </section>
 
 </body>
