@@ -25,6 +25,8 @@ export default function SettingsPage() {
     city: '',
     address: '',
     bio: '',
+    ice: '',
+    inpe: '',
     appointment_duration: 30,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
   })
@@ -42,6 +44,7 @@ export default function SettingsPage() {
   const [consultTypes, setConsultTypes] = useState<ConsultationType[]>([])
   const [newTypeName, setNewTypeName] = useState('')
   const [newTypeDuration, setNewTypeDuration] = useState('30')
+  const [newTypePrice, setNewTypePrice] = useState('')
   const [typeLoading, setTypeLoading] = useState(false)
   const supabase = createClient()
 
@@ -64,6 +67,8 @@ export default function SettingsPage() {
           city: data.city ?? '',
           address: data.address ?? '',
           bio: data.bio ?? '',
+          ice: data.ice ?? '',
+          inpe: data.inpe ?? '',
           appointment_duration: data.appointment_duration,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
         })
@@ -92,12 +97,14 @@ export default function SettingsPage() {
   async function handleAddConsultType() {
     if (!doctor || !newTypeName.trim()) return
     setTypeLoading(true)
+    const priceNum = parseFloat(newTypePrice.replace(',', '.'))
     const { data, error } = await supabase
       .from('consultation_types')
       .insert({
         doctor_id: doctor.id,
         name: newTypeName.trim().substring(0, 80),
         duration_minutes: parseInt(newTypeDuration, 10) || 30,
+        default_price: !isNaN(priceNum) && priceNum >= 0 ? priceNum : null,
       })
       .select()
       .single()
@@ -106,6 +113,7 @@ export default function SettingsPage() {
       setConsultTypes((prev) => [...prev, data])
       setNewTypeName('')
       setNewTypeDuration('30')
+      setNewTypePrice('')
     }
   }
 
@@ -170,6 +178,8 @@ export default function SettingsPage() {
           city: form.city,
           address: form.address,
           bio: form.bio || null,
+          ice: form.ice.trim() || null,
+          inpe: form.inpe.trim() || null,
           appointment_duration: form.appointment_duration,
           working_hours: form.working_hours,
         })
@@ -444,6 +454,32 @@ export default function SettingsPage() {
               />
               <p className="text-xs text-gray-400">{form.bio.length}/500 caractères · Affichée sur votre page publique</p>
             </div>
+
+            {/* Identifiants légaux (facture) */}
+            <Separator />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="s_ice">ICE (optionnel)</Label>
+                <Input
+                  id="s_ice"
+                  value={form.ice}
+                  onChange={(e) => setForm({ ...form, ice: e.target.value })}
+                  placeholder="Identifiant Commun de l'Entreprise"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="s_inpe">INPE (optionnel)</Label>
+                <Input
+                  id="s_inpe"
+                  value={form.inpe}
+                  onChange={(e) => setForm({ ...form, inpe: e.target.value })}
+                  placeholder="N° professionnel de santé"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 -mt-2">
+              Ces identifiants apparaîtront sur les factures/reçus imprimés.
+            </p>
           </CardContent>
         </Card>
 
@@ -542,11 +578,16 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 {consultTypes.map((t) => (
                   <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
                       <span className="text-sm font-medium text-gray-800 truncate">{t.name}</span>
                       <span className="text-xs text-primary-600 bg-primary-50 rounded-full px-2 py-0.5 shrink-0">
                         {t.duration_minutes} min
                       </span>
+                      {t.default_price != null && (
+                        <span className="text-xs text-green-700 bg-green-50 rounded-full px-2 py-0.5 shrink-0">
+                          {t.default_price} DH
+                        </span>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -570,7 +611,7 @@ export default function SettingsPage() {
                 className="flex-1"
               />
               <Select value={newTypeDuration} onValueChange={setNewTypeDuration}>
-                <SelectTrigger className="w-36 shrink-0">
+                <SelectTrigger className="w-32 shrink-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -583,6 +624,18 @@ export default function SettingsPage() {
                   <SelectItem value="90">1h30</SelectItem>
                 </SelectContent>
               </Select>
+              <div className="relative w-28 shrink-0">
+                <Input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={newTypePrice}
+                  onChange={(e) => setNewTypePrice(e.target.value)}
+                  placeholder="Tarif"
+                  className="pr-9"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">DH</span>
+              </div>
               <Button
                 type="button"
                 variant="outline"
@@ -591,9 +644,12 @@ export default function SettingsPage() {
                 className="shrink-0"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                {typeLoading ? 'Ajout…' : 'Ajouter le motif'}
+                {typeLoading ? 'Ajout…' : 'Ajouter'}
               </Button>
             </div>
+            <p className="text-xs text-gray-400">
+              Le tarif est optionnel — s&apos;il est renseigné, le montant sera pré-rempli à l&apos;encaissement.
+            </p>
           </CardContent>
         </Card>
 

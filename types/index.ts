@@ -14,6 +14,9 @@ export interface Doctor {
   status?: string
   subscription_status?: string
   cnom_number?: string
+  // Identifiants légaux (facture marocaine)
+  ice?: string | null
+  inpe?: string | null
   working_hours: WorkingHours
   appointment_duration: number // en minutes : 15, 20 ou 30
   created_at: string
@@ -74,6 +77,7 @@ export interface ConsultationType {
   doctor_id: string
   name: string
   duration_minutes: number
+  default_price?: number | null // tarif pré-rempli à l'encaissement
   active: boolean
   created_at: string
 }
@@ -85,6 +89,16 @@ export interface ConsultationNote {
   patient_id: string
   appointment_id?: string | null
   note: string
+  created_at: string
+}
+
+// Ordonnance imprimable
+export interface Prescription {
+  id: string
+  doctor_id: string
+  patient_id: string
+  appointment_id?: string | null
+  content: string
   created_at: string
 }
 

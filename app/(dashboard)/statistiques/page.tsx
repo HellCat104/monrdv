@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getNowInMaroc, formatDateFr } from '@/lib/utils'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { Button } from '@/components/ui/button'
 import {
-  BarChart3, Wallet, CalendarCheck, UserCheck, UserX, Timer, TrendingUp,
+  BarChart3, Wallet, CalendarCheck, UserCheck, UserX, Timer, TrendingUp, Download,
 } from 'lucide-react'
 import type { Appointment } from '@/types'
 
@@ -24,8 +25,17 @@ interface Stats {
   revenueByMonth: { label: string; total: number }[]
 }
 
+// Une ligne de paiement pour l'export comptable
+interface PaymentRow {
+  date: string      // date de paiement (YYYY-MM-DD)
+  patient: string
+  motif: string
+  amount: number
+}
+
 export default function StatistiquesPage() {
   const [stats, setStats] = useState<Stats | null>(null)
+  const [payments, setPayments] = useState<PaymentRow[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
@@ -37,14 +47,14 @@ export default function StatistiquesPage() {
         .from('doctors').select('id').eq('email', user.email).single()
       if (!doctor) return
 
-      // Tous les RDV non annulés (avec montant + date)
+      // Tous les RDV non annulés (avec montant + date + patient + motif pour l'export)
       const { data: apts } = await supabase
         .from('appointments')
-        .select('date, time, status, attendance, amount_paid, paid_at, duration_minutes')
+        .select('date, time, status, attendance, amount_paid, paid_at, duration_minutes, notes, patient:patients(first_name, last_name), consultation_type:consultation_types(name)')
         .eq('doctor_id', doctor.id)
         .neq('status', 'cancelled')
 
-      const list = (apts ?? []) as Appointment[]
+      const list = (apts ?? []) as unknown as Appointment[]
       const now = getNowInMaroc()
       const todayStr = format(now, 'yyyy-MM-dd')
       const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
@@ -57,6 +67,7 @@ export default function StatistiquesPage() {
       let countToday = 0, countMonth = 0
       let present = 0, absent = 0, late = 0
       const byMonth = new Map<string, number>()
+      const paymentRows: PaymentRow[] = []
 
       for (const a of list) {
         const amt = a.amount_paid ?? 0
@@ -67,6 +78,12 @@ export default function StatistiquesPage() {
           if (d >= monthStart && d <= monthEnd) revenueMonth += amt
           const mk = d.slice(0, 7) // YYYY-MM
           byMonth.set(mk, (byMonth.get(mk) ?? 0) + amt)
+          paymentRows.push({
+            date: d,
+            patient: a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : '',
+            motif: a.consultation_type?.name || a.notes || '',
+            amount: amt,
+          })
         }
         if (a.date === todayStr) countToday++
         if (a.date >= monthStart && a.date <= monthEnd) countMonth++
@@ -74,6 +91,10 @@ export default function StatistiquesPage() {
         else if (a.attendance === 'absent') absent++
         else if (a.attendance === 'late') late++
       }
+
+      // Trié du plus récent au plus ancien pour l'export
+      paymentRows.sort((x, y) => y.date.localeCompare(x.date))
+      setPayments(paymentRows)
 
       // 6 derniers mois de CA (du plus ancien au plus récent)
       const revenueByMonth = Array.from(byMonth.entries())
@@ -97,6 +118,27 @@ export default function StatistiquesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Export comptable : télécharge tous les paiements en CSV (ouvrable dans Excel)
+  function exportCSV() {
+    const esc = (v: string | number) => {
+      const s = String(v)
+      return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const header = ['Date', 'Patient', 'Motif', 'Montant (DH)']
+    const lines = payments.map((p) => [p.date, p.patient, p.motif, p.amount].map(esc).join(';'))
+    const total = payments.reduce((sum, p) => sum + p.amount, 0)
+    lines.push(['', '', 'TOTAL', total].map(esc).join(';'))
+    // BOM UTF-8 pour qu'Excel affiche correctement les accents
+    const csv = '﻿' + [header.join(';'), ...lines].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `paiements-monrdv-${format(getNowInMaroc(), 'yyyy-MM-dd')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   if (loading || !stats) {
     return (
       <div className="space-y-6">
@@ -116,9 +158,21 @@ export default function StatistiquesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Statistiques du cabinet</h1>
-        <p className="text-sm text-gray-500 mt-1 capitalize">{formatDateFr(getNowInMaroc())}</p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Statistiques du cabinet</h1>
+          <p className="text-sm text-gray-500 mt-1 capitalize">{formatDateFr(getNowInMaroc())}</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={exportCSV}
+          disabled={payments.length === 0}
+          className="shrink-0"
+          title={payments.length === 0 ? 'Aucun paiement à exporter' : 'Exporter les paiements en CSV'}
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export comptable ({payments.length})
+        </Button>
       </div>
 
       {/* Revenus */}

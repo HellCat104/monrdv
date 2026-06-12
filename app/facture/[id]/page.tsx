@@ -20,7 +20,7 @@ export default async function FacturePage({ params }: Props) {
   // Médecin connecté
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, email')
+    .select('id, name, specialty, address, city, phone, email, ice, inpe')
     .eq('email', user.email)
     .single()
 
@@ -58,6 +58,13 @@ export default async function FacturePage({ params }: Props) {
             {doctor.address && <p className="text-sm text-gray-500 mt-1">{doctor.address}</p>}
             {doctor.city && <p className="text-sm text-gray-500">{doctor.city}</p>}
             {doctor.phone && <p className="text-sm text-gray-500 mt-1">Tél : {doctor.phone}</p>}
+            {(doctor.ice || doctor.inpe) && (
+              <p className="text-xs text-gray-400 mt-1">
+                {doctor.ice && <span>ICE : {doctor.ice}</span>}
+                {doctor.ice && doctor.inpe && <span> · </span>}
+                {doctor.inpe && <span>INPE : {doctor.inpe}</span>}
+              </p>
+            )}
           </div>
           <div className="text-right">
             <h2 className="text-lg font-bold text-gray-800">REÇU</h2>

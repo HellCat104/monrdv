@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { formatDateShort, formatTime, getInitials } from '@/lib/utils'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance } from '@/types'
-import { Phone, Clock, UserCheck, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList } from 'lucide-react'
+import { Phone, Clock, UserCheck, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText } from 'lucide-react'
 
 interface AppointmentListProps {
   appointments: Appointment[]
@@ -137,7 +137,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   )}
                   {onPayment && (
                     <button
-                      onClick={() => setPayDialog({ open: true, id: apt.id, amount: apt.amount_paid != null ? String(apt.amount_paid) : '' })}
+                      onClick={() => setPayDialog({ open: true, id: apt.id, amount: apt.amount_paid != null ? String(apt.amount_paid) : (apt.consultation_type?.default_price != null ? String(apt.consultation_type.default_price) : '') })}
                       className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors font-medium ${
                         apt.amount_paid != null
                           ? 'bg-green-100 text-green-700 border-green-200'
@@ -146,6 +146,16 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     >
                       <Wallet className="h-3 w-3" /> {apt.amount_paid != null ? 'Modifier paiement' : 'Payé'}
                     </button>
+                  )}
+                  {onViewPatient && apt.patient_id && (
+                    <a
+                      href={`/ordonnance/${apt.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-primary-300 hover:text-primary-600 transition-colors font-medium"
+                    >
+                      <FileText className="h-3 w-3" /> Ordonnance
+                    </a>
                   )}
                   {apt.amount_paid != null && (
                     <a

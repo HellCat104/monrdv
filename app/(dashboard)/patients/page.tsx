@@ -8,9 +8,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
-import type { Patient, Appointment } from '@/types'
-import { getInitials, formatDateShort } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill } from 'lucide-react'
+import type { Patient, Appointment, ConsultationNote } from '@/types'
+import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus } from 'lucide-react'
 
 interface PatientWithStats extends Patient {
   appointment_count: number
@@ -37,6 +37,10 @@ export default function PatientsPage() {
   const [editTreatments, setEditTreatments] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  // Notes de consultation datées (timeline)
+  const [consultNotes, setConsultNotes] = useState<ConsultationNote[]>([])
+  const [newNote, setNewNote] = useState('')
+  const [addingNote, setAddingNote] = useState(false)
 
   // Ajout d'un patient
   const [addOpen, setAddOpen] = useState(false)
@@ -107,18 +111,52 @@ export default function PatientsPage() {
     setEditAllergies(patient.allergies ?? '')
     setEditChronic(patient.chronic_conditions ?? '')
     setEditTreatments(patient.current_treatments ?? '')
+    setNewNote('')
+    setConsultNotes([])
     setLoadingHistory(true)
     setSaved(false)
 
-    const { data } = await supabase
-      .from('appointments')
-      .select('*, patient:patients(*)')
-      .eq('patient_id', patient.id)
-      .order('date', { ascending: false })
-      .order('time', { ascending: false })
+    const [aptRes, notesRes] = await Promise.all([
+      supabase
+        .from('appointments')
+        .select('*, patient:patients(*)')
+        .eq('patient_id', patient.id)
+        .order('date', { ascending: false })
+        .order('time', { ascending: false }),
+      supabase
+        .from('consultation_notes')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .order('created_at', { ascending: false }),
+    ])
 
-    setPatientAppointments(data ?? [])
+    setPatientAppointments(aptRes.data ?? [])
+    setConsultNotes(notesRes.data ?? [])
     setLoadingHistory(false)
+  }
+
+  async function addConsultNote() {
+    if (!selectedPatient || !doctorId || !newNote.trim()) return
+    setAddingNote(true)
+    const { data, error } = await supabase
+      .from('consultation_notes')
+      .insert({
+        doctor_id: doctorId,
+        patient_id: selectedPatient.id,
+        note: newNote.trim(),
+      })
+      .select()
+      .single()
+    setAddingNote(false)
+    if (!error && data) {
+      setConsultNotes((prev) => [data, ...prev])
+      setNewNote('')
+    }
+  }
+
+  async function deleteConsultNote(id: string) {
+    await supabase.from('consultation_notes').delete().eq('id', id)
+    setConsultNotes((prev) => prev.filter((n) => n.id !== id))
   }
 
   async function savePatientNotes() {
@@ -490,8 +528,58 @@ export default function PatientsPage() {
                 </div>
               </div>
 
+              {/* Notes de consultation datées (timeline) */}
+              <div className="border-t border-gray-100 pt-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <NotebookPen className="h-4 w-4 text-primary-500" />
+                  Notes de consultation ({consultNotes.length})
+                </h4>
+
+                {/* Ajout d'une note */}
+                <div className="flex gap-2 mb-3">
+                  <textarea
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    placeholder="Ajouter une note datée (diagnostic, observation du jour…)"
+                    rows={2}
+                    className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={addConsultNote}
+                    disabled={addingNote || !newNote.trim()}
+                    className="shrink-0 self-start"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Liste chronologique */}
+                {consultNotes.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">Aucune note pour le moment.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {consultNotes.map((n) => (
+                      <div key={n.id} className="group bg-gray-50 rounded-lg p-3 flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] text-gray-400 mb-0.5 capitalize">{formatDateFr(n.created_at)}</p>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{n.note}</p>
+                        </div>
+                        <button
+                          onClick={() => deleteConsultNote(n.id)}
+                          className="text-gray-300 hover:text-red-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                          title="Supprimer cette note"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Historique RDV */}
-              <div>
+              <div className="border-t border-gray-100 pt-4">
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">
                   Historique des rendez-vous ({patientAppointments.length})
                 </h4>
