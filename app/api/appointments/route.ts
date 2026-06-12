@@ -333,5 +333,10 @@ export async function POST(req: NextRequest) {
 
   await Promise.allSettled(emailTasks)
 
-  return NextResponse.json(appointment, { status: 201 })
+  // Réponse minimale : ne jamais renvoyer cancel_token ni les champs internes
+  // au navigateur (le token ne circule que par email).
+  return NextResponse.json(
+    { id: appointment.id, date: appointment.date, time: appointment.time },
+    { status: 201 }
+  )
 }
