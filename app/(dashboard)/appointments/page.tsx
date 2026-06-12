@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { AppointmentList } from '@/components/dashboard/AppointmentList'
+import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import { AddAppointmentDialog } from '@/components/dashboard/AddAppointmentDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,11 +13,14 @@ import {
 } from '@/components/ui/select'
 import type { Appointment, Doctor, AppointmentStatus, AppointmentAttendance } from '@/types'
 import { Plus, Search, Calendar } from 'lucide-react'
-import { format, startOfWeek, endOfWeek, addDays, subDays } from 'date-fns'
+import {
+  format, startOfWeek, endOfWeek, addDays, subDays,
+  startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay,
+} from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { getNowInMaroc } from '@/lib/utils'
 
-type ViewMode = 'day' | 'week' | 'all'
+type ViewMode = 'day' | 'week' | 'month' | 'all'
 
 export default function AppointmentsPage() {
   const router = useRouter()
@@ -67,6 +70,10 @@ export default function AppointmentsPage() {
         const weekStart = format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')
         const weekEnd = format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')
         query = query.gte('date', weekStart).lte('date', weekEnd)
+      } else if (viewMode === 'month') {
+        const mStart = format(startOfMonth(currentDate), 'yyyy-MM-dd')
+        const mEnd = format(endOfMonth(currentDate), 'yyyy-MM-dd')
+        query = query.gte('date', mStart).lte('date', mEnd)
       }
 
       if (statusFilter !== 'all') {
@@ -118,14 +125,13 @@ export default function AppointmentsPage() {
     )
   }
 
-  // Enregistre le montant payé (null = annuler le paiement).
-  // On ne met l'UI à jour qu'après confirmation du serveur, et on utilise
-  // paid_at renvoyé par le serveur (heure faisant foi) plutôt que l'heure locale.
-  async function handlePayment(id: string, amount: number | null) {
+  // Enregistre l'encaissement (montant payé, total dû, mode de règlement).
+  // null = annuler le paiement. On attend la confirmation serveur avant l'UI.
+  async function handlePayment(id: string, payload: PaymentPayload) {
     const res = await fetch(`/api/appointments/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount_paid: amount }),
+      body: JSON.stringify(payload),
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
@@ -134,7 +140,13 @@ export default function AppointmentsPage() {
     const updated = await res.json().catch(() => null)
     setAppointments((prev) =>
       prev.map((a) => a.id === id
-        ? { ...a, amount_paid: amount, paid_at: updated?.paid_at ?? (amount !== null ? new Date().toISOString() : null) }
+        ? {
+            ...a,
+            amount_paid: payload.amount_paid,
+            amount_due: payload.amount_due,
+            payment_method: payload.payment_method,
+            paid_at: updated?.paid_at ?? (payload.amount_paid !== null ? new Date().toISOString() : null),
+          }
         : a)
     )
   }
@@ -143,6 +155,8 @@ export default function AppointmentsPage() {
   function navigate(direction: 'prev' | 'next') {
     if (viewMode === 'day') {
       setCurrentDate(direction === 'next' ? addDays(currentDate, 1) : subDays(currentDate, 1))
+    } else if (viewMode === 'month') {
+      setCurrentDate(direction === 'next' ? addMonths(currentDate, 1) : subMonths(currentDate, 1))
     } else {
       setCurrentDate(direction === 'next' ? addDays(currentDate, 7) : subDays(currentDate, 7))
     }
@@ -150,7 +164,25 @@ export default function AppointmentsPage() {
 
   const dateLabel = viewMode === 'day'
     ? format(currentDate, 'EEEE d MMMM yyyy', { locale: fr })
+    : viewMode === 'month'
+    ? format(currentDate, 'MMMM yyyy', { locale: fr })
     : `Semaine du ${format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'd MMM', { locale: fr })} au ${format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: fr })}`
+
+  // Construit la grille du mois (lundi → dimanche) pour la vue calendrier
+  function buildMonthGrid(): Date[] {
+    const first = startOfMonth(currentDate)
+    const offset = (getDay(first) + 6) % 7 // lundi = 0
+    const gridStart = subDays(first, offset)
+    return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+  }
+  // Compte des RDV (non annulés) par jour pour la vue mois
+  const countByDay = new Map<string, number>()
+  if (viewMode === 'month') {
+    for (const a of filtered) {
+      if (a.status === 'cancelled') continue
+      countByDay.set(a.date, (countByDay.get(a.date) ?? 0) + 1)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -172,7 +204,7 @@ export default function AppointmentsPage() {
           {/* Vue et navigation */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex rounded-lg border overflow-hidden">
-              {(['day', 'week', 'all'] as ViewMode[]).map((mode) => (
+              {(['day', 'week', 'month', 'all'] as ViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
@@ -182,7 +214,7 @@ export default function AppointmentsPage() {
                       : 'bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {mode === 'day' ? 'Jour' : mode === 'week' ? 'Semaine' : 'Tous'}
+                  {mode === 'day' ? 'Jour' : mode === 'week' ? 'Semaine' : mode === 'month' ? 'Mois' : 'Tous'}
                 </button>
               ))}
             </div>
@@ -249,6 +281,42 @@ export default function AppointmentsPage() {
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />
               ))}
+            </div>
+          ) : viewMode === 'month' ? (
+            /* Grille calendrier mensuelle */
+            <div>
+              <div className="grid grid-cols-7 gap-1 mb-1">
+                {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((d) => (
+                  <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {buildMonthGrid().map((day) => {
+                  const dStr = format(day, 'yyyy-MM-dd')
+                  const count = countByDay.get(dStr) ?? 0
+                  const inMonth = isSameMonth(day, currentDate)
+                  const isToday = isSameDay(day, getNowInMaroc())
+                  return (
+                    <button
+                      key={dStr}
+                      onClick={() => { setCurrentDate(day); setViewMode('day') }}
+                      className={`aspect-square rounded-lg border p-1.5 flex flex-col items-start transition-colors ${
+                        inMonth ? 'bg-white hover:border-primary-300' : 'bg-gray-50 text-gray-300'
+                      } ${isToday ? 'border-primary-500 border-2' : 'border-gray-100'}`}
+                    >
+                      <span className={`text-xs font-medium ${isToday ? 'text-primary-600' : inMonth ? 'text-gray-700' : 'text-gray-300'}`}>
+                        {format(day, 'd')}
+                      </span>
+                      {count > 0 && inMonth && (
+                        <span className="mt-auto self-stretch text-[10px] font-semibold text-primary-700 bg-primary-50 rounded px-1 py-0.5 text-center">
+                          {count} RDV
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-gray-400 mt-3 text-center">Cliquez sur un jour pour voir le détail</p>
             </div>
           ) : (
             <AppointmentList

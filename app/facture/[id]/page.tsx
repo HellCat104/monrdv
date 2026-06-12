@@ -42,6 +42,10 @@ export default async function FacturePage({ params }: Props) {
   const numero = `F-${apt.id.slice(0, 8).toUpperCase()}`
   const motif = apt.consultation_type?.name || apt.notes || 'Consultation médicale'
   const montant = apt.amount_paid
+  // Paiement partiel : total dû vs encaissé
+  const due = apt.amount_due ?? montant
+  const reste = due != null && montant != null ? Math.round((due - montant) * 100) / 100 : 0
+  const PAY_LABELS: Record<string, string> = { especes: 'Espèces', carte: 'Carte', cheque: 'Chèque', virement: 'Virement' }
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
@@ -103,7 +107,7 @@ export default async function FacturePage({ params }: Props) {
                 </span>
               </td>
               <td className="py-3 text-gray-700 text-right whitespace-nowrap">
-                {montant != null ? `${montant} DH` : '—'}
+                {due != null ? `${due} DH` : '—'}
               </td>
             </tr>
           </tbody>
@@ -111,13 +115,27 @@ export default async function FacturePage({ params }: Props) {
 
         {/* Total */}
         <div className="flex justify-end">
-          <div className="w-56">
-            <div className="flex justify-between items-center py-2 border-t-2 border-gray-800">
-              <span className="font-bold text-gray-900">Total payé</span>
-              <span className="font-bold text-gray-900 text-lg">
-                {montant != null ? `${montant} DH` : '—'}
-              </span>
+          <div className="w-64 space-y-1">
+            <div className="flex justify-between items-center text-sm text-gray-500">
+              <span>Total</span>
+              <span>{due != null ? `${due} DH` : '—'}</span>
             </div>
+            <div className="flex justify-between items-center text-sm text-gray-500">
+              <span>Encaissé{apt.payment_method ? ` (${PAY_LABELS[apt.payment_method] ?? ''})` : ''}</span>
+              <span>{montant != null ? `${montant} DH` : '—'}</span>
+            </div>
+            {reste > 0 && (
+              <div className="flex justify-between items-center py-2 border-t-2 border-gray-800">
+                <span className="font-bold text-orange-700">Reste à payer</span>
+                <span className="font-bold text-orange-700 text-lg">{reste} DH</span>
+              </div>
+            )}
+            {reste <= 0 && (
+              <div className="flex justify-between items-center py-2 border-t-2 border-gray-800">
+                <span className="font-bold text-gray-900">Payé</span>
+                <span className="font-bold text-gray-900 text-lg">{montant} DH</span>
+              </div>
+            )}
           </div>
         </div>
 

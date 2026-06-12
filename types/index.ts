@@ -120,12 +120,35 @@ export interface Appointment {
   consultation_type_id?: string | null
   duration_minutes?: number | null
   // Paiement
-  amount_paid?: number | null
+  amount_paid?: number | null   // total déjà encaissé
+  amount_due?: number | null    // montant total attendu
+  payment_method?: PaymentMethod | null
   paid_at?: string | null
+  consent_at?: string | null
   created_at: string
   // Relations jointes
   patient?: Patient
   consultation_type?: ConsultationType | null
+}
+
+export type PaymentMethod = 'especes' | 'carte' | 'cheque' | 'virement'
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  especes:  'Espèces',
+  carte:    'Carte',
+  cheque:   'Chèque',
+  virement: 'Virement',
+}
+
+// Document rattaché à un patient (analyses, radios, etc.)
+export interface PatientDocument {
+  id: string
+  doctor_id: string
+  patient_id: string
+  file_path: string
+  file_name: string
+  file_type?: string | null
+  created_at: string
 }
 
 // Pour les créneaux disponibles

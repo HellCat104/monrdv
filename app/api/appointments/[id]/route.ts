@@ -13,9 +13,10 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   const body = await req.json()
-  const { status, date, time, doctor_notes, attendance, amount_paid } = body
+  const { status, date, time, doctor_notes, attendance, amount_paid, amount_due, payment_method } = body
 
-  if (!status && doctor_notes === undefined && attendance === undefined && amount_paid === undefined) {
+  if (!status && doctor_notes === undefined && attendance === undefined
+      && amount_paid === undefined && amount_due === undefined && payment_method === undefined) {
     return NextResponse.json({ error: 'Paramètre manquant' }, { status: 400 })
   }
 
@@ -42,6 +43,19 @@ export async function PATCH(
     }
     updates.amount_paid = amount
     updates.paid_at = amount !== null ? new Date().toISOString() : null
+  }
+  // Montant total dû (pour les paiements partiels)
+  if (amount_due !== undefined) {
+    const due = amount_due === null ? null : Number(amount_due)
+    if (due !== null && (isNaN(due) || due < 0 || due > 100000)) {
+      return NextResponse.json({ error: 'Montant total invalide' }, { status: 400 })
+    }
+    updates.amount_due = due
+  }
+  // Mode de règlement
+  if (payment_method !== undefined) {
+    const allowed = ['especes', 'carte', 'cheque', 'virement']
+    updates.payment_method = payment_method && allowed.includes(payment_method) ? payment_method : null
   }
 
   const { data: appointment, error } = await supabase

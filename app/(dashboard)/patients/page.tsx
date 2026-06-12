@@ -8,9 +8,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
-import type { Patient, Appointment, ConsultationNote } from '@/types'
+import type { Patient, Appointment, ConsultationNote, PatientDocument } from '@/types'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload } from 'lucide-react'
+
+const DOC_BUCKET = 'patient-documents'
 
 interface PatientWithStats extends Patient {
   appointment_count: number
@@ -42,6 +44,11 @@ export default function PatientsPage() {
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
   const [deleteNoteConfirm, setDeleteNoteConfirm] = useState<ConsultationNote | null>(null)
+
+  // Documents du patient (analyses, radios scannées…)
+  const [documents, setDocuments] = useState<PatientDocument[]>([])
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [deleteDocConfirm, setDeleteDocConfirm] = useState<PatientDocument | null>(null)
 
   // Ajout d'un patient
   const [addOpen, setAddOpen] = useState(false)
@@ -114,10 +121,11 @@ export default function PatientsPage() {
     setEditTreatments(patient.current_treatments ?? '')
     setNewNote('')
     setConsultNotes([])
+    setDocuments([])
     setLoadingHistory(true)
     setSaved(false)
 
-    const [aptRes, notesRes] = await Promise.all([
+    const [aptRes, notesRes, docsRes] = await Promise.all([
       supabase
         .from('appointments')
         .select('*, patient:patients(*)')
@@ -129,10 +137,16 @@ export default function PatientsPage() {
         .select('*')
         .eq('patient_id', patient.id)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('patient_documents')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .order('created_at', { ascending: false }),
     ])
 
     setPatientAppointments(aptRes.data ?? [])
     setConsultNotes(notesRes.data ?? [])
+    setDocuments(docsRes.data ?? [])
     setLoadingHistory(false)
   }
 
@@ -160,6 +174,62 @@ export default function PatientsPage() {
     if (error) { alert('La suppression de la note a échoué. Réessayez.'); return }
     setConsultNotes((prev) => prev.filter((n) => n.id !== id))
     setDeleteNoteConfirm(null)
+  }
+
+  // ── Documents du patient ──────────────────────────────────────────────────
+  async function handleUploadDocument(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !selectedPatient || !doctorId) return
+    if (file.size > 10 * 1024 * 1024) { alert('Le fichier ne doit pas dépasser 10 Mo.'); e.target.value = ''; return }
+
+    setUploadingDoc(true)
+    try {
+      // Chemin : {doctor_id}/{patient_id}/{horodatage}-{nom} (RLS sur le 1er dossier)
+      const safeName = file.name.replace(/[^\w.\-]/g, '_').substring(0, 120)
+      const path = `${doctorId}/${selectedPatient.id}/${Date.now()}-${safeName}`
+
+      const { error: upErr } = await supabase.storage
+        .from(DOC_BUCKET)
+        .upload(path, file, { contentType: file.type || undefined })
+      if (upErr) throw upErr
+
+      const { data, error: insErr } = await supabase
+        .from('patient_documents')
+        .insert({
+          doctor_id: doctorId,
+          patient_id: selectedPatient.id,
+          file_path: path,
+          file_name: file.name.substring(0, 200),
+          file_type: file.type || null,
+        })
+        .select()
+        .single()
+      if (insErr) throw insErr
+
+      setDocuments((prev) => [data, ...prev])
+    } catch {
+      alert('Échec de l\'envoi du document. Réessayez.')
+    } finally {
+      setUploadingDoc(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleDownloadDocument(doc: PatientDocument) {
+    // Bucket privé → URL signée valable 1 min
+    const { data, error } = await supabase.storage
+      .from(DOC_BUCKET)
+      .createSignedUrl(doc.file_path, 60)
+    if (error || !data) { alert('Impossible d\'ouvrir le document.'); return }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  async function handleDeleteDocument(doc: PatientDocument) {
+    await supabase.storage.from(DOC_BUCKET).remove([doc.file_path])
+    const { error } = await supabase.from('patient_documents').delete().eq('id', doc.id)
+    if (error) { alert('La suppression a échoué. Réessayez.'); return }
+    setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
+    setDeleteDocConfirm(null)
   }
 
   async function savePatientNotes() {
@@ -582,6 +652,45 @@ export default function PatientsPage() {
                 )}
               </div>
 
+              {/* Documents du patient */}
+              <div className="border-t border-gray-100 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                    <Paperclip className="h-4 w-4 text-primary-500" /> Documents ({documents.length})
+                  </h4>
+                  <label className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${uploadingDoc ? 'opacity-50 pointer-events-none' : 'border-primary-200 text-primary-600 hover:bg-primary-50'}`}>
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploadingDoc ? 'Envoi…' : 'Ajouter'}
+                    <input type="file" className="hidden" onChange={handleUploadDocument} disabled={uploadingDoc} />
+                  </label>
+                </div>
+                {documents.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">Aucun document. Ajoutez analyses, radios, ordonnances scannées… (max 10 Mo).</p>
+                ) : (
+                  <div className="space-y-2">
+                    {documents.map((d) => (
+                      <div key={d.id} className="group bg-gray-50 rounded-lg p-2.5 flex items-center gap-3">
+                        <Paperclip className="h-4 w-4 text-gray-400 shrink-0" />
+                        <button
+                          onClick={() => handleDownloadDocument(d)}
+                          className="flex-1 min-w-0 text-left"
+                          title="Ouvrir le document"
+                        >
+                          <p className="text-sm text-gray-700 truncate hover:text-primary-600">{d.file_name}</p>
+                          <p className="text-[11px] text-gray-400">{formatDateShort(d.created_at.slice(0, 10))}</p>
+                        </button>
+                        <button onClick={() => handleDownloadDocument(d)} className="text-gray-300 hover:text-primary-500 shrink-0" title="Télécharger">
+                          <Download className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => setDeleteDocConfirm(d)} className="text-gray-300 hover:text-red-500 shrink-0 opacity-0 group-hover:opacity-100" title="Supprimer">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Historique RDV */}
               <div className="border-t border-gray-100 pt-4">
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">
@@ -671,6 +780,32 @@ export default function PatientsPage() {
                   onClick={() => deleteConsultNote(deleteNoteConfirm.id)}
                   className="flex-1 bg-red-500 hover:bg-red-600"
                 >
+                  Supprimer
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation suppression d'un document */}
+      <Dialog open={!!deleteDocConfirm} onOpenChange={(o) => !o && setDeleteDocConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" /> Supprimer le document
+            </DialogTitle>
+          </DialogHeader>
+          {deleteDocConfirm && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Supprimer définitivement <strong>{deleteDocConfirm.file_name}</strong> ?
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setDeleteDocConfirm(null)} className="flex-1">
+                  Annuler
+                </Button>
+                <Button onClick={() => handleDeleteDocument(deleteDocConfirm)} className="flex-1 bg-red-500 hover:bg-red-600">
                   Supprimer
                 </Button>
               </div>
