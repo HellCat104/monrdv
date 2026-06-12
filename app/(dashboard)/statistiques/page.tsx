@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getNowInMaroc, formatDateFr } from '@/lib/utils'
-import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { getNowInMaroc, formatDateFr, MAROC_TZ } from '@/lib/utils'
+import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import {
@@ -60,8 +61,11 @@ export default function StatistiquesPage() {
       const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
       const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
 
-      // Date de référence pour le CA = paid_at si présent, sinon date du RDV
-      const payDate = (a: Appointment) => (a.paid_at ? a.paid_at.slice(0, 10) : a.date)
+      // Date de référence pour le CA = paid_at si présent, sinon date du RDV.
+      // paid_at est stocké en UTC → conversion en date marocaine (GMT+1),
+      // sinon un encaissement à 00h30 serait compté sur la veille.
+      const payDate = (a: Appointment) =>
+        a.paid_at ? formatInTimeZone(parseISO(a.paid_at), MAROC_TZ, 'yyyy-MM-dd') : a.date
 
       let revenueToday = 0, revenueMonth = 0, revenueTotal = 0
       let countToday = 0, countMonth = 0
@@ -71,7 +75,9 @@ export default function StatistiquesPage() {
 
       for (const a of list) {
         const amt = a.amount_paid ?? 0
-        if (amt > 0) {
+        // amount_paid != null inclut les actes gratuits (0 DH) dans l'export
+        // comptable — un acte tracé reste visible même sans encaissement.
+        if (a.amount_paid != null) {
           const d = payDate(a)
           revenueTotal += amt
           if (d === todayStr) revenueToday += amt
@@ -121,7 +127,10 @@ export default function StatistiquesPage() {
   // Export comptable : télécharge tous les paiements en CSV (ouvrable dans Excel)
   function exportCSV() {
     const esc = (v: string | number) => {
-      const s = String(v)
+      let s = String(v)
+      // Anti-injection de formule Excel : neutralise les cellules commençant
+      // par = + - @ (interprétées comme formules à l'ouverture)
+      if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = `'${s}`
       return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
     }
     const header = ['Date', 'Patient', 'Motif', 'Montant (DH)']

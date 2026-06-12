@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
-import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks, toMinutes } from '@/lib/utils'
 import { format } from 'date-fns'
 
 // GET /api/appointments?doctor_id=...&date=...
@@ -193,10 +193,10 @@ export async function POST(req: NextRequest) {
   } else {
     // Médecin : pas de restriction d'horaires, mais on bloque quand même
     // le chevauchement avec un RDV existant (pas deux patients en même temps).
-    const newStart = parseInt(time.slice(0, 2), 10) * 60 + parseInt(time.slice(3, 5), 10)
+    const newStart = toMinutes(time)
     const newEnd = newStart + appointmentDuration
     const overlaps = occupied.some((o) => {
-      const s = parseInt(o.time.slice(0, 2), 10) * 60 + parseInt(o.time.slice(3, 5), 10)
+      const s = toMinutes(o.time)
       return newStart < s + o.duration && newEnd > s
     })
     if (overlaps) {
@@ -279,8 +279,9 @@ export async function POST(req: NextRequest) {
 
   if (aptError || !appointment) {
     // Race condition : le créneau a été pris entre la vérification et l'insertion.
-    // L'index unique (unique_active_slot) renvoie le code Postgres 23505.
-    if (aptError?.code === '23505') {
+    // 23505 = index unique (même heure de départ) ; 23P01 = contrainte d'exclusion
+    // no_overlapping_appointments (chevauchement d'intervalles à durées variables).
+    if (aptError?.code === '23505' || aptError?.code === '23P01') {
       return NextResponse.json({ error: 'Ce créneau vient d\'être réservé. Veuillez en choisir un autre.' }, { status: 409 })
     }
     return NextResponse.json({ error: 'Erreur création RDV' }, { status: 500 })

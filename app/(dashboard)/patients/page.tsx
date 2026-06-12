@@ -41,6 +41,7 @@ export default function PatientsPage() {
   const [consultNotes, setConsultNotes] = useState<ConsultationNote[]>([])
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
+  const [deleteNoteConfirm, setDeleteNoteConfirm] = useState<ConsultationNote | null>(null)
 
   // Ajout d'un patient
   const [addOpen, setAddOpen] = useState(false)
@@ -157,6 +158,7 @@ export default function PatientsPage() {
   async function deleteConsultNote(id: string) {
     await supabase.from('consultation_notes').delete().eq('id', id)
     setConsultNotes((prev) => prev.filter((n) => n.id !== id))
+    setDeleteNoteConfirm(null)
   }
 
   async function savePatientNotes() {
@@ -566,7 +568,7 @@ export default function PatientsPage() {
                           <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{n.note}</p>
                         </div>
                         <button
-                          onClick={() => deleteConsultNote(n.id)}
+                          onClick={() => setDeleteNoteConfirm(n)}
                           className="text-gray-300 hover:text-red-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
                           title="Supprimer cette note"
                         >
@@ -636,6 +638,38 @@ export default function PatientsPage() {
                   className="flex-1 bg-red-500 hover:bg-red-600"
                 >
                   {deleting ? 'Suppression…' : 'Supprimer'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation suppression d'une note de consultation */}
+      <Dialog open={!!deleteNoteConfirm} onOpenChange={(o) => !o && setDeleteNoteConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" /> Supprimer la note
+            </DialogTitle>
+          </DialogHeader>
+          {deleteNoteConfirm && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Voulez-vous vraiment supprimer cette note du {formatDateFr(deleteNoteConfirm.created_at)} ?
+              </p>
+              <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg whitespace-pre-wrap break-words line-clamp-4">
+                {deleteNoteConfirm.note}
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setDeleteNoteConfirm(null)} className="flex-1">
+                  Annuler
+                </Button>
+                <Button
+                  onClick={() => deleteConsultNote(deleteNoteConfirm.id)}
+                  className="flex-1 bg-red-500 hover:bg-red-600"
+                >
+                  Supprimer
                 </Button>
               </div>
             </div>

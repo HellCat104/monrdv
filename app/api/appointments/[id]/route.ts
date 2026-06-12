@@ -53,6 +53,11 @@ export async function PATCH(
     .single()
 
   if (error || !appointment) {
+    // 23505 / 23P01 : le nouveau créneau (reprogrammation) entre en collision
+    // avec un RDV existant — index unique ou contrainte d'exclusion.
+    if (error?.code === '23505' || error?.code === '23P01') {
+      return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
   }
 

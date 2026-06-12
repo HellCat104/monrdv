@@ -101,7 +101,8 @@ export interface OccupiedInterval {
   duration: number  // minutes
 }
 
-function toMinutes(t: string): number {
+// Convertit "HH:mm" (ou "HH:mm:ss") en minutes depuis minuit
+export function toMinutes(t: string): number {
   const [h, m] = t.split(':')
   return parseInt(h, 10) * 60 + parseInt(m, 10)
 }
