@@ -118,16 +118,23 @@ export default function AppointmentsPage() {
     )
   }
 
-  // Enregistre le montant payé (null = annuler le paiement)
+  // Enregistre le montant payé (null = annuler le paiement).
+  // On ne met l'UI à jour qu'après confirmation du serveur, et on utilise
+  // paid_at renvoyé par le serveur (heure faisant foi) plutôt que l'heure locale.
   async function handlePayment(id: string, amount: number | null) {
-    await fetch(`/api/appointments/${id}`, {
+    const res = await fetch(`/api/appointments/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount_paid: amount }),
     })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || 'Échec de l\'enregistrement du paiement')
+    }
+    const updated = await res.json().catch(() => null)
     setAppointments((prev) =>
       prev.map((a) => a.id === id
-        ? { ...a, amount_paid: amount, paid_at: amount !== null ? new Date().toISOString() : null }
+        ? { ...a, amount_paid: amount, paid_at: updated?.paid_at ?? (amount !== null ? new Date().toISOString() : null) }
         : a)
     )
   }

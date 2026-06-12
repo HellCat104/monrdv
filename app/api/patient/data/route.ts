@@ -98,11 +98,21 @@ export async function DELETE() {
       .gte('date', today)
       .neq('status', 'cancelled')
 
-    // Anonymise les données patient (ne supprime pas les RDV passés pour le médecin)
+    // Anonymise les données patient (ne supprime pas les RDV passés pour le médecin).
+    // Efface aussi tout le dossier médical enrichi (loi 09-08 : suppression réelle
+    // des données personnelles à la demande de la personne concernée).
     await adminDb
       .from('patients')
-      .update({ first_name: 'Supprimé', last_name: '', phone: '', email: null, user_id: null })
+      .update({
+        first_name: 'Supprimé', last_name: '', phone: '', email: null, user_id: null,
+        age: null, notes: null,
+        allergies: null, chronic_conditions: null, current_treatments: null,
+      })
       .in('id', patientIds)
+
+    // Efface les notes de consultation et ordonnances rattachées à ces patients
+    await adminDb.from('consultation_notes').delete().in('patient_id', patientIds)
+    await adminDb.from('prescriptions').delete().in('patient_id', patientIds)
   }
 
   // Supprime le compte auth

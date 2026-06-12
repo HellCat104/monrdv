@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     time,
     notes,
     consultation_type_id,
+    consent,
     public: isPublic,
   } = body
 
@@ -62,11 +63,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Champs obligatoires manquants' }, { status: 400 })
   }
 
-  // Pour les réservations publiques (patient), l'email est obligatoire
-  // (seul moyen d'envoyer confirmation + rappel)
+  // Pour les réservations publiques (patient) :
   if (isPublic) {
+    // Email obligatoire (seul moyen d'envoyer confirmation + rappel)
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
       return NextResponse.json({ error: 'Un email valide est obligatoire pour recevoir votre confirmation et votre rappel' }, { status: 400 })
+    }
+    // Âge obligatoire (le formulaire le marque requis — on le valide côté serveur)
+    if (!Number.isInteger(age) || age <= 0 || age > 120) {
+      return NextResponse.json({ error: 'Un âge valide est obligatoire' }, { status: 400 })
+    }
+    // Consentement au traitement des données obligatoire (loi 09-08)
+    if (consent !== true) {
+      return NextResponse.json({ error: 'Vous devez accepter le traitement de vos données' }, { status: 400 })
     }
   }
 
@@ -273,6 +282,8 @@ export async function POST(req: NextRequest) {
       cancel_token: cancelToken,
       consultation_type_id: safeTypeId,
       duration_minutes: appointmentDuration,
+      // Trace du consentement légal (réservation publique uniquement)
+      consent_at: isPublic ? new Date().toISOString() : null,
     })
     .select('*')
     .single()

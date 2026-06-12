@@ -36,6 +36,9 @@ export default async function FacturePage({ params }: Props) {
 
   if (!apt) notFound()
 
+  // Pas de facture pour un RDV non encaissé (évite une facture vide bancale)
+  if (apt.amount_paid == null) redirect('/appointments')
+
   const numero = `F-${apt.id.slice(0, 8).toUpperCase()}`
   const motif = apt.consultation_type?.name || apt.notes || 'Consultation médicale'
   const montant = apt.amount_paid

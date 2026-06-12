@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,8 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { generateTimeSlots, getDayBreaks } from '@/lib/utils'
-import type { Doctor } from '@/types'
+import { format } from 'date-fns'
+import type { Doctor, ConsultationType, TimeSlot } from '@/types'
 
 interface AddAppointmentDialogProps {
   open: boolean
@@ -28,6 +29,9 @@ interface AddAppointmentDialogProps {
   doctor: Doctor
   onSuccess: () => void
 }
+
+// Valeur "aucun motif" du Select (durée de base du médecin)
+const NO_TYPE = '__none__'
 
 export function AddAppointmentDialog({
   open,
@@ -43,20 +47,41 @@ export function AddAppointmentDialog({
     time: '',
     notes: '',
   })
+  const [typeId, setTypeId] = useState<string>(NO_TYPE)
+  const [consultTypes, setConsultTypes] = useState<ConsultationType[]>([])
+  const [slots, setSlots] = useState<TimeSlot[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Génère les créneaux disponibles selon les horaires du médecin
-  const selectedDate = form.date ? new Date(form.date) : null
-  const dayNames: Record<number, keyof typeof doctor.working_hours> = {
-    0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday',
-    4: 'thursday', 5: 'friday', 6: 'saturday',
-  }
-  const dayKey = selectedDate ? dayNames[selectedDate.getDay()] : null
-  const daySchedule = dayKey ? doctor.working_hours[dayKey] : null
-  const timeSlots = daySchedule?.enabled
-    ? generateTimeSlots(daySchedule.start, daySchedule.end, doctor.appointment_duration, getDayBreaks(daySchedule))
-    : []
+  const supabase = createClient()
+
+  // Charge les motifs du médecin à l'ouverture
+  useEffect(() => {
+    if (!open) return
+    supabase
+      .from('consultation_types')
+      .select('*')
+      .eq('doctor_id', doctor.id)
+      .eq('active', true)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => setConsultTypes(data ?? []))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, doctor.id])
+
+  // Recharge les créneaux quand la date ou le motif change
+  // (durée variable + exclusion des créneaux déjà pris, gérés par l'API)
+  useEffect(() => {
+    if (!form.date) { setSlots([]); return }
+    setLoadingSlots(true)
+    const typeParam = typeId !== NO_TYPE ? `&type=${typeId}` : ''
+    fetch(`/api/slots?doctor_id=${doctor.id}&date=${form.date}${typeParam}`)
+      .then((r) => r.json())
+      .then((data) => setSlots(data.slots ?? []))
+      .finally(() => setLoadingSlots(false))
+  }, [form.date, typeId, doctor.id])
+
+  const availableSlots = slots.filter((s) => s.available)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -67,7 +92,12 @@ export function AddAppointmentDialog({
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, doctor_id: doctor.id }),
+        body: JSON.stringify({
+          ...form,
+          doctor_id: doctor.id,
+          consultation_type_id: typeId !== NO_TYPE ? typeId : undefined,
+          public: false,
+        }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -76,12 +106,15 @@ export function AddAppointmentDialog({
       onSuccess()
       onOpenChange(false)
       setForm({ first_name: '', last_name: '', phone: '', date: '', time: '', notes: '' })
+      setTypeId(NO_TYPE)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {
       setLoading(false)
     }
   }
+
+  const hasTypes = consultTypes.length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -126,6 +159,26 @@ export function AddAppointmentDialog({
             />
           </div>
 
+          {/* Motif (si le médecin a défini des motifs) — ajuste la durée du créneau */}
+          {hasTypes && (
+            <div className="space-y-1.5">
+              <Label htmlFor="motif">Motif</Label>
+              <Select value={typeId} onValueChange={(v) => { setTypeId(v); setForm((f) => ({ ...f, time: '' })) }}>
+                <SelectTrigger id="motif">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_TYPE}>Durée standard ({doctor.appointment_duration} min)</SelectItem>
+                  {consultTypes.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name} · {t.duration_minutes} min
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="date">Date *</Label>
@@ -143,30 +196,30 @@ export function AddAppointmentDialog({
               <Select
                 value={form.time}
                 onValueChange={(v) => setForm({ ...form, time: v })}
-                disabled={!form.date || timeSlots.length === 0}
+                disabled={!form.date || loadingSlots || availableSlots.length === 0}
               >
                 <SelectTrigger id="time">
-                  <SelectValue placeholder={!form.date ? 'Choisir date' : 'Heure'} />
+                  <SelectValue placeholder={!form.date ? 'Choisir date' : loadingSlots ? 'Chargement…' : 'Heure'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {timeSlots.map((slot) => (
-                    <SelectItem key={slot} value={slot}>{slot}</SelectItem>
+                  {availableSlots.map((slot) => (
+                    <SelectItem key={slot.time} value={slot.time}>{slot.time}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {form.date && daySchedule && !daySchedule.enabled && (
-                <p className="text-xs text-red-500">Jour de repos</p>
+              {form.date && !loadingSlots && availableSlots.length === 0 && (
+                <p className="text-xs text-red-500">Aucun créneau disponible ce jour</p>
               )}
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="notes">Motif de consultation</Label>
+            <Label htmlFor="notes">Notes (optionnel)</Label>
             <Textarea
               id="notes"
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Consultation générale, suivi, urgence…"
+              placeholder="Précisions, observations…"
               rows={2}
             />
           </div>

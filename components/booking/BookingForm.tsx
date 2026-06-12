@@ -96,6 +96,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
           ...form,
           age: form.age ? parseInt(form.age, 10) : undefined,
           consultation_type_id: consultationType?.id ?? undefined,
+          consent, // consentement légal (case cochée)
           public: true, // indique que c'est une réservation publique
         }),
       })

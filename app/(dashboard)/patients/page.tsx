@@ -156,7 +156,8 @@ export default function PatientsPage() {
   }
 
   async function deleteConsultNote(id: string) {
-    await supabase.from('consultation_notes').delete().eq('id', id)
+    const { error } = await supabase.from('consultation_notes').delete().eq('id', id)
+    if (error) { alert('La suppression de la note a échoué. Réessayez.'); return }
     setConsultNotes((prev) => prev.filter((n) => n.id !== id))
     setDeleteNoteConfirm(null)
   }
@@ -221,8 +222,9 @@ export default function PatientsPage() {
   async function handleDeletePatient() {
     if (!deleteConfirm) return
     setDeleting(true)
-    await supabase.from('patients').delete().eq('id', deleteConfirm.id)
+    const { error } = await supabase.from('patients').delete().eq('id', deleteConfirm.id)
     setDeleting(false)
+    if (error) { alert('La suppression du patient a échoué. Réessayez.'); return }
     setPatients((prev) => prev.filter((p) => p.id !== deleteConfirm.id))
     setDeleteConfirm(null)
     setSelectedPatient(null)

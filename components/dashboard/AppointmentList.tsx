@@ -27,6 +27,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
     { open: false, id: '', amount: '' }
   )
   const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState('')
 
   async function handleAction() {
     setLoading(true)
@@ -50,11 +51,17 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
 
   async function handleConfirmPayment() {
     const amount = parseFloat(payDialog.amount.replace(',', '.'))
-    if (isNaN(amount) || amount < 0) return
+    if (isNaN(amount) || amount < 0) {
+      setPayError('Veuillez saisir un montant valide.')
+      return
+    }
+    setPayError('')
     setPaying(true)
     try {
       await onPayment?.(payDialog.id, amount)
       setPayDialog({ open: false, id: '', amount: '' })
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Une erreur est survenue.')
     } finally {
       setPaying(false)
     }
@@ -272,7 +279,10 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
       </Dialog>
 
       {/* Dialog saisie du montant payé */}
-      <Dialog open={payDialog.open} onOpenChange={(open) => setPayDialog((prev) => ({ ...prev, open }))}>
+      <Dialog
+        open={payDialog.open}
+        onOpenChange={(open) => { setPayDialog((prev) => ({ ...prev, open })); if (!open) setPayError('') }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Montant encaissé</DialogTitle>
@@ -286,17 +296,26 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 step="any"
                 autoFocus
                 value={payDialog.amount}
-                onChange={(e) => setPayDialog((prev) => ({ ...prev, amount: e.target.value }))}
+                onChange={(e) => { setPayDialog((prev) => ({ ...prev, amount: e.target.value })); setPayError('') }}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmPayment() }}
                 placeholder="0"
                 className="pr-12 text-lg"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">DH</span>
             </div>
+            {payError && <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{payError}</p>}
             {payDialog.amount && (
               <button
                 type="button"
-                onClick={async () => { await onPayment?.(payDialog.id, null); setPayDialog({ open: false, id: '', amount: '' }) }}
+                onClick={async () => {
+                  setPayError('')
+                  try {
+                    await onPayment?.(payDialog.id, null)
+                    setPayDialog({ open: false, id: '', amount: '' })
+                  } catch (err) {
+                    setPayError(err instanceof Error ? err.message : 'Une erreur est survenue.')
+                  }
+                }}
                 className="text-xs text-gray-400 hover:text-red-500"
               >
                 Annuler le paiement
@@ -304,7 +323,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setPayDialog({ open: false, id: '', amount: '' })}>
+            <Button variant="outline" onClick={() => { setPayDialog({ open: false, id: '', amount: '' }); setPayError('') }}>
               Retour
             </Button>
             <Button onClick={handleConfirmPayment} disabled={paying || !payDialog.amount} className="bg-green-600 hover:bg-green-700">
