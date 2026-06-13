@@ -301,6 +301,47 @@ export async function sendReminderEmailToPatient(params: {
   }
 }
 
+// Email de rappel de suivi ("il est temps de reprendre rendez-vous")
+export async function sendRecallEmailToPatient(params: {
+  patientEmail: string
+  patientName: string
+  doctorName: string
+  specialty: string
+  reason?: string | null
+  bookingUrl: string
+}): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.patientEmail,
+      subject: `Suivi médical — Reprenez rendez-vous avec Dr. ${params.doctorName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 22px;">Il est temps de votre suivi</h1>
+          </div>
+          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
+            <p style="color: #374151;">Dr. ${h(params.doctorName)} (${h(params.specialty)}) vous invite à reprendre rendez-vous pour votre suivi.</p>
+            ${params.reason ? `<div style="background: #f0f9ff; border-left: 4px solid #0EA5E9; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;"><p style="margin: 0; color: #374151;"><strong>Motif :</strong> ${h(params.reason)}</p></div>` : ''}
+            <p style="text-align: center; margin: 28px 0;">
+              <a href="${params.bookingUrl}" style="background: #0EA5E9; color: white; text-decoration: none; padding: 13px 28px; border-radius: 10px; font-weight: bold; display: inline-block;">Prendre rendez-vous</a>
+            </p>
+            <p style="color: #9ca3af; font-size: 12px; text-align: center;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+          </div>
+        </div>
+      `,
+    })
+    return true
+  } catch (error) {
+    console.error('[Email] Erreur rappel de suivi:', error)
+    return false
+  }
+}
+
 // Email récapitulatif du jour envoyé au médecin chaque matin
 export async function sendDailyAgendaToDoctor(params: {
   doctorEmail: string

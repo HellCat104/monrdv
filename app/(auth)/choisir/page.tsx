@@ -18,7 +18,7 @@ export default function ChoisirPage() {
           <p className="text-gray-500 text-sm mt-3">Qui êtes-vous ?</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Carte Patient */}
           <Link
             href="/patient/login"

@@ -2,10 +2,12 @@
 // Déclenché automatiquement par Vercel Cron (voir vercel.json)
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { sendReminderEmailToPatient } from '@/lib/email'
+import { sendReminderEmailToPatient, sendRecallEmailToPatient } from '@/lib/email'
 import { format, addDays, startOfDay } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
 import { MAROC_TZ } from '@/lib/utils'
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 
 export async function GET(req: NextRequest) {
   // Vérifie le secret Cron pour éviter les appels non autorisés
@@ -76,5 +78,54 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(`[Cron reminders] Email: ${sent} envoyés, ${skipped} ignorés, ${failed} échoués — date: ${targetDate}`)
-  return NextResponse.json({ sent, skipped, failed, date: targetDate })
+
+  // ── Rappels de suivi ("revenez dans X mois") arrivés à échéance ───────────
+  const today = format(nowMaroc, 'yyyy-MM-dd')
+  let recallSent = 0, recallSkipped = 0, recallFailed = 0
+
+  const { data: recalls } = await supabase
+    .from('recalls')
+    .select(`
+      id, reason,
+      patient:patients(first_name, last_name, email),
+      doctor:doctors(name, specialty, slug)
+    `)
+    .eq('status', 'pending')
+    .lte('due_date', today)
+
+  for (let i = 0; i < (recalls ?? []).length; i += batchSize) {
+    const batch = recalls!.slice(i, i + batchSize)
+    await Promise.allSettled(
+      batch.map(async (rec) => {
+        const patient = rec.patient as any
+        const doctor  = rec.doctor  as any
+        if (!patient?.email || !doctor?.slug) {
+          // Pas d'email : on marque quand même traité pour ne pas boucler
+          await supabase.from('recalls').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rec.id)
+          recallSkipped++; return
+        }
+        try {
+          const ok = await sendRecallEmailToPatient({
+            patientEmail: patient.email,
+            patientName: `${patient.first_name} ${patient.last_name}`,
+            doctorName: doctor.name ?? 'votre médecin',
+            specialty: doctor.specialty ?? '',
+            reason: rec.reason,
+            bookingUrl: `${APP_URL}/dr-${doctor.slug}`,
+          })
+          if (ok) {
+            await supabase.from('recalls').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rec.id)
+            recallSent++
+          } else { recallFailed++ }
+        } catch { recallFailed++ }
+      })
+    )
+  }
+
+  console.log(`[Cron recalls] ${recallSent} envoyés, ${recallSkipped} sans email, ${recallFailed} échoués`)
+
+  return NextResponse.json({
+    reminders: { sent, skipped, failed, date: targetDate },
+    recalls: { sent: recallSent, skipped: recallSkipped, failed: recallFailed },
+  })
 }

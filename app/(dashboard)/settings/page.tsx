@@ -12,8 +12,8 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
-import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC } from '@/types'
-import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks } from 'lucide-react'
+import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals } from '@/types'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 
 export default function SettingsPage() {
@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const [newTypeDuration, setNewTypeDuration] = useState('30')
   const [newTypePrice, setNewTypePrice] = useState('')
   const [typeLoading, setTypeLoading] = useState(false)
+  // Constantes vitales suivies (clés VITAL_DEFS)
+  const [enabledVitals, setEnabledVitals] = useState<string[]>([])
   const supabase = createClient()
 
   useEffect(() => {
@@ -72,6 +74,7 @@ export default function SettingsPage() {
           appointment_duration: data.appointment_duration,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
         })
+        setEnabledVitals(resolveEnabledVitals(data.enabled_vitals, data.specialty))
 
         // Charge les dates bloquées
         const { data: blocked } = await supabase
@@ -180,6 +183,7 @@ export default function SettingsPage() {
           bio: form.bio || null,
           ice: form.ice.trim() || null,
           inpe: form.inpe.trim() || null,
+          enabled_vitals: enabledVitals,
           appointment_duration: form.appointment_duration,
           working_hours: form.working_hours,
         })
@@ -650,6 +654,46 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400">
               Le tarif est optionnel — s&apos;il est renseigné, le montant sera pré-rempli à l&apos;encaissement.
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Constantes vitales suivies */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="h-4 w-4 text-primary-500" />
+              Constantes suivies
+            </CardTitle>
+            <p className="text-xs text-gray-400 mt-1">
+              Cochez les constantes utiles à votre pratique — elles apparaîtront dans la fiche patient.
+              Les valeurs proposées par défaut dépendent de votre spécialité ; un dentiste, par exemple,
+              n&apos;en a généralement aucune.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {VITAL_DEFS.map((v) => {
+                const on = enabledVitals.includes(v.key)
+                return (
+                  <button
+                    key={v.key}
+                    type="button"
+                    onClick={() => setEnabledVitals((prev) => on ? prev.filter((k) => k !== v.key) : [...prev, v.key])}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-sm transition-colors ${
+                      on ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-primary-500 border-primary-500' : 'border-gray-300'}`}>
+                      {on && <Check className="h-3 w-3 text-white" />}
+                    </span>
+                    <span className="truncate">{v.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {enabledVitals.length === 0 && (
+              <p className="text-xs text-gray-400 mt-3">Aucune constante suivie — la section n&apos;apparaîtra pas dans les fiches patient.</p>
+            )}
           </CardContent>
         </Card>
 

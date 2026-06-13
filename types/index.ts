@@ -17,6 +17,8 @@ export interface Doctor {
   // Identifiants légaux (facture marocaine)
   ice?: string | null
   inpe?: string | null
+  // Constantes vitales suivies (null = défaut selon spécialité, [] = aucune)
+  enabled_vitals?: string[] | null
   working_hours: WorkingHours
   appointment_duration: number // en minutes : 15, 20 ou 30
   created_at: string
@@ -100,6 +102,73 @@ export interface Prescription {
   appointment_id?: string | null
   content: string
   created_at: string
+}
+
+// Rappel de suivi ("revenez dans X mois")
+export type RecallStatus = 'pending' | 'sent' | 'done' | 'cancelled'
+export interface Recall {
+  id: string
+  doctor_id: string
+  patient_id: string
+  due_date: string        // YYYY-MM-DD
+  reason: string | null
+  status: RecallStatus
+  sent_at: string | null
+  created_at: string
+}
+
+// Mesure de constantes vitales (valeurs flexibles en JSON)
+export interface VitalSign {
+  id: string
+  doctor_id: string
+  patient_id: string
+  measured_at: string
+  values: Record<string, number>
+  created_at: string
+}
+
+// Catalogue des constantes disponibles
+export interface VitalDef {
+  key: string
+  label: string
+  unit: string
+  step?: number
+}
+
+export const VITAL_DEFS: VitalDef[] = [
+  { key: 'weight',             label: 'Poids',                unit: 'kg',   step: 0.1 },
+  { key: 'height',             label: 'Taille',               unit: 'cm',   step: 0.5 },
+  { key: 'temperature',        label: 'Température',          unit: '°C',   step: 0.1 },
+  { key: 'systolic',           label: 'Tension systolique',  unit: 'mmHg', step: 1 },
+  { key: 'diastolic',          label: 'Tension diastolique', unit: 'mmHg', step: 1 },
+  { key: 'heart_rate',         label: 'Fréquence cardiaque', unit: 'bpm',  step: 1 },
+  { key: 'respiratory_rate',   label: 'Fréquence respiratoire', unit: '/min', step: 1 },
+  { key: 'spo2',               label: 'SpO₂',                 unit: '%',    step: 1 },
+  { key: 'blood_glucose',      label: 'Glycémie',             unit: 'g/L',  step: 0.01 },
+  { key: 'head_circumference', label: 'Périmètre crânien',   unit: 'cm',   step: 0.5 },
+  { key: 'pain',               label: 'Douleur',              unit: '/10',  step: 1 },
+]
+
+// Constantes proposées par défaut selon la spécialité.
+// Spécialité absente de la table → aucune constante par défaut (ex: dentiste,
+// dermatologue, psychiatre…). Le médecin peut toujours les activer dans Réglages.
+export const DEFAULT_VITALS_BY_SPECIALTY: Record<string, string[]> = {
+  'Médecin généraliste':          ['weight', 'height', 'systolic', 'diastolic', 'heart_rate', 'temperature', 'spo2'],
+  'Cardiologue':                  ['weight', 'height', 'systolic', 'diastolic', 'heart_rate', 'spo2'],
+  'Pédiatre':                     ['weight', 'height', 'head_circumference', 'temperature'],
+  'Pneumologue':                  ['spo2', 'respiratory_rate', 'heart_rate'],
+  'Endocrinologue':               ['weight', 'height', 'blood_glucose', 'systolic', 'diastolic'],
+  'Nutritionniste / Diététicien': ['weight', 'height'],
+  'Médecin du sport':             ['weight', 'height', 'heart_rate', 'systolic', 'diastolic'],
+  'Gériatre':                     ['weight', 'height', 'systolic', 'diastolic', 'heart_rate', 'spo2'],
+  'Néphrologue':                  ['weight', 'systolic', 'diastolic'],
+  'Médecin urgentiste':           ['systolic', 'diastolic', 'heart_rate', 'spo2', 'temperature', 'respiratory_rate'],
+}
+
+// Résout les constantes à afficher pour un médecin (config ou défaut spécialité)
+export function resolveEnabledVitals(enabled: string[] | null | undefined, specialty?: string): string[] {
+  if (enabled != null) return enabled
+  return (specialty && DEFAULT_VITALS_BY_SPECIALTY[specialty]) || []
 }
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled'

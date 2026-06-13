@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
-import type { Patient, Appointment, ConsultationNote, PatientDocument } from '@/types'
+import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign } from '@/types'
+import { VITAL_DEFS, resolveEnabledVitals } from '@/types'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -27,6 +28,8 @@ interface PatientWithStats extends Patient {
 export default function PatientsPage() {
   const [patients, setPatients] = useState<PatientWithStats[]>([])
   const [doctorId, setDoctorId] = useState<string | null>(null)
+  const [doctorSlug, setDoctorSlug] = useState<string>('')
+  const [enabledVitals, setEnabledVitals] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedPatient, setSelectedPatient] = useState<PatientWithStats | null>(null)
@@ -50,6 +53,17 @@ export default function PatientsPage() {
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [deleteDocConfirm, setDeleteDocConfirm] = useState<PatientDocument | null>(null)
 
+  // Rappels de suivi
+  const [recalls, setRecalls] = useState<Recall[]>([])
+  const [recallDate, setRecallDate] = useState('')
+  const [recallReason, setRecallReason] = useState('')
+  const [addingRecall, setAddingRecall] = useState(false)
+
+  // Constantes vitales
+  const [vitals, setVitals] = useState<VitalSign[]>([])
+  const [vitalInput, setVitalInput] = useState<Record<string, string>>({})
+  const [savingVital, setSavingVital] = useState(false)
+
   // Ajout d'un patient
   const [addOpen, setAddOpen] = useState(false)
   const [newPatient, setNewPatient] = useState({ first_name: '', last_name: '', phone: '', notes: '' })
@@ -68,12 +82,14 @@ export default function PatientsPage() {
 
     const { data: doctor } = await supabase
       .from('doctors')
-      .select('id')
+      .select('id, slug, specialty, enabled_vitals')
       .eq('email', user.email)
       .single()
 
     if (!doctor) return
     setDoctorId(doctor.id)
+    setDoctorSlug(doctor.slug ?? '')
+    setEnabledVitals(resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty))
 
     // Récupère les patients avec leurs RDV (date + présence)
     const { data: pts } = await supabase
@@ -122,10 +138,15 @@ export default function PatientsPage() {
     setNewNote('')
     setConsultNotes([])
     setDocuments([])
+    setRecalls([])
+    setVitals([])
+    setVitalInput({})
+    setRecallDate('')
+    setRecallReason('')
     setLoadingHistory(true)
     setSaved(false)
 
-    const [aptRes, notesRes, docsRes] = await Promise.all([
+    const [aptRes, notesRes, docsRes, recallsRes, vitalsRes] = await Promise.all([
       supabase
         .from('appointments')
         .select('*, patient:patients(*)')
@@ -142,12 +163,78 @@ export default function PatientsPage() {
         .select('*')
         .eq('patient_id', patient.id)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('recalls')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .order('due_date', { ascending: true }),
+      supabase
+        .from('vital_signs')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .order('measured_at', { ascending: false }),
     ])
 
     setPatientAppointments(aptRes.data ?? [])
     setConsultNotes(notesRes.data ?? [])
     setDocuments(docsRes.data ?? [])
+    setRecalls(recallsRes.data ?? [])
+    setVitals(vitalsRes.data ?? [])
     setLoadingHistory(false)
+  }
+
+  // ── Rappels de suivi ────────────────────────────────────────────────────
+  async function addRecall() {
+    if (!selectedPatient || !doctorId || !recallDate) return
+    setAddingRecall(true)
+    const { data, error } = await supabase
+      .from('recalls')
+      .insert({
+        doctor_id: doctorId,
+        patient_id: selectedPatient.id,
+        due_date: recallDate,
+        reason: recallReason.trim() || null,
+      })
+      .select()
+      .single()
+    setAddingRecall(false)
+    if (!error && data) {
+      setRecalls((prev) => [...prev, data].sort((a, b) => a.due_date.localeCompare(b.due_date)))
+      setRecallDate('')
+      setRecallReason('')
+    }
+  }
+
+  async function cancelRecall(id: string) {
+    const { error } = await supabase.from('recalls').delete().eq('id', id)
+    if (error) { alert('La suppression du rappel a échoué.'); return }
+    setRecalls((prev) => prev.filter((r) => r.id !== id))
+  }
+
+  // ── Constantes vitales ──────────────────────────────────────────────────
+  async function addVital() {
+    if (!selectedPatient || !doctorId) return
+    // Ne garde que les champs activés et réellement remplis
+    const values: Record<string, number> = {}
+    for (const key of enabledVitals) {
+      const raw = vitalInput[key]
+      if (raw != null && raw !== '') {
+        const n = parseFloat(String(raw).replace(',', '.'))
+        if (!isNaN(n)) values[key] = n
+      }
+    }
+    if (Object.keys(values).length === 0) return
+    setSavingVital(true)
+    const { data, error } = await supabase
+      .from('vital_signs')
+      .insert({ doctor_id: doctorId, patient_id: selectedPatient.id, values })
+      .select()
+      .single()
+    setSavingVital(false)
+    if (!error && data) {
+      setVitals((prev) => [data, ...prev])
+      setVitalInput({})
+    }
   }
 
   async function addConsultNote() {
@@ -601,6 +688,114 @@ export default function PatientsPage() {
                   )}
                 </div>
               </div>
+
+              {/* Rappel de suivi */}
+              <div className="border-t border-gray-100 pt-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <BellRing className="h-4 w-4 text-primary-500" />
+                  Rappels de suivi ({recalls.filter((r) => r.status === 'pending').length})
+                </h4>
+
+                {/* Rappels programmés */}
+                {recalls.filter((r) => r.status !== 'cancelled').length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {recalls.filter((r) => r.status !== 'cancelled').map((r) => (
+                      <div key={r.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm text-gray-800">
+                            {formatDateShort(r.due_date)}
+                            {r.reason && <span className="text-gray-500"> — {r.reason}</span>}
+                          </p>
+                          <p className="text-[11px] text-gray-400">
+                            {r.status === 'sent' ? 'Rappel envoyé' : 'En attente d’envoi'}
+                          </p>
+                        </div>
+                        {r.status === 'pending' && (
+                          <button onClick={() => cancelRecall(r.id)} className="text-gray-300 hover:text-red-500 shrink-0" title="Annuler ce rappel">
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Programmer un rappel */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    type="date"
+                    value={recallDate}
+                    onChange={(e) => setRecallDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="sm:w-44"
+                  />
+                  <Input
+                    value={recallReason}
+                    onChange={(e) => setRecallReason(e.target.value)}
+                    placeholder="Motif (ex : contrôle annuel)"
+                    className="flex-1"
+                  />
+                  <Button type="button" variant="outline" onClick={addRecall} disabled={!recallDate || addingRecall} className="shrink-0">
+                    <Plus className="h-4 w-4 mr-1" /> {addingRecall ? 'Ajout…' : 'Programmer'}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2">
+                  Un email invitant le patient à reprendre rendez-vous sera envoyé automatiquement à la date choisie.
+                </p>
+              </div>
+
+              {/* Constantes vitales — affichées selon la spécialité */}
+              {enabledVitals.length > 0 && (
+                <div className="border-t border-gray-100 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-primary-500" />
+                    Constantes ({vitals.length})
+                  </h4>
+
+                  {/* Saisie d'une mesure */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+                    {VITAL_DEFS.filter((v) => enabledVitals.includes(v.key)).map((v) => (
+                      <div key={v.key} className="relative">
+                        <Input
+                          type="number"
+                          step={v.step ?? 'any'}
+                          inputMode="decimal"
+                          value={vitalInput[v.key] ?? ''}
+                          onChange={(e) => setVitalInput((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                          placeholder={v.label}
+                          className="pr-12 text-sm"
+                          aria-label={v.label}
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">{v.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addVital} disabled={savingVital} className="mb-3">
+                    <Plus className="h-4 w-4 mr-1" /> {savingVital ? 'Enregistrement…' : 'Enregistrer la mesure'}
+                  </Button>
+
+                  {/* Historique des mesures */}
+                  {vitals.length > 0 && (
+                    <div className="space-y-2">
+                      {vitals.map((m) => {
+                        const w = m.values.weight, ht = m.values.height
+                        const imc = w && ht ? (w / Math.pow(ht / 100, 2)) : null
+                        return (
+                          <div key={m.id} className="bg-gray-50 rounded-lg px-3 py-2">
+                            <p className="text-[11px] text-gray-400 mb-1 capitalize">{formatDateFr(m.measured_at)}</p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-700">
+                              {VITAL_DEFS.filter((v) => m.values[v.key] != null).map((v) => (
+                                <span key={v.key}><b className="font-medium">{v.label}</b> {m.values[v.key]} {v.unit}</span>
+                              ))}
+                              {imc && <span className="text-primary-600"><b className="font-medium">IMC</b> {imc.toFixed(1)}</span>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Notes de consultation datées (timeline) */}
               <div className="border-t border-gray-100 pt-4">
