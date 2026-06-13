@@ -341,11 +341,12 @@ export default function PatientsPage() {
       chronic_conditions: editChronic || null,
       current_treatments: editTreatments || null,
     }
-    await supabase
+    const { error } = await supabase
       .from('patients')
       .update(updates)
       .eq('id', selectedPatient.id)
     setSaving(false)
+    if (error) { alert('L\'enregistrement de la fiche a échoué. Réessayez.'); return }
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
     setPatients((prev) => prev.map((p) =>

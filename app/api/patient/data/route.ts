@@ -110,9 +110,22 @@ export async function DELETE() {
       })
       .in('id', patientIds)
 
-    // Efface les notes de consultation et ordonnances rattachées à ces patients
+    // Efface tout le dossier médical rattaché (loi 09-08 : suppression réelle)
     await adminDb.from('consultation_notes').delete().in('patient_id', patientIds)
     await adminDb.from('prescriptions').delete().in('patient_id', patientIds)
+    await adminDb.from('vital_signs').delete().in('patient_id', patientIds)
+    await adminDb.from('recalls').delete().in('patient_id', patientIds)
+
+    // Documents : supprime les fichiers du stockage PUIS les lignes en base
+    const { data: docs } = await adminDb
+      .from('patient_documents')
+      .select('file_path')
+      .in('patient_id', patientIds)
+    const paths = (docs ?? []).map((d: { file_path: string }) => d.file_path).filter(Boolean)
+    if (paths.length > 0) {
+      await adminDb.storage.from('patient-documents').remove(paths)
+    }
+    await adminDb.from('patient_documents').delete().in('patient_id', patientIds)
   }
 
   // Supprime le compte auth
