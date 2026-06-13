@@ -66,7 +66,7 @@ export default async function DossierPage({ params }: Props) {
 
       {/* Bandeau conservation — masqué à l'impression */}
       <div className="max-w-3xl mx-auto mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800 print:hidden">
-        💡 <strong>Gardez une copie de ce dossier</strong> (impression ou PDF). Vos données médicales vous appartiennent — une copie hors ligne vous protège en cas d&apos;indisponibilité du service.
+        💡 <strong>Imprimez ou enregistrez ce dossier en PDF</strong> pour en conserver une copie personnelle. Vos données médicales vous appartiennent.
       </div>
 
       <div className="max-w-3xl mx-auto bg-white shadow-sm rounded-lg p-10 print:shadow-none print:rounded-none print:p-0 text-gray-800">
