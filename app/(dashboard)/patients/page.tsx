@@ -11,7 +11,7 @@ import { AppointmentList, type PaymentPayload } from '@/components/dashboard/App
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign } from '@/types'
 import { VITAL_DEFS, resolveEnabledVitals } from '@/types'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -626,18 +626,26 @@ export default function PatientsPage() {
                   <Phone className="h-3.5 w-3.5" />
                   {selectedPatient.phone}
                 </span>
-                <a
-                  href={`/dossier/${selectedPatient.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 bg-white border border-primary-200 rounded-lg px-3 py-1.5 shrink-0"
-                >
-                  <Download className="h-3.5 w-3.5" /> Dossier complet
-                </a>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={`/dossier/${selectedPatient.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 bg-white border border-primary-200 rounded-lg px-3 py-1.5"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Voir / imprimer
+                  </a>
+                  <a
+                    href={`/api/dossier/${selectedPatient.id}`}
+                    className="flex items-center gap-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-3 py-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Tout télécharger
+                  </a>
+                </div>
               </div>
 
               <p className="text-[11px] text-gray-400 -mt-2 px-1">
-                💡 Imprimez ou enregistrez le dossier en PDF pour en conserver une copie personnelle. Vos données médicales vous appartiennent.
+                💡 « Tout télécharger » enregistre sur votre PC un dossier complet (récapitulatif + radios et documents). Vos données médicales vous appartiennent.
               </p>
 
               {/* Alerte allergies — visible immédiatement à l'ouverture */}

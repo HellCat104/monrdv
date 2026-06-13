@@ -7,7 +7,7 @@ export function PrintButton() {
   return (
     <Button onClick={() => window.print()} size="sm">
       <Printer className="h-4 w-4 mr-2" />
-      Imprimer / PDF
+      Imprimer / Enregistrer en PDF
     </Button>
   )
 }
