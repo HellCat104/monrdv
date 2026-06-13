@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { AppointmentList } from '@/components/dashboard/AppointmentList'
+import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign } from '@/types'
 import { VITAL_DEFS, resolveEnabledVitals } from '@/types'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
@@ -235,6 +235,31 @@ export default function PatientsPage() {
       setVitals((prev) => [data, ...prev])
       setVitalInput({})
     }
+  }
+
+  // Encaissement modifiable directement depuis la fiche patient (historique RDV)
+  async function handlePatientPayment(id: string, payload: PaymentPayload) {
+    const res = await fetch(`/api/appointments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || 'Échec de l\'enregistrement du paiement')
+    }
+    const updated = await res.json().catch(() => null)
+    setPatientAppointments((prev) =>
+      prev.map((a) => a.id === id
+        ? {
+            ...a,
+            amount_paid: payload.amount_paid,
+            amount_due: payload.amount_due,
+            payment_method: payload.payment_method,
+            paid_at: updated?.paid_at ?? (payload.amount_paid !== null ? new Date().toISOString() : null),
+          }
+        : a)
+    )
   }
 
   async function addConsultNote() {
@@ -911,7 +936,7 @@ export default function PatientsPage() {
                     ))}
                   </div>
                 ) : (
-                  <AppointmentList appointments={patientAppointments} />
+                  <AppointmentList appointments={patientAppointments} onPayment={handlePatientPayment} />
                 )}
               </div>
 
