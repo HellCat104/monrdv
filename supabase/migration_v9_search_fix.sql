@@ -11,7 +11,11 @@
 -- (plus d'email/identifiants exposés via la recherche).
 -- ============================================================================
 
-CREATE OR REPLACE FUNCTION search_doctors(p_q text, p_specialite text, p_ville text)
+-- L'ancienne fonction renvoie un type différent : on la supprime d'abord
+-- (CREATE OR REPLACE ne peut pas changer le type de retour — erreur 42P13).
+DROP FUNCTION IF EXISTS search_doctors(text, text, text);
+
+CREATE FUNCTION search_doctors(p_q text, p_specialite text, p_ville text)
 RETURNS TABLE (
   id                   uuid,
   name                 text,

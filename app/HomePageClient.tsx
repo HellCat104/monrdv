@@ -283,7 +283,7 @@ export default function HomePageClient() {
         </div>
         <div className="flex items-center justify-center gap-4 mt-4">
           <a
-            href="mailto:asmaadouach@gmail.com"
+            href="mailto:monrdvco@gmail.com"
             className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
           >
             <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">

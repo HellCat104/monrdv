@@ -136,8 +136,8 @@ export default function CGUPage() {
                 <p><strong>Pays d'exploitation :</strong> Maroc 🇲🇦</p>
                 <p>
                   <strong>Contact :</strong>{' '}
-                  <a href="mailto:asmaadouach@gmail.com" className="text-primary-500 hover:underline">
-                    asmaadouach@gmail.com
+                  <a href="mailto:monrdvco@gmail.com" className="text-primary-500 hover:underline">
+                    monrdvco@gmail.com
                   </a>
                 </p>
                 <p>
@@ -240,8 +240,8 @@ export default function CGUPage() {
                 <p className="text-gray-600 leading-relaxed">
                   Chaque utilisateur est responsable de la confidentialité de ses identifiants de connexion.
                   Toute utilisation frauduleuse signalée doit être notifiée immédiatement à{' '}
-                  <a href="mailto:asmaadouach@gmail.com" className="text-primary-500 hover:underline">
-                    asmaadouach@gmail.com
+                  <a href="mailto:monrdvco@gmail.com" className="text-primary-500 hover:underline">
+                    monrdvco@gmail.com
                   </a>.
                 </p>
               </SubSection>
@@ -360,7 +360,7 @@ export default function CGUPage() {
               <SubSection title="Résiliation à l'initiative du médecin :">
                 <p className="text-gray-600 leading-relaxed">
                   Le médecin peut résilier son abonnement à tout moment en adressant une demande à{' '}
-                  <a href="mailto:asmaadouach@gmail.com" className="text-primary-500 hover:underline">asmaadouach@gmail.com</a>.
+                  <a href="mailto:monrdvco@gmail.com" className="text-primary-500 hover:underline">monrdvco@gmail.com</a>.
                   La résiliation prend effet à la fin de la période mensuelle en cours.
                   Les données du compte sont conservées 1 an après la résiliation, sauf demande de suppression.
                 </p>
@@ -511,14 +511,14 @@ export default function CGUPage() {
               <div className="bg-gray-50 rounded-xl p-5 text-sm text-gray-700 space-y-2">
                 <p>
                   📧 Email général :{' '}
-                  <a href="mailto:asmaadouach@gmail.com" className="text-primary-500 hover:underline">
-                    asmaadouach@gmail.com
+                  <a href="mailto:monrdvco@gmail.com" className="text-primary-500 hover:underline">
+                    monrdvco@gmail.com
                   </a>
                 </p>
                 <p>
                   🔒 Protection des données :{' '}
-                  <a href="mailto:asmaadouach@gmail.com" className="text-primary-500 hover:underline">
-                    asmaadouach@gmail.com
+                  <a href="mailto:monrdvco@gmail.com" className="text-primary-500 hover:underline">
+                    monrdvco@gmail.com
                   </a>
                 </p>
                 <p>💬 WhatsApp support : disponible via la page d&apos;accueil</p>

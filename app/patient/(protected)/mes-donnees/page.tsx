@@ -168,8 +168,8 @@ export default function MesDonneesPage() {
 
       <p className="text-xs text-gray-400 text-center">
         Pour toute demande supplémentaire, contactez-nous à{' '}
-        <a href="mailto:asmaadouach@gmail.com" className="underline hover:text-primary-500">
-          asmaadouach@gmail.com
+        <a href="mailto:monrdvco@gmail.com" className="underline hover:text-primary-500">
+          monrdvco@gmail.com
         </a>
         . Délai de réponse : 30 jours maximum.
       </p>
