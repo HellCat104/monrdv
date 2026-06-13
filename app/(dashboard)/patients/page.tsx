@@ -620,12 +620,20 @@ export default function PatientsPage() {
 
           {selectedPatient && (
             <div className="space-y-4">
-              {/* Infos contact */}
-              <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-                <p className="flex items-center gap-2 text-gray-600">
+              {/* Infos contact + dossier complet */}
+              <div className="bg-gray-50 rounded-lg p-3 text-sm flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-gray-600">
                   <Phone className="h-3.5 w-3.5" />
                   {selectedPatient.phone}
-                </p>
+                </span>
+                <a
+                  href={`/dossier/${selectedPatient.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 bg-white border border-primary-200 rounded-lg px-3 py-1.5 shrink-0"
+                >
+                  <Download className="h-3.5 w-3.5" /> Dossier complet
+                </a>
               </div>
 
               {/* Alerte allergies — visible immédiatement à l'ouverture */}
