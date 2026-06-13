@@ -268,6 +268,15 @@ export default function PatientsPage() {
     const file = e.target.files?.[0]
     if (!file || !selectedPatient || !doctorId) return
     if (file.size > 10 * 1024 * 1024) { alert('Le fichier ne doit pas dépasser 10 Mo.'); e.target.value = ''; return }
+    // Bloque les formats potentiellement exécutables (script en SVG/HTML, etc.)
+    const ext = '.' + (file.name.split('.').pop() || '').toLowerCase()
+    const BLOCKED = ['.html', '.htm', '.xhtml', '.svg', '.xml', '.js', '.mjs', '.exe', '.sh', '.bat']
+    if (BLOCKED.includes(ext)) {
+      alert('Ce type de fichier n\'est pas autorisé. Utilisez un PDF, une image (JPG/PNG) ou un document Word/Excel.')
+      e.target.value = ''
+      return
+    }
+    if (documents.length >= 50) { alert('Limite de 50 documents par patient atteinte.'); e.target.value = ''; return }
 
     setUploadingDoc(true)
     try {
@@ -306,13 +315,16 @@ export default function PatientsPage() {
     // Bucket privé → URL signée valable 1 min
     const { data, error } = await supabase.storage
       .from(DOC_BUCKET)
-      .createSignedUrl(doc.file_path, 60)
+      .createSignedUrl(doc.file_path, 120)
     if (error || !data) { alert('Impossible d\'ouvrir le document.'); return }
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
   }
 
   async function handleDeleteDocument(doc: PatientDocument) {
-    await supabase.storage.from(DOC_BUCKET).remove([doc.file_path])
+    // On supprime d'abord le fichier (donnée de santé) : si ça échoue, on
+    // n'efface pas la ligne en base, pour ne pas laisser de fichier orphelin.
+    const { error: storageErr } = await supabase.storage.from(DOC_BUCKET).remove([doc.file_path])
+    if (storageErr) { alert('Impossible de supprimer le fichier. Réessayez.'); return }
     const { error } = await supabase.from('patient_documents').delete().eq('id', doc.id)
     if (error) { alert('La suppression a échoué. Réessayez.'); return }
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
