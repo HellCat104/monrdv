@@ -367,12 +367,24 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
               </div>
             </div>
 
-            {/* Reste à payer (info) */}
+            {/* Reste à payer + bouton "Solder le reste" */}
             {(() => {
               const due = parseFloat(payDialog.due.replace(',', '.'))
               const paid = parseFloat(payDialog.paid.replace(',', '.'))
-              if (!isNaN(due) && !isNaN(paid) && due - paid > 0) {
-                return <p className="text-xs text-orange-600 font-medium">Reste à payer : {Math.round((due - paid) * 100) / 100} DH</p>
+              const reste = Math.round((due - paid) * 100) / 100
+              if (!isNaN(due) && !isNaN(paid) && reste > 0) {
+                return (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-orange-600 font-medium">Reste à payer : {reste} DH</p>
+                    <button
+                      type="button"
+                      onClick={() => { setPayDialog((p) => ({ ...p, paid: p.due })); setPayError('') }}
+                      className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1 hover:bg-green-100 transition-colors"
+                    >
+                      Solder le reste
+                    </button>
+                  </div>
+                )
               }
               if (!isNaN(due) && !isNaN(paid) && due > 0 && paid >= due) {
                 return <p className="text-xs text-green-600 font-medium">Soldé ✓</p>
