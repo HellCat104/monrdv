@@ -3,82 +3,108 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MonRDV — Visuels LinkedIn</title>
+<title>MonRDV — Identité LinkedIn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#eef5fb;color:#0f2230;margin:0;padding:32px;line-height:1.5}
-  h1{font-size:22px;margin:0 0 4px}
-  p.sub{color:#64748b;margin:0 0 28px;font-size:14px}
-  .card{background:#fff;border:1px solid #e6eef4;border-radius:16px;padding:22px;margin-bottom:22px;max-width:860px}
-  .card h2{font-size:16px;margin:0 0 2px}
-  .card .dim{color:#90a4b3;font-size:12.5px;margin:0 0 16px}
-  .preview{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
-  .btn{display:inline-flex;align-items:center;gap:8px;background:#0EA5E9;color:#fff;border:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:11px;cursor:pointer}
+  body{font-family:'Poppins',-apple-system,sans-serif;background:#eaf1f8;color:#0f2230;margin:0;padding:40px 24px}
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-size:24px;font-weight:700;margin:0 0 4px}
+  p.sub{color:#64748b;margin:0 0 32px;font-weight:400}
+  .card{background:#fff;border:1px solid #e6eef4;border-radius:20px;padding:26px;margin-bottom:24px;box-shadow:0 8px 30px rgba(15,34,48,.04)}
+  .card h2{font-size:17px;font-weight:600;margin:0 0 2px}
+  .card .dim{color:#9aa7b2;font-size:13px;margin:0 0 18px;font-weight:400}
+  .row{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#0EA5E9;color:#fff;border:none;font-family:'Poppins';font-weight:600;font-size:14px;padding:12px 22px;border-radius:12px;cursor:pointer;box-shadow:0 8px 20px rgba(14,165,233,.32)}
   .btn:hover{background:#0284c7}
-  .frame{border:1px solid #e6eef4;border-radius:12px;overflow:hidden;background:#fff}
-  .note{font-size:12.5px;color:#90a4b3;margin-top:10px}
+  .frame{border:1px solid #eef2f6;border-radius:16px;overflow:hidden;line-height:0}
+  .note{font-size:12.5px;color:#9aa7b2;margin-top:12px;font-weight:400}
 </style>
 </head>
 <body>
-  <h1>Visuels LinkedIn — MonRDV</h1>
-  <p class="sub">Clique sur « Télécharger » : le fichier PNG est créé directement sur ton Mac, prêt à téléverser sur LinkedIn.</p>
+<div class="wrap">
+  <h1>Identité MonRDV — réseaux sociaux</h1>
+  <p class="sub">Clique sur « Télécharger » : le PNG haute résolution est généré sur ton Mac, prêt à téléverser sur LinkedIn.</p>
 
   <div class="card">
     <h2>Photo de profil</h2>
-    <p class="dim">Carré · exporté en 800 × 800 px (LinkedIn l'affiche en cercle)</p>
-    <div class="preview">
+    <p class="dim">Carré · export 1000 × 1000 px · LinkedIn l'affiche en cercle</p>
+    <div class="row">
       <div class="frame" style="border-radius:50%">
-        <svg id="svgProfile" width="180" height="180" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="400" height="400" fill="#0EA5E9"/>
-          <text x="200" y="215" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="170" font-weight="700" fill="#ffffff">M</text>
-          <text x="200" y="300" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="52" font-weight="700" fill="#ffffff">MonRDV</text>
+        <svg id="svgProfile" width="170" height="170" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&display=swap');</style>
+            <linearGradient id="pg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#4cc3f5"/><stop offset="0.5" stop-color="#0EA5E9"/><stop offset="1" stop-color="#0369a1"/>
+            </linearGradient>
+            <radialGradient id="pglow" cx="0.3" cy="0.24" r="0.85">
+              <stop offset="0" stop-color="#ffffff" stop-opacity="0.38"/><stop offset="0.6" stop-color="#ffffff" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="psh" x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="7" stdDeviation="11" flood-color="#082f49" flood-opacity="0.40"/>
+            </filter>
+          </defs>
+          <rect x="0" y="0" width="400" height="400" fill="url(#pg)"/>
+          <rect x="0" y="0" width="400" height="400" fill="url(#pglow)"/>
+          <g filter="url(#psh)">
+            <text x="200" y="232" text-anchor="middle" font-family="Poppins,sans-serif" font-size="186" font-weight="800" fill="#ffffff" letter-spacing="-6">M</text>
+          </g>
+          <polyline points="116,300 158,300 178,300 192,272 206,328 220,300 284,300" fill="none" stroke="#ffffff" stroke-opacity="0.92" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
-      <button class="btn" onclick="dl('svgProfile',800,800,'monrdv-linkedin-profil.png')">Télécharger la photo</button>
+      <button class="btn" onclick="dl('svgProfile',1000,1000,'monrdv-linkedin-profil.png')">Télécharger la photo</button>
     </div>
   </div>
 
   <div class="card">
     <h2>Bannière de page</h2>
-    <p class="dim">Format LinkedIn · exporté en 1128 × 191 px</p>
+    <p class="dim">Format LinkedIn 1128 × 191 · export 2× (2256 × 382) · zone bas-gauche laissée libre pour le logo</p>
     <div class="frame">
-      <svg id="svgBanner" width="100%" viewBox="0 0 1128 191" xmlns="http://www.w3.org/2000/svg" style="display:block">
-        <rect x="0" y="0" width="1128" height="191" fill="#f0f9ff"/>
-        <circle cx="1010" cy="96" r="120" fill="#e0f2fe"/>
-        <rect x="958" y="62" width="92" height="74" rx="12" fill="#ffffff" stroke="#0EA5E9" stroke-width="5"/>
-        <rect x="958" y="62" width="92" height="20" fill="#0EA5E9"/>
-        <path d="M984 104 L998 117 L1026 90" fill="none" stroke="#0EA5E9" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-        <rect x="70" y="58" width="76" height="76" rx="20" fill="#0EA5E9"/>
-        <text x="108" y="113" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="42" font-weight="700" fill="#ffffff">M</text>
-        <text x="172" y="98" font-family="Helvetica,Arial,sans-serif" font-size="52" font-weight="700"><tspan fill="#475c6b">Mon</tspan><tspan fill="#0EA5E9">RDV</tspan></text>
-        <text x="174" y="138" font-family="Helvetica,Arial,sans-serif" font-size="23" font-weight="400" fill="#5b7180">Prenez rendez-vous avec un médecin, en ligne, partout au Maroc.</text>
+      <svg id="svgBanner" width="100%" viewBox="0 0 1128 191" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;700;800&display=swap');</style>
+          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0EA5E9"/><stop offset="0.55" stop-color="#0a87c4"/><stop offset="1" stop-color="#075985"/>
+          </linearGradient>
+          <radialGradient id="bglow" cx="0.78" cy="0.2" r="0.7">
+            <stop offset="0" stop-color="#7dd3fc" stop-opacity="0.45"/><stop offset="1" stop-color="#7dd3fc" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="1128" height="191" fill="url(#bg)"/>
+        <rect x="0" y="0" width="1128" height="191" fill="url(#bglow)"/>
+        <polyline points="0,150 230,150 300,150 340,150 372,150 398,86 424,150 470,150 506,150 548,114 590,150 1128,150"
+          fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="564" y="96" text-anchor="middle" font-family="Poppins,sans-serif" font-size="72" font-weight="800" fill="#ffffff" letter-spacing="-2">MonRDV</text>
+        <rect x="494" y="120" width="140" height="3" rx="1.5" fill="#7dd3fc" fill-opacity="0.8"/>
+        <text x="564" y="156" text-anchor="middle" font-family="Poppins,sans-serif" font-size="24" font-weight="500" fill="#e0f2fe">La prise de rendez-vous médical, simplifiée.</text>
       </svg>
     </div>
-    <button class="btn" style="margin-top:16px" onclick="dl('svgBanner',2256,382,'monrdv-linkedin-banniere.png')">Télécharger la bannière</button>
-    <p class="note">Exportée en 2× (2256 × 382) pour un rendu net ; LinkedIn la redimensionne automatiquement.</p>
+    <button class="btn" style="margin-top:18px" onclick="dl('svgBanner',2256,382,'monrdv-linkedin-banniere.png')">Télécharger la bannière</button>
+    <p class="note">Texte centré : reste visible même quand LinkedIn place le logo en bas à gauche.</p>
   </div>
+</div>
 
 <script>
-function dl(svgId, w, h, filename){
+async function dl(svgId, w, h, filename){
+  try { await document.fonts.ready;
+    await Promise.all([document.fonts.load("800 100px Poppins"),document.fonts.load("700 100px Poppins"),document.fonts.load("500 40px Poppins")]);
+  } catch(e){}
   var svg = document.getElementById(svgId);
   var clone = svg.cloneNode(true);
-  clone.setAttribute('width', w);
-  clone.setAttribute('height', h);
+  clone.setAttribute('width', w); clone.setAttribute('height', h);
   var data = new XMLSerializer().serializeToString(clone);
-  var blob = new Blob([data], {type:'image/svg+xml;charset=utf-8'});
-  var url = URL.createObjectURL(blob);
+  var url = URL.createObjectURL(new Blob([data], {type:'image/svg+xml;charset=utf-8'}));
   var img = new Image();
   img.onload = function(){
     var canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
-    var ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, w, h);
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
     URL.revokeObjectURL(url);
     canvas.toBlob(function(b){
       var a = document.createElement('a');
-      a.href = URL.createObjectURL(b);
-      a.download = filename;
-      a.click();
-      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+      a.href = URL.createObjectURL(b); a.download = filename; a.click();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
     }, 'image/png');
   };
   img.src = url;
