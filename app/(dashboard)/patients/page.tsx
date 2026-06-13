@@ -7,11 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign } from '@/types'
 import { VITAL_DEFS, resolveEnabledVitals } from '@/types'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -32,6 +33,7 @@ export default function PatientsPage() {
   const [enabledVitals, setEnabledVitals] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'recent' | 'name' | 'lastRdv'>('recent')
   const [selectedPatient, setSelectedPatient] = useState<PatientWithStats | null>(null)
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -70,10 +72,16 @@ export default function PatientsPage() {
   const [newPatient, setNewPatient] = useState({ first_name: '', last_name: '', phone: '', notes: '' })
   const [addingPatient, setAddingPatient] = useState(false)
   const [addError, setAddError] = useState('')
+  const [similarPatient, setSimilarPatient] = useState<PatientWithStats | null>(null)
 
   // Suppression d'un patient
   const [deleteConfirm, setDeleteConfirm] = useState<PatientWithStats | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Fusion de fiches (doublons)
+  const [mergeOpen, setMergeOpen] = useState(false)
+  const [mergeSearch, setMergeSearch] = useState('')
+  const [merging, setMerging] = useState(false)
 
   const supabase = createClient()
 
@@ -392,7 +400,7 @@ export default function PatientsPage() {
     ))
   }
 
-  async function handleAddPatient(e: React.FormEvent) {
+  async function handleAddPatient(e: React.FormEvent, force = false) {
     e.preventDefault()
     setAddError('')
     if (!doctorId) return
@@ -400,6 +408,20 @@ export default function PatientsPage() {
       setAddError('Prénom, nom et téléphone sont obligatoires.')
       return
     }
+
+    // Alerte "patient similaire" : même téléphone (chiffres) ou même nom complet
+    if (!force) {
+      const digits = (s: string) => s.replace(/\D/g, '').replace(/^212/, '0')
+      const phoneD = digits(newPatient.phone)
+      const fullName = `${newPatient.first_name.trim()} ${newPatient.last_name.trim()}`.toLowerCase()
+      const match = patients.find((p) =>
+        (phoneD.length >= 6 && digits(p.phone) === phoneD) ||
+        `${p.first_name} ${p.last_name}`.toLowerCase() === fullName
+      )
+      if (match) { setSimilarPatient(match); return }
+    }
+
+    setSimilarPatient(null)
     setAddingPatient(true)
 
     const { error } = await supabase.from('patients').insert({
@@ -438,15 +460,48 @@ export default function PatientsPage() {
     setSelectedPatient(null)
   }
 
-  const filtered = patients.filter((p) => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return (
-      p.first_name.toLowerCase().includes(q) ||
-      p.last_name.toLowerCase().includes(q) ||
-      p.phone.includes(q)
-    )
-  })
+  // Fusionne la fiche "dupId" DANS la fiche ouverte (selectedPatient = conservée)
+  async function handleMerge(dupId: string) {
+    if (!selectedPatient) return
+    if (!confirm('Fusionner ce doublon dans la fiche actuelle ? Les RDV, notes, ordonnances et documents du doublon seront déplacés ici, puis le doublon sera supprimé. Action définitive.')) return
+    setMerging(true)
+    const res = await fetch('/api/patients/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keepId: selectedPatient.id, mergeId: dupId }),
+    })
+    setMerging(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      alert(d.error || 'La fusion a échoué. Réessayez.')
+      return
+    }
+    setMergeOpen(false)
+    setSelectedPatient(null)
+    setLoading(true)
+    await load()
+  }
+
+  const filtered = patients
+    .filter((p) => {
+      if (!search) return true
+      const q = search.toLowerCase()
+      return (
+        p.first_name.toLowerCase().includes(q) ||
+        p.last_name.toLowerCase().includes(q) ||
+        p.phone.includes(q)
+      )
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name') {
+        return `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'fr', { sensitivity: 'base' })
+      }
+      if (sortBy === 'lastRdv') {
+        return (b.last_appointment_date ?? '').localeCompare(a.last_appointment_date ?? '')
+      }
+      // recent : par date de création (ordre de chargement déjà desc)
+      return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+    })
 
   return (
     <div className="space-y-6">
@@ -460,15 +515,27 @@ export default function PatientsPage() {
         </Button>
       </div>
 
-      {/* Recherche */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher par nom ou téléphone…"
-          className="pl-9"
-        />
+      {/* Recherche + tri */}
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher par nom ou téléphone…"
+            className="pl-9"
+          />
+        </div>
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+          <SelectTrigger className="w-48 shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="recent">Ajout récent</SelectItem>
+            <SelectItem value="name">Ordre alphabétique</SelectItem>
+            <SelectItem value="lastRdv">Dernier rendez-vous</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Liste des patients */}
@@ -554,7 +621,7 @@ export default function PatientsPage() {
                 <label className="text-xs text-gray-500">Prénom *</label>
                 <Input
                   value={newPatient.first_name}
-                  onChange={(e) => setNewPatient({ ...newPatient, first_name: e.target.value })}
+                  onChange={(e) => { setNewPatient({ ...newPatient, first_name: e.target.value }); setSimilarPatient(null) }}
                   placeholder="Mohammed"
                   required
                 />
@@ -563,7 +630,7 @@ export default function PatientsPage() {
                 <label className="text-xs text-gray-500">Nom *</label>
                 <Input
                   value={newPatient.last_name}
-                  onChange={(e) => setNewPatient({ ...newPatient, last_name: e.target.value })}
+                  onChange={(e) => { setNewPatient({ ...newPatient, last_name: e.target.value }); setSimilarPatient(null) }}
                   placeholder="Alami"
                   required
                 />
@@ -574,7 +641,7 @@ export default function PatientsPage() {
               <Input
                 type="tel"
                 value={newPatient.phone}
-                onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+                onChange={(e) => { setNewPatient({ ...newPatient, phone: e.target.value }); setSimilarPatient(null) }}
                 placeholder="06 12 34 56 78"
                 required
               />
@@ -590,11 +657,38 @@ export default function PatientsPage() {
               />
             </div>
             {addError && <p className="text-sm text-red-500 bg-red-50 p-2.5 rounded-lg">{addError}</p>}
+
+            {similarPatient && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm space-y-2">
+                <p className="text-amber-800">
+                  ⚠️ Un patient similaire existe déjà : <strong>{similarPatient.first_name} {similarPatient.last_name}</strong> ({similarPatient.phone}). Voulez-vous ouvrir sa fiche plutôt que créer un doublon ?
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      const p = similarPatient
+                      setAddOpen(false); setSimilarPatient(null)
+                      setNewPatient({ first_name: '', last_name: '', phone: '', notes: '' })
+                      if (p) openPatientHistory(p)
+                    }}
+                  >
+                    Ouvrir la fiche existante
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="flex-1" onClick={(e) => handleAddPatient(e as unknown as React.FormEvent, true)}>
+                    Créer quand même
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={() => setAddOpen(false)} className="flex-1">
+              <Button type="button" variant="outline" onClick={() => { setAddOpen(false); setSimilarPatient(null) }} className="flex-1">
                 Annuler
               </Button>
-              <Button type="submit" disabled={addingPatient} className="flex-1">
+              <Button type="submit" disabled={addingPatient || !!similarPatient} className="flex-1">
                 {addingPatient ? 'Ajout…' : 'Ajouter'}
               </Button>
             </div>
@@ -993,8 +1087,16 @@ export default function PatientsPage() {
                 )}
               </div>
 
-              {/* Zone de suppression */}
-              <div className="border-t border-gray-100 pt-4">
+              {/* Zone de gestion : fusion + suppression */}
+              <div className="border-t border-gray-100 pt-4 flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-primary-600 border-primary-200 hover:bg-primary-50"
+                  onClick={() => { setMergeOpen(true); setMergeSearch('') }}
+                >
+                  <GitMerge className="h-3.5 w-3.5 mr-1.5" /> Fusionner un doublon
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1068,6 +1170,59 @@ export default function PatientsPage() {
                 >
                   Supprimer
                 </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Fusion : choisir le doublon à fusionner dans la fiche ouverte */}
+      <Dialog open={mergeOpen} onOpenChange={(o) => { setMergeOpen(o); if (!o) setMergeSearch('') }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitMerge className="h-5 w-5 text-primary-500" /> Fusionner un doublon
+            </DialogTitle>
+          </DialogHeader>
+          {selectedPatient && (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Choisissez la fiche en double. Son contenu (RDV, notes, ordonnances, documents) sera déplacé dans
+                <strong> {selectedPatient.first_name} {selectedPatient.last_name}</strong>, puis le doublon sera supprimé.
+              </p>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  value={mergeSearch}
+                  onChange={(e) => setMergeSearch(e.target.value)}
+                  placeholder="Rechercher la fiche en double…"
+                  className="pl-9"
+                />
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-1.5">
+                {patients
+                  .filter((p) => p.id !== selectedPatient.id)
+                  .filter((p) => {
+                    if (!mergeSearch) return true
+                    const q = mergeSearch.toLowerCase()
+                    return `${p.first_name} ${p.last_name}`.toLowerCase().includes(q) || p.phone.includes(q)
+                  })
+                  .slice(0, 30)
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={merging}
+                      onClick={() => handleMerge(p.id)}
+                      className="w-full flex items-center justify-between gap-2 text-left bg-gray-50 hover:bg-primary-50 rounded-lg px-3 py-2 disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="text-sm font-medium text-gray-800 block truncate">{p.first_name} {p.last_name}</span>
+                        <span className="text-xs text-gray-400">{p.phone} · {p.appointment_count} RDV</span>
+                      </span>
+                      <GitMerge className="h-4 w-4 text-primary-400 shrink-0" />
+                    </button>
+                  ))}
               </div>
             </div>
           )}
