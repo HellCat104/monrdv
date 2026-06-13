@@ -11,7 +11,7 @@ import { AppointmentList, type PaymentPayload } from '@/components/dashboard/App
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign } from '@/types'
 import { VITAL_DEFS, resolveEnabledVitals } from '@/types'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -47,6 +47,7 @@ export default function PatientsPage() {
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
   const [deleteNoteConfirm, setDeleteNoteConfirm] = useState<ConsultationNote | null>(null)
+  const [signNoteConfirm, setSignNoteConfirm] = useState<ConsultationNote | null>(null)
 
   // Documents du patient (analyses, radios scannées…)
   const [documents, setDocuments] = useState<PatientDocument[]>([])
@@ -286,6 +287,18 @@ export default function PatientsPage() {
     if (error) { alert('La suppression de la note a échoué. Réessayez.'); return }
     setConsultNotes((prev) => prev.filter((n) => n.id !== id))
     setDeleteNoteConfirm(null)
+  }
+
+  // Signe (verrouille) une note : devient non modifiable / non supprimable
+  async function signConsultNote(id: string) {
+    const signedAt = new Date().toISOString()
+    const { error } = await supabase
+      .from('consultation_notes')
+      .update({ signed_at: signedAt })
+      .eq('id', id)
+    if (error) { alert('La signature a échoué. Réessayez.'); return }
+    setConsultNotes((prev) => prev.map((n) => n.id === id ? { ...n, signed_at: signedAt } : n))
+    setSignNoteConfirm(null)
   }
 
   // ── Documents du patient ──────────────────────────────────────────────────
@@ -867,18 +880,38 @@ export default function PatientsPage() {
                 ) : (
                   <div className="space-y-2">
                     {consultNotes.map((n) => (
-                      <div key={n.id} className="group bg-gray-50 rounded-lg p-3 flex items-start gap-3">
+                      <div key={n.id} className={`group rounded-lg p-3 flex items-start gap-3 ${n.signed_at ? 'bg-green-50/60 border border-green-100' : 'bg-gray-50'}`}>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[11px] text-gray-400 mb-0.5 capitalize">{formatDateFr(n.created_at)}</p>
+                          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                            <span className="text-[11px] text-gray-400 capitalize">{formatDateFr(n.created_at)}</span>
+                            {n.signed_at && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-700 bg-green-100 rounded-full px-2 py-0.5">
+                                <Lock className="h-2.5 w-2.5" /> Signée le {formatDateShort(n.signed_at.slice(0, 10))}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{n.note}</p>
                         </div>
-                        <button
-                          onClick={() => setDeleteNoteConfirm(n)}
-                          className="text-gray-300 hover:text-red-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
-                          title="Supprimer cette note"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {n.signed_at ? (
+                          <Lock className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              onClick={() => setSignNoteConfirm(n)}
+                              className="text-[11px] font-medium text-primary-600 hover:text-primary-700 hover:underline opacity-0 group-hover:opacity-100"
+                              title="Signer (verrouiller) cette note"
+                            >
+                              Signer
+                            </button>
+                            <button
+                              onClick={() => setDeleteNoteConfirm(n)}
+                              className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                              title="Supprimer cette note"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1014,6 +1047,38 @@ export default function PatientsPage() {
                   className="flex-1 bg-red-500 hover:bg-red-600"
                 >
                   Supprimer
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation signature d'une note */}
+      <Dialog open={!!signNoteConfirm} onOpenChange={(o) => !o && setSignNoteConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700">
+              <Lock className="h-5 w-5" /> Signer la note
+            </DialogTitle>
+          </DialogHeader>
+          {signNoteConfirm && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Une fois signée, cette note sera <strong>verrouillée</strong> : elle ne pourra plus être ni modifiée ni supprimée. C&apos;est une garantie médico-légale.
+              </p>
+              <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg whitespace-pre-wrap break-words line-clamp-4">
+                {signNoteConfirm.note}
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setSignNoteConfirm(null)} className="flex-1">
+                  Annuler
+                </Button>
+                <Button
+                  onClick={() => signConsultNote(signNoteConfirm.id)}
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                >
+                  Signer et verrouiller
                 </Button>
               </div>
             </div>

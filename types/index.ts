@@ -91,6 +91,7 @@ export interface ConsultationNote {
   patient_id: string
   appointment_id?: string | null
   note: string
+  signed_at?: string | null  // signée = verrouillée (non modifiable/supprimable)
   created_at: string
 }
 
