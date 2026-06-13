@@ -51,6 +51,20 @@ export default async function DossierPage({ params }: Props) {
   const vitals = vitalsRes.data ?? []
   const documents = docsRes.data ?? []
 
+  // URLs signées pour afficher les documents (radios, analyses…) dans le dossier.
+  // Les images sont prévisualisées ; les autres fichiers (PDF…) restent en lien.
+  const isImage = (d: { file_type?: string | null; file_name?: string }) =>
+    (d.file_type?.startsWith('image/')) || /\.(jpe?g|png|gif|webp|heic)$/i.test(d.file_name || '')
+  const signedUrls = new Map<string, string>()
+  if (documents.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from('patient-documents')
+      .createSignedUrls(documents.map((d) => d.file_path), 600)
+    for (const s of signed ?? []) {
+      if (s.signedUrl && s.path) signedUrls.set(s.path, s.signedUrl)
+    }
+  }
+
   const aptDate = new Map<string, string>()
   for (const a of appointments) aptDate.set(a.id, `${formatDateShort(a.date)} ${formatTime(a.time)}`)
   const totalPaid = appointments.reduce((s, a) => s + (a.amount_paid ?? 0), 0)
@@ -170,16 +184,33 @@ export default async function DossierPage({ params }: Props) {
           </>
         )}
 
-        {/* Documents */}
+        {/* Documents (radios, analyses…) */}
         {documents.length > 0 && (
           <>
-            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mt-7 mb-2">Documents ({documents.length})</h3>
-            <ul className="text-sm text-gray-700 list-disc pl-5 space-y-0.5">
-              {documents.map((d) => (
-                <li key={d.id}>{d.file_name} <span className="text-xs text-gray-400">— {formatDateShort(d.created_at.slice(0, 10))}</span></li>
-              ))}
-            </ul>
-            <p className="text-xs text-gray-400 mt-1">Les fichiers eux-mêmes restent consultables dans la fiche patient en ligne.</p>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mt-7 mb-3">Documents ({documents.length})</h3>
+            <div className="grid grid-cols-2 gap-4">
+              {documents.map((d) => {
+                const url = signedUrls.get(d.file_path)
+                return (
+                  <div key={d.id} className="border border-gray-200 rounded-lg overflow-hidden break-inside-avoid">
+                    {url && isImage(d) ? (
+                      <img src={url} alt={d.file_name} className="w-full max-h-64 object-contain bg-gray-50" />
+                    ) : (
+                      <div className="h-24 flex items-center justify-center bg-gray-50 text-gray-400 text-xs">
+                        Fichier {d.file_type || 'document'}
+                      </div>
+                    )}
+                    <div className="px-2.5 py-1.5 text-xs">
+                      <p className="text-gray-700 truncate">{d.file_name}</p>
+                      <p className="text-gray-400">{formatDateShort(d.created_at.slice(0, 10))}{url && !isImage(d) && (
+                        <> · <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary-600 underline print:no-underline">ouvrir</a></>
+                      )}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="text-xs text-gray-400 mt-2 print:hidden">Les fichiers non-image (PDF…) s&apos;ouvrent via le lien ; ils restent aussi consultables dans la fiche patient.</p>
           </>
         )}
 

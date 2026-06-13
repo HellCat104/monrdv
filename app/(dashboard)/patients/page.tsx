@@ -636,6 +636,10 @@ export default function PatientsPage() {
                 </a>
               </div>
 
+              <p className="text-[11px] text-gray-400 -mt-2 px-1">
+                💡 Imprimez ou enregistrez le dossier en PDF pour en conserver une copie personnelle. Vos données médicales vous appartiennent.
+              </p>
+
               {/* Alerte allergies — visible immédiatement à l'ouverture */}
               {editAllergies.trim() && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
