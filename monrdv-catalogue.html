@@ -86,10 +86,11 @@
   .contact .info b{font-size:16px;color:var(--ink)}
 
   @media print{
-    body{background:#fff}
-    .page{margin:0;width:auto;min-height:auto;height:297mm;page-break-after:always}
-    .page:last-child{page-break-after:auto}
-    .strip,.cover,.contact{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4;margin:0}
+    html,body{background:#fff}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .page{margin:0;width:210mm;height:297mm;min-height:297mm;page-break-after:always;break-after:page;overflow:hidden}
+    .page:last-child{page-break-after:auto;break-after:auto}
   }
   @media screen and (max-width:760px){.page{width:auto;padding:26px 20px}h1,.cover h1{font-size:32px}.pillars,.cols,.trust{grid-template-columns:1fr}}
 </style>
