@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MonRDV — Présentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:'Poppins',-apple-system,sans-serif;background:#04293f;overflow:hidden}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center}
+  .scene{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:8vw;opacity:0;transform:translateY(24px) scale(.98);transition:opacity .7s ease,transform .7s ease;pointer-events:none}
+  .scene.on{opacity:1;transform:none}
+  .sky{background:linear-gradient(150deg,#38bdf8 0%,#0EA5E9 45%,#0369a1 100%)}
+  .light{background:linear-gradient(150deg,#f0f9ff,#ffffff)}
+  .ico{width:120px;height:120px;border-radius:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 24px 60px rgba(2,40,70,.28)}
+  .ico svg{width:60px;height:60px;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .ico.on-sky{background:rgba(255,255,255,.16);backdrop-filter:blur(4px)}.ico.on-sky svg{stroke:#fff}
+  .ico.on-light{background:#0EA5E9}.ico.on-light svg{stroke:#fff}
+  .pop{animation:pop .6s .15s both}@keyframes pop{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+  h1{font-size:clamp(34px,7vw,76px);font-weight:800;line-height:1.05;letter-spacing:-.02em}
+  h2{font-size:clamp(26px,5vw,52px);font-weight:700;line-height:1.15;max-width:16ch}
+  p{font-size:clamp(16px,2.4vw,24px);font-weight:400;max-width:24ch;line-height:1.5}
+  .on-sky h1,.on-sky h2{color:#fff}.on-sky p{color:#e0f2fe}
+  .on-light h1,.on-light h2{color:#0f2230}.on-light p{color:#5b7180}.on-light h2 .l{color:#0EA5E9}
+  .on-sky h2 .l{color:#bae6fd}
+  .logoM{width:104px;height:104px;border-radius:28px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:60px;font-weight:800;color:#0EA5E9;box-shadow:0 24px 60px rgba(2,40,70,.3)}
+  .url{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#0369a1;font-weight:700;font-size:clamp(16px,2.6vw,26px);padding:14px 30px;border-radius:16px;box-shadow:0 18px 44px rgba(2,40,70,.25)}
+  .chips{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:600px}
+  .chip{background:rgba(255,255,255,.16);color:#fff;font-weight:600;font-size:clamp(13px,2vw,18px);padding:9px 18px;border-radius:999px}
+  /* progress */
+  #bars{position:fixed;top:18px;left:18px;right:18px;display:flex;gap:6px;z-index:10}
+  .bar{flex:1;height:4px;border-radius:3px;background:rgba(255,255,255,.28);overflow:hidden}
+  .bar i{display:block;height:100%;width:0;background:#fff;border-radius:3px}
+  #replay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;background:rgba(4,41,63,.6);z-index:20;color:#fff;font-weight:600;cursor:pointer}
+  #replay button{font-family:inherit;font-weight:700;font-size:18px;color:#0369a1;background:#fff;border:none;padding:14px 28px;border-radius:14px;cursor:pointer}
+  .hint{position:fixed;bottom:14px;left:0;right:0;text-align:center;color:rgba(255,255,255,.5);font-size:12px;z-index:10}
+</style>
+</head>
+<body>
+<div id="bars"></div>
+<div id="stage"></div>
+<div id="replay"><div>Présentation terminée</div><button onclick="play()">▶ Revoir</button></div>
+<div class="hint">MonRDV — appuie sur Échap pour quitter le plein écran</div>
+
+<script>
+const I = {
+  cal:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg>',
+  bell:'<svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  folder:'<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 13h6"/></svg>',
+  chart:'<svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 4-6"/></svg>',
+  clock:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+};
+const scenes = [
+  { cls:'sky', dur:3200, html:`<div class="logoM pop">M</div><h1>MonRDV</h1><p>Votre cabinet, en ligne.</p>` },
+  { cls:'light', dur:3800, html:`<div class="ico on-light pop">${I.clock}</div><h2>Fini les appels à répétition et les <span class="l">rendez-vous manqués</span>.</h2>` },
+  { cls:'sky', dur:3800, html:`<div class="ico on-sky pop">${I.cal}</div><h2>Vos patients réservent seuls, <span class="l">24h/24</span>.</h2><p>Une page à votre nom, visible sur Google.</p>` },
+  { cls:'light', dur:3800, html:`<div class="ico on-light pop">${I.bell}</div><h2>Rappels automatiques → <span class="l">moins d'absences</span>.</h2><p>Confirmation et rappel envoyés tout seuls.</p>` },
+  { cls:'sky', dur:4200, html:`<div class="ico on-sky pop">${I.folder}</div><h2>Dossiers, ordonnances, encaissement.</h2><div class="chips"><span class="chip">Fiche patient</span><span class="chip">Ordonnance</span><span class="chip">Facture</span><span class="chip">Paiement</span></div>` },
+  { cls:'light', dur:3600, html:`<div class="ico on-light pop">${I.chart}</div><h2>Vos revenus et stats, <span class="l">en un coup d'œil</span>.</h2>` },
+  { cls:'sky', dur:5200, html:`<div class="logoM pop">M</div><h2>Mettez votre cabinet en ligne <span class="l">aujourd'hui</span>.</h2><div class="url">www.monrdv.co.ma</div>` },
+];
+
+const stage = document.getElementById('stage');
+const barsC = document.getElementById('bars');
+scenes.forEach(() => { const b=document.createElement('div'); b.className='bar'; b.innerHTML='<i></i>'; barsC.appendChild(b); });
+const bars = [...barsC.querySelectorAll('.bar i')];
+scenes.forEach(s => { const d=document.createElement('div'); d.className='scene '+('on-'+(s.cls)); d.classList.add(s.cls==='sky'?'sky':'light','on-'+(s.cls==='sky'?'sky':'light')); d.innerHTML=s.html; stage.appendChild(d); });
+const els = [...stage.querySelectorAll('.scene')];
+els.forEach((e,i)=>{ e.classList.add(scenes[i].cls==='sky'?'on-sky':'on-light'); });
+
+let timer, idx=0;
+function show(i){
+  els.forEach(e=>e.classList.remove('on'));
+  bars.forEach((b,j)=>{ b.style.transition='none'; b.style.width = j<i?'100%':'0'; });
+  document.body.style.background = scenes[i].cls==='sky' ? '#04293f' : '#dbeafe';
+  const el = els[i]; el.classList.add('on');
+  void bars[i].offsetWidth;
+  bars[i].style.transition = `width ${scenes[i].dur}ms linear`;
+  bars[i].style.width='100%';
+  timer = setTimeout(()=>{ i+1<scenes.length ? show(i+1) : end(); }, scenes[i].dur);
+}
+function end(){ document.getElementById('replay').style.display='flex'; }
+function play(){ clearTimeout(timer); document.getElementById('replay').style.display='none'; show(0); }
+window.addEventListener('load', ()=> setTimeout(play, 400));
+</script>
+</body>
+</html>
