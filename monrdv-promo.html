@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MonRDV — Film</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;font-family:'Poppins',sans-serif;background:#04263b}
+  #film{position:fixed;inset:0;overflow:hidden}
+  .bg{position:absolute;inset:-20%;background:radial-gradient(60% 60% at 20% 20%,#0b3a5a,transparent),radial-gradient(60% 60% at 85% 80%,#0a4f73,transparent),linear-gradient(135deg,#04263b,#062c45);animation:drift 16s ease-in-out infinite alternate}
+  @keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(-3%,-2%) scale(1.06)}}
+  .scene{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;text-align:center;padding:6vh 8vw;opacity:0;transform:scale(.99);transition:opacity .7s ease,transform .7s ease;pointer-events:none}
+  .scene.on{opacity:1;transform:none}
+  .u{opacity:0;transform:translateY(26px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1)}
+  .scene.on .u{opacity:1;transform:none}
+  /* typography */
+  .kicker{font-size:clamp(15px,1.5vw,22px);font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:#7dd3fc}
+  h1{font-size:clamp(40px,7vw,108px);font-weight:800;line-height:1.02;letter-spacing:-.02em;color:#fff}
+  h2{font-size:clamp(30px,4.6vw,68px);font-weight:800;line-height:1.08;color:#fff;max-width:18ch}
+  h2 .l{color:#38bdf8}
+  .sub{font-size:clamp(17px,2vw,30px);font-weight:300;color:#cfe6f5;max-width:30ch;line-height:1.5}
+  .big{font-size:clamp(34px,5.2vw,84px);font-weight:800;color:#fff;line-height:1.08;max-width:16ch}
+  .dim{color:#8fb6cf}
+  /* logo */
+  .logoM{width:clamp(96px,11vw,168px);aspect-ratio:1;border-radius:28px;background:#fff;color:#0EA5E9;display:flex;align-items:center;justify-content:center;font-size:clamp(56px,7vw,108px);font-weight:800;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+  .word{font-size:clamp(40px,6vw,96px);font-weight:800;color:#fff;letter-spacing:-.02em}
+  /* title cards */
+  .num{font-size:clamp(80px,14vw,220px);font-weight:800;color:rgba(125,211,252,.18);line-height:.8}
+  .titlewrap{position:relative}
+  .titlewrap h2{position:relative}
+  /* browser frame */
+  .bw{width:min(1080px,82vw);background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 50px 120px rgba(0,0,0,.5)}
+  .bw .top{height:46px;background:#eef2f6;display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:1px solid #e2e8f0}
+  .bw .d{width:12px;height:12px;border-radius:50%}.rr{background:#ff5f57}.yy{background:#febc2e}.gg{background:#28c840}
+  .bw .url{flex:1;margin-left:12px;height:26px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;display:flex;align-items:center;padding:0 14px;font-size:13px;color:#64748b}
+  .bw .view{padding:26px 30px;min-height:380px;text-align:left;color:#0f2230}
+  /* generic UI bits */
+  .av{display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;background:#0EA5E9}
+  .row{display:flex;gap:14px;align-items:center}
+  .docCard{display:flex;gap:16px;align-items:center;background:#f8fbfe;border:1px solid #e6eef4;border-radius:16px;padding:16px 18px}
+  .docCard .av{width:58px;height:58px;border-radius:16px;font-size:26px}
+  .docCard h3{font-size:20px}.docCard p{font-size:15px;color:#0EA5E9;font-weight:600}
+  .lbl{font-size:14px;font-weight:700;color:#0f2230;margin:18px 0 10px}
+  .opt{display:flex;justify-content:space-between;align-items:center;border:2px solid #e6eef4;border-radius:13px;padding:14px 18px;margin-bottom:10px;font-size:16px;color:#334e5e;font-weight:500}
+  .opt.sel{border-color:#0EA5E9;background:#f0f9ff;color:#0369a1}
+  .opt span{color:#90a4b3;font-size:13px}
+  .slots{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  .slot{border:1px solid #e6eef4;border-radius:11px;padding:12px 0;text-align:center;font-weight:600;color:#334e5e}
+  .slot.sel{background:#0EA5E9;color:#fff;border-color:#0EA5E9}
+  .cta2{margin-top:16px;background:#0EA5E9;color:#fff;text-align:center;font-weight:700;padding:15px;border-radius:13px;font-size:17px}
+  .ok{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:380px;background:linear-gradient(160deg,#38bdf8,#0369a1);margin:-26px -30px;color:#fff}
+  .ok .c{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:52px}
+  .ok h3{font-size:30px;font-weight:800}.ok p{color:#e0f2fe;font-size:16px}
+  /* agenda */
+  .rdv{border:1px solid #e6eef4;border-radius:16px;padding:18px;background:#fff}
+  .rdv .av{width:50px;height:50px;border-radius:50%;background:#e0f2fe;color:#0369a1;font-size:18px}
+  .who{font-weight:700;font-size:18px}.meta{font-size:14px;color:#64748b;margin-top:6px}
+  .badge{font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;margin-left:7px}
+  .bC{background:#dcfce7;color:#15803d}.bN{background:#0EA5E9;color:#fff}.bP{background:#dcfce7;color:#15803d}
+  .acts{display:flex;gap:9px;margin-top:15px;flex-wrap:wrap}
+  .btn{font-size:14px;font-weight:600;padding:9px 17px;border-radius:999px;border:1px solid #e6eef4;color:#475c6b;background:#fff}
+  .btn.p{background:#0EA5E9;color:#fff;border-color:#0EA5E9}
+  .paid{font-size:15px;color:#16a34a;font-weight:700;margin-top:13px}
+  /* fiche */
+  .fi{display:flex;flex-direction:column;gap:11px}
+  .alert{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:13px 16px;font-size:15px;color:#b91c1c;font-weight:600}
+  .field{background:#f8fbfe;border:1px solid #e6eef4;border-radius:12px;padding:12px 16px;font-size:14px;color:#334e5e}
+  .field b{color:#0f2230}
+  .vit{display:flex;gap:10px;flex-wrap:wrap}.vch{background:#f0f9ff;border:1px solid #e0f2fe;border-radius:11px;padding:9px 14px;font-size:14px;color:#0369a1;font-weight:600}
+  .note{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;font-size:14px;color:#166534}
+  .thumb{display:flex;gap:13px;align-items:center;background:#fff;border:1px solid #e6eef4;border-radius:12px;padding:12px}
+  .thumb .im{width:84px;height:60px;border-radius:8px;background:linear-gradient(135deg,#1e293b,#475569);position:relative}
+  .thumb .im::after{content:"";position:absolute;inset:8px;border-radius:4px;background:radial-gradient(circle at 50% 40%,rgba(255,255,255,.5),transparent 60%)}
+  /* stats */
+  .st3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .stat{background:#f8fbfe;border:1px solid #e6eef4;border-radius:15px;padding:18px}
+  .stat .k{font-size:13px;color:#90a4b3;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .stat .v{font-size:34px;font-weight:800;margin-top:6px}.stat .v.b{color:#0EA5E9}
+  .barsb{background:#f8fbfe;border:1px solid #e6eef4;border-radius:15px;padding:16px 20px;margin-top:16px}
+  .br{display:flex;align-items:center;gap:12px;margin:9px 0;font-size:14px;color:#64748b}
+  .br .lab{width:64px}.trk{flex:1;height:22px;background:#eef2f6;border-radius:7px;overflow:hidden}
+  .fill{height:100%;width:0;background:#0EA5E9;border-radius:7px;transition:width 1.1s cubic-bezier(.2,.7,.2,1)}
+  .pres{display:flex;gap:14px;margin-top:16px}
+  .pc{flex:1;border-radius:13px;padding:16px;text-align:center}.pp{background:#ecfdf5}.pr{background:#fff7ed}.pa{background:#fef2f2}
+  .pc .n{font-size:30px;font-weight:800}.pc .l{font-size:13px;font-weight:600}
+  .pp .n,.pp .l{color:#16a34a}.pr .n,.pr .l{color:#ea580c}.pa .n,.pa .l{color:#dc2626}
+  .exp{display:inline-flex;gap:9px;align-items:center;background:#0EA5E9;color:#fff;font-weight:700;font-size:15px;padding:12px 20px;border-radius:13px;margin-top:16px}
+  /* facture */
+  .inv{background:#fff;border:1px solid #e6eef4;border-radius:14px;padding:26px;color:#0f2230}
+  .invh{display:flex;justify-content:space-between;border-bottom:2px solid #0EA5E9;padding-bottom:14px;margin-bottom:16px}
+  .invh h3{font-size:19px}.invh .s{font-size:14px;color:#64748b}.invh .t{font-size:12px;color:#90a4b3;margin-top:3px}
+  .ir{display:flex;justify-content:space-between;font-size:15px;color:#334e5e;padding:9px 0;border-bottom:1px solid #f1f5f9}
+  .it{display:flex;justify-content:space-between;font-weight:800;font-size:19px;border-top:2px solid #0f2230;margin-top:10px;padding-top:10px}
+  /* advantages grid */
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;max-width:1100px}
+  .gc{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:22px 16px;color:#fff;font-weight:600;font-size:clamp(14px,1.3vw,18px)}
+  .gc i{display:block;font-size:30px;margin-bottom:10px}
+  /* cursor */
+  #cur{position:fixed;z-index:60;width:30px;height:30px;margin:-4px 0 0 -4px;transition:left .85s cubic-bezier(.45,0,.25,1),top .85s cubic-bezier(.45,0,.25,1);opacity:0}
+  #cur.show{opacity:1}#cur svg{width:30px;height:30px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.5))}
+  #cur.tap::after{content:"";position:absolute;left:-16px;top:-16px;width:52px;height:52px;border-radius:50%;border:3px solid #0EA5E9;animation:rg .55s ease-out}
+  @keyframes rg{from{transform:scale(.3);opacity:.85}to{transform:scale(1.4);opacity:0}}
+  /* caption lower-third */
+  #cap{position:fixed;left:0;right:0;bottom:5vh;text-align:center;z-index:55;transition:opacity .4s}
+  #cap span{display:inline-block;background:rgba(4,38,59,.66);backdrop-filter:blur(6px);color:#fff;font-weight:600;font-size:clamp(16px,1.8vw,26px);padding:12px 26px;border-radius:14px;border:1px solid rgba(125,211,252,.25)}
+  .hide{display:none!important}
+  .watermark{position:fixed;top:26px;right:32px;z-index:55;color:rgba(255,255,255,.5);font-weight:700;letter-spacing:.05em;font-size:15px}
+  /* progress */
+  #prog{position:fixed;left:0;bottom:0;height:4px;background:#38bdf8;width:0;z-index:60;transition:width .3s linear}
+</style>
+</head>
+<body>
+<div id="film">
+  <div class="bg"></div>
+  <div class="watermark">MonRDV</div>
+
+  <!-- INTRO -->
+  <div class="scene" id="sc_intro">
+    <div class="logoM u">M</div>
+    <div class="word u" style="transition-delay:.25s">MonRDV</div>
+    <div class="sub u" style="transition-delay:.5s">Votre cabinet, en ligne.</div>
+  </div>
+
+  <!-- PROBLEM -->
+  <div class="scene" id="sc_problem">
+    <div class="big u">Trop d'appels.</div>
+    <div class="big u dim" style="transition-delay:.4s">Trop de rendez-vous manqués.</div>
+    <div class="big u dim" style="transition-delay:.8s">Trop de paperasse.</div>
+  </div>
+  <div class="scene" id="sc_hook">
+    <h2 class="u">Et si tout était réuni <span class="l">au même endroit</span> ?</h2>
+  </div>
+
+  <!-- T1 -->
+  <div class="scene" id="sc_t1"><div class="titlewrap"><div class="num u">01</div><h2 class="u" style="transition-delay:.15s">La <span class="l">réservation</span></h2></div><div class="sub u" style="transition-delay:.3s">Vos patients réservent seuls, 24h/24.</div></div>
+
+  <!-- BOOKING -->
+  <div class="scene" id="sc_book">
+    <div class="bw">
+      <div class="top"><span class="d rr"></span><span class="d yy"></span><span class="d gg"></span><div class="url">monrdv.co.ma/dr-amine</div></div>
+      <div class="view" id="bview">
+        <div class="docCard"><div class="av">A</div><div><h3>Dr. Amine Bennani</h3><p>Pédiatre · Fès</p></div></div>
+        <div class="lbl">Motif de votre visite</div>
+        <div class="opt" id="b_m1">Première consultation <span>45 min</span></div>
+        <div class="opt">Suivi / Contrôle <span>15 min</span></div>
+        <div id="b_step2" class="hide">
+          <div class="lbl">Créneaux disponibles — mardi 23 juin</div>
+          <div class="slots"><div class="slot">08:30</div><div class="slot" id="b_slot">09:00</div><div class="slot">09:45</div><div class="slot">10:30</div><div class="slot">11:15</div><div class="slot">12:00</div></div>
+          <div class="cta2 hide" id="b_cont">Continuer avec 09:00 →</div>
+        </div>
+        <div class="ok hide" id="b_ok"><div class="c">✓</div><h3>Rendez-vous confirmé !</h3><p>Confirmation + rappel envoyés automatiquement.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REMINDERS -->
+  <div class="scene" id="sc_remind"><h2 class="u">Rappels automatiques.<br><span class="l">Moins d'absences.</span></h2><div class="sub u" style="transition-delay:.3s">Chaque patient reçoit confirmation et rappel — sans que vous touchiez à rien.</div></div>
+
+  <!-- T2 -->
+  <div class="scene" id="sc_t2"><div class="titlewrap"><div class="num u">02</div><h2 class="u" style="transition-delay:.15s">Votre <span class="l">agenda</span></h2></div><div class="sub u" style="transition-delay:.3s">Toute votre journée, en quelques clics.</div></div>
+
+  <!-- AGENDA -->
+  <div class="scene" id="sc_agenda">
+    <div class="bw">
+      <div class="top"><span class="d rr"></span><span class="d yy"></span><span class="d gg"></span><div class="url">monrdv.co.ma/appointments</div></div>
+      <div class="view">
+        <div style="font-weight:700;font-size:18px;margin-bottom:16px">Rendez-vous — aujourd'hui</div>
+        <div class="rdv" id="a_rdv">
+          <div class="row" style="align-items:flex-start">
+            <div class="av">MA</div>
+            <div style="flex:1">
+              <div class="who">Mohammed Alami <span class="badge bC">Confirmé</span><span class="badge bN" id="a_new">Nouveau</span><span class="badge bP hide" id="a_pres">Présent</span></div>
+              <div class="meta">⏱ 09:00 (45 min) · 📋 Première consultation · ☎ 06 12 34 56 78</div>
+              <div class="acts"><div class="btn p" id="a_arr">Patient arrivé</div><div class="btn" id="a_pay">Encaisser</div><div class="btn">📄 Ordonnance</div><div class="btn">🧾 Facture</div></div>
+              <div class="paid hide" id="a_paid">✓ 450 DH encaissés · Espèces</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- T3 -->
+  <div class="scene" id="sc_t3"><div class="titlewrap"><div class="num u">03</div><h2 class="u" style="transition-delay:.15s">Le <span class="l">dossier patient</span></h2></div><div class="sub u" style="transition-delay:.3s">Complet, sécurisé, toujours à portée.</div></div>
+
+  <!-- FICHE -->
+  <div class="scene" id="sc_fiche">
+    <div class="bw">
+      <div class="top"><span class="d rr"></span><span class="d yy"></span><span class="d gg"></span><div class="url">monrdv.co.ma/patients</div></div>
+      <div class="view">
+        <div style="font-weight:700;font-size:18px;margin-bottom:14px">Mohammed Alami · 34 ans</div>
+        <div class="fi">
+          <div class="alert u">⚠️ Allergies : Pénicilline</div>
+          <div class="field u" style="transition-delay:.1s"><b>Antécédents :</b> Asthme léger &nbsp;·&nbsp; <b>Traitements :</b> Ventoline si besoin</div>
+          <div class="vit u" style="transition-delay:.2s"><span class="vch">78 kg</span><span class="vch">180 cm</span><span class="vch">IMC 24</span><span class="vch">Tension 12/8</span></div>
+          <div class="note u" style="transition-delay:.3s">🔒 12 juin — Angine, repos 48h · <b>Note signée (verrouillée)</b></div>
+          <div class="thumb u" style="transition-delay:.4s"><div class="im"></div><div style="font-size:14px"><b>Radio thorax.jpg</b><br><span class="dim" style="color:#90a4b3">ajoutée le 12/06</span></div></div>
+          <div class="note u" style="transition-delay:.5s;background:#fff7ed;border-color:#fed7aa;color:#9a3412">🔔 Rappel de suivi programmé : <b>dans 6 mois</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- T4 -->
+  <div class="scene" id="sc_t4"><div class="titlewrap"><div class="num u">04</div><h2 class="u" style="transition-delay:.15s">Le <span class="l">pilotage</span></h2></div><div class="sub u" style="transition-delay:.3s">Vos revenus et statistiques, en temps réel.</div></div>
+
+  <!-- STATS -->
+  <div class="scene" id="sc_stats">
+    <div class="bw">
+      <div class="top"><span class="d rr"></span><span class="d yy"></span><span class="d gg"></span><div class="url">monrdv.co.ma/statistiques</div></div>
+      <div class="view">
+        <div style="font-weight:700;font-size:18px;margin-bottom:14px">Statistiques du cabinet</div>
+        <div class="st3">
+          <div class="stat"><div class="k">Aujourd'hui</div><div class="v" id="s_day">0 DH</div></div>
+          <div class="stat"><div class="k">Ce mois-ci</div><div class="v b" id="s_month">0 DH</div></div>
+          <div class="stat"><div class="k">Total encaissé</div><div class="v" id="s_total">0 DH</div></div>
+        </div>
+        <div class="barsb">
+          <div style="font-weight:700;font-size:14px;margin-bottom:8px">Chiffre d'affaires — derniers mois</div>
+          <div class="br"><span class="lab">Mars</span><div class="trk"><div class="fill" data-w="58%"></div></div></div>
+          <div class="br"><span class="lab">Avril</span><div class="trk"><div class="fill" data-w="72%"></div></div></div>
+          <div class="br"><span class="lab">Mai</span><div class="trk"><div class="fill" data-w="86%"></div></div></div>
+          <div class="br"><span class="lab">Juin</span><div class="trk"><div class="fill" data-w="100%"></div></div></div>
+        </div>
+        <div class="pres">
+          <div class="pc pp"><div class="n">92%</div><div class="l">Présence</div></div>
+          <div class="pc pr"><div class="n">5%</div><div class="l">Retards</div></div>
+          <div class="pc pa"><div class="n">3%</div><div class="l">Absences</div></div>
+        </div>
+        <div class="exp">⬇ Export comptable (.csv)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FACTURE -->
+  <div class="scene" id="sc_fact">
+    <div class="bw" style="width:min(720px,72vw)">
+      <div class="top"><span class="d rr"></span><span class="d yy"></span><span class="d gg"></span><div class="url">monrdv.co.ma/facture</div></div>
+      <div class="view">
+        <div class="inv">
+          <div class="invh"><div><h3>Dr. Amine Bennani</h3><div class="s">Pédiatre · Fès</div><div class="t">INPE 123456 · ICE 0021…</div></div><div style="text-align:right"><b style="font-size:18px">REÇU</b><div class="s">N° F-8A2C · 23/06/2026</div></div></div>
+          <div style="font-size:13px;color:#90a4b3">PATIENT</div><div style="font-weight:600;margin-bottom:10px">Mohammed Alami</div>
+          <div class="ir"><span>Première consultation</span><span>450 DH</span></div>
+          <div class="it"><span>Total payé</span><span>450 DH</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADVANTAGES -->
+  <div class="scene" id="sc_adv">
+    <div class="kicker u">Tout-en-un</div>
+    <div class="grid">
+      <div class="gc u"><i>🗓️</i>Réservation en ligne 24/7</div>
+      <div class="gc u" style="transition-delay:.08s"><i>🔔</i>Rappels automatiques</div>
+      <div class="gc u" style="transition-delay:.16s"><i>📁</i>Dossiers patients</div>
+      <div class="gc u" style="transition-delay:.24s"><i>📄</i>Ordonnances</div>
+      <div class="gc u" style="transition-delay:.32s"><i>💳</i>Encaissement &amp; factures</div>
+      <div class="gc u" style="transition-delay:.4s"><i>📊</i>Statistiques &amp; export</div>
+      <div class="gc u" style="transition-delay:.48s"><i>🔒</i>Sécurisé &amp; conforme</div>
+      <div class="gc u" style="transition-delay:.56s"><i>🩺</i>Toutes spécialités</div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="scene" id="sc_cta">
+    <div class="logoM u">M</div>
+    <h2 class="u" style="transition-delay:.2s">Mettez votre cabinet <span class="l">en ligne</span> aujourd'hui.</h2>
+    <div class="u" style="transition-delay:.4s;background:#fff;color:#0369a1;font-weight:700;font-size:clamp(20px,2.4vw,34px);padding:16px 38px;border-radius:16px">www.monrdv.co.ma</div>
+  </div>
+</div>
+
+<div id="cap"><span id="capt">MonRDV</span></div>
+<div id="prog"></div>
+<div id="cur"><svg viewBox="0 0 24 24"><path d="M5 3l15 9-6 1.5L17 20l-3 1-3-6.5L5 18z" fill="#0f2230" stroke="#fff" stroke-width="1.2"/></svg></div>
+
+<script>
+const $=id=>document.getElementById(id), cur=$('cur'), cap=$('cap'), capt=$('capt'), prog=$('prog');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const TOTAL=68000; let t0;
+function tick(){ if(!t0)return; prog.style.width=Math.min(100,(performance.now()-t0)/TOTAL*100)+'%'; requestAnimationFrame(tick); }
+function moveTo(el){const r=el.getBoundingClientRect();cur.style.left=(r.left+r.width/2)+'px';cur.style.top=(r.top+r.height/2)+'px';}
+async function go(el){cur.classList.add('show');moveTo(el);await sleep(900);}
+async function tap(){cur.classList.add('tap');await sleep(150);cur.classList.remove('tap');await sleep(230);}
+function cursorOff(){cur.classList.remove('show');}
+function say(t){cap.style.opacity=0;setTimeout(()=>{capt.textContent=t;cap.style.opacity=1;},220);}
+function sayHide(){cap.style.opacity=0;}
+let curScene=null;
+async function to(id,wait){ if(curScene)$(curScene).classList.remove('on'); curScene=id; const e=$(id); e.classList.add('on'); if(wait)await sleep(wait); }
+function countUp(el,to,suf,ms){const s=performance.now();function f(t){let p=Math.min(1,(t-s)/ms);el.textContent=Math.round(to*p).toLocaleString('fr-FR')+suf;if(p<1)requestAnimationFrame(f);}requestAnimationFrame(f);}
+
+async function play(){
+  t0=performance.now(); requestAnimationFrame(tick);
+  // reset
+  ['b_step2','b_cont','b_ok'].forEach(i=>$(i).classList.add('hide'));
+  $('b_m1').classList.remove('sel');$('b_slot').classList.remove('sel');
+  $('a_new').classList.remove('hide');$('a_pres').classList.add('hide');$('a_paid').classList.add('hide');
+  document.querySelectorAll('.fill').forEach(f=>f.style.width='0');
+  cursorOff();
+
+  sayHide();
+  await to('sc_intro',3400);
+  await to('sc_problem',4400);
+  await to('sc_hook',2600);
+
+  await to('sc_t1',2000);
+  // BOOKING
+  await to('sc_book',300); say('Le patient choisit son motif…');
+  await go($('b_m1'));await tap();$('b_m1').classList.add('sel');$('b_step2').classList.remove('hide');await sleep(500);
+  say('…puis son créneau');
+  await go($('b_slot'));await tap();$('b_slot').classList.add('sel');$('b_cont').classList.remove('hide');await sleep(400);
+  await go($('b_cont'));await tap();cursorOff();$('b_ok').classList.remove('hide');say('Réservé en 30 secondes, sans appel');await sleep(2300);
+
+  sayHide();await to('sc_remind',4000);
+  await to('sc_t2',2000);
+  // AGENDA
+  await to('sc_agenda',500);say('Le RDV arrive dans votre agenda');await sleep(1300);
+  say('Patient arrivé, puis encaissement — en un clic');
+  await go($('a_arr'));await tap();$('a_new').classList.add('hide');$('a_pres').classList.remove('hide');await sleep(500);
+  await go($('a_pay'));await tap();$('a_paid').classList.remove('hide');cursorOff();await sleep(1500);
+
+  sayHide();await to('sc_t3',2000);
+  await to('sc_fiche',300);say('Allergies, constantes, notes signées, radios, rappels');await sleep(4200);
+
+  sayHide();await to('sc_t4',2000);
+  await to('sc_stats',300);
+  countUp($('s_day'),450,' DH',900);countUp($('s_month'),12800,' DH',1300);countUp($('s_total'),84200,' DH',1600);
+  say('Vos revenus, en temps réel');await sleep(800);
+  document.querySelectorAll('#sc_stats .fill').forEach(f=>f.style.width=f.dataset.w);await sleep(1700);
+  say('Présence, absences et export comptable');await sleep(2200);
+
+  sayHide();await to('sc_fact',300);say('Factures aux normes marocaines (ICE / INPE)');await sleep(3000);
+
+  sayHide();await to('sc_adv',4600);
+  await to('sc_cta',5200);
+  prog.style.width='100%';
+}
+window.addEventListener('load',()=>setTimeout(play,500));
+</script>
+</body>
+</html>
