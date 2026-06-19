@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MonRDV — Démo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Poppins',-apple-system,sans-serif;background:#eaf2fa;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:18px;overflow:hidden}
+  .caption{font-weight:600;color:#0369a1;font-size:clamp(15px,2.4vw,22px);min-height:30px;text-align:center;transition:opacity .4s}
+  .win{width:min(96vw,960px);height:min(64vh,600px);background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(2,40,70,.22);overflow:hidden;position:relative}
+  .bar{height:42px;background:#f1f5f9;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid #e6eef4}
+  .dot{width:11px;height:11px;border-radius:50%}.r{background:#ff5f57}.y{background:#febc2e}.g{background:#28c840}
+  .addr{flex:1;margin-left:10px;background:#fff;border:1px solid #e6eef4;border-radius:8px;height:24px;display:flex;align-items:center;padding:0 12px;font-size:12px;color:#64748b}
+  .screen{position:absolute;top:42px;left:0;right:0;bottom:0;opacity:0;transition:opacity .5s;pointer-events:none}
+  .screen.on{opacity:1}
+  /* cursor */
+  #cur{position:fixed;z-index:50;width:22px;height:22px;margin:-4px 0 0 -4px;transition:left .8s cubic-bezier(.45,0,.25,1),top .8s cubic-bezier(.45,0,.25,1);pointer-events:none}
+  #cur svg{width:22px;height:22px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}
+  #cur.tap::after{content:"";position:absolute;left:-12px;top:-12px;width:40px;height:40px;border-radius:50%;border:3px solid #0EA5E9;animation:ring .5s ease-out}
+  @keyframes ring{from{transform:scale(.3);opacity:.8}to{transform:scale(1.3);opacity:0}}
+  /* PATIENT */
+  .pwrap{height:100%;overflow:hidden;padding:22px 26px;background:linear-gradient(180deg,#f0f9ff,#fff)}
+  .docCard{display:flex;gap:14px;align-items:center;background:#fff;border:1px solid #e6eef4;border-radius:14px;padding:14px 16px}
+  .av{width:52px;height:52px;border-radius:14px;background:#0EA5E9;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px}
+  .docCard h3{font-size:17px;color:#0f2230}.docCard p{font-size:13px;color:#0EA5E9;font-weight:600}
+  .lbl{font-size:13px;font-weight:700;color:#0f2230;margin:16px 0 8px}
+  .opt{display:flex;justify-content:space-between;align-items:center;border:2px solid #e6eef4;border-radius:12px;padding:12px 16px;margin-bottom:8px;font-size:14px;color:#334e5e;font-weight:500;background:#fff}
+  .opt.sel{border-color:#0EA5E9;background:#f0f9ff;color:#0369a1}
+  .opt span{font-size:12px;color:#90a4b3}
+  .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:6px}
+  .slot{border:1px solid #e6eef4;border-radius:10px;padding:9px 0;text-align:center;font-size:13px;color:#334e5e;font-weight:600;background:#fff}
+  .slot.sel{background:#0EA5E9;color:#fff;border-color:#0EA5E9}
+  .cta{margin-top:16px;background:#0EA5E9;color:#fff;text-align:center;font-weight:700;padding:13px;border-radius:12px;font-size:15px}
+  .hide{display:none}
+  .success{position:absolute;inset:42px 0 0 0;background:linear-gradient(160deg,#38bdf8,#0369a1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;opacity:0;transition:opacity .5s;pointer-events:none}
+  .success.on{opacity:1}
+  .success .ok{width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:46px;animation:pop .5s both}
+  @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+  .success h2{font-size:26px;font-weight:800}.success p{font-size:15px;color:#e0f2fe}
+  /* DOCTOR */
+  .dwrap{display:flex;height:100%}
+  .side{width:190px;background:#0b2435;color:#cfe3f0;padding:18px 14px;flex-shrink:0}
+  .side .brand{display:flex;align-items:center;gap:9px;font-weight:800;color:#fff;font-size:16px;margin-bottom:22px}
+  .side .brand i{width:28px;height:28px;border-radius:9px;background:#0EA5E9;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .nav{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;font-size:13.5px;font-weight:500;margin-bottom:4px}
+  .nav.act{background:#0EA5E9;color:#fff}
+  .main{flex:1;padding:22px 24px;background:#f7fafc;overflow:hidden}
+  .main h2{font-size:18px;color:#0f2230;margin-bottom:14px}
+  .rdv{background:#fff;border:1px solid #e6eef4;border-radius:14px;padding:16px;display:flex;gap:14px;align-items:flex-start;transition:box-shadow .4s,border-color .4s}
+  .rdv.flash{border-color:#0EA5E9;box-shadow:0 0 0 4px #e0f2fe}
+  .rdv .av{width:44px;height:44px;border-radius:50%;background:#e0f2fe;color:#0369a1;font-size:16px}
+  .rdv .who{font-weight:700;color:#0f2230;font-size:15px}
+  .rdv .meta{font-size:12.5px;color:#64748b;margin-top:3px}
+  .badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;margin-left:6px}
+  .bConf{background:#dcfce7;color:#15803d}.bNew{background:#0EA5E9;color:#fff}.bPres{background:#dcfce7;color:#15803d}
+  .acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .btn{font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:999px;border:1px solid #e6eef4;color:#475c6b;background:#fff}
+  .btn.prim{background:#0EA5E9;color:#fff;border-color:#0EA5E9}
+  .btn.paid{background:#16a34a;color:#fff;border-color:#16a34a}
+  .paidline{font-size:13px;color:#16a34a;font-weight:700;margin-top:10px}
+  .dlg{position:absolute;inset:42px 0 0 0;background:rgba(11,36,53,.45);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .4s;pointer-events:none}
+  .dlg.on{opacity:1}
+  .dlg .card{background:#fff;border-radius:14px;padding:22px;width:300px;text-align:center}
+  .dlg h3{font-size:16px;color:#0f2230;margin-bottom:14px}
+  .dlg .amt{font-size:30px;font-weight:800;color:#0EA5E9;border:2px solid #0EA5E9;border-radius:12px;padding:10px}
+  .dlg .save{margin-top:14px;background:#16a34a;color:#fff;font-weight:700;padding:11px;border-radius:11px;font-size:14px}
+  .endcta{position:fixed;inset:0;background:linear-gradient(160deg,#38bdf8,#0369a1);display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:#fff;z-index:60}
+  .endcta .m{width:96px;height:96px;border-radius:26px;background:#fff;color:#0EA5E9;display:flex;align-items:center;justify-content:center;font-size:54px;font-weight:800}
+  .endcta h2{font-size:30px;font-weight:800;text-align:center;max-width:14ch}
+  .endcta .url{background:#fff;color:#0369a1;font-weight:700;padding:13px 28px;border-radius:14px;font-size:20px}
+  .endcta button{margin-top:6px;background:rgba(255,255,255,.2);color:#fff;border:none;font-family:inherit;font-weight:600;padding:10px 22px;border-radius:12px;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="caption" id="cap">MonRDV</div>
+  <div class="win">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><div class="addr" id="addr">monrdv.co.ma</div></div>
+
+    <!-- PATIENT -->
+    <div class="screen on" id="patient">
+      <div class="pwrap">
+        <div class="docCard"><div class="av">M</div><div><h3>Dr. HellCat</h3><p>Pédiatre · Fès</p></div></div>
+        <div class="lbl">Motif de votre visite</div>
+        <div class="opt" id="m1">Première consultation <span>45 min</span></div>
+        <div class="opt" id="m2">Suivi / Contrôle <span>15 min</span></div>
+        <div id="step2" class="hide">
+          <div class="lbl">Créneaux du mardi 23 juin</div>
+          <div class="grid">
+            <div class="slot" id="s1">08:30</div><div class="slot" id="s2">09:00</div><div class="slot">09:45</div>
+            <div class="slot">10:30</div><div class="slot">11:15</div><div class="slot">12:00</div>
+          </div>
+          <div class="cta hide" id="continue">Continuer avec 09:00 →</div>
+        </div>
+      </div>
+      <div class="success" id="success"><div class="ok">✓</div><h2>Rendez-vous confirmé !</h2><p>Un email de confirmation a été envoyé.</p></div>
+    </div>
+
+    <!-- DOCTOR -->
+    <div class="screen" id="doctor">
+      <div class="dwrap">
+        <div class="side">
+          <div class="brand"><i>M</i> MonRDV</div>
+          <div class="nav">▦ Tableau de bord</div>
+          <div class="nav act">▤ Rendez-vous</div>
+          <div class="nav">☺ Patients</div>
+          <div class="nav">▮ Statistiques</div>
+        </div>
+        <div class="main">
+          <h2>Rendez-vous — aujourd'hui</h2>
+          <div class="rdv" id="rdv">
+            <div class="av">MA</div>
+            <div style="flex:1">
+              <div class="who">Mohammed Alami <span class="badge bConf">Confirmé</span><span class="badge bNew" id="newb">Nouveau</span><span class="badge bPres hide" id="presb">Présent</span></div>
+              <div class="meta">⏱ 09:00 (45 min) · 📋 Première consultation · ☎ 06 12 34 56 78</div>
+              <div class="acts">
+                <div class="btn prim" id="arrived">Patient arrivé</div>
+                <div class="btn" id="paid">Encaisser</div>
+              </div>
+              <div class="paidline hide" id="paidline">✓ 450 DH encaissés · Espèces</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dlg" id="dlg"><div class="card"><h3>Montant encaissé</h3><div class="amt" id="amt">0 DH</div><div class="save" id="save">Enregistrer</div></div></div>
+    </div>
+  </div>
+
+  <div class="endcta" id="end"><div class="m">M</div><h2>Mettez votre cabinet en ligne.</h2><div class="url">www.monrdv.co.ma</div><button onclick="play()">▶ Revoir la démo</button></div>
+
+  <div id="cur"><svg viewBox="0 0 24 24"><path d="M5 3l15 9-6 1.5L17 20l-3 1-3-6.5L5 18z" fill="#0f2230" stroke="#fff" stroke-width="1.2"/></svg></div>
+
+<script>
+const cur=document.getElementById('cur'), cap=document.getElementById('cap');
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function moveTo(el){const r=el.getBoundingClientRect();cur.style.left=(r.left+r.width/2)+'px';cur.style.top=(r.top+r.height/2)+'px';}
+async function go(el){moveTo(el);await sleep(900);}
+async function tap(el){cur.classList.add('tap');await sleep(120);cur.classList.remove('tap');if(el)el.classList.add('clicked');await sleep(250);}
+function say(t){cap.style.opacity=0;setTimeout(()=>{cap.textContent=t;cap.style.opacity=1;},250);}
+function screen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));$(id).classList.add('on');}
+
+async function play(){
+  // reset
+  $('end').style.display='none';
+  ['step2'].forEach(i=>$(i).classList.add('hide'));
+  $('continue').classList.add('hide'); $('success').classList.remove('on');
+  $('m1').classList.remove('sel'); $('s2').classList.remove('sel');
+  $('newb').classList.remove('hide'); $('presb').classList.add('hide');
+  $('paidline').classList.add('hide'); $('dlg').classList.remove('on'); $('amt').textContent='0 DH';
+  $('rdv').classList.remove('flash'); $('addr').textContent='monrdv.co.ma/dr-hellcat';
+  screen('patient'); cur.style.left='50%'; cur.style.top='80%';
+  await sleep(700);
+
+  say('1 — Le patient choisit son motif');
+  await go($('m1')); await tap(); $('m1').classList.add('sel'); $('step2').classList.remove('hide');
+  await sleep(500);
+
+  say('2 — …et son créneau');
+  await go($('s2')); await tap(); $('s2').classList.add('sel'); $('continue').classList.remove('hide');
+  await sleep(400);
+  await go($('continue')); await tap();
+  $('success').classList.add('on'); say('Réservation confirmée — en quelques secondes');
+  await sleep(2200);
+
+  // DOCTOR
+  say('3 — Le médecin reçoit le RDV instantanément');
+  $('addr').textContent='monrdv.co.ma/appointments'; screen('doctor');
+  cur.style.left='50%'; cur.style.top='80%';
+  await sleep(400); $('rdv').classList.add('flash'); await sleep(1400); $('rdv').classList.remove('flash');
+
+  say('4 — « Patient arrivé » en un clic');
+  await go($('arrived')); await tap();
+  $('newb').classList.add('hide'); $('presb').classList.remove('hide');
+  await sleep(700);
+
+  say('5 — Encaissement enregistré');
+  await go($('paid')); await tap(); $('dlg').classList.add('on');
+  await sleep(500); $('amt').textContent='450 DH';
+  await go($('save')); await tap(); $('dlg').classList.remove('on');
+  $('paidline').classList.remove('hide');
+  await sleep(1600);
+
+  say('Tout est suivi : dossier, paiement, statistiques');
+  await sleep(1400);
+  $('end').style.display='flex';
+}
+window.addEventListener('load',()=>setTimeout(play,500));
+</script>
+</body>
+</html>
