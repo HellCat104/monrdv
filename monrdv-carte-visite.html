@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:510px;height:330px}
+  body{font-family:'Poppins',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .card{position:relative;width:510px;height:330px;background:#fff;overflow:hidden;display:flex}
+  .left{width:182px;flex-shrink:0;background:linear-gradient(150deg,#38bdf8,#0EA5E9 55%,#0369a1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;position:relative}
+  .left .m{width:78px;height:78px;border-radius:22px;background:#fff;color:#0EA5E9;display:flex;align-items:center;justify-content:center;font-size:46px;font-weight:800;box-shadow:0 12px 28px rgba(2,40,70,.25)}
+  .left .w{font-size:24px;font-weight:800;color:#fff;letter-spacing:-.01em}
+  .left .pulse{position:absolute;bottom:26px;left:0;right:0;opacity:.25;stroke:#fff;fill:none;stroke-width:5}
+  .right{flex:1;padding:30px 28px;display:flex;flex-direction:column;justify-content:center}
+  .kicker{font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#0EA5E9}
+  .acc{margin-top:9px;font-size:24px;font-weight:800;line-height:1.15;color:#0f2230;letter-spacing:-.01em}
+  .acc .l{color:#0EA5E9}
+  .contacts{margin-top:auto;display:flex;flex-direction:column;gap:10px}
+  .ln{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;color:#334e5e}
+  .ln .ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ln.web .ic{background:#f0f9ff}.ln.web .ic svg{width:17px;height:17px;stroke:#0EA5E9;fill:none;stroke-width:2}
+  .ln.wa .ic{background:#25D366}.ln.wa .ic svg{width:18px;height:18px;fill:#fff}
+  .ln b{color:#0f2230;font-weight:700}
+  @media print{@page{size:85mm 55mm;margin:0}html,body{width:85mm;height:55mm}.card{width:85mm;height:55mm}.left{width:30mm}}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="left">
+      <div class="m">M</div>
+      <div class="w">MonRDV</div>
+      <svg class="pulse" viewBox="0 0 182 40" preserveAspectRatio="none"><polyline points="0,20 60,20 78,20 92,4 106,36 120,20 182,20"/></svg>
+    </div>
+    <div class="right">
+      <div class="kicker">Pour les médecins</div>
+      <div class="acc">Digitalisez votre cabinet en <span class="l">5 minutes</span>.</div>
+      <div class="contacts">
+        <div class="ln web"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></span><b>www.monrdv.co.ma</b></div>
+        <div class="ln wa"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.4A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1-.4-.1-1-.3-1.7-.6-3-1.3-4.9-4.3-5-4.5-.2-.2-1.2-1.6-1.2-3s.7-2.1 1-2.4c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 1.9c.1.2.1.4 0 .5l-.4.6c-.2.2-.3.4-.1.7.2.3.9 1.4 1.9 2.3 1.3 1.1 2.3 1.5 2.6 1.6.3.1.5.1.7-.1l.8-1c.2-.3.4-.2.7-.1l1.9.9c.3.1.5.2.6.3.1.2.1.7-.1 1.2Z"/></svg></span><b>+212 6 20 73 98 88</b></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
