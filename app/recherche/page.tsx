@@ -146,7 +146,7 @@ function RechercheContent() {
             <p className="font-semibold">Recherche indisponible</p>
             <p className="mt-1">{error}</p>
             <a
-              href="https://wa.me/32465383121"
+              href="https://wa.me/212621900874"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block mt-3 text-red-800 underline underline-offset-2 font-medium"

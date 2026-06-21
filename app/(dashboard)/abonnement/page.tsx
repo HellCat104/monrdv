@@ -136,7 +136,7 @@ export default function AbonnementPage() {
           </div>
 
           <a
-            href={`https://wa.me/32465383121?text=${whatsappMessage}`}
+            href={`https://wa.me/212621900874?text=${whatsappMessage}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-3 w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-xl transition-colors"
