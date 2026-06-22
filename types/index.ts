@@ -105,6 +105,17 @@ export interface Prescription {
   created_at: string
 }
 
+// Dépense / charge du cabinet
+export interface Expense {
+  id: string
+  doctor_id: string
+  date: string        // YYYY-MM-DD
+  label: string
+  category?: string | null
+  amount: number
+  created_at: string
+}
+
 // Rappel de suivi ("revenez dans X mois")
 export type RecallStatus = 'pending' | 'sent' | 'done' | 'cancelled'
 export interface Recall {
@@ -193,6 +204,7 @@ export interface Appointment {
   amount_paid?: number | null   // total déjà encaissé
   amount_due?: number | null    // montant total attendu
   payment_method?: PaymentMethod | null
+  invoice_no?: string | null    // n° de facture séquentiel (F-AAAA-NNNN)
   paid_at?: string | null
   consent_at?: string | null
   created_at: string
