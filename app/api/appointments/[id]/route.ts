@@ -43,16 +43,8 @@ export async function PATCH(
     }
     updates.amount_paid = amount
     updates.paid_at = amount !== null ? new Date().toISOString() : null
-
-    // Attribue un n° de facture séquentiel au 1er encaissement (jamais réattribué)
-    if (amount !== null) {
-      const { data: existing } = await supabase
-        .from('appointments').select('invoice_no').eq('id', params.id).eq('doctor_id', doctor.id).single()
-      if (existing && !existing.invoice_no) {
-        const { data: no } = await supabase.rpc('next_invoice_no', { p_doctor: doctor.id })
-        if (no) updates.invoice_no = no
-      }
-    }
+    // Le n° de facture séquentiel est attribué automatiquement par le trigger
+    // assign_invoice_no() en base, dans la même transaction (sans trou).
   }
   // Montant total dû (pour les paiements partiels)
   if (amount_due !== undefined) {
