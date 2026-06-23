@@ -109,14 +109,15 @@ export default function StatistiquesPage() {
     }
     rows.sort((x, y) => y.date.localeCompare(x.date))
 
-    const depenses = expenses.filter((e) => inRange(e.date)).reduce((s, e) => s + Number(e.amount), 0)
+    const expenseRows = expenses.filter((e) => inRange(e.date)).sort((a, b) => b.date.localeCompare(a.date))
+    const depenses = expenseRows.reduce((s, e) => s + Number(e.amount), 0)
 
     const revenueByMonth = Array.from(byMonth.entries()).sort((a, b) => a[0].localeCompare(b[0])).slice(-6)
       .map(([mk, total]) => { const [y, m] = mk.split('-'); return { label: format(new Date(+y, +m - 1, 1), 'MMM yyyy', { locale: fr }), total } })
 
     const totAtt = present + absent + late
     return {
-      recettes, depenses, net: recettes - depenses, caisse, rows, rdvCount,
+      recettes, depenses, net: recettes - depenses, caisse, rows, expenseRows, rdvCount,
       present, absent, late, presenceRate: totAtt > 0 ? Math.round((present / totAtt) * 100) : 0,
       revenueByMonth,
     }
@@ -144,23 +145,45 @@ export default function StatistiquesPage() {
     setExpenses((prev) => prev.filter((x) => x.id !== id))
   }
 
-  function exportCSV() {
+  function downloadCSV(kind: string, headers: string[], rows: (string | number)[][]) {
     const esc = (v: string | number) => {
       let s = String(v)
       if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = `'${s}`
       return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
     }
-    const header = ['Date', 'N° facture', 'Patient', 'Motif', 'Mode', 'Montant (DH)']
-    const lines = d.rows.map((r) => [r.date, r.invoice, r.patient, r.motif, r.mode, r.amount].map(esc).join(';'))
-    lines.push(['', '', '', '', 'TOTAL RECETTES', d.recettes].map(esc).join(';'))
-    lines.push(['', '', '', '', 'TOTAL DÉPENSES', d.depenses].map(esc).join(';'))
-    lines.push(['', '', '', '', 'NET', d.net].map(esc).join(';'))
-    const csv = '﻿' + [header.join(';'), ...lines].join('\n')
+    const csv = '﻿' + [headers, ...rows].map((r) => r.map(esc).join(';')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `compta-monrdv-${period}-${format(getNowInMaroc(), 'yyyy-MM-dd')}.csv`
+    a.download = `${kind}-monrdv-${period}-${format(getNowInMaroc(), 'yyyy-MM-dd')}.csv`
     a.click()
+  }
+
+  // Recettes (détail des encaissements)
+  function exportRecettes() {
+    const rows: (string | number)[][] = d.rows.map((r) => [r.date, r.invoice, r.patient, r.motif, r.mode, r.amount])
+    rows.push(['', '', '', '', 'TOTAL RECETTES', d.recettes])
+    downloadCSV('recettes', ['Date', 'N° facture', 'Patient', 'Motif', 'Mode', 'Montant (DH)'], rows)
+  }
+
+  // Dépenses (détail)
+  function exportDepenses() {
+    const rows: (string | number)[][] = d.expenseRows.map((e) => [e.date, e.label, Number(e.amount)])
+    rows.push(['', 'TOTAL DÉPENSES', d.depenses])
+    downloadCSV('depenses', ['Date', 'Libellé', 'Montant (DH)'], rows)
+  }
+
+  // Journal complet : recettes + dépenses, triés par date (chronologique)
+  function exportJournal() {
+    const entries = [
+      ...d.rows.map((r) => ({ date: r.date, type: 'Recette', desc: [r.patient, r.motif].filter(Boolean).join(' · '), mode: r.mode, recette: r.amount, depense: 0 })),
+      ...d.expenseRows.map((e) => ({ date: e.date, type: 'Dépense', desc: e.label, mode: '', recette: 0, depense: Number(e.amount) })),
+    ].sort((a, b) => a.date.localeCompare(b.date))
+    const rows: (string | number)[][] = entries.map((x) => [x.date, x.type, x.desc, x.mode, x.recette || '', x.depense || ''])
+    rows.push(['', '', '', 'TOTAL RECETTES', d.recettes, ''])
+    rows.push(['', '', '', 'TOTAL DÉPENSES', '', d.depenses])
+    rows.push(['', '', '', 'NET', d.net, ''])
+    downloadCSV('journal', ['Date', 'Type', 'Détail', 'Mode', 'Recette (DH)', 'Dépense (DH)'], rows)
   }
 
   if (loading) {
@@ -193,8 +216,14 @@ export default function StatistiquesPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={exportCSV} disabled={d.rows.length === 0}>
-            <Download className="h-4 w-4 mr-2" /> Export ({d.rows.length})
+          <Button variant="outline" size="sm" onClick={exportRecettes} disabled={d.rows.length === 0}>
+            <Download className="h-4 w-4 mr-1.5" /> Recettes
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportDepenses} disabled={d.expenseRows.length === 0}>
+            <Download className="h-4 w-4 mr-1.5" /> Dépenses
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportJournal} disabled={d.rows.length === 0 && d.expenseRows.length === 0}>
+            <Download className="h-4 w-4 mr-1.5" /> Journal
           </Button>
         </div>
       </div>
@@ -253,11 +282,11 @@ export default function StatistiquesPage() {
               <Plus className="h-4 w-4 mr-1" /> {addingExp ? 'Ajout…' : 'Ajouter'}
             </Button>
           </form>
-          {expenses.filter((e) => { const r = periodRange(period, getNowInMaroc()); return e.date >= r.start && e.date <= r.end }).length === 0 ? (
+          {d.expenseRows.length === 0 ? (
             <p className="text-sm text-gray-400">Aucune dépense sur la période.</p>
           ) : (
             <div className="space-y-1.5">
-              {expenses.filter((e) => { const r = periodRange(period, getNowInMaroc()); return e.date >= r.start && e.date <= r.end }).map((e) => (
+              {d.expenseRows.map((e) => (
                 <div key={e.id} className="group flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-xs text-gray-400 w-20 shrink-0">{formatDateShort(e.date)}</span>
