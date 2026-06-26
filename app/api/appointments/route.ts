@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     time,
     notes,
     consultation_type_id,
+    specialty,
     consent,
     public: isPublic,
   } = body
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
   // Vérifie que le médecin existe, est approuvé et a un abonnement actif
   const { data: doctorCheck } = await db
     .from('doctors')
-    .select('id, status, subscription_status, working_hours, appointment_duration')
+    .select('id, status, subscription_status, working_hours, appointment_duration, specialty, specialties')
     .eq('id', doctor_id)
     .single()
 
@@ -269,6 +270,15 @@ export async function POST(req: NextRequest) {
     patientId = newPatient.id
   }
 
+  // Spécialité choisie : validée contre les spécialités du médecin (jamais le client).
+  // Médecin mono-spécialité → on stocke sa spécialité ; sinon null si non fournie/invalide.
+  const docSpecs = (doctorCheck.specialties && doctorCheck.specialties.length > 0)
+    ? doctorCheck.specialties
+    : (doctorCheck.specialty ? [doctorCheck.specialty] : [])
+  const safeSpecialty = (specialty && docSpecs.includes(specialty))
+    ? specialty
+    : (docSpecs.length === 1 ? docSpecs[0] : null)
+
   // Crée le rendez-vous
   const { data: appointment, error: aptError } = await db
     .from('appointments')
@@ -281,6 +291,7 @@ export async function POST(req: NextRequest) {
       notes: safeNotes || null,
       cancel_token: cancelToken,
       consultation_type_id: safeTypeId,
+      specialty: safeSpecialty,
       duration_minutes: appointmentDuration,
       // Trace du consentement légal (réservation publique uniquement)
       consent_at: isPublic ? new Date().toISOString() : null,

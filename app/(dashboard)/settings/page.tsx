@@ -48,6 +48,8 @@ export default function SettingsPage() {
   const [typeLoading, setTypeLoading] = useState(false)
   // Constantes vitales suivies (clés VITAL_DEFS)
   const [enabledVitals, setEnabledVitals] = useState<string[]>([])
+  // Spécialités additionnelles (en plus de la principale)
+  const [extraSpecs, setExtraSpecs] = useState<string[]>([])
   const supabase = createClient()
 
   useEffect(() => {
@@ -75,6 +77,7 @@ export default function SettingsPage() {
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
         })
         setEnabledVitals(resolveEnabledVitals(data.enabled_vitals, data.specialty))
+        setExtraSpecs(((data.specialties as string[] | null) ?? [data.specialty]).filter((s) => s && s !== data.specialty))
 
         // Charge les dates bloquées
         const { data: blocked } = await supabase
@@ -178,6 +181,7 @@ export default function SettingsPage() {
           name: form.name,
           phone: form.phone,
           specialty: form.specialty,
+          specialties: Array.from(new Set([form.specialty, ...extraSpecs])).filter(Boolean),
           city: form.city,
           address: form.address,
           bio: form.bio || null,
@@ -387,10 +391,10 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Spécialité</Label>
+                <Label>Spécialité principale</Label>
                 <Select
                   value={form.specialty}
-                  onValueChange={(v) => setForm({ ...form, specialty: v })}
+                  onValueChange={(v) => { setForm({ ...form, specialty: v }); setExtraSpecs((prev) => prev.filter((s) => s !== v)) }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Choisir…" />
@@ -412,6 +416,34 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+
+            {/* Spécialités additionnelles (médecin multi-spécialités) */}
+            <div className="space-y-1.5">
+              <Label>Autres spécialités (optionnel)</Label>
+              <p className="text-xs text-gray-400">
+                Si vous exercez plusieurs activités (ex : généraliste <strong>et</strong> esthétique),
+                ajoutez-les ici : vous apparaîtrez dans la recherche sous chacune, et le patient
+                choisira la spécialité à la réservation.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {SPECIALITES_LIST.filter((s) => s !== form.specialty && s !== 'Autre').map((s) => {
+                  const on = extraSpecs.includes(s)
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setExtraSpecs((prev) => on ? prev.filter((x) => x !== s) : [...prev, s])}
+                      className={`text-xs font-medium rounded-full px-3 py-1.5 border transition-colors ${
+                        on ? 'bg-primary-500 text-white border-primary-500' : 'bg-white text-gray-500 border-gray-200 hover:border-primary-300'
+                      }`}
+                    >
+                      {on ? '✓ ' : '+ '}{s}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label>Ville</Label>
               <Select

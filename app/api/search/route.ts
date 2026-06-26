@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     .order('name', { ascending: true })
     .limit(50)
 
-  if (specialite) query = query.eq('specialty', specialite)
+  if (specialite) query = query.contains('specialties', [specialite])
   if (ville)      query = query.eq('city', ville)
   if (q)          query = query.ilike('name', `%${q}%`)
 

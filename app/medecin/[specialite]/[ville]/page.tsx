@@ -43,7 +43,7 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
     .select('id, name, specialty, slug, phone, city, appointment_duration')
     .eq('status', 'approved')
     .eq('subscription_status', 'actif')
-    .eq('specialty', specialite)
+    .contains('specialties', [specialite])
     .eq('city', ville)
     .order('name', { ascending: true })
 

@@ -5,7 +5,8 @@ export interface Doctor {
   name: string
   email: string
   phone: string
-  specialty: string
+  specialty: string          // spécialité principale (titre)
+  specialties?: string[] | null  // toutes les spécialités (inclut la principale)
   slug: string
   city?: string
   address?: string
@@ -200,6 +201,7 @@ export interface Appointment {
   // Motif + durée (variable selon le motif choisi)
   consultation_type_id?: string | null
   duration_minutes?: number | null
+  specialty?: string | null     // spécialité choisie (médecin multi-spécialités)
   // Paiement
   amount_paid?: number | null   // total déjà encaissé
   amount_due?: number | null    // montant total attendu

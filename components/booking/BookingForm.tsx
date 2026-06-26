@@ -14,6 +14,7 @@ interface BookingFormProps {
   selectedDate: string  // YYYY-MM-DD
   selectedTime: string  // HH:mm
   consultationType?: ConsultationType | null
+  specialty?: string | null
   onBack: () => void
   onSuccess: () => void
   onSlotTaken: () => void
@@ -27,7 +28,7 @@ interface MyProfile {
   age: number | null
 }
 
-export function BookingForm({ doctor, selectedDate, selectedTime, consultationType, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
+export function BookingForm({ doctor, selectedDate, selectedTime, consultationType, specialty, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
   const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', age: '', notes: '' })
   const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -96,6 +97,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
           ...form,
           age: form.age ? parseInt(form.age, 10) : undefined,
           consultation_type_id: consultationType?.id ?? undefined,
+          specialty: specialty ?? undefined,
           consent, // consentement légal (case cochée)
           public: true, // indique que c'est une réservation publique
         }),

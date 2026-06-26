@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
       name,
       email,
       specialty,
+      specialties: [specialty],
       phone: phone || null,
       city: city || null,
       slug,

@@ -42,6 +42,10 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
   // Motif de consultation choisi (obligatoire si le médecin en a défini)
   const hasTypes = consultationTypes.length > 0
   const [selectedType, setSelectedType] = useState<ConsultationType | null>(null)
+  // Spécialités (médecin multi-spécialités) : choix par le patient si plusieurs
+  const specialties = (doctor.specialties && doctor.specialties.length > 0) ? doctor.specialties : [doctor.specialty]
+  const hasMultiSpec = specialties.length > 1
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string | null>(hasMultiSpec ? null : (specialties[0] ?? null))
 
   // Charge les congés du médecin (dates à griser + messages publics)
   useEffect(() => {
@@ -147,7 +151,7 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
             )}
             <div>
               <h2 className="text-xl font-bold text-gray-900">Dr. {doctor.name}</h2>
-              <p className="text-primary-600 font-medium text-sm mt-0.5">{doctor.specialty}</p>
+              <p className="text-primary-600 font-medium text-sm mt-0.5">{specialties.join(' · ')}</p>
               <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 flex-wrap">
                 {doctor.address ? (
                   <span className="flex items-center gap-1">
@@ -207,8 +211,32 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
                 </div>
               )}
 
+              {/* Choix de la spécialité (si le médecin en a plusieurs) */}
+              {hasMultiSpec && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-primary-500" />
+                    Pour quelle spécialité ?
+                  </h3>
+                  <div className="grid gap-2">
+                    {specialties.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setSelectedSpecialty(s)}
+                        className={`px-4 py-3 rounded-xl border-2 text-left text-sm font-medium transition-all ${
+                          selectedSpecialty === s ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-700 hover:border-primary-200'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Choix du motif (si le médecin a défini des motifs) */}
-              {hasTypes && (
+              {hasTypes && (!hasMultiSpec || selectedSpecialty) && (
                 <div className="space-y-3">
                   <h3 className="font-semibold text-gray-800 flex items-center gap-2">
                     <ClipboardList className="h-4 w-4 text-primary-500" />
@@ -236,8 +264,8 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
                 </div>
               )}
 
-              {/* Calendrier — affiché après le choix du motif (ou direct si pas de motifs) */}
-              {(!hasTypes || selectedType) && (
+              {/* Calendrier — affiché après spécialité + motif (selon le médecin) */}
+              {(!hasMultiSpec || selectedSpecialty) && (!hasTypes || selectedType) && (
                 <>
               <h3 className="font-semibold text-gray-800">Choisissez une date</h3>
               {vacationNotices.length > 0 && (
@@ -292,6 +320,7 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
               selectedDate={dateStr}
               selectedTime={selectedTime}
               consultationType={selectedType}
+              specialty={selectedSpecialty}
               onBack={() => setStep('datetime')}
               onSuccess={() => setStep('success')}
               onSlotTaken={handleSlotTaken}
