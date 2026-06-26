@@ -12,7 +12,6 @@ interface AppointmentRow {
   time: string
   status: 'pending' | 'confirmed' | 'cancelled'
   notes: string | null
-  cancel_token: string | null
   doctor: {
     id: string
     name: string
@@ -51,7 +50,7 @@ export default async function PatientDashboardPage() {
 
     const { data: allApts } = await adminDb
       .from('appointments')
-      .select('id, date, time, status, notes, cancel_token, doctor:doctors(id, name, specialty, slug)')
+      .select('id, date, time, status, notes, doctor:doctors(id, name, specialty, slug)')
       .in('patient_id', patientIds)
       .order('date', { ascending: false })
       .order('time', { ascending: false })
@@ -177,7 +176,7 @@ function AppointmentCard({ apt, isPast = false }: { apt: AppointmentRow; isPast?
                 </Link>
               )}
               {(apt.status === 'confirmed' || apt.status === 'pending') && (
-                <CancelButton appointmentId={apt.id} cancelToken={apt.cancel_token} />
+                <CancelButton appointmentId={apt.id} />
               )}
             </div>
           )}

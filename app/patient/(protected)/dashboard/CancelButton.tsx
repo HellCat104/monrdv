@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation'
 
 interface CancelButtonProps {
   appointmentId: string
-  cancelToken?: string | null
 }
 
-export function CancelButton({ appointmentId, cancelToken }: CancelButtonProps) {
+export function CancelButton({ appointmentId }: CancelButtonProps) {
   const router = useRouter()
   const [step, setStep] = useState<'idle' | 'confirm' | 'loading'>('idle')
   const [error, setError] = useState('')

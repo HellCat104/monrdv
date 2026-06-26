@@ -153,7 +153,7 @@ export default async function BookingPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
       <BookingPageClient doctor={doctor} consultationTypes={consultationTypes ?? []} />
     </>

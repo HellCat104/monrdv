@@ -33,8 +33,11 @@ export async function PATCH(
   if (status)              updates.status       = status
   if (date)                updates.date         = date
   if (time)                updates.time         = time
-  if (doctor_notes !== undefined) updates.doctor_notes = doctor_notes || null
-  if (attendance !== undefined)   updates.attendance   = attendance
+  if (doctor_notes !== undefined) updates.doctor_notes = doctor_notes ? String(doctor_notes).slice(0, 2000) : null
+  if (attendance !== undefined) {
+    const allowedAtt = ['present', 'absent', 'late']
+    updates.attendance = attendance && allowedAtt.includes(attendance) ? attendance : null
+  }
   // Paiement : montant encaissé (null = marquer comme non payé)
   if (amount_paid !== undefined) {
     const amount = amount_paid === null ? null : Number(amount_paid)
@@ -58,6 +61,22 @@ export async function PATCH(
   if (payment_method !== undefined) {
     const allowed = ['especes', 'carte', 'cheque', 'virement']
     updates.payment_method = payment_method && allowed.includes(payment_method) ? payment_method : null
+  }
+
+  // Cohérence comptable : le montant payé ne peut pas dépasser le montant dû.
+  if (updates.amount_paid != null) {
+    let effectiveDue: number | null
+    if (amount_due !== undefined) {
+      effectiveDue = updates.amount_due as number | null
+    } else {
+      const { data: cur } = await supabase
+        .from('appointments').select('amount_due')
+        .eq('id', params.id).eq('doctor_id', doctor.id).single()
+      effectiveDue = (cur?.amount_due as number | null) ?? null
+    }
+    if (effectiveDue != null && (updates.amount_paid as number) > effectiveDue) {
+      return NextResponse.json({ error: 'Le montant payé dépasse le montant dû' }, { status: 400 })
+    }
   }
 
   const { data: appointment, error } = await supabase
