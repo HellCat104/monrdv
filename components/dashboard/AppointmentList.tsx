@@ -143,6 +143,11 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     {ATTENDANCE_LABELS[apt.attendance]}
                   </span>
                 )}
+                {apt.specialty && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                    {apt.specialty}
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-4 mt-1 text-xs text-gray-500 flex-wrap">

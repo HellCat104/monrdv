@@ -102,7 +102,7 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
                     </div>
                     <div>
                       <h2 className="font-semibold text-gray-900">Dr. {doctor.name}</h2>
-                      <p className="text-sm text-primary-600">{doctor.specialty}</p>
+                      <p className="text-sm text-primary-600">{specialite}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
                         <span className="flex items-center gap-1">
                           <MapPin className="h-3 w-3" /> {doctor.city}

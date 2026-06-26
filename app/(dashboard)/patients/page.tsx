@@ -22,6 +22,7 @@ interface PatientWithStats extends Patient {
   present_count: number
   absent_count: number
   late_count: number
+  specialties: string[]   // spécialités dans lesquelles ce patient a eu un RDV
   age?: number | null
   notes?: string | null
 }
@@ -34,6 +35,8 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'recent' | 'name' | 'lastRdv'>('recent')
+  const [doctorSpecialties, setDoctorSpecialties] = useState<string[]>([])
+  const [specialtyFilter, setSpecialtyFilter] = useState<string>('all')
   const [selectedPatient, setSelectedPatient] = useState<PatientWithStats | null>(null)
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -91,7 +94,7 @@ export default function PatientsPage() {
 
     const { data: doctor } = await supabase
       .from('doctors')
-      .select('id, slug, specialty, enabled_vitals')
+      .select('id, slug, specialty, specialties, enabled_vitals')
       .eq('email', user.email)
       .single()
 
@@ -99,11 +102,15 @@ export default function PatientsPage() {
     setDoctorId(doctor.id)
     setDoctorSlug(doctor.slug ?? '')
     setEnabledVitals(resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty))
+    setDoctorSpecialties(
+      ((doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : []))
+        .filter(Boolean)
+    )
 
-    // Récupère les patients avec leurs RDV (date + présence)
+    // Récupère les patients avec leurs RDV (date + présence + spécialité)
     const { data: pts } = await supabase
       .from('patients')
-      .select('*, appointments(date, attendance, status)')
+      .select('*, appointments(date, attendance, status, specialty)')
       .eq('doctor_id', doctor.id)
       .order('created_at', { ascending: false })
 
@@ -117,6 +124,7 @@ export default function PatientsPage() {
         present_count: apts.filter((a: any) => a.attendance === 'present').length,
         absent_count: apts.filter((a: any) => a.attendance === 'absent').length,
         late_count: apts.filter((a: any) => a.attendance === 'late').length,
+        specialties: Array.from(new Set(apts.map((a: any) => a.specialty).filter(Boolean))) as string[],
       }
     })
 
@@ -483,6 +491,7 @@ export default function PatientsPage() {
   }
 
   const filtered = patients
+    .filter((p) => specialtyFilter === 'all' || p.specialties.includes(specialtyFilter))
     .filter((p) => {
       if (!search) return true
       const q = search.toLowerCase()
@@ -526,6 +535,19 @@ export default function PatientsPage() {
             className="pl-9"
           />
         </div>
+        {doctorSpecialties.length > 1 && (
+          <Select value={specialtyFilter} onValueChange={setSpecialtyFilter}>
+            <SelectTrigger className="w-48 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes les spécialités</SelectItem>
+              {doctorSpecialties.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
           <SelectTrigger className="w-48 shrink-0">
             <SelectValue />

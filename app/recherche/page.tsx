@@ -193,7 +193,7 @@ function RechercheContent() {
                   {/* Infos */}
                   <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-gray-900">Dr. {doctor.name}</h3>
-                    <p className="text-primary-600 text-sm font-medium">{doctor.specialty}</p>
+                    <p className="text-primary-600 text-sm font-medium">{specialite || doctor.specialty}</p>
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 flex-wrap">
                       <span className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
