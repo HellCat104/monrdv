@@ -117,6 +117,19 @@ export interface Expense {
   created_at: string
 }
 
+// Facture d'avoir (annule/corrige une facture émise — conformité fiscale MA)
+export interface CreditNote {
+  id: string
+  doctor_id: string
+  appointment_id?: string | null
+  credit_no?: string | null         // AV-AAAA-NNNN (attribué par trigger)
+  original_invoice_no: string       // facture annulée
+  patient_name?: string | null
+  amount: number
+  reason?: string | null
+  created_at: string
+}
+
 // Rappel de suivi ("revenez dans X mois")
 export type RecallStatus = 'pending' | 'sent' | 'done' | 'cancelled'
 export interface Recall {

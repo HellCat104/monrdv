@@ -10,7 +10,7 @@ import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMeth
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Phone, Clock, UserCheck, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText } from 'lucide-react'
+import { Phone, Clock, UserCheck, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2 } from 'lucide-react'
 
 export interface PaymentPayload {
   amount_paid: number | null
@@ -37,6 +37,35 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
   }>({ open: false, id: '', due: '', paid: '', method: '' })
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState('')
+  // Dialog d'émission d'avoir (annulation/correction de facture)
+  const [creditDialog, setCreditDialog] = useState<{
+    open: boolean; id: string; invoiceNo: string; amount: string; reason: string
+  }>({ open: false, id: '', invoiceNo: '', amount: '', reason: '' })
+  const [crediting, setCrediting] = useState(false)
+  const [creditError, setCreditError] = useState('')
+  const [creditDone, setCreditDone] = useState<{ creditNo: string; id: string } | null>(null)
+
+  async function submitCreditNote() {
+    setCrediting(true)
+    setCreditError('')
+    try {
+      const res = await fetch(`/api/appointments/${creditDialog.id}/credit-note`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: creditDialog.amount ? Number(creditDialog.amount) : undefined,
+          reason: creditDialog.reason || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Échec de l\'émission de l\'avoir')
+      setCreditDone({ creditNo: data.credit_no, id: data.id })
+    } catch (e) {
+      setCreditError(e instanceof Error ? e.message : 'Erreur')
+    } finally {
+      setCrediting(false)
+    }
+  }
 
   async function handleAction() {
     setLoading(true)
@@ -227,6 +256,21 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     >
                       <Printer className="h-3 w-3" /> Facture
                     </a>
+                  )}
+                  {apt.invoice_no && (
+                    <button
+                      onClick={() => {
+                        setCreditDone(null); setCreditError('')
+                        setCreditDialog({
+                          open: true, id: apt.id, invoiceNo: apt.invoice_no!,
+                          amount: apt.amount_paid != null ? String(apt.amount_paid) : '',
+                          reason: '',
+                        })
+                      }}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600 transition-colors font-medium"
+                    >
+                      <Undo2 className="h-3 w-3" /> Avoir
+                    </button>
                   )}
                 </div>
               )}
@@ -441,6 +485,68 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
               {paying ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog : émettre une facture d'avoir */}
+      <Dialog open={creditDialog.open} onOpenChange={(o) => { if (!o) setCreditDialog((p) => ({ ...p, open: false })) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Émettre un avoir</DialogTitle>
+          </DialogHeader>
+          {creditDone ? (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-gray-700">
+                Avoir <strong>{creditDone.creditNo}</strong> émis pour la facture {creditDialog.invoiceNo}.
+              </p>
+              <a
+                href={`/avoir/${creditDone.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:underline"
+              >
+                <Printer className="h-4 w-4" /> Imprimer l'avoir
+              </a>
+              <DialogFooter>
+                <Button onClick={() => setCreditDialog((p) => ({ ...p, open: false }))}>Fermer</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <p className="text-xs text-gray-500">
+                Annule (totalement ou partiellement) la facture <strong>{creditDialog.invoiceNo}</strong>.
+                La facture d'origine reste conservée.
+              </p>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500">Montant de l'avoir</label>
+                <div className="relative">
+                  <Input
+                    type="number" min="0" step="0.01"
+                    value={creditDialog.amount}
+                    onChange={(e) => setCreditDialog((p) => ({ ...p, amount: e.target.value }))}
+                    placeholder="0"
+                    className="pr-9"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">DH</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500">Motif (optionnel)</label>
+                <Input
+                  value={creditDialog.reason}
+                  onChange={(e) => setCreditDialog((p) => ({ ...p, reason: e.target.value }))}
+                  placeholder="Ex. erreur de saisie, remboursement…"
+                />
+              </div>
+              {creditError && <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{creditError}</p>}
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setCreditDialog((p) => ({ ...p, open: false }))}>Retour</Button>
+                <Button onClick={submitCreditNote} disabled={crediting} className="bg-red-600 hover:bg-red-700">
+                  {crediting ? 'Émission…' : 'Émettre l\'avoir'}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

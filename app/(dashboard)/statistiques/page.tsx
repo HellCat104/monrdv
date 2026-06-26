@@ -18,7 +18,7 @@ import { fr } from 'date-fns/locale'
 import {
   BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt,
 } from 'lucide-react'
-import type { Appointment, Expense } from '@/types'
+import type { Appointment, Expense, CreditNote } from '@/types'
 
 type Period = 'month' | 'lastmonth' | 'quarter' | 'year' | 'all'
 const PERIOD_LABELS: Record<Period, string> = {
@@ -38,6 +38,7 @@ export default function StatistiquesPage() {
   const [doctorId, setDoctorId] = useState<string | null>(null)
   const [appts, setAppts] = useState<Appointment[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [credits, setCredits] = useState<CreditNote[]>([])
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<Period>('month')
   const [exp, setExp] = useState({ date: format(getNowInMaroc(), 'yyyy-MM-dd'), label: '', amount: '' })
@@ -45,14 +46,16 @@ export default function StatistiquesPage() {
   const supabase = createClient()
 
   async function loadAll(docId: string) {
-    const [aptRes, expRes] = await Promise.all([
+    const [aptRes, expRes, creditRes] = await Promise.all([
       supabase.from('appointments')
         .select('date, time, status, attendance, amount_paid, amount_due, payment_method, invoice_no, paid_at, notes, patient:patients(first_name, last_name), consultation_type:consultation_types(name)')
         .eq('doctor_id', docId).neq('status', 'cancelled'),
       supabase.from('expenses').select('*').eq('doctor_id', docId).order('date', { ascending: false }),
+      supabase.from('credit_notes').select('*').eq('doctor_id', docId).order('created_at', { ascending: false }),
     ])
     setAppts((aptRes.data ?? []) as unknown as Appointment[])
     setExpenses((expRes.data ?? []) as Expense[])
+    setCredits((creditRes.data ?? []) as CreditNote[])
   }
 
   useEffect(() => {
@@ -112,16 +115,23 @@ export default function StatistiquesPage() {
     const expenseRows = expenses.filter((e) => inRange(e.date)).sort((a, b) => b.date.localeCompare(a.date))
     const depenses = expenseRows.reduce((s, e) => s + Number(e.amount), 0)
 
+    // Avoirs émis dans la période (date = date d'émission, en heure marocaine)
+    const creditRows = credits
+      .map((c) => ({ ...c, _date: formatInTimeZone(parseISO(c.created_at), MAROC_TZ, 'yyyy-MM-dd') }))
+      .filter((c) => inRange(c._date))
+      .sort((a, b) => b._date.localeCompare(a._date))
+    const avoirs = creditRows.reduce((s, c) => s + Number(c.amount), 0)
+
     const revenueByMonth = Array.from(byMonth.entries()).sort((a, b) => a[0].localeCompare(b[0])).slice(-6)
       .map(([mk, total]) => { const [y, m] = mk.split('-'); return { label: format(new Date(+y, +m - 1, 1), 'MMM yyyy', { locale: fr }), total } })
 
     const totAtt = present + absent + late
     return {
-      recettes, depenses, net: recettes - depenses, caisse, rows, expenseRows, rdvCount,
+      recettes, depenses, avoirs, net: recettes - avoirs - depenses, caisse, rows, expenseRows, creditRows, rdvCount,
       present, absent, late, presenceRate: totAtt > 0 ? Math.round((present / totAtt) * 100) : 0,
       revenueByMonth,
     }
-  }, [appts, expenses, period])
+  }, [appts, expenses, credits, period])
 
   async function addExpense(e: React.FormEvent) {
     e.preventDefault()
@@ -173,14 +183,23 @@ export default function StatistiquesPage() {
     downloadCSV('depenses', ['Date', 'Libellé', 'Montant (DH)'], rows)
   }
 
-  // Journal complet : recettes + dépenses, triés par date (chronologique)
+  // Avoirs (détail)
+  function exportAvoirs() {
+    const rows: (string | number)[][] = d.creditRows.map((c) => [c._date, c.credit_no || '', c.original_invoice_no, c.patient_name || '', c.reason || '', Number(c.amount)])
+    rows.push(['', '', '', '', 'TOTAL AVOIRS', d.avoirs])
+    downloadCSV('avoirs', ['Date', 'N° avoir', 'Facture annulée', 'Patient', 'Motif', 'Montant (DH)'], rows)
+  }
+
+  // Journal complet : recettes + avoirs + dépenses, triés par date (chronologique)
   function exportJournal() {
     const entries = [
       ...d.rows.map((r) => ({ date: r.date, type: 'Recette', desc: [r.patient, r.motif].filter(Boolean).join(' · '), mode: r.mode, recette: r.amount, depense: 0 })),
+      ...d.creditRows.map((c) => ({ date: c._date, type: 'Avoir', desc: `Avoir ${c.credit_no || ''} sur ${c.original_invoice_no}${c.reason ? ' · ' + c.reason : ''}`, mode: '', recette: -Number(c.amount), depense: 0 })),
       ...d.expenseRows.map((e) => ({ date: e.date, type: 'Dépense', desc: e.label, mode: '', recette: 0, depense: Number(e.amount) })),
     ].sort((a, b) => a.date.localeCompare(b.date))
     const rows: (string | number)[][] = entries.map((x) => [x.date, x.type, x.desc, x.mode, x.recette || '', x.depense || ''])
     rows.push(['', '', '', 'TOTAL RECETTES', d.recettes, ''])
+    rows.push(['', '', '', 'TOTAL AVOIRS', -d.avoirs, ''])
     rows.push(['', '', '', 'TOTAL DÉPENSES', '', d.depenses])
     rows.push(['', '', '', 'NET', d.net, ''])
     downloadCSV('journal', ['Date', 'Type', 'Détail', 'Mode', 'Recette (DH)', 'Dépense (DH)'], rows)
@@ -222,6 +241,9 @@ export default function StatistiquesPage() {
           <Button variant="outline" size="sm" onClick={exportDepenses} disabled={d.expenseRows.length === 0}>
             <Download className="h-4 w-4 mr-1.5" /> Dépenses
           </Button>
+          <Button variant="outline" size="sm" onClick={exportAvoirs} disabled={d.creditRows.length === 0}>
+            <Download className="h-4 w-4 mr-1.5" /> Avoirs
+          </Button>
           <Button variant="outline" size="sm" onClick={exportJournal} disabled={d.rows.length === 0 && d.expenseRows.length === 0}>
             <Download className="h-4 w-4 mr-1.5" /> Journal
           </Button>
@@ -233,6 +255,9 @@ export default function StatistiquesPage() {
         <Card><CardContent className="p-5">
           <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><Wallet className="h-4 w-4" /> Recettes · {PERIOD_LABELS[period]}</div>
           <p className="text-3xl font-bold text-gray-900 mt-2">{d.recettes.toLocaleString('fr-FR')} <span className="text-base font-medium text-gray-400">DH</span></p>
+          {d.avoirs > 0 && (
+            <p className="text-xs text-red-500 mt-1">− {d.avoirs.toLocaleString('fr-FR')} DH d&apos;avoirs émis</p>
+          )}
         </CardContent></Card>
         <Card><CardContent className="p-5">
           <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><Receipt className="h-4 w-4" /> Dépenses</div>
