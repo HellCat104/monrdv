@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     `)
     .eq('date', targetDate)
     .neq('status', 'cancelled')
+    .is('reminder_sent_at', null)   // idempotence : ne jamais renvoyer un rappel déjà envoyé
 
   if (error) {
     console.error('[Cron reminders] Erreur Supabase:', error)
@@ -71,7 +72,13 @@ export async function GET(req: NextRequest) {
             time: apt.time,
             cancelToken: apt.cancel_token,
           })
-          ok ? sent++ : failed++
+          if (ok) {
+            // Marque l'envoi pour qu'un rejeu du cron ne renvoie pas l'email
+            await supabase.from('appointments')
+              .update({ reminder_sent_at: new Date().toISOString() })
+              .eq('id', apt.id)
+            sent++
+          } else { failed++ }
         } catch { failed++ }
       })
     )
