@@ -33,7 +33,7 @@ export async function PATCH(
   if (status)              updates.status       = status
   if (date)                updates.date         = date
   if (time)                updates.time         = time
-  if (doctor_notes !== undefined) updates.doctor_notes = doctor_notes ? String(doctor_notes).slice(0, 2000) : null
+  if (doctor_notes !== undefined) updates.doctor_notes = doctor_notes || null
   if (attendance !== undefined) {
     const allowedAtt = ['present', 'absent', 'late']
     updates.attendance = attendance && allowedAtt.includes(attendance) ? attendance : null
