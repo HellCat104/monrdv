@@ -22,8 +22,12 @@ const DatePicker = dynamic(
   }
 )
 
+// La page publique ne transmet JAMAIS les colonnes sensibles (email, etc.)
+// au navigateur — voir la projection dans app/[slug]/page.tsx.
+type PublicDoctor = Omit<Doctor, 'email' | 'created_at'>
+
 interface Props {
-  doctor: Doctor
+  doctor: PublicDoctor
   consultationTypes?: ConsultationType[]
 }
 

@@ -10,7 +10,7 @@ import { CheckCircle2, User, Phone, MessageSquare, Mail, Hash } from 'lucide-rea
 import type { Doctor, ConsultationType } from '@/types'
 
 interface BookingFormProps {
-  doctor: Doctor
+  doctor: Omit<Doctor, 'email' | 'created_at'>
   selectedDate: string  // YYYY-MM-DD
   selectedTime: string  // HH:mm
   consultationType?: ConsultationType | null
