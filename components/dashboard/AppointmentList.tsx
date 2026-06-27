@@ -237,7 +237,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                       <Wallet className="h-3 w-3" /> {apt.amount_paid != null ? 'Encaissement' : 'Encaisser'}
                     </button>
                   )}
-                  {onViewPatient && apt.patient_id && (
+                  {apt.patient_id && (
                     <a
                       href={`/ordonnance/${apt.id}`}
                       target="_blank"
