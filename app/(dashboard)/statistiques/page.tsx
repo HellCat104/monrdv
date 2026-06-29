@@ -16,7 +16,7 @@ import {
 import { formatInTimeZone } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
 import {
-  BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt,
+  BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt, FileText, Table2,
 } from 'lucide-react'
 import type { Appointment, Expense, CreditNote } from '@/types'
 
@@ -32,6 +32,37 @@ function periodRange(p: Period, now: Date): { start: string; end: string } {
   if (p === 'quarter') return { start: format(startOfQuarter(now), 'yyyy-MM-dd'), end: format(endOfQuarter(now), 'yyyy-MM-dd') }
   if (p === 'year') return { start: format(startOfYear(now), 'yyyy-MM-dd'), end: format(endOfYear(now), 'yyyy-MM-dd') }
   return { start: format(startOfMonth(now), 'yyyy-MM-dd'), end: format(endOfMonth(now), 'yyyy-MM-dd') }
+}
+
+// Bouton d'export avec choix du format (Excel/CSV ou PDF) au clic
+function ExportBtn({ label, disabled, onPick }: { label: string; disabled?: boolean; onPick: (fmt: 'csv' | 'pdf') => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <Button variant="outline" size="sm" disabled={disabled} onClick={() => setOpen((o) => !o)}>
+        <Download className="h-4 w-4 mr-1.5" /> {label}
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-1 z-20 w-52 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+            <button
+              onClick={() => { setOpen(false); onPick('csv') }}
+              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+            >
+              <Table2 className="h-4 w-4 text-green-600" /> Ouvrir dans Excel (CSV)
+            </button>
+            <button
+              onClick={() => { setOpen(false); onPick('pdf') }}
+              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+            >
+              <FileText className="h-4 w-4 text-red-500" /> PDF (imprimer / enregistrer)
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 export default function StatistiquesPage() {
@@ -169,29 +200,66 @@ export default function StatistiquesPage() {
     a.click()
   }
 
+  // Génère un PDF : ouvre une vue imprimable (l'utilisateur choisit « Enregistrer en PDF »)
+  function downloadPDF(kind: string, title: string, headers: string[], rows: (string | number)[][]) {
+    const esc = (v: string | number) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const numCols = 2 // les 2 dernières colonnes sont des montants → alignées à droite
+    const thead = `<tr>${headers.map((h, i) => `<th class="${i >= headers.length - numCols ? 'num' : ''}">${esc(h)}</th>`).join('')}</tr>`
+    const tbody = rows.map((r) => {
+      const isTotal = r.some((c) => typeof c === 'string' && /^(TOTAL|NET)/.test(c))
+      return `<tr class="${isTotal ? 'tot' : ''}">${r.map((c, i) => `<td class="${i >= headers.length - numCols ? 'num' : ''}">${esc(c)}</td>`).join('')}</tr>`
+    }).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+      *{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;box-sizing:border-box}
+      body{margin:24px;color:#0f2230}
+      h1{font-size:18px;margin:0 0 2px}
+      .sub{color:#64748b;font-size:11px;margin:0 0 16px}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th,td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:left}
+      th{background:#f1f5f9;color:#475569;text-transform:uppercase;font-size:9px;letter-spacing:.04em}
+      td.num,th.num{text-align:right;white-space:nowrap}
+      tr.tot td{font-weight:700;border-top:2px solid #0f2230;background:#f8fafc}
+      @media print{body{margin:0}}
+    </style></head><body>
+      <h1>${esc(title)}</h1>
+      <p class="sub">Cabinet MonRDV · Généré le ${formatDateFr(getNowInMaroc())}</p>
+      <table><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+      <script>window.onload=function(){setTimeout(function(){window.print()},250)}</script>
+    </body></html>`
+    const w = window.open('', '_blank')
+    if (!w) { alert('Autorisez les fenêtres pop-up pour générer le PDF.'); return }
+    w.document.write(html); w.document.close()
+  }
+
+  // Dispatcher : envoie l'export au bon format (Excel/CSV ou PDF)
+  function emit(fmt: 'csv' | 'pdf', kind: string, title: string, headers: string[], rows: (string | number)[][]) {
+    if (fmt === 'pdf') downloadPDF(kind, title, headers, rows)
+    else downloadCSV(kind, headers, rows)
+  }
+
   // Recettes (détail des encaissements)
-  function exportRecettes() {
+  function exportRecettes(fmt: 'csv' | 'pdf') {
     const rows: (string | number)[][] = d.rows.map((r) => [r.date, r.invoice, r.patient, r.motif, r.mode, r.amount])
     rows.push(['', '', '', '', 'TOTAL RECETTES', d.recettes])
-    downloadCSV('recettes', ['Date', 'N° facture', 'Patient', 'Motif', 'Mode', 'Montant (DH)'], rows)
+    emit(fmt, 'recettes', `Recettes — ${PERIOD_LABELS[period]}`, ['Date', 'N° facture', 'Patient', 'Motif', 'Mode', 'Montant (DH)'], rows)
   }
 
   // Dépenses (détail)
-  function exportDepenses() {
+  function exportDepenses(fmt: 'csv' | 'pdf') {
     const rows: (string | number)[][] = d.expenseRows.map((e) => [e.date, e.label, Number(e.amount)])
     rows.push(['', 'TOTAL DÉPENSES', d.depenses])
-    downloadCSV('depenses', ['Date', 'Libellé', 'Montant (DH)'], rows)
+    emit(fmt, 'depenses', `Dépenses — ${PERIOD_LABELS[period]}`, ['Date', 'Libellé', 'Montant (DH)'], rows)
   }
 
   // Avoirs (détail)
-  function exportAvoirs() {
+  function exportAvoirs(fmt: 'csv' | 'pdf') {
     const rows: (string | number)[][] = d.creditRows.map((c) => [c._date, c.credit_no || '', c.original_invoice_no, c.patient_name || '', c.reason || '', Number(c.amount)])
     rows.push(['', '', '', '', 'TOTAL AVOIRS', d.avoirs])
-    downloadCSV('avoirs', ['Date', 'N° avoir', 'Facture annulée', 'Patient', 'Motif', 'Montant (DH)'], rows)
+    emit(fmt, 'avoirs', `Avoirs — ${PERIOD_LABELS[period]}`, ['Date', 'N° avoir', 'Facture annulée', 'Patient', 'Motif', 'Montant (DH)'], rows)
   }
 
   // Journal complet : recettes + avoirs + dépenses, triés par date (chronologique)
-  function exportJournal() {
+  function exportJournal(fmt: 'csv' | 'pdf') {
     const entries = [
       ...d.rows.map((r) => ({ date: r.date, type: 'Recette', desc: [r.patient, r.motif].filter(Boolean).join(' · '), mode: r.mode, recette: r.amount, depense: 0 })),
       ...d.creditRows.map((c) => ({ date: c._date, type: 'Avoir', desc: `Avoir ${c.credit_no || ''} sur ${c.original_invoice_no}${c.reason ? ' · ' + c.reason : ''}`, mode: '', recette: -Number(c.amount), depense: 0 })),
@@ -202,7 +270,7 @@ export default function StatistiquesPage() {
     rows.push(['', '', '', 'TOTAL AVOIRS', -d.avoirs, ''])
     rows.push(['', '', '', 'TOTAL DÉPENSES', '', d.depenses])
     rows.push(['', '', '', 'NET', d.net, ''])
-    downloadCSV('journal', ['Date', 'Type', 'Détail', 'Mode', 'Recette (DH)', 'Dépense (DH)'], rows)
+    emit(fmt, 'journal', `Journal comptable — ${PERIOD_LABELS[period]}`, ['Date', 'Type', 'Détail', 'Mode', 'Recette (DH)', 'Dépense (DH)'], rows)
   }
 
   if (loading) {
@@ -235,18 +303,10 @@ export default function StatistiquesPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={exportRecettes} disabled={d.rows.length === 0}>
-            <Download className="h-4 w-4 mr-1.5" /> Recettes
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportDepenses} disabled={d.expenseRows.length === 0}>
-            <Download className="h-4 w-4 mr-1.5" /> Dépenses
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportAvoirs} disabled={d.creditRows.length === 0}>
-            <Download className="h-4 w-4 mr-1.5" /> Avoirs
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportJournal} disabled={d.rows.length === 0 && d.expenseRows.length === 0}>
-            <Download className="h-4 w-4 mr-1.5" /> Journal
-          </Button>
+          <ExportBtn label="Recettes" disabled={d.rows.length === 0} onPick={(f) => exportRecettes(f)} />
+          <ExportBtn label="Dépenses" disabled={d.expenseRows.length === 0} onPick={(f) => exportDepenses(f)} />
+          <ExportBtn label="Avoirs" disabled={d.creditRows.length === 0} onPick={(f) => exportAvoirs(f)} />
+          <ExportBtn label="Journal" disabled={d.rows.length === 0 && d.expenseRows.length === 0} onPick={(f) => exportJournal(f)} />
         </div>
       </div>
 
