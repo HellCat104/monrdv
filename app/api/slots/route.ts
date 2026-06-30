@@ -21,12 +21,20 @@ export async function GET(req: NextRequest) {
   // Requête 1 : infos médecin (nécessaire avant les autres pour vérifier le jour)
   const { data: doctor, error: doctorError } = await supabase
     .from('doctors')
-    .select('working_hours, appointment_duration')
+    .select('working_hours, appointment_duration, status, subscription_status')
     .eq('id', doctorId)
     .single()
 
   if (doctorError || !doctor) {
     return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
+  }
+
+  // Médecin non réservable (non approuvé ou abonnement inactif) : aucun créneau.
+  // Évite d'afficher des disponibilités que la création de RDV refusera ensuite.
+  if (doctor.status !== 'approved' || doctor.subscription_status !== 'actif') {
+    return NextResponse.json({ slots: [] }, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' },
+    })
   }
 
   // Vérifie si le jour est ouvert — court-circuit si fermé

@@ -104,12 +104,14 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
       })
 
       if (!res.ok) {
-        const data = await res.json()
         if (res.status === 409) {
           onSlotTaken()
           return
         }
-        throw new Error(data.error || 'Erreur lors de la réservation')
+        // Parse robuste : si la réponse n'est pas du JSON (page d'erreur HTML,
+        // corps vide…), on retombe sur un message clair au lieu de planter.
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'La réservation n\'a pas pu aboutir. Réessayez dans un instant.')
       }
 
       setConfirmed(true)
