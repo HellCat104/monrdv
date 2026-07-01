@@ -50,6 +50,7 @@ export const VILLE_SLUGS: Record<string, string> = {
   'kenitra':       'Kénitra',
   'tetouan':       'Tétouan',
   'sale':          'Salé',
+  'temara':        'Témara',
   'mohammedia':    'Mohammedia',
   'el-jadida':     'El Jadida',
   'beni-mellal':   'Béni Mellal',
