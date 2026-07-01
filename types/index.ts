@@ -363,6 +363,7 @@ export const VILLES_MAROC = [
   'Kénitra',
   'Tétouan',
   'Salé',
+  'Témara',
   'Mohammedia',
   'El Jadida',
   'Béni Mellal',
