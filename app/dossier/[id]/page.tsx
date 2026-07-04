@@ -3,7 +3,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
-import { VITAL_DEFS } from '@/types'
+import { allVitalDefs, type VitalDef } from '@/types'
 import { PrintButton } from './PrintButton'
 
 interface Props { params: { id: string } }
@@ -23,7 +23,7 @@ export default async function DossierPage({ params }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe')
+    .select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -68,8 +68,9 @@ export default async function DossierPage({ params }: Props) {
   const aptDate = new Map<string, string>()
   for (const a of appointments) aptDate.set(a.id, `${formatDateShort(a.date)} ${formatTime(a.time)}`)
   const totalPaid = appointments.reduce((s, a) => s + (a.amount_paid ?? 0), 0)
-  const vitalLabel = (k: string) => VITAL_DEFS.find((v) => v.key === k)?.label || k
-  const vitalUnit = (k: string) => VITAL_DEFS.find((v) => v.key === k)?.unit || ''
+  const vitalDefs = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
+  const vitalLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
+  const vitalUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">

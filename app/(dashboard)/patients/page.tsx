@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign } from '@/types'
-import { VITAL_DEFS, resolveEnabledVitals } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, type VitalDef } from '@/types'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge } from 'lucide-react'
 
@@ -32,6 +32,7 @@ export default function PatientsPage() {
   const [doctorId, setDoctorId] = useState<string | null>(null)
   const [doctorSlug, setDoctorSlug] = useState<string>('')
   const [enabledVitals, setEnabledVitals] = useState<string[]>([])
+  const [vitalDefs, setVitalDefs] = useState<VitalDef[]>(() => allVitalDefs())
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'recent' | 'name' | 'lastRdv'>('recent')
@@ -94,7 +95,7 @@ export default function PatientsPage() {
 
     const { data: doctor } = await supabase
       .from('doctors')
-      .select('id, slug, specialty, specialties, enabled_vitals')
+      .select('id, slug, specialty, specialties, enabled_vitals, custom_vitals')
       .eq('email', user.email)
       .single()
 
@@ -102,6 +103,7 @@ export default function PatientsPage() {
     setDoctorId(doctor.id)
     setDoctorSlug(doctor.slug ?? '')
     setEnabledVitals(resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty))
+    setVitalDefs(allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? []))
     setDoctorSpecialties(
       ((doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : []))
         .filter(Boolean)
@@ -941,7 +943,7 @@ export default function PatientsPage() {
 
                   {/* Saisie d'une mesure */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
-                    {VITAL_DEFS.filter((v) => enabledVitals.includes(v.key)).map((v) => (
+                    {vitalDefs.filter((v) => enabledVitals.includes(v.key)).map((v) => (
                       <div key={v.key} className="relative">
                         <Input
                           type="number"
@@ -971,7 +973,7 @@ export default function PatientsPage() {
                           <div key={m.id} className="bg-gray-50 rounded-lg px-3 py-2">
                             <p className="text-[11px] text-gray-400 mb-1 capitalize">{formatDateFr(m.measured_at)}</p>
                             <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-700">
-                              {VITAL_DEFS.filter((v) => m.values[v.key] != null).map((v) => (
+                              {vitalDefs.filter((v) => m.values[v.key] != null).map((v) => (
                                 <span key={v.key}><b className="font-medium">{v.label}</b> {m.values[v.key]} {v.unit}</span>
                               ))}
                               {imc && <span className="text-primary-600"><b className="font-medium">IMC</b> {imc.toFixed(1)}</span>}

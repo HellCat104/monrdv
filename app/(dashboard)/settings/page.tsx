@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
-import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals } from '@/types'
+import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals, type VitalDef } from '@/types'
 import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 
@@ -48,6 +48,10 @@ export default function SettingsPage() {
   const [typeLoading, setTypeLoading] = useState(false)
   // Constantes vitales suivies (clés VITAL_DEFS)
   const [enabledVitals, setEnabledVitals] = useState<string[]>([])
+  // Constantes personnalisées créées par le médecin
+  const [customVitals, setCustomVitals] = useState<VitalDef[]>([])
+  const [newVitalLabel, setNewVitalLabel] = useState('')
+  const [newVitalUnit, setNewVitalUnit] = useState('')
   // Spécialités additionnelles (en plus de la principale)
   const [extraSpecs, setExtraSpecs] = useState<string[]>([])
   const supabase = createClient()
@@ -77,6 +81,7 @@ export default function SettingsPage() {
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
         })
         setEnabledVitals(resolveEnabledVitals(data.enabled_vitals, data.specialty))
+        setCustomVitals(((data.custom_vitals as VitalDef[] | null) ?? []))
         setExtraSpecs(((data.specialties as string[] | null) ?? [data.specialty]).filter((s) => s && s !== data.specialty))
 
         // Charge les dates bloquées
@@ -188,6 +193,7 @@ export default function SettingsPage() {
           ice: form.ice.trim() || null,
           inpe: form.inpe.trim() || null,
           enabled_vitals: enabledVitals,
+          custom_vitals: customVitals,
           appointment_duration: form.appointment_duration,
           working_hours: form.working_hours,
         })
@@ -722,7 +728,76 @@ export default function SettingsPage() {
                   </button>
                 )
               })}
+              {/* Constantes personnalisées du médecin */}
+              {customVitals.map((v) => {
+                const on = enabledVitals.includes(v.key)
+                return (
+                  <div key={v.key} className={`flex items-center gap-1 px-2 py-2 rounded-lg border text-sm transition-colors ${
+                    on ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-500'
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setEnabledVitals((prev) => on ? prev.filter((k) => k !== v.key) : [...prev, v.key])}
+                      className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                    >
+                      <span className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-primary-500 border-primary-500' : 'border-gray-300'}`}>
+                        {on && <Check className="h-3 w-3 text-white" />}
+                      </span>
+                      <span className="truncate">{v.label}{v.unit ? ` (${v.unit})` : ''}</span>
+                    </button>
+                    <button
+                      type="button"
+                      title="Supprimer cette constante"
+                      onClick={() => {
+                        setCustomVitals((prev) => prev.filter((x) => x.key !== v.key))
+                        setEnabledVitals((prev) => prev.filter((k) => k !== v.key))
+                      }}
+                      className="text-gray-300 hover:text-red-500 shrink-0"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )
+              })}
             </div>
+
+            {/* Ajouter une constante personnalisée */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Input
+                value={newVitalLabel}
+                onChange={(e) => setNewVitalLabel(e.target.value)}
+                placeholder="Nouvelle constante (ex. HbA1c)"
+                className="flex-1 min-w-[160px] h-9 text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('add-vital-btn')?.click() } }}
+              />
+              <Input
+                value={newVitalUnit}
+                onChange={(e) => setNewVitalUnit(e.target.value)}
+                placeholder="Unité (ex. %)"
+                className="w-28 h-9 text-sm"
+              />
+              <button
+                id="add-vital-btn"
+                type="button"
+                onClick={() => {
+                  const label = newVitalLabel.trim()
+                  if (!label) return
+                  const slug = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20)
+                  const key = `c_${slug || 'v'}_${Math.random().toString(36).slice(2, 6)}`
+                  setCustomVitals((prev) => [...prev, { key, label, unit: newVitalUnit.trim() }])
+                  setEnabledVitals((prev) => [...prev, key])
+                  setNewVitalLabel('')
+                  setNewVitalUnit('')
+                }}
+                className="flex items-center gap-1.5 h-9 px-3 rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 transition-colors shrink-0"
+              >
+                <Plus className="h-4 w-4" /> Ajouter
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Créez vos propres constantes (ex. cardiologue : HbA1c, bilan lipidique, créatinine, INR, TP…). Elles s&apos;ajoutent à la saisie dans la fiche patient.
+            </p>
+
             {enabledVitals.length === 0 && (
               <p className="text-xs text-gray-400 mt-3">Aucune constante suivie — la section n&apos;apparaîtra pas dans les fiches patient.</p>
             )}

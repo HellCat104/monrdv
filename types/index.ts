@@ -20,6 +20,8 @@ export interface Doctor {
   inpe?: string | null
   // Constantes vitales suivies (null = défaut selon spécialité, [] = aucune)
   enabled_vitals?: string[] | null
+  // Constantes personnalisées créées par le médecin (ex. HbA1c, INR, créatinine…)
+  custom_vitals?: VitalDef[] | null
   working_hours: WorkingHours
   appointment_duration: number // en minutes : 15, 20 ou 30
   created_at: string
@@ -195,6 +197,12 @@ export const DEFAULT_VITALS_BY_SPECIALTY: Record<string, string[]> = {
 export function resolveEnabledVitals(enabled: string[] | null | undefined, specialty?: string): string[] {
   if (enabled != null) return enabled
   return (specialty && DEFAULT_VITALS_BY_SPECIALTY[specialty]) || []
+}
+
+// Catalogue complet des constantes disponibles pour un médecin :
+// les constantes standard + celles qu'il a créées lui-même.
+export function allVitalDefs(custom?: VitalDef[] | null): VitalDef[] {
+  return [...VITAL_DEFS, ...(custom ?? [])]
 }
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled'

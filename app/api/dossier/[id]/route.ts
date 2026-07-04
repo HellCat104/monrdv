@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
-import { VITAL_DEFS } from '@/types'
+import { allVitalDefs, type VitalDef } from '@/types'
 import JSZip from 'jszip'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   const { data: doctor } = await supabase
-    .from('doctors').select('id, name, specialty, address, city, phone, ice, inpe')
+    .from('doctors').select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals')
     .eq('email', user.email).single()
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
 
@@ -63,8 +63,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const aptLabel = new Map<string, string>()
   for (const a of appointments) aptLabel.set(a.id, `${formatDateShort(a.date)} ${formatTime(a.time)}`)
   const totalPaid = appointments.reduce((s, a) => s + (a.amount_paid ?? 0), 0)
-  const vLabel = (k: string) => VITAL_DEFS.find((v) => v.key === k)?.label || k
-  const vUnit = (k: string) => VITAL_DEFS.find((v) => v.key === k)?.unit || ''
+  const vitalDefs = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
+  const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
+  const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
   const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Dossier — ${esc(patient.first_name)} ${esc(patient.last_name)}</title>
 <style>body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;max-width:800px;margin:24px auto;padding:0 20px;line-height:1.5}
