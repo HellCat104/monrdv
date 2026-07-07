@@ -19,7 +19,7 @@ const getDoctor = cache(async (slug: string) => {
   // sensibles (email, cnom_number, document_url, rejection_reason, ice, inpe…).
   const { data } = await supabase
     .from('doctors')
-    .select('id, name, slug, specialty, specialties, photo_url, address, city, bio, appointment_duration, working_hours, phone, subscription_status, status')
+    .select('id, name, slug, specialty, specialties, photo_url, address, city, bio, appointment_duration, working_hours, phone, whatsapp, public_email, subscription_status, status')
     .eq('slug', slug)
     .eq('status', 'approved')
     .single()

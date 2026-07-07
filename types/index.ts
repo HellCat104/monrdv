@@ -18,6 +18,9 @@ export interface Doctor {
   // Identifiants légaux (facture marocaine)
   ice?: string | null
   inpe?: string | null
+  // Coordonnées de contact publiques (affichées aux patients)
+  whatsapp?: string | null
+  public_email?: string | null
   // Constantes vitales suivies (null = défaut selon spécialité, [] = aucune)
   enabled_vitals?: string[] | null
   // Constantes personnalisées créées par le médecin (ex. HbA1c, INR, créatinine…)

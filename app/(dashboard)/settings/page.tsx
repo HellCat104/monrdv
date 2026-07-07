@@ -21,6 +21,8 @@ export default function SettingsPage() {
   const [form, setForm] = useState({
     name: '',
     phone: '',
+    whatsapp: '',
+    public_email: '',
     specialty: '',
     city: '',
     address: '',
@@ -71,6 +73,8 @@ export default function SettingsPage() {
         setForm({
           name: data.name,
           phone: data.phone ?? '',
+          whatsapp: data.whatsapp ?? '',
+          public_email: data.public_email ?? '',
           specialty: data.specialty ?? '',
           city: data.city ?? '',
           address: data.address ?? '',
@@ -185,6 +189,8 @@ export default function SettingsPage() {
         .update({
           name: form.name,
           phone: form.phone,
+          whatsapp: form.whatsapp.trim() || null,
+          public_email: form.public_email.trim() || null,
           specialty: form.specialty,
           specialties: Array.from(new Set([form.specialty, ...extraSpecs])).filter(Boolean),
           city: form.city,
@@ -413,13 +419,38 @@ export default function SettingsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="s_phone">Téléphone</Label>
+                <Label htmlFor="s_phone">Téléphone (pour appeler)</Label>
                 <Input
                   id="s_phone"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   placeholder="05 22 XX XX XX"
                 />
+              </div>
+            </div>
+
+            {/* Contact affiché aux patients sur la page publique */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="s_whatsapp">WhatsApp (optionnel)</Label>
+                <Input
+                  id="s_whatsapp"
+                  value={form.whatsapp}
+                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                  placeholder="06 XX XX XX XX"
+                />
+                <p className="text-xs text-gray-400">Un bouton « WhatsApp » apparaîtra sur votre page.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="s_public_email">E-mail de contact (optionnel)</Label>
+                <Input
+                  id="s_public_email"
+                  type="email"
+                  value={form.public_email}
+                  onChange={(e) => setForm({ ...form, public_email: e.target.value })}
+                  placeholder="cabinet@exemple.ma"
+                />
+                <p className="text-xs text-gray-400">Différent de votre e-mail de connexion. Affiché aux patients.</p>
               </div>
             </div>
 

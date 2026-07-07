@@ -6,7 +6,15 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { TimeSlots } from '@/components/booking/TimeSlots'
 import { BookingForm } from '@/components/booking/BookingForm'
-import { Stethoscope, MapPin, Clock, ClipboardList } from 'lucide-react'
+import { Stethoscope, MapPin, Clock, ClipboardList, Phone, Mail } from 'lucide-react'
+
+// Convertit un numéro marocain en format international pour wa.me (ex. 0612… → 212612…)
+function waNumber(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.startsWith('212')) return digits
+  if (digits.startsWith('0')) return '212' + digits.slice(1)
+  return digits
+}
 import type { Doctor, TimeSlot, ConsultationType } from '@/types'
 
 // Chargement différé du calendrier — réduit le JS initial de ~30 kB
@@ -178,6 +186,42 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
               )}
             </div>
           </div>
+
+          {/* Contacter le médecin */}
+          {(doctor.whatsapp || doctor.phone || doctor.public_email) && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">Contacter le médecin</p>
+              <div className="flex flex-wrap gap-2">
+                {doctor.whatsapp && (
+                  <a
+                    href={`https://wa.me/${waNumber(doctor.whatsapp)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#25D366] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current"><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.4A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1-.4-.1-1-.3-1.7-.6-3-1.3-4.9-4.3-5-4.5-.2-.2-1.2-1.6-1.2-3s.7-2.1 1-2.4c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 1.9c.1.2.1.4 0 .5l-.4.6c-.2.2-.3.4-.1.7.2.3.9 1.4 1.9 2.3 1.3 1.1 2.3 1.5 2.6 1.6.3.1.5.1.7-.1l.8-1c.2-.3.4-.2.7-.1l1.9.9c.3.1.5.2.6.3.1.2.1.7-.1 1.2Z"/></svg>
+                    WhatsApp
+                  </a>
+                )}
+                {doctor.phone && (
+                  <a
+                    href={`tel:${doctor.phone}`}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:border-primary-300 hover:text-primary-600 transition-colors"
+                  >
+                    <Phone className="h-4 w-4" /> Appeler
+                  </a>
+                )}
+                {doctor.public_email && (
+                  <a
+                    href={`mailto:${doctor.public_email}`}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:border-primary-300 hover:text-primary-600 transition-colors"
+                  >
+                    <Mail className="h-4 w-4" /> Email
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Stepper */}
