@@ -36,6 +36,9 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'recent' | 'name' | 'lastRdv'>('recent')
+  // Sélection multiple pour export groupé
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [exporting, setExporting] = useState(false)
   const [doctorSpecialties, setDoctorSpecialties] = useState<string[]>([])
   const [specialtyFilter, setSpecialtyFilter] = useState<string>('all')
   const [selectedPatient, setSelectedPatient] = useState<PatientWithStats | null>(null)
@@ -492,6 +495,60 @@ export default function PatientsPage() {
     await load()
   }
 
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+
+  // Export "liste d'infos" : un CSV des patients sélectionnés (ouvrable dans Excel)
+  function exportSelectedList() {
+    const sel = patients.filter((p) => selectedIds.has(p.id))
+    if (sel.length === 0) return
+    const esc = (v: string | number) => {
+      let s = String(v)
+      if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = `'${s}`
+      return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const headers = ['Prénom', 'Nom', 'Téléphone', 'Âge', 'Nb RDV', 'Présents', 'Absents', 'Dernier RDV']
+    const rows = sel.map((p) => [p.first_name, p.last_name, p.phone, p.age ?? '', p.appointment_count, p.present_count, p.absent_count, p.last_appointment_date ?? ''])
+    const csv = '﻿' + [headers, ...rows].map((r) => r.map(esc).join(';')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `patients-monrdv-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+  }
+
+  // Export "dossiers complets" : un ZIP avec le dossier de chaque patient sélectionné
+  async function exportSelectedDossiers() {
+    if (selectedIds.size === 0) return
+    setExporting(true)
+    try {
+      const res = await fetch('/api/dossier/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Échec du téléchargement des dossiers.')
+        return
+      }
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `dossiers-patients-${new Date().toISOString().slice(0, 10)}.zip`
+      a.click()
+    } catch {
+      alert('Erreur réseau pendant l\'export.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const filtered = patients
     .filter((p) => specialtyFilter === 'all' || p.specialties.includes(specialtyFilter))
     .filter((p) => {
@@ -562,6 +619,24 @@ export default function PatientsPage() {
         </Select>
       </div>
 
+      {/* Barre d'actions groupées (apparaît dès qu'un patient est coché) */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between gap-3 flex-wrap bg-primary-50 border border-primary-100 rounded-xl px-4 py-2.5">
+          <span className="text-sm font-medium text-primary-700">{selectedIds.size} patient(s) sélectionné(s)</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={exportSelectedList}>
+              <Download className="h-4 w-4 mr-1.5" /> Exporter la liste (Excel)
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportSelectedDossiers} disabled={exporting}>
+              <Download className="h-4 w-4 mr-1.5" /> {exporting ? 'Préparation…' : 'Télécharger les dossiers'}
+            </Button>
+            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600 px-1">
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Liste des patients */}
       {loading ? (
         <div className="space-y-3">
@@ -586,6 +661,15 @@ export default function PatientsPage() {
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-4">
+                  {/* Case de sélection (export groupé) */}
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(patient.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleSelect(patient.id)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 shrink-0 cursor-pointer"
+                    aria-label={`Sélectionner ${patient.first_name} ${patient.last_name}`}
+                  />
                   {/* Avatar */}
                   <div className="w-11 h-11 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-semibold shrink-0">
                     {getInitials(patient.first_name, patient.last_name)}
