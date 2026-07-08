@@ -20,6 +20,11 @@ export const DENTAL_COLOR: Record<string, string> = Object.fromEntries(DENTAL_ST
 export const FDI_UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]
 export const FDI_LOWER = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38]
 
+// Le schéma dentaire ne concerne que les spécialités dentaires.
+export function isDentalDoctor(specialties: (string | null | undefined)[]): boolean {
+  return specialties.some((s) => !!s && /dent|stomato|orthodont|odonto/i.test(s))
+}
+
 // Résumé compact pour l'export : [{ label:'Carie', teeth:['16','24'] }, …]
 export function summarizeTeeth(teeth: DentalTeeth | null | undefined): { label: string; teeth: string[] }[] {
   if (!teeth) return []
