@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import DentalChart from '@/components/dashboard/DentalChart'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -1086,6 +1087,11 @@ export default function PatientsPage() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Schéma dentaire — uniquement pour les dentistes */}
+              {selectedPatient && doctorId && doctorSpecialties.includes('Dentiste') && (
+                <DentalChart key={selectedPatient.id} patientId={selectedPatient.id} doctorId={doctorId} />
               )}
 
               {/* Notes de consultation datées (timeline) */}

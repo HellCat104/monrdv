@@ -3,6 +3,7 @@
 import PDFDocument from 'pdfkit'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
+import { summarizeTeeth, type DentalTeeth } from '@/lib/dental'
 
 const PAY: Record<string, string> = { especes: 'Espèces', carte: 'Carte', cheque: 'Chèque', virement: 'Virement' }
 const ATT: Record<string, string> = { present: 'Présent', absent: 'Absent', late: 'En retard' }
@@ -36,6 +37,7 @@ interface DossierData {
   aptLabel: Map<string, string>
   totalPaid: number
   vitalDefs: VitalDef[]
+  dentalSummary: { label: string; teeth: string[] }[]
 }
 
 // Récupère toutes les données d'un dossier (partagé PDF + HTML). null si le patient
@@ -46,18 +48,20 @@ async function fetchDossierData(supabase: any, doctor: DossierDoctor & { id: str
     .from('patients').select('*').eq('id', patientId).eq('doctor_id', doctor.id).single()
   if (!patient) return null
 
-  const [aptRes, notesRes, presRes, vitalsRes, docsRes] = await Promise.all([
+  const [aptRes, notesRes, presRes, vitalsRes, docsRes, dentalRes] = await Promise.all([
     supabase.from('appointments').select('*, consultation_type:consultation_types(name)').eq('patient_id', patient.id).order('date', { ascending: false }).order('time', { ascending: false }),
     supabase.from('consultation_notes').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
     supabase.from('prescriptions').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
     supabase.from('vital_signs').select('*').eq('patient_id', patient.id).order('measured_at', { ascending: false }),
     supabase.from('patient_documents').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
+    supabase.from('dental_charts').select('teeth').eq('patient_id', patient.id).maybeSingle(),
   ])
   const appointments = aptRes.data ?? []
   const notes = notesRes.data ?? []
   const prescriptions = presRes.data ?? []
   const vitals = vitalsRes.data ?? []
   const documents = docsRes.data ?? []
+  const dentalSummary = summarizeTeeth(dentalRes.data?.teeth as DentalTeeth | undefined)
 
   const docFiles: { name: string; buf: Buffer }[] = []
   const imgEmbeds: { name: string; dataUri: string }[] = []
@@ -78,7 +82,7 @@ async function fetchDossierData(supabase: any, doctor: DossierDoctor & { id: str
   const totalPaid = appointments.reduce((s: number, a: { amount_paid?: number | null }) => s + (a.amount_paid ?? 0), 0)
   const vitalDefs = allVitalDefs(doctor.custom_vitals ?? [])
 
-  return { patient, appointments, notes, prescriptions, vitals, documents, docFiles, imgEmbeds, aptLabel, totalPaid, vitalDefs }
+  return { patient, appointments, notes, prescriptions, vitals, documents, docFiles, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,7 +95,7 @@ const CONTENT_W = PAGE_RIGHT - M // 515
 const BOTTOM = 792 // hauteur A4 en points
 
 function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer> {
-  const { patient, appointments, notes, prescriptions, vitals, documents, aptLabel, totalPaid, vitalDefs } = d
+  const { patient, appointments, notes, prescriptions, vitals, documents, aptLabel, totalPaid, vitalDefs, dentalSummary } = d
   const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
@@ -243,6 +247,12 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer
       }
     }
 
+    // ── Schéma dentaire (dentistes) ──────────────────────────────────────
+    if (dentalSummary.length > 0) {
+      section('Schéma dentaire')
+      for (const g of dentalSummary) kv(`${g.label} :`, `dents ${g.teeth.join(', ')}`)
+    }
+
     // ── Documents (référence) ────────────────────────────────────────────
     if (documents.length > 0) {
       section(`Documents (${documents.length})`)
@@ -298,7 +308,7 @@ export async function buildPatientDossierPDF(supabase: any, doctor: DossierDocto
 export async function buildPatientDossier(supabase: any, doctor: DossierDoctor & { id: string }, patientId: string): Promise<DossierResult> {
   const d = await fetchDossierData(supabase, doctor, patientId)
   if (!d) return { ok: false }
-  const { patient, appointments, notes, prescriptions, vitals, documents, imgEmbeds, aptLabel, totalPaid, vitalDefs } = d
+  const { patient, appointments, notes, prescriptions, vitals, documents, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary } = d
   const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
@@ -332,6 +342,8 @@ ${notes.length === 0 ? '<p class="muted">Aucune.</p>' : notes.map((n: Row) => `<
 ${prescriptions.length === 0 ? '<p class="muted">Aucune.</p>' : prescriptions.map((p: Row) => `<div class="block" style="border:1px solid #e5e7eb;border-radius:6px;padding:8px"><span class="tag">${esc(formatDateFr(p.created_at))}${p.appointment_id && aptLabel.get(p.appointment_id) ? ' · RDV du ' + esc(aptLabel.get(p.appointment_id)) : ''}</span><br>${esc(p.content).replace(/\n/g, '<br>')}</div>`).join('')}
 
 ${vitals.length > 0 ? `<h2>Constantes (${vitals.length})</h2>${vitals.map((v: Row) => `<div class="block"><span class="tag">${esc(formatDateFr(v.measured_at))}</span> — ${Object.entries(v.values as Record<string, number>).map(([k, val]) => `${esc(vLabel(k))} : ${esc(val)} ${esc(vUnit(k))}`).join(' · ')}</div>`).join('')}` : ''}
+
+${dentalSummary.length > 0 ? `<h2>Schéma dentaire</h2><div class="block">${dentalSummary.map((g) => `<strong>${esc(g.label)} :</strong> dents ${esc(g.teeth.join(', '))}`).join('<br>')}</div>` : ''}
 
 ${documents.length > 0 ? `<h2>Documents (${documents.length})</h2><p class="muted">Les fichiers d'origine sont dans le dossier « documents ».</p>${imgEmbeds.map((im) => `<div><span class="tag">${esc(im.name)}</span><br><img src="${im.dataUri}" alt="${esc(im.name)}"></div>`).join('')}` : ''}
 
