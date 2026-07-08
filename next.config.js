@@ -31,7 +31,9 @@ const securityHeaders = [
 
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['twilio'],
+    // pdfkit doit rester externe : ses fichiers de police (.afm) ne survivent pas
+    // au bundling webpack et provoqueraient une erreur au runtime serverless.
+    serverComponentsExternalPackages: ['twilio', 'pdfkit'],
   },
   images: {
     remotePatterns: [

@@ -1,9 +1,11 @@
-// Téléchargement du dossier patient COMPLET en .zip (récap HTML + fichiers réels).
+// Téléchargement du dossier patient COMPLET.
+// - Sans document joint : un .pdf téléchargé directement.
+// - Avec documents joints : un .zip (dossier.pdf + fichiers réels).
 // Réservé au médecin propriétaire.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import JSZip from 'jszip'
-import { buildPatientDossier } from '@/lib/dossier'
+import { buildPatientDossierPDF } from '@/lib/dossier'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,13 +21,28 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .eq('email', user.email).single()
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
 
-  const r = await buildPatientDossier(supabase, doctor, params.id)
-  if (!r.ok || !r.html) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
+  const r = await buildPatientDossierPDF(supabase, doctor, params.id)
+  if (!r.ok || !r.pdf) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
 
+  const docFiles = r.docFiles ?? []
+
+  // Pas de document joint → PDF direct
+  if (docFiles.length === 0) {
+    return new NextResponse(new Uint8Array(r.pdf), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="dossier-${r.slug}.pdf"`,
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
+
+  // Avec documents → .zip (PDF récap + fichiers d'origine)
   const zip = new JSZip()
-  zip.file('dossier.html', r.html)
+  zip.file(`dossier-${r.slug}.pdf`, r.pdf)
   const docsFolder = zip.folder('documents')
-  for (const f of r.docFiles ?? []) docsFolder?.file(f.name, f.buf)
+  for (const f of docFiles) docsFolder?.file(f.name, f.buf)
 
   const buffer = await zip.generateAsync({ type: 'nodebuffer' })
   return new NextResponse(new Uint8Array(buffer), {

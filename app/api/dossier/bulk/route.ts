@@ -1,9 +1,10 @@
 // Téléchargement groupé : les dossiers complets d'une sélection de patients,
-// dans un seul .zip (un sous-dossier par patient). Réservé au médecin propriétaire.
+// dans un seul .zip (un sous-dossier par patient : dossier.pdf + fichiers réels).
+// Réservé au médecin propriétaire.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import JSZip from 'jszip'
-import { buildPatientDossier } from '@/lib/dossier'
+import { buildPatientDossierPDF } from '@/lib/dossier'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -33,15 +34,15 @@ export async function POST(req: NextRequest) {
   let count = 0
 
   for (const id of ids) {
-    const r = await buildPatientDossier(supabase, doctor, id)
-    if (!r.ok || !r.html) continue // ignore silencieusement un id qui n'appartient pas au médecin
+    const r = await buildPatientDossierPDF(supabase, doctor, id)
+    if (!r.ok || !r.pdf) continue // ignore silencieusement un id qui n'appartient pas au médecin
     // évite les collisions de noms de dossier (homonymes)
     let folderName = r.slug || 'patient'
     while (usedNames.has(folderName)) folderName = `${r.slug}-${usedNames.size}`
     usedNames.add(folderName)
 
     const folder = zip.folder(folderName)
-    folder?.file('dossier.html', r.html)
+    folder?.file(`dossier-${r.slug}.pdf`, r.pdf)
     if ((r.docFiles ?? []).length > 0) {
       const docs = folder?.folder('documents')
       for (const f of r.docFiles ?? []) docs?.file(f.name, f.buf)

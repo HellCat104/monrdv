@@ -841,13 +841,13 @@ export default function PatientsPage() {
                     href={`/api/dossier/${selectedPatient.id}`}
                     className="flex items-center gap-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-3 py-1.5"
                   >
-                    <Download className="h-3.5 w-3.5" /> Tout télécharger
+                    <Download className="h-3.5 w-3.5" /> Télécharger (PDF)
                   </a>
                 </div>
               </div>
 
               <p className="text-[11px] text-gray-400 -mt-2 px-1">
-                💡 « Tout télécharger » enregistre sur votre PC un dossier complet (récapitulatif + radios et documents). Vos données médicales vous appartiennent.
+                💡 « Télécharger (PDF) » enregistre sur votre PC le dossier complet en PDF (récapitulatif du patient). Si le patient a des radios ou documents joints, le tout est fourni dans un .zip. Vos données médicales vous appartiennent.
               </p>
 
               {/* Alerte allergies — visible immédiatement à l'ouverture */}

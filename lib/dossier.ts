@@ -1,5 +1,6 @@
-// Génération du dossier patient (HTML récapitulatif + fichiers réels).
+// Génération du dossier patient (récapitulatif PDF ou HTML + fichiers réels).
 // Partagé entre l'export d'un seul patient et l'export groupé (sélection).
+import PDFDocument from 'pdfkit'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
 
@@ -17,14 +18,33 @@ export interface DossierResult {
   patientName?: string
   slug?: string
   html?: string
+  pdf?: Buffer
   docFiles?: { name: string; buf: Buffer }[]
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function buildPatientDossier(supabase: any, doctor: DossierDoctor & { id: string }, patientId: string): Promise<DossierResult> {
+type Row = Record<string, any>
+interface DossierData {
+  patient: Row
+  appointments: Row[]
+  notes: Row[]
+  prescriptions: Row[]
+  vitals: Row[]
+  documents: Row[]
+  docFiles: { name: string; buf: Buffer }[]
+  imgEmbeds: { name: string; dataUri: string }[]
+  aptLabel: Map<string, string>
+  totalPaid: number
+  vitalDefs: VitalDef[]
+}
+
+// Récupère toutes les données d'un dossier (partagé PDF + HTML). null si le patient
+// n'appartient pas au médecin.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchDossierData(supabase: any, doctor: DossierDoctor & { id: string }, patientId: string): Promise<DossierData | null> {
   const { data: patient } = await supabase
     .from('patients').select('*').eq('id', patientId).eq('doctor_id', doctor.id).single()
-  if (!patient) return { ok: false }
+  if (!patient) return null
 
   const [aptRes, notesRes, presRes, vitalsRes, docsRes] = await Promise.all([
     supabase.from('appointments').select('*, consultation_type:consultation_types(name)').eq('patient_id', patient.id).order('date', { ascending: false }).order('time', { ascending: false }),
@@ -57,6 +77,228 @@ export async function buildPatientDossier(supabase: any, doctor: DossierDoctor &
   for (const a of appointments) aptLabel.set(a.id, `${formatDateShort(a.date)} ${formatTime(a.time)}`)
   const totalPaid = appointments.reduce((s: number, a: { amount_paid?: number | null }) => s + (a.amount_paid ?? 0), 0)
   const vitalDefs = allVitalDefs(doctor.custom_vitals ?? [])
+
+  return { patient, appointments, notes, prescriptions, vitals, documents, docFiles, imgEmbeds, aptLabel, totalPaid, vitalDefs }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rendu PDF (pdfkit, 100 % Node — aucun navigateur, aucun timeout serverless)
+// ─────────────────────────────────────────────────────────────────────────────
+const C = { ink: '#1f2937', muted: '#6b7280', faint: '#9ca3af', accent: '#0369a1', line: '#e5e7eb', red: '#dc2626', bar: '#0EA5E9' }
+const M = 40 // marge
+const PAGE_RIGHT = 555 // 595 (A4) - 40
+const CONTENT_W = PAGE_RIGHT - M // 515
+const BOTTOM = 792 // hauteur A4 en points
+
+function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer> {
+  const { patient, appointments, notes, prescriptions, vitals, documents, aptLabel, totalPaid, vitalDefs } = d
+  const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
+  const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
+
+  // bufferPages: true → indispensable pour repasser dessiner le pied sur chaque page
+  const doc = new PDFDocument({ size: 'A4', margin: M, bufferPages: true })
+  const chunks: Buffer[] = []
+
+  return new Promise<Buffer>((resolve, reject) => {
+    doc.on('data', (c: Buffer) => chunks.push(c))
+    doc.on('end', () => resolve(Buffer.concat(chunks)))
+    doc.on('error', reject)
+
+    // Assure assez de place, sinon nouvelle page
+    const ensure = (h: number) => { if (doc.y + h > BOTTOM - 50) doc.addPage() }
+
+    const section = (title: string) => {
+      ensure(40)
+      doc.moveDown(0.6)
+      doc.fillColor(C.accent).font('Helvetica-Bold').fontSize(11).text(title.toUpperCase(), M, doc.y)
+      const ly = doc.y + 2
+      doc.moveTo(M, ly).lineTo(PAGE_RIGHT, ly).lineWidth(0.5).strokeColor(C.line).stroke()
+      doc.moveDown(0.6)
+      doc.fillColor(C.ink).font('Helvetica').fontSize(10)
+      doc.x = M
+    }
+
+    // Ligne « label : valeur » (label gras)
+    const kv = (label: string, value: string, color = C.ink) => {
+      const h = doc.heightOfString(`${label} ${value}`, { width: CONTENT_W })
+      ensure(h)
+      doc.fillColor(color).font('Helvetica-Bold').fontSize(10).text(`${label} `, M, doc.y, { continued: true })
+      doc.font('Helvetica').fillColor(color).text(value)
+      doc.x = M
+    }
+
+    // Bloc de texte libre (notes, ordonnances) avec sauts de ligne conservés
+    const block = (meta: string, body: string, boxed = false) => {
+      doc.font('Helvetica').fontSize(9).fillColor(C.faint)
+      const metaH = doc.heightOfString(meta, { width: CONTENT_W })
+      doc.font('Helvetica').fontSize(10).fillColor(C.ink)
+      const bodyH = doc.heightOfString(body || '—', { width: CONTENT_W - (boxed ? 16 : 0) })
+      ensure(metaH + bodyH + 18)
+      const startY = doc.y
+      if (boxed) {
+        // encadré léger : on dessine d'abord le texte pour connaître la hauteur réelle
+        doc.font('Helvetica').fontSize(9).fillColor(C.faint).text(meta, M + 8, startY + 6, { width: CONTENT_W - 16 })
+        doc.font('Helvetica').fontSize(10).fillColor(C.ink).text(body || '—', M + 8, doc.y + 1, { width: CONTENT_W - 16 })
+        const endY = doc.y + 6
+        doc.roundedRect(M, startY, CONTENT_W, endY - startY, 4).lineWidth(0.5).strokeColor(C.line).stroke()
+        doc.y = endY
+      } else {
+        doc.font('Helvetica').fontSize(9).fillColor(C.faint).text(meta, M, startY, { width: CONTENT_W })
+        doc.font('Helvetica').fontSize(10).fillColor(C.ink).text(body || '—', M, doc.y, { width: CONTENT_W })
+      }
+      doc.x = M
+      doc.moveDown(0.5)
+    }
+
+    // ── En-tête ──────────────────────────────────────────────────────────
+    const top = doc.y
+    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(17).text(`Dr. ${doctor.name}`, M, top, { width: 340 })
+    doc.fillColor(C.muted).font('Helvetica').fontSize(10).text(
+      [doctor.specialty, doctor.city, doctor.phone].filter(Boolean).join(' · '), M, doc.y + 1, { width: 340 })
+    if (doctor.inpe || doctor.ice) {
+      doc.fillColor(C.faint).fontSize(8.5).text(
+        [doctor.inpe ? `INPE : ${doctor.inpe}` : '', doctor.ice ? `ICE : ${doctor.ice}` : ''].filter(Boolean).join(' · '),
+        M, doc.y + 1, { width: 340 })
+    }
+    // titre à droite
+    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(12).text('DOSSIER PATIENT', 360, top, { width: PAGE_RIGHT - 360, align: 'right' })
+    doc.fillColor(C.muted).font('Helvetica').fontSize(9).text(`Édité le ${formatDateFr(new Date())}`, 360, doc.y + 1, { width: PAGE_RIGHT - 360, align: 'right' })
+    const barY = Math.max(doc.y, top + 46) + 6
+    doc.moveTo(M, barY).lineTo(PAGE_RIGHT, barY).lineWidth(2).strokeColor(C.bar).stroke()
+    doc.y = barY + 6
+    doc.x = M
+
+    // ── Patient ──────────────────────────────────────────────────────────
+    section('Patient')
+    doc.font('Helvetica-Bold').fontSize(12).fillColor(C.ink)
+      .text(`${patient.first_name} ${patient.last_name}${patient.age != null ? ` · ${patient.age} ans` : ''}`, M, doc.y, { width: CONTENT_W })
+    doc.x = M; doc.moveDown(0.3)
+    kv('Téléphone :', `${patient.phone ?? '—'}${patient.email ? ` · ${patient.email}` : ''}`)
+    if (patient.allergies) kv('Allergies :', String(patient.allergies), C.red)
+    if (patient.chronic_conditions) kv('Antécédents :', String(patient.chronic_conditions))
+    if (patient.current_treatments) kv('Traitements :', String(patient.current_treatments))
+    if (patient.notes) kv('Notes :', String(patient.notes))
+
+    // ── Rendez-vous (tableau) ────────────────────────────────────────────
+    section(`Rendez-vous (${appointments.length})`)
+    if (appointments.length === 0) {
+      doc.fillColor(C.muted).font('Helvetica').fontSize(10).text('Aucun.', M, doc.y); doc.x = M
+    } else {
+      const cols = [
+        { x: M, w: 100, label: 'Date' },
+        { x: M + 105, w: 215, label: 'Motif' },
+        { x: M + 325, w: 75, label: 'Présence' },
+        { x: M + 405, w: PAGE_RIGHT - (M + 405), label: 'Payé' },
+      ]
+      const drawRow = (cells: string[], bold: boolean) => {
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 8.5 : 9.5)
+        const heights = cells.map((t, i) => doc.heightOfString(t, { width: cols[i].w }))
+        const rowH = Math.max(...heights) + 6
+        ensure(rowH)
+        const y = doc.y
+        doc.fillColor(bold ? C.faint : C.ink)
+        cells.forEach((t, i) => doc.text(t, cols[i].x, y + 3, { width: cols[i].w }))
+        const ly = y + rowH
+        doc.moveTo(M, ly).lineTo(PAGE_RIGHT, ly).lineWidth(0.5).strokeColor(C.line).stroke()
+        doc.y = ly
+        doc.x = M
+      }
+      drawRow(cols.map((c) => c.label), true)
+      for (const a of appointments) {
+        const paid = a.amount_paid != null
+          ? `${a.amount_paid}${a.amount_due && a.amount_due > a.amount_paid ? `/${a.amount_due}` : ''} DH${a.payment_method ? ` (${PAY[a.payment_method] || a.payment_method})` : ''}`
+          : '—'
+        drawRow([
+          `${formatDateShort(a.date)} ${formatTime(a.time)}`,
+          a.consultation_type?.name || a.notes || '—',
+          a.attendance ? (ATT[a.attendance] || a.attendance) : (a.status === 'cancelled' ? 'Annulé' : '—'),
+          paid,
+        ], false)
+      }
+    }
+
+    // ── Notes de consultation ────────────────────────────────────────────
+    section(`Notes de consultation (${notes.length})`)
+    if (notes.length === 0) { doc.fillColor(C.muted).fontSize(10).text('Aucune.', M, doc.y); doc.x = M }
+    else for (const n of notes) {
+      const meta = `${formatDateFr(n.created_at)}${n.appointment_id && aptLabel.get(n.appointment_id) ? ` · RDV du ${aptLabel.get(n.appointment_id)}` : ''}${n.signed_at ? ' · signée' : ''}`
+      block(meta, String(n.note ?? ''))
+    }
+
+    // ── Ordonnances ──────────────────────────────────────────────────────
+    section(`Ordonnances (${prescriptions.length})`)
+    if (prescriptions.length === 0) { doc.fillColor(C.muted).fontSize(10).text('Aucune.', M, doc.y); doc.x = M }
+    else for (const p of prescriptions) {
+      const meta = `${formatDateFr(p.created_at)}${p.appointment_id && aptLabel.get(p.appointment_id) ? ` · RDV du ${aptLabel.get(p.appointment_id)}` : ''}`
+      block(meta, String(p.content ?? ''), true)
+    }
+
+    // ── Constantes ───────────────────────────────────────────────────────
+    if (vitals.length > 0) {
+      section(`Constantes (${vitals.length})`)
+      for (const v of vitals) {
+        const vals = Object.entries((v.values ?? {}) as Record<string, number>)
+          .map(([k, val]) => `${vLabel(k)} : ${val} ${vUnit(k)}`.trim()).join('  ·  ')
+        block(formatDateFr(v.measured_at), vals)
+      }
+    }
+
+    // ── Documents (référence) ────────────────────────────────────────────
+    if (documents.length > 0) {
+      section(`Documents (${documents.length})`)
+      doc.fillColor(C.muted).font('Helvetica').fontSize(9.5)
+        .text('Les fichiers d\'origine (scans, radios, analyses…) sont joints dans le dossier « documents » du .zip.', M, doc.y, { width: CONTENT_W })
+      doc.x = M; doc.moveDown(0.3)
+      for (const doc0 of documents) {
+        doc.fillColor(C.ink).fontSize(10).text(`• ${doc0.file_name || 'fichier'}`, M + 6, doc.y, { width: CONTENT_W - 6 })
+      }
+      doc.x = M
+    }
+
+    // ── Total ────────────────────────────────────────────────────────────
+    ensure(40)
+    doc.moveDown(0.8)
+    const ty = doc.y
+    doc.moveTo(M, ty).lineTo(PAGE_RIGHT, ty).lineWidth(1.5).strokeColor(C.ink).stroke()
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(C.ink).text('Total encaissé', M, ty + 6, { width: 300 })
+    doc.text(`${totalPaid} DH`, 300, ty + 6, { width: PAGE_RIGHT - 300, align: 'right' })
+    doc.x = M
+
+    // ── Pied de page sur toutes les pages ────────────────────────────────
+    const range = doc.bufferedPageRange?.() ?? { start: 0, count: 0 }
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i)
+      doc.font('Helvetica').fontSize(8).fillColor(C.faint)
+        .text(`Dossier généré le ${formatDateFr(new Date())} via MonRDV`, M, BOTTOM - 30, { width: CONTENT_W, align: 'center', lineBreak: false })
+    }
+
+    doc.end()
+  })
+}
+
+// Dossier complet en PDF (+ fichiers d'origine renvoyés à part par l'appelant).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function buildPatientDossierPDF(supabase: any, doctor: DossierDoctor & { id: string }, patientId: string): Promise<DossierResult> {
+  const d = await fetchDossierData(supabase, doctor, patientId)
+  if (!d) return { ok: false }
+  const pdf = await renderDossierPDF(doctor, d)
+  return {
+    ok: true,
+    patientName: `${d.patient.first_name} ${d.patient.last_name}`,
+    slug: dossierSlug(`${d.patient.first_name}-${d.patient.last_name}`),
+    pdf,
+    docFiles: d.docFiles,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rendu HTML (conservé — permet de revenir à l'ancienne version si besoin)
+// ─────────────────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function buildPatientDossier(supabase: any, doctor: DossierDoctor & { id: string }, patientId: string): Promise<DossierResult> {
+  const d = await fetchDossierData(supabase, doctor, patientId)
+  if (!d) return { ok: false }
+  const { patient, appointments, notes, prescriptions, vitals, documents, imgEmbeds, aptLabel, totalPaid, vitalDefs } = d
   const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
@@ -81,15 +323,15 @@ ${patient.notes ? `<br><strong>Notes :</strong> ${esc(patient.notes)}` : ''}</di
 
 <h2>Rendez-vous (${appointments.length})</h2>
 ${appointments.length === 0 ? '<p class="muted">Aucun.</p>' : `<table><tr><th>Date</th><th>Motif</th><th>Présence</th><th>Payé</th></tr>
-${appointments.map((a: Record<string, any>) => `<tr><td>${esc(formatDateShort(a.date))} ${esc(formatTime(a.time))}</td><td>${esc(a.consultation_type?.name || a.notes || '—')}</td><td>${a.attendance ? ATT[a.attendance] : (a.status === 'cancelled' ? 'Annulé' : '—')}</td><td>${a.amount_paid != null ? esc(a.amount_paid) + (a.amount_due && a.amount_due > a.amount_paid ? '/' + esc(a.amount_due) : '') + ' DH' + (a.payment_method ? ' (' + (PAY[a.payment_method] || a.payment_method) + ')' : '') : '—'}</td></tr>`).join('')}</table>`}
+${appointments.map((a: Row) => `<tr><td>${esc(formatDateShort(a.date))} ${esc(formatTime(a.time))}</td><td>${esc(a.consultation_type?.name || a.notes || '—')}</td><td>${a.attendance ? ATT[a.attendance] : (a.status === 'cancelled' ? 'Annulé' : '—')}</td><td>${a.amount_paid != null ? esc(a.amount_paid) + (a.amount_due && a.amount_due > a.amount_paid ? '/' + esc(a.amount_due) : '') + ' DH' + (a.payment_method ? ' (' + (PAY[a.payment_method] || a.payment_method) + ')' : '') : '—'}</td></tr>`).join('')}</table>`}
 
 <h2>Notes de consultation (${notes.length})</h2>
-${notes.length === 0 ? '<p class="muted">Aucune.</p>' : notes.map((n: Record<string, any>) => `<div class="block"><span class="tag">${esc(formatDateFr(n.created_at))}${n.appointment_id && aptLabel.get(n.appointment_id) ? ' · RDV du ' + esc(aptLabel.get(n.appointment_id)) : ''}${n.signed_at ? ' · signée' : ''}</span><br>${esc(n.note).replace(/\n/g, '<br>')}</div>`).join('')}
+${notes.length === 0 ? '<p class="muted">Aucune.</p>' : notes.map((n: Row) => `<div class="block"><span class="tag">${esc(formatDateFr(n.created_at))}${n.appointment_id && aptLabel.get(n.appointment_id) ? ' · RDV du ' + esc(aptLabel.get(n.appointment_id)) : ''}${n.signed_at ? ' · signée' : ''}</span><br>${esc(n.note).replace(/\n/g, '<br>')}</div>`).join('')}
 
 <h2>Ordonnances (${prescriptions.length})</h2>
-${prescriptions.length === 0 ? '<p class="muted">Aucune.</p>' : prescriptions.map((p: Record<string, any>) => `<div class="block" style="border:1px solid #e5e7eb;border-radius:6px;padding:8px"><span class="tag">${esc(formatDateFr(p.created_at))}${p.appointment_id && aptLabel.get(p.appointment_id) ? ' · RDV du ' + esc(aptLabel.get(p.appointment_id)) : ''}</span><br>${esc(p.content).replace(/\n/g, '<br>')}</div>`).join('')}
+${prescriptions.length === 0 ? '<p class="muted">Aucune.</p>' : prescriptions.map((p: Row) => `<div class="block" style="border:1px solid #e5e7eb;border-radius:6px;padding:8px"><span class="tag">${esc(formatDateFr(p.created_at))}${p.appointment_id && aptLabel.get(p.appointment_id) ? ' · RDV du ' + esc(aptLabel.get(p.appointment_id)) : ''}</span><br>${esc(p.content).replace(/\n/g, '<br>')}</div>`).join('')}
 
-${vitals.length > 0 ? `<h2>Constantes (${vitals.length})</h2>${vitals.map((v: Record<string, any>) => `<div class="block"><span class="tag">${esc(formatDateFr(v.measured_at))}</span> — ${Object.entries(v.values as Record<string, number>).map(([k, val]) => `${esc(vLabel(k))} : ${esc(val)} ${esc(vUnit(k))}`).join(' · ')}</div>`).join('')}` : ''}
+${vitals.length > 0 ? `<h2>Constantes (${vitals.length})</h2>${vitals.map((v: Row) => `<div class="block"><span class="tag">${esc(formatDateFr(v.measured_at))}</span> — ${Object.entries(v.values as Record<string, number>).map(([k, val]) => `${esc(vLabel(k))} : ${esc(val)} ${esc(vUnit(k))}`).join(' · ')}</div>`).join('')}` : ''}
 
 ${documents.length > 0 ? `<h2>Documents (${documents.length})</h2><p class="muted">Les fichiers d'origine sont dans le dossier « documents ».</p>${imgEmbeds.map((im) => `<div><span class="tag">${esc(im.name)}</span><br><img src="${im.dataUri}" alt="${esc(im.name)}"></div>`).join('')}` : ''}
 
@@ -97,5 +339,5 @@ ${documents.length > 0 ? `<h2>Documents (${documents.length})</h2><p class="mute
 <p class="muted" style="text-align:center;margin-top:24px">Dossier généré le ${esc(formatDateFr(new Date()))} via MonRDV</p>
 </body></html>`
 
-  return { ok: true, patientName: `${patient.first_name} ${patient.last_name}`, slug: dossierSlug(`${patient.first_name}-${patient.last_name}`), html, docFiles }
+  return { ok: true, patientName: `${patient.first_name} ${patient.last_name}`, slug: dossierSlug(`${patient.first_name}-${patient.last_name}`), html, docFiles: d.docFiles }
 }
