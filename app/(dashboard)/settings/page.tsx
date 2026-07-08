@@ -450,7 +450,7 @@ export default function SettingsPage() {
                   onChange={(e) => setForm({ ...form, public_email: e.target.value })}
                   placeholder="cabinet@exemple.ma"
                 />
-                <p className="text-xs text-gray-400">Différent de votre e-mail de connexion. Affiché aux patients.</p>
+                <p className="text-xs text-gray-400">Peut être identique ou différent de votre e-mail de connexion. Affiché aux patients.</p>
               </div>
             </div>
 
