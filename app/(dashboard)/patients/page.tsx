@@ -825,7 +825,7 @@ export default function PatientsPage() {
 
       {/* Modale historique patient */}
       <Dialog open={!!selectedPatient} onOpenChange={(o) => !o && setSelectedPatient(null)}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               {selectedPatient && (
