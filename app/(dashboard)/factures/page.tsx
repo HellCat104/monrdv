@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getNowInMaroc, MAROC_TZ } from '@/lib/utils'
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear, parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
-import { Search, Download, Printer, Receipt, Undo2 } from 'lucide-react'
+import { Search, Download, Printer, Receipt, Undo2, ListChecks } from 'lucide-react'
 import { PAYMENT_METHOD_LABELS } from '@/types'
 
 type Period = 'month' | 'lastmonth' | 'quarter' | 'year' | 'all'
@@ -39,6 +39,8 @@ export default function FacturesPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [period, setPeriod] = useState<Period>('all')
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const supabase = createClient()
 
   useEffect(() => {
@@ -76,21 +78,53 @@ export default function FacturesPage() {
 
   const total = rows.reduce((s, f) => s + (f.amount_paid ?? 0), 0)
 
-  function exportCSV() {
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+  // Coche / décoche toutes les factures actuellement affichées
+  const allVisibleSelected = rows.length > 0 && rows.every((f) => selectedIds.has(f.id))
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      const n = new Set(prev)
+      if (allVisibleSelected) rows.forEach((f) => n.delete(f.id))
+      else rows.forEach((f) => n.add(f.id))
+      return n
+    })
+  }
+  function exitSelection() {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+  }
+
+  function downloadCSV(list: typeof rows, filename: string) {
     const esc = (v: string | number) => {
       let s = String(v)
       if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = `'${s}`
       return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
     }
+    const sum = list.reduce((s, f) => s + (f.amount_paid ?? 0), 0)
     const headers = ['Date', 'N° facture', 'Patient', 'Montant payé (DH)', 'Total dû (DH)', 'Mode']
-    const data = rows.map((f) => [f._date, f.invoice_no ?? '', f._patient, f.amount_paid ?? 0, f.amount_due ?? '', f.payment_method ? (PAYMENT_METHOD_LABELS[f.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? f.payment_method) : ''])
-    data.push(['', '', '', total, '', 'TOTAL'])
+    const data = list.map((f) => [f._date, f.invoice_no ?? '', f._patient, f.amount_paid ?? 0, f.amount_due ?? '', f.payment_method ? (PAYMENT_METHOD_LABELS[f.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? f.payment_method) : ''])
+    data.push(['', '', '', sum, '', 'TOTAL'])
     const csv = '﻿' + [headers, ...data].map((r) => r.map(esc).join(';')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `factures-monrdv-${period}-${format(getNowInMaroc(), 'yyyy-MM-dd')}.csv`
+    a.download = filename
     a.click()
+  }
+
+  function exportCSV() {
+    downloadCSV(rows, `factures-monrdv-${period}-${format(getNowInMaroc(), 'yyyy-MM-dd')}.csv`)
+  }
+  function exportSelected() {
+    const sel = rows.filter((f) => selectedIds.has(f.id))
+    if (sel.length === 0) return
+    downloadCSV(sel, `factures-selection-${format(getNowInMaroc(), 'yyyy-MM-dd')}.csv`)
   }
 
   return (
@@ -107,11 +141,35 @@ export default function FacturesPage() {
               {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => <SelectItem key={p} value={p}>{PERIOD_LABELS[p]}</SelectItem>)}
             </SelectContent>
           </Select>
+          {selectionMode ? (
+            <Button variant="outline" size="sm" onClick={exitSelection}>
+              Terminer
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setSelectionMode(true)} disabled={rows.length === 0}>
+              <ListChecks className="h-4 w-4 mr-1.5" /> Sélectionner
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={exportCSV} disabled={rows.length === 0}>
-            <Download className="h-4 w-4 mr-1.5" /> Export
+            <Download className="h-4 w-4 mr-1.5" /> Tout exporter
           </Button>
         </div>
       </div>
+
+      {/* Barre d'actions groupées (mode sélection) */}
+      {selectionMode && (
+        <div className="flex items-center justify-between gap-3 flex-wrap bg-primary-50 border border-primary-100 rounded-xl px-4 py-2.5">
+          <span className="text-sm font-medium text-primary-700">{selectedIds.size} facture(s) sélectionnée(s)</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={exportSelected} disabled={selectedIds.size === 0}>
+              <Download className="h-4 w-4 mr-1.5" /> Télécharger la sélection (Excel)
+            </Button>
+            <button onClick={exitSelection} className="text-xs text-gray-400 hover:text-gray-600 px-1">
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -132,6 +190,13 @@ export default function FacturesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-gray-400 text-xs uppercase tracking-wide border-b border-gray-100">
+                    {selectionMode && (
+                      <th className="py-2.5 pl-4 pr-1 w-8">
+                        <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 cursor-pointer"
+                          aria-label="Tout sélectionner" />
+                      </th>
+                    )}
                     <th className="py-2.5 px-4 font-medium">Date</th>
                     <th className="py-2.5 px-4 font-medium">N° facture</th>
                     <th className="py-2.5 px-4 font-medium">Patient</th>
@@ -142,7 +207,14 @@ export default function FacturesPage() {
                 </thead>
                 <tbody>
                   {rows.map((f) => (
-                    <tr key={f.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                    <tr key={f.id} className={`border-b border-gray-50 hover:bg-gray-50/50 ${selectionMode && selectedIds.has(f.id) ? 'bg-primary-50/40' : ''}`}>
+                      {selectionMode && (
+                        <td className="py-2.5 pl-4 pr-1">
+                          <input type="checkbox" checked={selectedIds.has(f.id)} onChange={() => toggleSelect(f.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 cursor-pointer"
+                            aria-label={`Sélectionner la facture ${f.invoice_no ?? ''}`} />
+                        </td>
+                      )}
                       <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap">{f._date}</td>
                       <td className="py-2.5 px-4 font-medium text-gray-900 whitespace-nowrap">{f.invoice_no ?? '—'}</td>
                       <td className="py-2.5 px-4 text-gray-700">{f._patient || '—'}</td>

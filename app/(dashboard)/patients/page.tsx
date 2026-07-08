@@ -12,7 +12,7 @@ import { AppointmentList, type PaymentPayload } from '@/components/dashboard/App
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign } from '@/types'
 import { allVitalDefs, resolveEnabledVitals, type VitalDef } from '@/types'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -38,6 +38,7 @@ export default function PatientsPage() {
   const [sortBy, setSortBy] = useState<'recent' | 'name' | 'lastRdv'>('recent')
   // Sélection multiple pour export groupé
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectionMode, setSelectionMode] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [doctorSpecialties, setDoctorSpecialties] = useState<string[]>([])
   const [specialtyFilter, setSpecialtyFilter] = useState<string>('all')
@@ -502,6 +503,10 @@ export default function PatientsPage() {
       return n
     })
   }
+  function exitSelection() {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+  }
 
   // Export "liste d'infos" : un CSV des patients sélectionnés (ouvrable dans Excel)
   function exportSelectedList() {
@@ -578,9 +583,20 @@ export default function PatientsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Patients</h1>
           <p className="text-sm text-gray-500 mt-1">{patients.length} patient(s) enregistré(s)</p>
         </div>
-        <Button onClick={() => { setAddError(''); setAddOpen(true) }} className="shrink-0">
-          <UserPlus className="h-4 w-4 mr-1.5" /> Ajouter un patient
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {selectionMode ? (
+            <Button variant="outline" onClick={exitSelection}>
+              Terminer
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => setSelectionMode(true)} disabled={patients.length === 0}>
+              <ListChecks className="h-4 w-4 mr-1.5" /> Sélectionner
+            </Button>
+          )}
+          <Button onClick={() => { setAddError(''); setAddOpen(true) }}>
+            <UserPlus className="h-4 w-4 mr-1.5" /> Ajouter un patient
+          </Button>
+        </div>
       </div>
 
       {/* Recherche + tri */}
@@ -619,18 +635,18 @@ export default function PatientsPage() {
         </Select>
       </div>
 
-      {/* Barre d'actions groupées (apparaît dès qu'un patient est coché) */}
-      {selectedIds.size > 0 && (
+      {/* Barre d'actions groupées (mode sélection) */}
+      {selectionMode && (
         <div className="flex items-center justify-between gap-3 flex-wrap bg-primary-50 border border-primary-100 rounded-xl px-4 py-2.5">
           <span className="text-sm font-medium text-primary-700">{selectedIds.size} patient(s) sélectionné(s)</span>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={exportSelectedList}>
+            <Button variant="outline" size="sm" onClick={exportSelectedList} disabled={selectedIds.size === 0}>
               <Download className="h-4 w-4 mr-1.5" /> Exporter la liste (Excel)
             </Button>
-            <Button variant="outline" size="sm" onClick={exportSelectedDossiers} disabled={exporting}>
+            <Button variant="outline" size="sm" onClick={exportSelectedDossiers} disabled={exporting || selectedIds.size === 0}>
               <Download className="h-4 w-4 mr-1.5" /> {exporting ? 'Préparation…' : 'Télécharger les dossiers'}
             </Button>
-            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600 px-1">
+            <button onClick={exitSelection} className="text-xs text-gray-400 hover:text-gray-600 px-1">
               Annuler
             </button>
           </div>
@@ -656,20 +672,22 @@ export default function PatientsPage() {
           {filtered.map((patient) => (
             <Card
               key={patient.id}
-              className="cursor-pointer hover:border-primary-200 hover:shadow-sm transition-all"
-              onClick={() => openPatientHistory(patient)}
+              className={`cursor-pointer hover:border-primary-200 hover:shadow-sm transition-all ${selectionMode && selectedIds.has(patient.id) ? 'border-primary-300 bg-primary-50/40' : ''}`}
+              onClick={() => selectionMode ? toggleSelect(patient.id) : openPatientHistory(patient)}
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-4">
-                  {/* Case de sélection (export groupé) */}
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(patient.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => toggleSelect(patient.id)}
-                    className="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 shrink-0 cursor-pointer"
-                    aria-label={`Sélectionner ${patient.first_name} ${patient.last_name}`}
-                  />
+                  {/* Case de sélection (export groupé) — visible seulement en mode sélection */}
+                  {selectionMode && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(patient.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleSelect(patient.id)}
+                      className="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 shrink-0 cursor-pointer"
+                      aria-label={`Sélectionner ${patient.first_name} ${patient.last_name}`}
+                    />
+                  )}
                   {/* Avatar */}
                   <div className="w-11 h-11 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-semibold shrink-0">
                     {getInitials(patient.first_name, patient.last_name)}
