@@ -825,7 +825,7 @@ export default function PatientsPage() {
 
       {/* Modale historique patient */}
       <Dialog open={!!selectedPatient} onOpenChange={(o) => !o && setSelectedPatient(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               {selectedPatient && (
@@ -842,12 +842,12 @@ export default function PatientsPage() {
           {selectedPatient && (
             <div className="space-y-4">
               {/* Infos contact + dossier complet */}
-              <div className="bg-gray-50 rounded-lg p-3 text-sm flex items-center justify-between gap-3">
+              <div className="bg-gray-50 rounded-lg p-3 text-sm flex items-center justify-between gap-3 flex-wrap">
                 <span className="flex items-center gap-2 text-gray-600">
                   <Phone className="h-3.5 w-3.5" />
                   {selectedPatient.phone}
                 </span>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   <a
                     href={`/dossier/${selectedPatient.id}`}
                     target="_blank"
