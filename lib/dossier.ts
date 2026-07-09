@@ -3,7 +3,7 @@
 import PDFDocument from 'pdfkit'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
-import { summarizeTeeth, type DentalTeeth } from '@/lib/dental'
+import { summarizeTeeth, DENTAL_STATES, DENTAL_COLOR, DENTAL_LABEL, FDI_UPPER, FDI_LOWER, type DentalTeeth } from '@/lib/dental'
 
 const PAY: Record<string, string> = { especes: 'Espèces', carte: 'Carte', cheque: 'Chèque', virement: 'Virement' }
 const ATT: Record<string, string> = { present: 'Présent', absent: 'Absent', late: 'En retard' }
@@ -38,6 +38,7 @@ interface DossierData {
   totalPaid: number
   vitalDefs: VitalDef[]
   dentalSummary: { label: string; teeth: string[] }[]
+  dentalTeeth: DentalTeeth
 }
 
 // Récupère toutes les données d'un dossier (partagé PDF + HTML). null si le patient
@@ -61,7 +62,8 @@ async function fetchDossierData(supabase: any, doctor: DossierDoctor & { id: str
   const prescriptions = presRes.data ?? []
   const vitals = vitalsRes.data ?? []
   const documents = docsRes.data ?? []
-  const dentalSummary = summarizeTeeth(dentalRes.data?.teeth as DentalTeeth | undefined)
+  const dentalTeeth = (dentalRes.data?.teeth ?? {}) as DentalTeeth
+  const dentalSummary = summarizeTeeth(dentalTeeth)
 
   const docFiles: { name: string; buf: Buffer }[] = []
   const imgEmbeds: { name: string; dataUri: string }[] = []
@@ -82,7 +84,7 @@ async function fetchDossierData(supabase: any, doctor: DossierDoctor & { id: str
   const totalPaid = appointments.reduce((s: number, a: { amount_paid?: number | null }) => s + (a.amount_paid ?? 0), 0)
   const vitalDefs = allVitalDefs(doctor.custom_vitals ?? [])
 
-  return { patient, appointments, notes, prescriptions, vitals, documents, docFiles, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary }
+  return { patient, appointments, notes, prescriptions, vitals, documents, docFiles, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary, dentalTeeth }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,7 +97,7 @@ const CONTENT_W = PAGE_RIGHT - M // 515
 const BOTTOM = 792 // hauteur A4 en points
 
 function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer> {
-  const { patient, appointments, notes, prescriptions, vitals, documents, aptLabel, totalPaid, vitalDefs, dentalSummary } = d
+  const { patient, appointments, notes, prescriptions, vitals, documents, aptLabel, totalPaid, vitalDefs, dentalSummary, dentalTeeth } = d
   const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
@@ -247,10 +249,52 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer
       }
     }
 
-    // ── Schéma dentaire (dentistes) ──────────────────────────────────────
+    // ── Schéma dentaire (dentistes) — odontogramme dessiné ───────────────
     if (dentalSummary.length > 0) {
       section('Schéma dentaire')
-      for (const g of dentalSummary) kv(`${g.label} :`, `dents ${g.teeth.join(', ')}`)
+      const bw = 26, bh = 20, gap = 3, midGap = 10
+      // Dessine une arcade (16 dents) : côté droit / ligne médiane / côté gauche
+      const drawArch = (ids: number[]) => {
+        ensure(bh + 6)
+        const y = doc.y
+        let x = M
+        ids.forEach((n, i) => {
+          if (i === 8) x += midGap
+          const info = dentalTeeth[String(n)]
+          const color = info ? DENTAL_COLOR[info.s] : null
+          doc.roundedRect(x, y, bw, bh, 3)
+          if (color) doc.fillAndStroke(color, color)
+          else doc.lineWidth(0.5).strokeColor('#d1d5db').stroke()
+          doc.fillColor(color ? '#ffffff' : '#6b7280').font('Helvetica').fontSize(8)
+            .text(String(n), x, y + 6, { width: bw, align: 'center', lineBreak: false })
+          x += bw + gap
+        })
+        doc.y = y + bh + 4
+        doc.x = M
+      }
+      drawArch(FDI_UPPER)
+      drawArch(FDI_LOWER)
+
+      // Légende
+      doc.moveDown(0.2)
+      let lx = M, ly = doc.y
+      doc.font('Helvetica').fontSize(8)
+      for (const st of DENTAL_STATES) {
+        const w = 10 + 3 + doc.widthOfString(st.label) + 12
+        if (lx + w > PAGE_RIGHT) { lx = M; ly += 13 }
+        doc.roundedRect(lx, ly + 1, 8, 8, 1).fill(st.color)
+        doc.fillColor(C.muted).font('Helvetica').fontSize(8).text(st.label, lx + 12, ly, { lineBreak: false })
+        lx += w
+      }
+      doc.y = ly + 12
+      doc.x = M
+
+      // Notes éventuelles par dent
+      const noted = Object.entries(dentalTeeth).filter(([, v]) => v?.n).sort((a, b) => Number(a[0]) - Number(b[0]))
+      if (noted.length > 0) {
+        doc.moveDown(0.2)
+        for (const [n, v] of noted) kv(`Dent ${n} :`, `${DENTAL_LABEL[v.s] || v.s} — ${v.n}`)
+      }
     }
 
     // ── Documents (référence) ────────────────────────────────────────────
