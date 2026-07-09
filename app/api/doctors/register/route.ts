@@ -16,6 +16,12 @@ export async function POST(req: NextRequest) {
   const slug        = sanitizeSlug(formData.get('slug'))
   const cnom_number = sanitizeString(formData.get('cnom_number'))
 
+  // Secrétaire (facultatif — « Avez-vous une secrétaire médicale ? »)
+  const secName     = sanitizeString(formData.get('secretary_name'))
+  const secEmail    = sanitizeEmail(formData.get('secretary_email'))
+  const secPassword = (formData.get('secretary_password') as string) || ''
+  const withSecretary = !!(secName && secEmail)
+
   // Validation stricte
   if (!name || !email || !password || !specialty || !slug || !cnom_number || !city) {
     return NextResponse.json({ error: 'Tous les champs obligatoires doivent être remplis (dont la ville)' }, { status: 400 })
@@ -31,6 +37,18 @@ export async function POST(req: NextRequest) {
 
   if (password.length < 8) {
     return NextResponse.json({ error: 'Le mot de passe doit contenir au moins 8 caractères' }, { status: 400 })
+  }
+
+  if (withSecretary) {
+    if (!isValidEmail(secEmail)) {
+      return NextResponse.json({ error: 'E-mail de la secrétaire invalide' }, { status: 400 })
+    }
+    if (secEmail.toLowerCase() === email.toLowerCase()) {
+      return NextResponse.json({ error: 'La secrétaire doit avoir un e-mail différent du vôtre' }, { status: 400 })
+    }
+    if (secPassword.length < 8) {
+      return NextResponse.json({ error: 'Le mot de passe de la secrétaire doit contenir au moins 8 caractères' }, { status: 400 })
+    }
   }
 
   const supabase = createAdminClient()
@@ -61,7 +79,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Insère le médecin avec statut 'pending'
-  const { error: doctorError } = await supabase
+  const { data: newDoctor, error: doctorError } = await supabase
     .from('doctors')
     .insert({
       name,
@@ -74,12 +92,41 @@ export async function POST(req: NextRequest) {
       cnom_number,
       status: 'pending',
       appointment_duration: 30,
+      has_secretary: withSecretary,
     })
+    .select('id')
+    .single()
 
-  if (doctorError) {
+  if (doctorError || !newDoctor) {
     // Supprime le compte Auth si l'insertion échoue
     await supabase.auth.admin.deleteUser(authData.user.id)
     return NextResponse.json({ error: 'Erreur lors de la création du profil' }, { status: 500 })
+  }
+
+  // Crée le compte de la secrétaire (identifiants distincts, lié au cabinet).
+  // Non bloquant : si son e-mail est déjà pris, l'inscription du médecin reste
+  // valide — il pourra la réinviter depuis « Mon équipe ».
+  let secretaryWarning: string | null = null
+  if (withSecretary) {
+    const { error: secAuthErr } = await supabase.auth.admin.createUser({
+      email: secEmail,
+      password: secPassword,
+      email_confirm: true,
+      user_metadata: { role: 'staff', name: secName },
+    })
+    if (secAuthErr && !/already|registered|exists/i.test(secAuthErr.message || '')) {
+      secretaryWarning = 'Le compte de la secrétaire n\'a pas pu être créé — vous pourrez l\'inviter depuis « Mon équipe ».'
+    } else {
+      const { error: staffErr } = await supabase.from('cabinet_staff').insert({
+        doctor_id: newDoctor.id,
+        email: secEmail.toLowerCase(),
+        name: secName,
+        // permissions par défaut : agenda + accueil (défini côté DB)
+      })
+      if (staffErr) {
+        secretaryWarning = 'Le compte de la secrétaire n\'a pas pu être lié — vous pourrez l\'inviter depuis « Mon équipe ».'
+      }
+    }
   }
 
   // Emails — AWAIT obligatoire en serverless (sinon tués avant l'envoi)
@@ -92,5 +139,5 @@ export async function POST(req: NextRequest) {
       .catch((err) => console.error('[Email pending]', err)),
   ])
 
-  return NextResponse.json({ success: true }, { status: 201 })
+  return NextResponse.json({ success: true, secretaryWarning }, { status: 201 })
 }

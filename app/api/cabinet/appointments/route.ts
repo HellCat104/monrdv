@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const [aptRes, typesRes, docRes] = await Promise.all([
     admin.from('appointments')
-      .select('id, date, time, status, attendance, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
+      .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
       .eq('doctor_id', ctx.doctor.id).eq('date', date).order('time', { ascending: true }),
     admin.from('consultation_types')
       .select('id, name, duration_minutes, default_price')
@@ -156,6 +156,16 @@ export async function PATCH(req: NextRequest) {
     const allowed = ['present', 'absent', 'late', null]
     if (!allowed.includes(body.attendance)) return NextResponse.json({ error: 'Valeur de présence invalide' }, { status: 400 })
     patch.attendance = body.attendance
+  }
+
+  // Salle d'attente : arrivé / en consultation / parti
+  if ('queue_status' in body) {
+    if (!ctx.permissions.mark_attendance) return NextResponse.json({ error: 'Permission manquante (salle d\'attente)' }, { status: 403 })
+    const allowed = ['arrive', 'en_consultation', 'parti', null]
+    if (!allowed.includes(body.queue_status)) return NextResponse.json({ error: 'Statut de file invalide' }, { status: 400 })
+    patch.queue_status = body.queue_status
+    // « Arrivé » vaut pointage présent (cohérence avec les statistiques de présence)
+    if (body.queue_status === 'arrive') patch.attendance = 'present'
   }
 
   // Encaissement

@@ -2,7 +2,7 @@
 // Une secrétaire n'est pas dans `doctors` : ses données passent par le client
 // admin (service_role) après vérification de son appartenance à cabinet_staff.
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import type { CabinetStaff, StaffPermissions } from '@/types'
+import { DEFAULT_STAFF_PERMISSIONS, type CabinetStaff, type StaffPermissions } from '@/types'
 
 export interface StaffContext {
   email: string
@@ -34,5 +34,8 @@ export async function getStaffContext(): Promise<StaffContext | null> {
     .single()
   if (!doctor) return null
 
-  return { email: user.email, staff: staff as CabinetStaff, doctor, permissions: (staff.permissions ?? {}) as StaffPermissions }
+  // Fusion avec les défauts : les permissions ajoutées après l'invitation
+  // d'une secrétaire existante prennent leur valeur par défaut.
+  const permissions = { ...DEFAULT_STAFF_PERMISSIONS, ...((staff.permissions ?? {}) as Partial<StaffPermissions>) }
+  return { email: user.email, staff: staff as CabinetStaff, doctor, permissions }
 }

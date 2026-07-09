@@ -31,6 +31,7 @@ export default function SettingsPage() {
     inpe: '',
     appointment_duration: 30,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
+    has_secretary: false,
   })
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -83,6 +84,7 @@ export default function SettingsPage() {
           inpe: data.inpe ?? '',
           appointment_duration: data.appointment_duration,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
+          has_secretary: !!data.has_secretary,
         })
         setEnabledVitals(resolveEnabledVitals(data.enabled_vitals, data.specialty))
         setCustomVitals(((data.custom_vitals as VitalDef[] | null) ?? []))
@@ -202,6 +204,7 @@ export default function SettingsPage() {
           custom_vitals: customVitals,
           appointment_duration: form.appointment_duration,
           working_hours: form.working_hours,
+          has_secretary: form.has_secretary,
         })
         .eq('id', doctor.id)
 
@@ -453,6 +456,22 @@ export default function SettingsPage() {
                 <p className="text-xs text-gray-400">Peut être identique ou différent de votre e-mail de connexion. Affiché aux patients.</p>
               </div>
             </div>
+
+            {/* Personnel du cabinet — active l'onglet « Mon équipe » */}
+            <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3.5 cursor-pointer hover:bg-gray-50">
+              <input
+                type="checkbox"
+                checked={form.has_secretary}
+                onChange={(e) => setForm({ ...form, has_secretary: e.target.checked })}
+                className="h-4 w-4 mt-0.5 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+              />
+              <span className="text-sm">
+                <span className="font-medium text-gray-800">J&apos;ai une secrétaire médicale</span>
+                <span className="block text-xs text-gray-400 mt-0.5">
+                  Active l&apos;onglet « Mon équipe » : invitez votre secrétaire et choisissez précisément ce qu&apos;elle peut voir et faire (jamais le dossier médical sans votre accord).
+                </span>
+              </span>
+            </label>
 
             {/* Spécialités additionnelles (médecin multi-spécialités) */}
             <div className="space-y-1.5">

@@ -1,12 +1,14 @@
 'use client'
 
 // « Mon équipe » — le médecin invite des secrétaires et règle leurs permissions.
+// Visible seulement si le médecin a déclaré avoir une secrétaire (Paramètres).
 import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { UserPlus, Trash2, Users2, Check, Mail, Loader2 } from 'lucide-react'
-import { DEFAULT_STAFF_PERMISSIONS, STAFF_PERMISSION_LABELS, type CabinetStaff, type StaffPermissions } from '@/types'
+import { DEFAULT_STAFF_PERMISSIONS, STAFF_PERMISSION_GROUPS, type CabinetStaff, type StaffPermissions } from '@/types'
 
 export default function EquipePage() {
   const [staff, setStaff] = useState<CabinetStaff[]>([])
@@ -14,6 +16,8 @@ export default function EquipePage() {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
+  const [hasSecretary, setHasSecretary] = useState<boolean | null>(null)
+  const supabase = createClient()
 
   // Formulaire d'invitation
   const [name, setName] = useState('')
@@ -21,12 +25,25 @@ export default function EquipePage() {
   const [perms, setPerms] = useState<StaffPermissions>({ ...DEFAULT_STAFF_PERMISSIONS })
 
   async function load() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: doc } = await supabase.from('doctors').select('has_secretary').eq('email', user.email).single()
+      setHasSecretary(!!doc?.has_secretary)
+    }
     const res = await fetch('/api/staff')
     const d = await res.json().catch(() => ({}))
     setStaff(d.staff ?? [])
     setLoading(false)
   }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [])
+
+  async function enableSecretary() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('doctors').update({ has_secretary: true }).eq('email', user.email)
+    setHasSecretary(true)
+  }
 
   async function invite() {
     setError(''); setOk('')
@@ -46,7 +63,9 @@ export default function EquipePage() {
   }
 
   async function togglePerm(s: CabinetStaff, key: keyof StaffPermissions) {
-    const next = { ...s.permissions, [key]: !s.permissions[key] }
+    // Fusion avec les défauts : les anciennes invitations n'ont pas les nouvelles clés
+    const merged = { ...DEFAULT_STAFF_PERMISSIONS, ...s.permissions }
+    const next = { ...merged, [key]: !merged[key] }
     setStaff((prev) => prev.map((x) => x.id === s.id ? { ...x, permissions: next } : x))
     await fetch('/api/staff', {
       method: 'PATCH',
@@ -59,6 +78,45 @@ export default function EquipePage() {
     if (!confirm(`Retirer ${s.name} de votre équipe ? Cette personne perdra l’accès au cabinet.`)) return
     setStaff((prev) => prev.filter((x) => x.id !== s.id))
     await fetch(`/api/staff?id=${s.id}`, { method: 'DELETE' })
+  }
+
+  // Matrice groupée réutilisée (invitation + édition)
+  const PermMatrix = ({ values, onToggle }: { values: StaffPermissions; onToggle: (k: keyof StaffPermissions) => void }) => (
+    <div className="space-y-3">
+      {STAFF_PERMISSION_GROUPS.map((g) => (
+        <div key={g.title}>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{g.title}</p>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {g.items.map(({ key, label, hint }) => (
+              <label key={key} className="flex items-start gap-2 text-sm cursor-pointer rounded-lg border border-gray-100 p-2.5 hover:bg-gray-50">
+                <input type="checkbox" checked={!!values[key]} onChange={() => onToggle(key)}
+                  className="h-4 w-4 mt-0.5 rounded border-gray-300 text-primary-500 focus:ring-primary-500" />
+                <span>
+                  <span className="text-gray-800">{label}</span>
+                  <span className="block text-[11px] text-gray-400">{hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+
+  if (!loading && hasSecretary === false && staff.length === 0) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Users2 className="h-6 w-6 text-primary-500" /> Mon équipe</h1>
+        <Card>
+          <CardContent className="p-8 text-center space-y-3">
+            <Users2 className="h-10 w-10 mx-auto text-gray-300" />
+            <p className="text-sm text-gray-600">Vous n’avez pas encore déclaré de secrétaire pour votre cabinet.</p>
+            <p className="text-xs text-gray-400">Activez cette option pour inviter votre secrétaire et lui donner un accès limité (agenda, accueil…), sans jamais exposer le dossier médical si vous ne le souhaitez pas.</p>
+            <Button onClick={enableSecretary}><UserPlus className="h-4 w-4 mr-1.5" /> J’ai une secrétaire — activer</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -77,21 +135,7 @@ export default function EquipePage() {
             <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Adresse e-mail" />
           </div>
 
-          <div>
-            <p className="text-xs font-medium text-gray-500 mb-2">Permissions</p>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {STAFF_PERMISSION_LABELS.map(({ key, label, hint }) => (
-                <label key={key} className="flex items-start gap-2 text-sm cursor-pointer rounded-lg border border-gray-100 p-2.5 hover:bg-gray-50">
-                  <input type="checkbox" checked={perms[key]} onChange={() => setPerms((p) => ({ ...p, [key]: !p[key] }))}
-                    className="h-4 w-4 mt-0.5 rounded border-gray-300 text-primary-500 focus:ring-primary-500" />
-                  <span>
-                    <span className="text-gray-800">{label}</span>
-                    <span className="block text-[11px] text-gray-400">{hint}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
+          <PermMatrix values={perms} onToggle={(key) => setPerms((p) => ({ ...p, [key]: !p[key] }))} />
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {ok && <p className="text-sm text-green-600 flex items-center gap-1"><Check className="h-4 w-4" /> {ok}</p>}
@@ -126,14 +170,7 @@ export default function EquipePage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {STAFF_PERMISSION_LABELS.map(({ key, label }) => (
-                      <button key={key} onClick={() => togglePerm(s, key)}
-                        className={`text-[11px] px-2 py-1 rounded-full border transition ${s.permissions[key] ? 'bg-primary-50 border-primary-200 text-primary-700' : 'bg-white border-gray-200 text-gray-400'}`}>
-                        {s.permissions[key] ? '✓ ' : ''}{label}
-                      </button>
-                    ))}
-                  </div>
+                  <PermMatrix values={{ ...DEFAULT_STAFF_PERMISSIONS, ...s.permissions }} onToggle={(key) => togglePerm(s, key)} />
                 </CardContent>
               </Card>
             ))}

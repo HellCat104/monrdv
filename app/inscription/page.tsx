@@ -29,6 +29,11 @@ export default function InscriptionPage() {
     cnom_number: '',
   })
 
+  // Secrétaire médicale (facultatif — crée un second compte lié au cabinet)
+  const [hasSecretary, setHasSecretary] = useState<'oui' | 'non'>('non')
+  const [secretary, setSecretary] = useState({ name: '', email: '', password: '' })
+  const [showSecPassword, setShowSecPassword] = useState(false)
+
   // Génère automatiquement un slug à partir du nom
   function handleNameChange(name: string) {
     const slug = name
@@ -75,11 +80,31 @@ export default function InscriptionPage() {
       return
     }
 
+    if (hasSecretary === 'oui') {
+      if (!secretary.name.trim() || !secretary.email.trim()) {
+        setError('Renseignez le nom et l\'e-mail de votre secrétaire (ou répondez « Non »)')
+        return
+      }
+      if (secretary.password.length < 8) {
+        setError('Le mot de passe de la secrétaire doit contenir au moins 8 caractères')
+        return
+      }
+      if (secretary.email.trim().toLowerCase() === form.email.trim().toLowerCase()) {
+        setError('La secrétaire doit avoir une adresse e-mail différente de la vôtre')
+        return
+      }
+    }
+
     setLoading(true)
 
     try {
       const formData = new FormData()
       Object.entries(form).forEach(([k, v]) => formData.append(k, v))
+      if (hasSecretary === 'oui') {
+        formData.append('secretary_name', secretary.name.trim())
+        formData.append('secretary_email', secretary.email.trim())
+        formData.append('secretary_password', secretary.password)
+      }
 
       const res = await fetch('/api/doctors/register', {
         method: 'POST',
@@ -273,6 +298,56 @@ export default function InscriptionPage() {
                   />
                 </div>
                 <p className="text-xs text-gray-400">Numéro d'inscription au Conseil National de l'Ordre des Médecins du Maroc</p>
+              </div>
+
+              {/* Secrétaire médicale — crée un second compte lié au cabinet */}
+              <div className="space-y-2">
+                <Label>Avez-vous une secrétaire médicale ?</Label>
+                <div className="flex gap-2">
+                  {(['non', 'oui'] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setHasSecretary(v)}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-medium transition ${hasSecretary === v ? 'bg-primary-500 border-primary-500 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                    >
+                      {v === 'oui' ? 'Oui' : 'Non'}
+                    </button>
+                  ))}
+                </div>
+                {hasSecretary === 'non' && (
+                  <p className="text-xs text-gray-400">Pas de souci — vous pourrez l&apos;ajouter plus tard dans Paramètres.</p>
+                )}
+                {hasSecretary === 'oui' && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                    <p className="text-xs text-gray-500">Son compte sera créé avec le vôtre : elle aura ses propres identifiants et un accès limité (agenda, accueil — jamais le dossier médical sans votre accord).</p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="sec_name">Nom et prénom de la secrétaire *</Label>
+                      <Input id="sec_name" value={secretary.name} onChange={(e) => setSecretary({ ...secretary, name: e.target.value })} placeholder="Salma Bennani" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="sec_email">Son e-mail de connexion *</Label>
+                      <Input id="sec_email" type="email" value={secretary.email} onChange={(e) => setSecretary({ ...secretary, email: e.target.value })} placeholder="salma@exemple.ma" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="sec_password">Son mot de passe *</Label>
+                      <div className="relative">
+                        <Input
+                          id="sec_password"
+                          type={showSecPassword ? 'text' : 'password'}
+                          value={secretary.password}
+                          onChange={(e) => setSecretary({ ...secretary, password: e.target.value })}
+                          placeholder="Minimum 8 caractères"
+                          className="pr-10"
+                        />
+                        <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" onClick={() => setShowSecPassword(!showSecPassword)}>
+                          {showSecPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-400">Elle pourra le changer dans « Mon compte » après sa première connexion.</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Case CGU — séparée du consentement médical */}

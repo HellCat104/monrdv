@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Calendar, Users, LogOut, Settings } from 'lucide-react'
+import { Calendar, Users, LogOut, Settings, Armchair, Banknote } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { StaffPermissions } from '@/types'
 
@@ -22,7 +22,9 @@ export default function CabinetShell({
 
   const nav = [
     permissions.agenda && { href: '/cabinet', label: 'Agenda', icon: Calendar },
+    permissions.mark_attendance && { href: '/cabinet/attente', label: 'Salle d’attente', icon: Armchair },
     permissions.patients_contact && { href: '/cabinet/patients', label: 'Patients', icon: Users },
+    (permissions.caisse_day || permissions.view_revenue) && { href: '/cabinet/caisse', label: 'Caisse', icon: Banknote },
     // Toujours visible : chacun gère son propre compte (mot de passe…)
     { href: '/cabinet/compte', label: 'Mon compte', icon: Settings },
   ].filter(Boolean) as { href: string; label: string; icon: typeof Calendar }[]

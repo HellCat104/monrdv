@@ -21,6 +21,7 @@ export interface Doctor {
   // Coordonnées de contact publiques (affichées aux patients)
   whatsapp?: string | null
   public_email?: string | null
+  has_secretary?: boolean
   // Constantes vitales suivies (null = défaut selon spécialité, [] = aucune)
   enabled_vitals?: string[] | null
   // Constantes personnalisées créées par le médecin (ex. HbA1c, INR, créatinine…)
@@ -71,6 +72,8 @@ export interface Patient {
   phone: string
   email?: string | null
   age?: number | null
+  cin?: string | null       // carte d'identité nationale (Maroc)
+  mutuelle?: string | null  // CNSS / CNOPS / assurance privée…
   // Dossier médical enrichi
   allergies?: string | null
   chronic_conditions?: string | null
@@ -428,13 +431,24 @@ export const ATTENDANCE_COLORS: Record<NonNullable<AppointmentAttendance>, strin
 
 // ── Comptes secrétaire (personnel du cabinet) ───────────────────────────────
 export interface StaffPermissions {
+  // Agenda & accueil
   agenda: boolean               // voir l'agenda
   manage_appointments: boolean  // créer / modifier / annuler des RDV
-  mark_attendance: boolean      // marquer présent / absent / en retard
-  payments: boolean             // encaisser + voir les montants
-  patients_contact: boolean     // liste patients (coordonnées)
-  patients_medical: boolean     // dossier médical (allergies, notes, ordonnances, constantes)
+  mark_attendance: boolean      // salle d'attente : arrivé / en consultation / parti
+  patients_contact: boolean     // fiches patients (coordonnées, CIN, mutuelle) + création
+  // Bloc médical
+  patients_medical: boolean     // antécédents, allergies, traitements
+  prescriptions_view: boolean   // afficher les ordonnances
+  vitals_entry: boolean         // saisir les constantes (poids, tension…)
+  // Bloc finances
+  payments: boolean             // saisir les encaissements (espèces, chèque…)
+  edit_prices: boolean          // modifier le prix d'un acte au moment de l'encaissement
+  caisse_day: boolean           // voir le journal de caisse du jour
+  view_revenue: boolean         // voir le chiffre d'affaires global (mois / année)
   factures: boolean             // accès aux factures
+  // Bloc sécurité
+  delete_patient: boolean       // supprimer un dossier patient
+  export_patients: boolean      // exporter la base patients (Excel)
 }
 
 export interface CabinetStaff {
@@ -451,19 +465,59 @@ export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
   agenda: true,
   manage_appointments: true,
   mark_attendance: true,
-  payments: false,
   patients_contact: true,
   patients_medical: false,
+  prescriptions_view: false,
+  vitals_entry: false,
+  payments: false,
+  edit_prices: false,
+  caisse_day: false,
+  view_revenue: false,
   factures: false,
+  delete_patient: false,
+  export_patients: false,
 }
 
-// Ordre + libellés pour la matrice de permissions (page « Mon équipe »)
-export const STAFF_PERMISSION_LABELS: { key: keyof StaffPermissions; label: string; hint: string }[] = [
-  { key: 'agenda',              label: 'Voir l’agenda',            hint: 'Consulter les rendez-vous du cabinet' },
-  { key: 'manage_appointments', label: 'Gérer les rendez-vous',        hint: 'Ajouter, déplacer, annuler des RDV' },
-  { key: 'mark_attendance',     label: 'Pointer les présences',        hint: 'Marquer présent / absent / en retard' },
-  { key: 'payments',            label: 'Encaissements',                hint: 'Voir les montants et enregistrer les paiements' },
-  { key: 'patients_contact',    label: 'Fiches patients (coordonnées)', hint: 'Nom, téléphone, e-mail' },
-  { key: 'patients_medical',    label: 'Dossier médical',              hint: 'Allergies, antécédents, notes, ordonnances, constantes' },
-  { key: 'factures',            label: 'Factures',                     hint: 'Accès à l’onglet Factures' },
+// Matrice de permissions groupée par bloc (page « Mon équipe »)
+export const STAFF_PERMISSION_GROUPS: { title: string; items: { key: keyof StaffPermissions; label: string; hint: string }[] }[] = [
+  {
+    title: 'Agenda & accueil',
+    items: [
+      { key: 'agenda',              label: 'Voir l’agenda',                 hint: 'Consulter les rendez-vous du cabinet' },
+      { key: 'manage_appointments', label: 'Gérer les rendez-vous',         hint: 'Ajouter, déplacer, annuler des RDV' },
+      { key: 'mark_attendance',     label: 'Salle d’attente / présences',   hint: 'Arrivé, en consultation, parti' },
+      { key: 'patients_contact',    label: 'Fiches patients (coordonnées)', hint: 'Créer des fiches : nom, téléphone, CIN, mutuelle' },
+    ],
+  },
+  {
+    title: 'Bloc médical',
+    items: [
+      { key: 'patients_medical',    label: 'Afficher les antécédents médicaux', hint: 'Allergies, maladies chroniques, traitements' },
+      { key: 'prescriptions_view',  label: 'Afficher les ordonnances',          hint: 'Consultation des ordonnances émises' },
+      { key: 'vitals_entry',        label: 'Saisir les constantes',             hint: 'Poids, tension, température…' },
+    ],
+  },
+  {
+    title: 'Bloc finances',
+    items: [
+      { key: 'payments',      label: 'Saisir les encaissements',    hint: 'Espèces, carte, chèque, virement' },
+      { key: 'edit_prices',   label: 'Modifier le prix des actes',  hint: 'Ajuster le montant dû lors de l’encaissement' },
+      { key: 'caisse_day',    label: 'Journal de caisse du jour',   hint: 'Total encaissé aujourd’hui, par mode de règlement' },
+      { key: 'view_revenue',  label: 'Chiffre d’affaires global',   hint: 'Totaux du mois et de l’année' },
+      { key: 'factures',      label: 'Factures',                    hint: 'Accès à la liste des factures' },
+    ],
+  },
+  {
+    title: 'Bloc sécurité',
+    items: [
+      { key: 'delete_patient',  label: 'Supprimer un dossier patient', hint: 'Suppression définitive — à réserver aux personnes de confiance' },
+      { key: 'export_patients', label: 'Exporter la base patients',    hint: 'Téléchargement de la liste (Excel)' },
+    ],
+  },
 ]
+
+// Liste à plat (compatibilité avec l'affichage compact des badges)
+export const STAFF_PERMISSION_LABELS = STAFF_PERMISSION_GROUPS.flatMap((g) => g.items)
+
+// Types de mutuelle courants au Maroc (fiche patient)
+export const MUTUELLES_MAROC = ['CNSS (AMO)', 'CNOPS', 'FAR', 'Assurance privée', 'Aucune'] as const

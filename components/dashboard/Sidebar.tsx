@@ -17,7 +17,7 @@ import {
   Receipt,
   Users2,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 const navItems = [
@@ -35,6 +35,17 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  // « Mon équipe » n'apparaît que si le médecin a déclaré une secrétaire
+  const [hasSecretary, setHasSecretary] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('doctors').select('has_secretary').eq('email', user.email).single()
+        .then(({ data }) => setHasSecretary(!!data?.has_secretary))
+    })
+  }, [pathname]) // re-vérifie après un passage dans Paramètres / Mon équipe
 
   async function handleLogout() {
     const supabase = createClient()
@@ -42,9 +53,11 @@ export function Sidebar() {
     router.push('/login')
   }
 
+  const visibleItems = navItems.filter((i) => i.href !== '/equipe' || hasSecretary)
+
   const NavLinks = () => (
     <>
-      {navItems.map(({ href, label, icon: Icon }) => (
+      {visibleItems.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}
           href={href}
