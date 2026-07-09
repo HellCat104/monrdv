@@ -21,6 +21,19 @@ export default async function PatientLayout({ children }: { children: React.Reac
     redirect('/dashboard')
   }
 
+  // Si c'est une secrétaire → renvoyer vers l'espace cabinet
+  const { data: staff } = await supabase
+    .from('cabinet_staff')
+    .select('id')
+    .eq('email', (user.email ?? '').toLowerCase())
+    .eq('status', 'active')
+    .limit(1)
+    .maybeSingle()
+
+  if (staff) {
+    redirect('/cabinet')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <PatientHeader userEmail={user.email ?? ''} userName={user.user_metadata?.full_name ?? ''} />
