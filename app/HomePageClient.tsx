@@ -109,7 +109,7 @@ export default function HomePageClient() {
       <section className="bg-primary-500 text-white py-16 px-4">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-3xl sm:text-5xl font-bold mb-3 leading-tight">
-            Prenez rendez-vous médical en ligne au Maroc
+            Prenez votre rendez-vous médical en ligne au Maroc
           </h1>
           <p className="text-primary-100 text-lg mb-10">
             Trouvez un médecin disponible à Casablanca, Rabat, Marrakech et partout au Maroc — confirmation immédiate 24h/24
