@@ -15,6 +15,7 @@ import {
   CreditCard,
   BarChart3,
   Receipt,
+  Users2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,7 @@ const navItems = [
   { href: '/patients',      label: 'Patients',          icon: Users },
   { href: '/factures',      label: 'Factures',          icon: Receipt },
   { href: '/statistiques',  label: 'Statistiques',      icon: BarChart3 },
+  { href: '/equipe',        label: 'Mon équipe',        icon: Users2 },
   { href: '/settings',      label: 'Paramètres',        icon: Settings },
   { href: '/abonnement',    label: 'Abonnement',        icon: CreditCard },
 ]

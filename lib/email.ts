@@ -591,3 +591,57 @@ export async function sendPasswordResetEmail(params: {
     return false
   }
 }
+
+// Email d'invitation d'une secrétaire (personnel du cabinet).
+// tempPassword = mot de passe provisoire si le compte vient d'être créé.
+export async function sendStaffInviteEmail(params: {
+  to: string
+  staffName: string
+  doctorName: string
+  tempPassword?: string
+}): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.to,
+      subject: `Vous avez été ajouté(e) à l'équipe du Dr. ${params.doctorName} sur MonRDV`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">MonRDV 🇲🇦</h1>
+          </div>
+          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <h2 style="color: #111827;">Bonjour ${h(params.staffName)},</h2>
+            <p style="color: #6b7280;">Le <strong>Dr. ${h(params.doctorName)}</strong> vous a ajouté(e) comme secrétaire de son cabinet sur MonRDV.</p>
+            ${params.tempPassword ? `
+            <p style="color: #6b7280;">Voici vos identifiants de connexion :</p>
+            <div style="background:#f3f4f6;border-radius:8px;padding:16px;margin:12px 0;font-size:15px;">
+              <div style="color:#111827;">E-mail : <strong>${h(params.to)}</strong></div>
+              <div style="color:#111827;">Mot de passe provisoire : <strong>${h(params.tempPassword)}</strong></div>
+            </div>
+            <p style="color:#9ca3af;font-size:13px;">Vous pourrez le modifier après connexion.</p>
+            ` : `
+            <p style="color: #6b7280;">Connectez-vous avec l'e-mail <strong>${h(params.to)}</strong> et votre mot de passe habituel.</p>
+            `}
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${APP_URL}/login"
+                style="background: #0EA5E9; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
+                Me connecter
+              </a>
+            </div>
+            <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+              MonRDV — Espace cabinet
+            </p>
+          </div>
+        </div>
+      `,
+    })
+    return true
+  } catch (error) {
+    console.error('[Email] Erreur invitation secrétaire:', error)
+    return false
+  }
+}

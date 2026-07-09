@@ -425,3 +425,45 @@ export const ATTENDANCE_COLORS: Record<NonNullable<AppointmentAttendance>, strin
   absent:  'bg-red-100 text-red-700',
   late:    'bg-orange-100 text-orange-700',
 }
+
+// ── Comptes secrétaire (personnel du cabinet) ───────────────────────────────
+export interface StaffPermissions {
+  agenda: boolean               // voir l'agenda
+  manage_appointments: boolean  // créer / modifier / annuler des RDV
+  mark_attendance: boolean      // marquer présent / absent / en retard
+  payments: boolean             // encaisser + voir les montants
+  patients_contact: boolean     // liste patients (coordonnées)
+  patients_medical: boolean     // dossier médical (allergies, notes, ordonnances, constantes)
+  factures: boolean             // accès aux factures
+}
+
+export interface CabinetStaff {
+  id: string
+  doctor_id: string
+  email: string
+  name: string
+  permissions: StaffPermissions
+  status: 'active' | 'disabled'
+  created_at: string
+}
+
+export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
+  agenda: true,
+  manage_appointments: true,
+  mark_attendance: true,
+  payments: false,
+  patients_contact: true,
+  patients_medical: false,
+  factures: false,
+}
+
+// Ordre + libellés pour la matrice de permissions (page « Mon équipe »)
+export const STAFF_PERMISSION_LABELS: { key: keyof StaffPermissions; label: string; hint: string }[] = [
+  { key: 'agenda',              label: 'Voir l’agenda',            hint: 'Consulter les rendez-vous du cabinet' },
+  { key: 'manage_appointments', label: 'Gérer les rendez-vous',        hint: 'Ajouter, déplacer, annuler des RDV' },
+  { key: 'mark_attendance',     label: 'Pointer les présences',        hint: 'Marquer présent / absent / en retard' },
+  { key: 'payments',            label: 'Encaissements',                hint: 'Voir les montants et enregistrer les paiements' },
+  { key: 'patients_contact',    label: 'Fiches patients (coordonnées)', hint: 'Nom, téléphone, e-mail' },
+  { key: 'patients_medical',    label: 'Dossier médical',              hint: 'Allergies, antécédents, notes, ordonnances, constantes' },
+  { key: 'factures',            label: 'Factures',                     hint: 'Accès à l’onglet Factures' },
+]
