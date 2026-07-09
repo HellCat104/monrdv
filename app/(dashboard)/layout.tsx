@@ -23,6 +23,10 @@ export default async function DashboardLayout({
     .single()
 
   if (!doctor) {
+    // Pas médecin : est-ce une secrétaire ? (accès à l'espace cabinet)
+    const { data: staff } = await supabase
+      .from('cabinet_staff').select('id').eq('email', (user.email ?? '').toLowerCase()).eq('status', 'active').limit(1).maybeSingle()
+    if (staff) redirect('/cabinet')
     redirect('/patient/dashboard')
   }
 

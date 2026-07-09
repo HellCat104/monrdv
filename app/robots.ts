@@ -15,6 +15,8 @@ export default function robots(): MetadataRoute.Robots {
           '/patients',
           '/settings',
           '/abonnement',
+          '/equipe',
+          '/cabinet',
           '/api/',
           '/choisir',
           '/login',
