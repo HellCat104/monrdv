@@ -6,15 +6,17 @@ import DentalChart from '@/components/dashboard/DentalChart'
 import { isDentalDoctor } from '@/lib/dental'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
-import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign } from '@/types'
+import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
 import { allVitalDefs, resolveEnabledVitals, type VitalDef } from '@/types'
+import { CERT_TEMPLATES } from '@/lib/certificats'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -32,6 +34,7 @@ interface PatientWithStats extends Patient {
 export default function PatientsPage() {
   const [patients, setPatients] = useState<PatientWithStats[]>([])
   const [doctorId, setDoctorId] = useState<string | null>(null)
+  const [doctorName, setDoctorName] = useState('')
   const [doctorSlug, setDoctorSlug] = useState<string>('')
   const [enabledVitals, setEnabledVitals] = useState<string[]>([])
   const [vitalDefs, setVitalDefs] = useState<VitalDef[]>(() => allVitalDefs())
@@ -60,6 +63,16 @@ export default function PatientsPage() {
   const [addingNote, setAddingNote] = useState(false)
   const [deleteNoteConfirm, setDeleteNoteConfirm] = useState<ConsultationNote | null>(null)
   const [signNoteConfirm, setSignNoteConfirm] = useState<ConsultationNote | null>(null)
+
+  // Ordonnances + certificats du patient
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
+  const [certificates, setCertificates] = useState<Certificate[]>([])
+  const [certOpen, setCertOpen] = useState(false)
+  const [certType, setCertType] = useState('repos')
+  const [certMotif, setCertMotif] = useState('')
+  const [certExtra, setCertExtra] = useState('')
+  const [certContent, setCertContent] = useState('')
+  const [savingCert, setSavingCert] = useState(false)
 
   // Documents du patient (analyses, radios scannées…)
   const [documents, setDocuments] = useState<PatientDocument[]>([])
@@ -101,12 +114,13 @@ export default function PatientsPage() {
 
     const { data: doctor } = await supabase
       .from('doctors')
-      .select('id, slug, specialty, specialties, enabled_vitals, custom_vitals')
+      .select('id, name, slug, specialty, specialties, enabled_vitals, custom_vitals')
       .eq('email', user.email)
       .single()
 
     if (!doctor) return
     setDoctorId(doctor.id)
+    setDoctorName(doctor.name ?? '')
     setDoctorSlug(doctor.slug ?? '')
     setEnabledVitals(resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty))
     setVitalDefs(allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? []))
@@ -171,7 +185,9 @@ export default function PatientsPage() {
     setLoadingHistory(true)
     setSaved(false)
 
-    const [aptRes, notesRes, docsRes, recallsRes, vitalsRes] = await Promise.all([
+    setPrescriptions([])
+    setCertificates([])
+    const [aptRes, notesRes, docsRes, recallsRes, vitalsRes, presRes, certRes] = await Promise.all([
       supabase
         .from('appointments')
         .select('*, patient:patients(*)')
@@ -198,6 +214,16 @@ export default function PatientsPage() {
         .select('*')
         .eq('patient_id', patient.id)
         .order('measured_at', { ascending: false }),
+      supabase
+        .from('prescriptions')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('certificates')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .order('created_at', { ascending: false }),
     ])
 
     setPatientAppointments(aptRes.data ?? [])
@@ -205,6 +231,8 @@ export default function PatientsPage() {
     setDocuments(docsRes.data ?? [])
     setRecalls(recallsRes.data ?? [])
     setVitals(vitalsRes.data ?? [])
+    setPrescriptions(presRes.data ?? [])
+    setCertificates(certRes.data ?? [])
     setLoadingHistory(false)
   }
 
@@ -323,6 +351,69 @@ export default function PatientsPage() {
     if (error) { alert('La signature a échoué. Réessayez.'); return }
     setConsultNotes((prev) => prev.map((n) => n.id === id ? { ...n, signed_at: signedAt } : n))
     setSignNoteConfirm(null)
+  }
+
+  // ── Ordonnances : renouvellement en 1 clic ────────────────────────────────
+  async function renewPrescription(p: Prescription) {
+    if (!doctorId || !selectedPatient) return
+    const { data, error } = await supabase
+      .from('prescriptions')
+      .insert({ doctor_id: doctorId, patient_id: selectedPatient.id, appointment_id: null, content: p.content })
+      .select('*')
+      .single()
+    if (error || !data) { alert('Échec du renouvellement'); return }
+    setPrescriptions((prev) => [data, ...prev])
+    window.open(`/ordonnance/p/${data.id}`, '_blank')
+  }
+
+  // ── Certificats médicaux ──────────────────────────────────────────────────
+  function buildCertContent(typeKey: string, extra: string) {
+    if (!selectedPatient) return ''
+    const tpl = CERT_TEMPLATES.find((t) => t.key === typeKey)
+    if (!tpl) return ''
+    return tpl.build(
+      { first_name: selectedPatient.first_name, last_name: selectedPatient.last_name, age: selectedPatient.age, cin: selectedPatient.cin },
+      { name: doctorName },
+      extra,
+    )
+  }
+  function openCertDialog() {
+    setCertType('repos')
+    setCertMotif('')
+    setCertExtra('')
+    setCertContent(buildCertContent('repos', ''))
+    setCertOpen(true)
+  }
+  function changeCertType(typeKey: string) {
+    setCertType(typeKey)
+    setCertExtra('')
+    setCertContent(buildCertContent(typeKey, ''))
+  }
+  function changeCertExtra(v: string) {
+    setCertExtra(v)
+    setCertContent(buildCertContent(certType, v))
+  }
+  async function saveCertificate(print: boolean) {
+    if (!doctorId || !selectedPatient || !certContent.trim()) return
+    setSavingCert(true)
+    const tpl = CERT_TEMPLATES.find((t) => t.key === certType)
+    const { data, error } = await supabase
+      .from('certificates')
+      .insert({
+        doctor_id: doctorId,
+        patient_id: selectedPatient.id,
+        type: certType,
+        title: tpl?.title ?? 'Certificat',
+        motif: certMotif.trim() || null,
+        content: certContent,
+      })
+      .select('*')
+      .single()
+    setSavingCert(false)
+    if (error || !data) { alert('Échec de l\'enregistrement du certificat'); return }
+    setCertificates((prev) => [data, ...prev])
+    setCertOpen(false)
+    if (print) window.open(`/certificat/${data.id}`, '_blank')
   }
 
   // ── Documents du patient ──────────────────────────────────────────────────
@@ -1165,6 +1256,82 @@ export default function PatientsPage() {
                 )}
               </div>
 
+              {/* Ordonnances */}
+              <div className="border-t border-gray-100 pt-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+                  <Pill className="h-4 w-4 text-primary-500" /> Ordonnances ({prescriptions.length})
+                </h4>
+                {prescriptions.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">Aucune ordonnance. Créez-en une depuis l&apos;agenda (bouton « Ordonnance » d&apos;un RDV).</p>
+                ) : (
+                  <div className="space-y-2">
+                    {prescriptions.map((p) => (
+                      <div key={p.id} className="bg-gray-50 rounded-lg px-3 py-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] text-gray-400 capitalize">{formatDateFr(p.created_at)}</p>
+                            <p className="text-xs text-gray-600 mt-0.5 line-clamp-2 whitespace-pre-wrap">{p.content}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={`/ordonnance/p/${p.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary-600 hover:underline inline-flex items-center gap-1"
+                            >
+                              <Printer className="h-3.5 w-3.5" /> Voir
+                            </a>
+                            <button
+                              onClick={() => renewPrescription(p)}
+                              className="text-xs text-gray-500 hover:text-primary-600 inline-flex items-center gap-1"
+                              title="Recréer la même ordonnance datée d'aujourd'hui"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" /> Renouveler
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Certificats médicaux */}
+              <div className="border-t border-gray-100 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-primary-500" /> Certificats ({certificates.length})
+                  </h4>
+                  <Button type="button" variant="outline" size="sm" onClick={openCertDialog}>
+                    <Plus className="h-4 w-4 mr-1" /> Nouveau certificat
+                  </Button>
+                </div>
+                {certificates.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">Repos, aptitude au sport, permis, courrier au confrère… ou certificat libre.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {certificates.map((ct) => (
+                      <div key={ct.id} className="bg-gray-50 rounded-lg px-3 py-2.5 flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm text-gray-800">{ct.title}</p>
+                          <p className="text-[11px] text-gray-400 capitalize">
+                            {formatDateFr(ct.created_at)}{ct.motif ? ` · motif : ${ct.motif}` : ''}
+                          </p>
+                        </div>
+                        <a
+                          href={`/certificat/${ct.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary-600 hover:underline inline-flex items-center gap-1 shrink-0"
+                        >
+                          <Printer className="h-3.5 w-3.5" /> Imprimer
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Documents du patient */}
               <div className="border-t border-gray-100 pt-4">
                 <div className="flex items-center justify-between mb-3">
@@ -1241,6 +1408,79 @@ export default function PatientsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Nouveau certificat médical */}
+      <Dialog open={certOpen} onOpenChange={setCertOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary-500" />
+              Nouveau certificat — {selectedPatient?.first_name} {selectedPatient?.last_name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Modèle</Label>
+              <Select value={certType} onValueChange={changeCertType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CERT_TEMPLATES.map((t) => (
+                    <SelectItem key={t.key} value={t.key}>{t.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {(() => {
+              const tpl = CERT_TEMPLATES.find((t) => t.key === certType)
+              return tpl?.extraField ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cert_extra">{tpl.extraField.label}</Label>
+                  <Input
+                    id="cert_extra"
+                    type={tpl.extraField.type}
+                    value={certExtra}
+                    onChange={(e) => changeCertExtra(e.target.value)}
+                    placeholder={tpl.extraField.placeholder}
+                  />
+                </div>
+              ) : null
+            })()}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="cert_motif">Motif (visible dans le dossier)</Label>
+              <Input
+                id="cert_motif"
+                value={certMotif}
+                onChange={(e) => setCertMotif(e.target.value)}
+                placeholder="Ex : grippe, visite annuelle…"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="cert_content">Texte du certificat (modifiable)</Label>
+              <textarea
+                id="cert_content"
+                value={certContent}
+                onChange={(e) => setCertContent(e.target.value)}
+                rows={12}
+                className="w-full text-sm text-gray-800 leading-relaxed border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+              />
+              <p className="text-[11px] text-gray-400">Le texte est figé à l&apos;enregistrement (valeur d&apos;archive) et le certificat apparaîtra dans le dossier du patient.</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => setCertOpen(false)}>Annuler</Button>
+              <Button type="button" variant="outline" onClick={() => saveCertificate(false)} disabled={savingCert || !certContent.trim()}>
+                {savingCert ? 'Enregistrement…' : 'Enregistrer'}
+              </Button>
+              <Button type="button" onClick={() => saveCertificate(true)} disabled={savingCert || !certContent.trim()}>
+                <Printer className="h-4 w-4 mr-1.5" /> Enregistrer et imprimer
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

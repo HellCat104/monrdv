@@ -22,6 +22,7 @@ export interface Doctor {
   whatsapp?: string | null
   public_email?: string | null
   has_secretary?: boolean
+  prescription_favorites?: string[] | null
   // Constantes vitales suivies (null = défaut selon spécialité, [] = aucune)
   enabled_vitals?: string[] | null
   // Constantes personnalisées créées par le médecin (ex. HbA1c, INR, créatinine…)
@@ -110,6 +111,18 @@ export interface Prescription {
   doctor_id: string
   patient_id: string
   appointment_id?: string | null
+  content: string
+  created_at: string
+}
+
+// Certificat médical émis (contenu figé à l'émission — archive)
+export interface Certificate {
+  id: string
+  doctor_id: string
+  patient_id: string
+  type: string
+  title: string
+  motif?: string | null
   content: string
   created_at: string
 }

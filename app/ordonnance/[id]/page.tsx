@@ -2,6 +2,7 @@
 // Accessible uniquement par le médecin propriétaire du RDV.
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { OrdonnanceEditor } from './OrdonnanceEditor'
 
 interface Props {
@@ -18,7 +19,7 @@ export default async function OrdonnancePage({ params }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe')
+    .select('id, name, specialty, address, city, phone, ice, inpe, prescription_favorites')
     .eq('email', user.email)
     .single()
 
@@ -46,6 +47,9 @@ export default async function OrdonnancePage({ params }: Props) {
     .limit(1)
     .maybeSingle()
 
+  const favorites = ((doctor.prescription_favorites as string[] | null) ?? []).filter((f) => typeof f === 'string')
+  const recentLines = await getRecentPrescriptionLines(supabase, doctor.id, favorites)
+
   return (
     <OrdonnanceEditor
       doctor={doctor}
@@ -54,6 +58,8 @@ export default async function OrdonnancePage({ params }: Props) {
       appointmentDate={apt.date}
       existingId={existing?.id ?? null}
       existingContent={existing?.content ?? ''}
+      favorites={favorites}
+      recentLines={recentLines}
     />
   )
 }

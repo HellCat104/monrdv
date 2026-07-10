@@ -30,6 +30,7 @@ interface DossierData {
   appointments: Row[]
   notes: Row[]
   prescriptions: Row[]
+  certificates: Row[]
   vitals: Row[]
   documents: Row[]
   docFiles: { name: string; buf: Buffer }[]
@@ -49,17 +50,19 @@ async function fetchDossierData(supabase: any, doctor: DossierDoctor & { id: str
     .from('patients').select('*').eq('id', patientId).eq('doctor_id', doctor.id).single()
   if (!patient) return null
 
-  const [aptRes, notesRes, presRes, vitalsRes, docsRes, dentalRes] = await Promise.all([
+  const [aptRes, notesRes, presRes, vitalsRes, docsRes, dentalRes, certRes] = await Promise.all([
     supabase.from('appointments').select('*, consultation_type:consultation_types(name)').eq('patient_id', patient.id).order('date', { ascending: false }).order('time', { ascending: false }),
     supabase.from('consultation_notes').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
     supabase.from('prescriptions').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
     supabase.from('vital_signs').select('*').eq('patient_id', patient.id).order('measured_at', { ascending: false }),
     supabase.from('patient_documents').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
     supabase.from('dental_charts').select('teeth').eq('patient_id', patient.id).maybeSingle(),
+    supabase.from('certificates').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
   ])
   const appointments = aptRes.data ?? []
   const notes = notesRes.data ?? []
   const prescriptions = presRes.data ?? []
+  const certificates = certRes.data ?? []
   const vitals = vitalsRes.data ?? []
   const documents = docsRes.data ?? []
   const dentalTeeth = (dentalRes.data?.teeth ?? {}) as DentalTeeth
@@ -84,7 +87,7 @@ async function fetchDossierData(supabase: any, doctor: DossierDoctor & { id: str
   const totalPaid = appointments.reduce((s: number, a: { amount_paid?: number | null }) => s + (a.amount_paid ?? 0), 0)
   const vitalDefs = allVitalDefs(doctor.custom_vitals ?? [])
 
-  return { patient, appointments, notes, prescriptions, vitals, documents, docFiles, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary, dentalTeeth }
+  return { patient, appointments, notes, prescriptions, certificates, vitals, documents, docFiles, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary, dentalTeeth }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,7 +100,7 @@ const CONTENT_W = PAGE_RIGHT - M // 515
 const BOTTOM = 792 // hauteur A4 en points
 
 function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer> {
-  const { patient, appointments, notes, prescriptions, vitals, documents, aptLabel, totalPaid, vitalDefs, dentalSummary, dentalTeeth } = d
+  const { patient, appointments, notes, prescriptions, certificates, vitals, documents, aptLabel, totalPaid, vitalDefs, dentalSummary, dentalTeeth } = d
   const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
@@ -239,6 +242,15 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer
       block(meta, String(p.content ?? ''), true)
     }
 
+    // ── Certificats émis ─────────────────────────────────────────────────
+    if (certificates.length > 0) {
+      section(`Certificats émis (${certificates.length})`)
+      for (const ct of certificates) {
+        const meta = `${formatDateFr(ct.created_at)} · ${ct.title}${ct.motif ? ` · motif : ${ct.motif}` : ''}`
+        block(meta, String(ct.content ?? ''), true)
+      }
+    }
+
     // ── Constantes ───────────────────────────────────────────────────────
     if (vitals.length > 0) {
       section(`Constantes (${vitals.length})`)
@@ -352,7 +364,7 @@ export async function buildPatientDossierPDF(supabase: any, doctor: DossierDocto
 export async function buildPatientDossier(supabase: any, doctor: DossierDoctor & { id: string }, patientId: string): Promise<DossierResult> {
   const d = await fetchDossierData(supabase, doctor, patientId)
   if (!d) return { ok: false }
-  const { patient, appointments, notes, prescriptions, vitals, documents, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary } = d
+  const { patient, appointments, notes, prescriptions, certificates, vitals, documents, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary } = d
   const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
@@ -384,6 +396,8 @@ ${notes.length === 0 ? '<p class="muted">Aucune.</p>' : notes.map((n: Row) => `<
 
 <h2>Ordonnances (${prescriptions.length})</h2>
 ${prescriptions.length === 0 ? '<p class="muted">Aucune.</p>' : prescriptions.map((p: Row) => `<div class="block" style="border:1px solid #e5e7eb;border-radius:6px;padding:8px"><span class="tag">${esc(formatDateFr(p.created_at))}${p.appointment_id && aptLabel.get(p.appointment_id) ? ' · RDV du ' + esc(aptLabel.get(p.appointment_id)) : ''}</span><br>${esc(p.content).replace(/\n/g, '<br>')}</div>`).join('')}
+
+${certificates.length > 0 ? `<h2>Certificats émis (${certificates.length})</h2>${certificates.map((ct: Row) => `<div class="block" style="border:1px solid #e5e7eb;border-radius:6px;padding:8px"><span class="tag">${esc(formatDateFr(ct.created_at))} · ${esc(ct.title)}${ct.motif ? ' · motif : ' + esc(ct.motif) : ''}</span><br>${esc(ct.content).replace(/\n/g, '<br>')}</div>`).join('')}` : ''}
 
 ${vitals.length > 0 ? `<h2>Constantes (${vitals.length})</h2>${vitals.map((v: Row) => `<div class="block"><span class="tag">${esc(formatDateFr(v.measured_at))}</span> — ${Object.entries(v.values as Record<string, number>).map(([k, val]) => `${esc(vLabel(k))} : ${esc(val)} ${esc(vUnit(k))}`).join(' · ')}</div>`).join('')}` : ''}
 

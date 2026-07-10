@@ -4,7 +4,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { formatDateFr } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
-import { FolderHeart, Pill, Activity, Paperclip, HeartPulse, Download, Stethoscope } from 'lucide-react'
+import { FolderHeart, Pill, Activity, Paperclip, HeartPulse, Download, Stethoscope, FileCheck } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,15 +29,19 @@ export default async function MonDossierPage() {
   let prescriptions: Row[] = []
   let vitals: Row[] = []
   let documents: Row[] = []
+  let certificates: Row[] = []
   if (ids.length > 0) {
-    const [pres, vit, docs] = await Promise.all([
+    const [pres, vit, docs, certs] = await Promise.all([
       admin.from('prescriptions').select('id, content, created_at, patient_id').in('patient_id', ids).order('created_at', { ascending: false }),
       admin.from('vital_signs').select('id, measured_at, values, patient_id').in('patient_id', ids).order('measured_at', { ascending: false }).limit(30),
       admin.from('patient_documents').select('id, file_name, file_type, created_at, patient_id').in('patient_id', ids).order('created_at', { ascending: false }),
+      // Certificats : trace uniquement (titre + motif) — jamais le contenu
+      admin.from('certificates').select('id, title, motif, created_at, patient_id').in('patient_id', ids).order('created_at', { ascending: false }),
     ])
     prescriptions = pres.data ?? []
     vitals = vit.data ?? []
     documents = docs.data ?? []
+    certificates = certs.data ?? []
   }
 
   const doctorOf = (patientId: string) => fiches.find((f) => f.id === patientId)?.doctor
@@ -47,7 +51,7 @@ export default async function MonDossierPage() {
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
 
   const hasMedicalInfo = fiches.some((f) => f.allergies || f.chronic_conditions || f.current_treatments)
-  const empty = ids.length === 0 || (prescriptions.length === 0 && vitals.length === 0 && documents.length === 0 && !hasMedicalInfo)
+  const empty = ids.length === 0 || (prescriptions.length === 0 && vitals.length === 0 && documents.length === 0 && certificates.length === 0 && !hasMedicalInfo)
 
   return (
     <div className="space-y-8">
@@ -103,13 +107,49 @@ export default async function MonDossierPage() {
               return (
                 <div key={p.id} className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5">
                   <p className="text-xs text-gray-400 mb-2 capitalize">
-                    {formatDateFr(p.created_at)}{doc ? ` — Dr. ${doc.name} (${doc.specialty})` : ''}
+                    {formatDateFr(p.created_at)}{doc ? ` — prescrite par Dr. ${doc.name}` : ''}
                   </p>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{p.content}</p>
+                  {/* Copie informative : filigrane + pas d'en-tête officiel ni d'impression */}
+                  <div className="relative overflow-hidden select-none">
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{p.content}</p>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden>
+                      <span className="-rotate-12 text-red-300/60 font-bold text-base sm:text-lg tracking-widest whitespace-nowrap uppercase">
+                        Copie — non valable en pharmacie
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-2 border-t border-gray-50 pt-2">
+                    Copie informative. Seul l&apos;original signé par votre médecin fait foi — pour un duplicata, adressez-vous au cabinet.
+                  </p>
                 </div>
               )
             })}
           </div>
+        </section>
+      )}
+
+      {/* Certificats — trace uniquement, jamais le contenu */}
+      {certificates.length > 0 && (
+        <section>
+          <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <FileCheck className="h-5 w-5 text-primary-500" /> Mes certificats ({certificates.length})
+          </h2>
+          <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
+            {certificates.map((ct) => {
+              const doc = doctorOf(ct.patient_id)
+              return (
+                <div key={ct.id} className="p-3.5 sm:px-5">
+                  <p className="text-sm text-gray-800">{ct.title}</p>
+                  <p className="text-[11px] text-gray-400 capitalize">
+                    {formatDateFr(ct.created_at)}{ct.motif ? ` · motif : ${ct.motif}` : ''}{doc ? ` · Dr. ${doc.name}` : ''}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">
+            L&apos;original vous a été remis en main propre. Pour un duplicata, adressez-vous à votre médecin.
+          </p>
         </section>
       )}
 
