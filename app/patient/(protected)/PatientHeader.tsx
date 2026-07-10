@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Stethoscope, LogOut, Search, Shield } from 'lucide-react'
+import { Stethoscope, LogOut, Search, Shield, FolderHeart } from 'lucide-react'
 
 interface PatientHeaderProps {
   userEmail: string
@@ -49,6 +49,14 @@ export default function PatientHeader({ userEmail, userName }: PatientHeaderProp
               {displayName}
             </span>
           </div>
+
+          <Link
+            href="/patient/mon-dossier"
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary-500 transition-colors"
+          >
+            <FolderHeart className="h-4 w-4" />
+            <span className="hidden sm:inline">Mon dossier</span>
+          </Link>
 
           <Link
             href="/patient/mes-donnees"
