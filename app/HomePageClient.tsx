@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, MapPin, User, Stethoscope, Clock, Shield, Star } from 'lucide-react'
+import { Search, MapPin, User, Stethoscope, Clock, Shield, Star, Calendar, FolderHeart, Receipt, BellRing, Users2, FileText, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
 
@@ -245,13 +245,61 @@ export default function HomePageClient() {
         </div>
       </section>
 
+      {/* Services (médecins) */}
+      <section id="services" className="py-16 px-4 bg-white">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10">
+            <span className="inline-block text-xs font-semibold uppercase tracking-wide text-primary-600 bg-primary-50 rounded-full px-3 py-1 mb-3">
+              Pour les médecins &amp; cabinets
+            </span>
+            <h2 className="text-2xl font-bold text-gray-900">Un logiciel de cabinet complet, pas seulement des rendez-vous</h2>
+            <p className="text-gray-500 mt-2 max-w-2xl mx-auto">
+              MonRDV gère l&apos;ensemble de votre cabinet, sur ordinateur comme sur téléphone — sans installation, conforme à la loi 09-08.
+            </p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[
+              { icon: Calendar, color: 'text-primary-500 bg-primary-50', title: 'Agenda & rendez-vous en ligne', desc: 'Votre page publique où les patients réservent 24h/24, avec durées par motif et anti-chevauchement.' },
+              { icon: FolderHeart, color: 'text-rose-500 bg-rose-50', title: 'Dossiers patients complets', desc: 'Antécédents, allergies, ordonnances, constantes, documents, CIN et mutuelle — export du dossier en PDF.' },
+              { icon: Receipt, color: 'text-emerald-600 bg-emerald-50', title: 'Facturation & comptabilité', desc: 'Factures aux normes (ICE/INPE), caisse du jour, chiffre d’affaires et exports Excel.' },
+              { icon: BellRing, color: 'text-amber-500 bg-amber-50', title: 'Rappels de suivi automatiques', desc: '« Revenez dans 6 mois » envoyé par e-mail, sans y penser.' },
+              { icon: Users2, color: 'text-indigo-500 bg-indigo-50', title: 'Compte secrétaire', desc: 'Un accès séparé pour votre secrétaire, avec des permissions que vous contrôlez précisément.' },
+              { icon: Shield, color: 'text-sky-600 bg-sky-50', title: 'Sécurité & confidentialité', desc: 'Vos données chiffrées, cloisonnées par cabinet, exportables à tout moment. Elles vous appartiennent.' },
+            ].map(({ icon: Icon, color, title, desc }) => (
+              <div key={title} className="border border-gray-100 rounded-2xl p-5 hover:shadow-sm hover:border-primary-100 transition-all">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-3 ${color}`}>
+                  <Icon className="h-6 w-6" aria-hidden="true" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-1">{title}</h3>
+                <p className="text-sm text-gray-500">{desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <a
+              href="/documentation-monrdv.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-primary-500 text-white font-semibold px-6 py-3 rounded-xl hover:bg-primary-600 transition-colors"
+            >
+              <Download className="h-5 w-5" aria-hidden="true" /> Télécharger la documentation
+            </a>
+            <span className="text-xs text-gray-400 inline-flex items-center gap-1">
+              <FileText className="h-3.5 w-3.5" aria-hidden="true" /> PDF · présentation &amp; guide d&apos;inscription
+            </span>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Médecin */}
       <section className="py-16 px-4 bg-primary-500 text-white text-center">
         <div className="max-w-2xl mx-auto">
           <Stethoscope className="h-12 w-12 mx-auto mb-4 opacity-80" aria-hidden="true" />
           <h2 className="text-2xl font-bold mb-3">Vous êtes médecin au Maroc ?</h2>
           <p className="text-primary-100 mb-8">
-            Rejoignez MonRDV et gérez vos rendez-vous facilement depuis votre téléphone.
+            Rejoignez MonRDV et gérez tout votre cabinet facilement depuis votre téléphone.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
@@ -260,12 +308,14 @@ export default function HomePageClient() {
             >
               S&apos;inscrire gratuitement
             </Link>
-            <Link
-              href="/login"
-              className="inline-block bg-primary-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-primary-700 transition-colors border border-white/30"
+            <a
+              href="/documentation-monrdv.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 bg-primary-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-primary-700 transition-colors border border-white/30"
             >
-              Se connecter
-            </Link>
+              <Download className="h-5 w-5" aria-hidden="true" /> Télécharger la documentation
+            </a>
           </div>
         </div>
       </section>
