@@ -99,10 +99,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Format de date ou heure invalide' }, { status: 400 })
   }
 
-  // Interdit les RDV le jour même
-  const today = format(getNowInMaroc(), 'yyyy-MM-dd')
-  if (date <= today) {
-    return NextResponse.json({ error: 'Les réservations le jour même ne sont pas acceptées' }, { status: 400 })
+  // Jour même : interdit pour les réservations publiques (le médecin garde la
+  // maîtrise de sa journée), autorisé pour le médecin connecté (appel au cabinet)
+  // tant que l'heure n'est pas passée.
+  const nowMaroc = getNowInMaroc()
+  const today = format(nowMaroc, 'yyyy-MM-dd')
+  if (isPublic) {
+    if (date <= today) {
+      return NextResponse.json({ error: 'Les réservations le jour même ne sont pas acceptées' }, { status: 400 })
+    }
+  } else {
+    if (date < today) {
+      return NextResponse.json({ error: 'Impossible de créer un rendez-vous dans le passé' }, { status: 400 })
+    }
+    if (date === today && time <= format(nowMaroc, 'HH:mm')) {
+      return NextResponse.json({ error: 'Ce créneau est déjà passé' }, { status: 400 })
+    }
   }
 
   // Pour les réservations du médecin, vérifie l'authentification

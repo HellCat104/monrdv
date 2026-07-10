@@ -2,8 +2,8 @@
 // Supporte les motifs de consultation à durée variable (?type=<consultation_type_id>).
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSlotsForDuration, getDayKey, getDayBreaks, type OccupiedInterval } from '@/lib/utils'
-import { parseISO } from 'date-fns'
+import { getSlotsForDuration, getDayKey, getDayBreaks, getNowInMaroc, type OccupiedInterval } from '@/lib/utils'
+import { parseISO, format } from 'date-fns'
 
 // GET /api/slots?doctor_id=...&date=YYYY-MM-DD[&type=<uuid>]
 export async function GET(req: NextRequest) {
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     duration: b.duration_minutes || doctor.appointment_duration,
   }))
 
-  const slots = getSlotsForDuration(
+  let slots = getSlotsForDuration(
     daySchedule.start,
     daySchedule.end,
     duration,
@@ -97,6 +97,14 @@ export async function GET(req: NextRequest) {
     getDayBreaks(daySchedule),
     occupied
   )
+
+  // Pour la journée en cours (heure marocaine), les heures déjà passées
+  // ne sont plus proposées (utile au cabinet : RDV du jour même).
+  const nowMaroc = getNowInMaroc()
+  if (date === format(nowMaroc, 'yyyy-MM-dd')) {
+    const nowTime = format(nowMaroc, 'HH:mm')
+    slots = slots.map((s) => (s.time <= nowTime ? { ...s, available: false } : s))
+  }
 
   return NextResponse.json({ slots }, {
     headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },

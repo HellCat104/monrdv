@@ -7,6 +7,17 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
 
+  // Ancienne URL de production → domaine officiel (301, bon pour le SEO).
+  // Les previews de branche (monrdv-git-*.vercel.app) ne sont PAS redirigées.
+  const host = req.headers.get('host') ?? ''
+  if (host === 'monrdv.vercel.app') {
+    const url = req.nextUrl.clone()
+    url.protocol = 'https:'
+    url.host = 'www.monrdv.co.ma'
+    url.port = ''
+    return NextResponse.redirect(url, 301)
+  }
+
   // ── Rate limiting simple sur les routes sensibles ─────────────────────────
   const ip = (req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip') ?? 'unknown').trim()
   const sensitiveRoutes = [
