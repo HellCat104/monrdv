@@ -22,7 +22,9 @@ export async function middleware(req: NextRequest) {
     const key = `rl:${ip}:${pathname}`
     const now = Date.now()
     const windowMs = 60_000 // 1 minute
-    const maxRequests = 10
+    // Lecture de créneaux : quota large (un patient parcourt plusieurs dates,
+    // et un cabinet entier peut partager la même IP). Écritures : quota strict.
+    const maxRequests = (pathname.startsWith('/api/slots') || pathname.startsWith('/api/search')) ? 40 : 10
     const current = rateLimitStore.get(key)
 
     let count = 1

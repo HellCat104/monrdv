@@ -35,6 +35,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'URL invalide (lettres, chiffres et tirets uniquement)' }, { status: 400 })
   }
 
+  // Slugs réservés : ces adresses correspondent à des pages du site
+  const RESERVED_SLUGS = [
+    'login', 'admin', 'api', 'inscription', 'recherche', 'patient', 'patients',
+    'dashboard', 'appointments', 'settings', 'abonnement', 'factures', 'facture',
+    'statistiques', 'equipe', 'cabinet', 'cgu', 'politique-confidentialite',
+    'annuler', 'cancel-result', 'choisir', 'medecin', 'dossier', 'ordonnance',
+    'avoir', 'reset-password', 'forgot-password', 'sitemap', 'robots', 'favicon',
+  ]
+  if (RESERVED_SLUGS.includes(slug.toLowerCase())) {
+    return NextResponse.json({ error: 'Cette URL est réservée, choisissez-en une autre (ex : votre nom)' }, { status: 400 })
+  }
+
   if (password.length < 8) {
     return NextResponse.json({ error: 'Le mot de passe doit contenir au moins 8 caractères' }, { status: 400 })
   }
