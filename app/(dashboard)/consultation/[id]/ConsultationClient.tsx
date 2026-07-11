@@ -1,7 +1,7 @@
 'use client'
 
 // Poste de consultation : 3 colonnes (dossier / note+constantes / actions).
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -54,20 +54,43 @@ export default function ConsultationClient({
   const vLabel = (k: string) => vitalDefsAll.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefsAll.find((v) => v.key === k)?.unit || ''
 
-  async function saveNote() {
-    if (!note.trim()) return
+  const savingRef = useRef(false)
+  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const saveNote = useCallback(async () => {
+    if (!note.trim() || savingRef.current) return
+    savingRef.current = true
     setNoteState('saving')
-    if (noteId) {
-      await supabase.from('consultation_notes').update({ note }).eq('id', noteId)
-    } else {
-      const { data } = await supabase
-        .from('consultation_notes')
-        .insert({ doctor_id: doctorId, patient_id: patient.id, appointment_id: appointmentId, note })
-        .select('id').single()
-      if (data) setNoteId(data.id)
+    try {
+      if (noteId) {
+        await supabase.from('consultation_notes').update({ note }).eq('id', noteId)
+      } else {
+        const { data } = await supabase
+          .from('consultation_notes')
+          .insert({ doctor_id: doctorId, patient_id: patient.id, appointment_id: appointmentId, note })
+          .select('id').single()
+        if (data) setNoteId(data.id)
+      }
+      setNoteState('saved')
+      setTimeout(() => setNoteState((s) => (s === 'saved' ? 'idle' : s)), 2000)
+    } finally {
+      savingRef.current = false
     }
-    setNoteState('saved')
-    setTimeout(() => setNoteState('idle'), 2000)
+  }, [note, noteId, appointmentId, patient.id, doctorId, supabase])
+
+  // Enregistrement automatique : 1,5 s après la dernière frappe → rien n'est perdu
+  useEffect(() => {
+    if (!note.trim()) return
+    if (noteTimer.current) clearTimeout(noteTimer.current)
+    noteTimer.current = setTimeout(() => { saveNote() }, 1500)
+    return () => { if (noteTimer.current) clearTimeout(noteTimer.current) }
+  }, [note, saveNote])
+
+  // Enregistre la note AVANT de quitter vers une autre action (ordonnance…)
+  async function goTo(url: string) {
+    if (noteTimer.current) clearTimeout(noteTimer.current)
+    if (note.trim()) await saveNote()
+    router.push(url)
   }
 
   async function saveVitals() {
@@ -225,13 +248,13 @@ export default function ConsultationClient({
           <div className="bg-white border border-gray-100 rounded-xl p-3 space-y-2 sticky top-4">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">Actions</p>
 
-            <a href={`/ordonnance/${appointmentId}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+            <button onClick={() => goTo(`/ordonnance/${appointmentId}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
               <Pill className="h-4 w-4 text-primary-500" /> Ordonnance
-            </a>
+            </button>
 
-            <a href={`/patients?certificat=${patient.id}`} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+            <button onClick={() => goTo(`/patients?certificat=${patient.id}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
               <FileText className="h-4 w-4 text-primary-500" /> Certificat
-            </a>
+            </button>
 
             {paid ? (
               <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
