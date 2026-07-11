@@ -15,7 +15,7 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
-interface Patient { id: string; first_name: string; last_name: string; age?: number | null; phone?: string | null; cin?: string | null; mutuelle?: string | null; allergies?: string | null; chronic_conditions?: string | null; current_treatments?: string | null }
+interface Patient { id: string; first_name: string; last_name: string; age?: number | null; phone?: string | null; cin?: string | null; mutuelle?: string | null; allergies?: string | null; chronic_conditions?: string | null; surgeries?: string | null; current_treatments?: string | null; vaccinations?: string | null }
 
 export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, hasInvoice, defaultPrice,
@@ -181,8 +181,10 @@ export default function ConsultationClient({
                 <span><b>Allergies :</b> {patient.allergies}</span>
               </p>
             )}
-            {patient.chronic_conditions && <p className="text-gray-700"><b>Antécédents :</b> {patient.chronic_conditions}</p>}
-            {patient.current_treatments && <p className="text-gray-700"><b>Traitements :</b> {patient.current_treatments}</p>}
+            {patient.chronic_conditions && <p className="text-gray-700"><b>Maladies chroniques :</b> {patient.chronic_conditions}</p>}
+            {patient.surgeries && <p className="text-gray-700"><b>Chirurgies :</b> {patient.surgeries}</p>}
+            {patient.current_treatments && <p className="text-gray-700"><b>Traitements de fond :</b> {patient.current_treatments}</p>}
+            {patient.vaccinations && <p className="text-gray-700"><b>Vaccins :</b> {patient.vaccinations}</p>}
           </div>
 
           {vitals.length > 0 && (

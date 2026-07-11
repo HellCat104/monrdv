@@ -16,7 +16,7 @@ import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, V
 import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, type VitalDef } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
-import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw } from 'lucide-react'
+import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -57,7 +57,9 @@ export default function PatientsPage() {
   const [editNotes, setEditNotes] = useState<string>('')
   const [editAllergies, setEditAllergies] = useState<string>('')
   const [editChronic, setEditChronic] = useState<string>('')
+  const [editSurgeries, setEditSurgeries] = useState<string>('')
   const [editTreatments, setEditTreatments] = useState<string>('')
+  const [editVaccinations, setEditVaccinations] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   // Notes de consultation datées (timeline)
@@ -184,7 +186,9 @@ export default function PatientsPage() {
     setEditNotes(patient.notes ?? '')
     setEditAllergies(patient.allergies ?? '')
     setEditChronic(patient.chronic_conditions ?? '')
+    setEditSurgeries(patient.surgeries ?? '')
     setEditTreatments(patient.current_treatments ?? '')
+    setEditVaccinations(patient.vaccinations ?? '')
     setNewNote('')
     setConsultNotes([])
     setDocuments([])
@@ -505,7 +509,9 @@ export default function PatientsPage() {
       notes: editNotes || null,
       allergies: editAllergies || null,
       chronic_conditions: editChronic || null,
+      surgeries: editSurgeries || null,
       current_treatments: editTreatments || null,
+      vaccinations: editVaccinations || null,
     }
     const { error } = await supabase
       .from('patients')
@@ -1078,12 +1084,36 @@ export default function PatientsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs text-gray-500 flex items-center gap-1.5">
-                    <Pill className="h-3.5 w-3.5 text-blue-400" /> Traitements en cours
+                    <Scissors className="h-3.5 w-3.5 text-purple-400" /> Antécédents chirurgicaux
+                  </label>
+                  <textarea
+                    value={editSurgeries}
+                    onChange={(e) => setEditSurgeries(e.target.value)}
+                    placeholder="Ex: Appendicectomie 2015, césarienne 2020…"
+                    rows={2}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <Pill className="h-3.5 w-3.5 text-blue-400" /> Traitements de fond
                   </label>
                   <textarea
                     value={editTreatments}
                     onChange={(e) => setEditTreatments(e.target.value)}
                     placeholder="Ex: Metformine 1000mg, …"
+                    rows={2}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <Syringe className="h-3.5 w-3.5 text-green-400" /> Vaccins / statut vaccinal
+                  </label>
+                  <textarea
+                    value={editVaccinations}
+                    onChange={(e) => setEditVaccinations(e.target.value)}
+                    placeholder="Ex: DTP à jour (2024), grippe 2025, hépatite B…"
                     rows={2}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />

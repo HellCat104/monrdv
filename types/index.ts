@@ -75,10 +75,12 @@ export interface Patient {
   age?: number | null
   cin?: string | null       // carte d'identité nationale (Maroc)
   mutuelle?: string | null  // CNSS / CNOPS / assurance privée…
-  // Dossier médical enrichi
+  // Dossier médical enrichi (antécédents structurés)
   allergies?: string | null
-  chronic_conditions?: string | null
-  current_treatments?: string | null
+  chronic_conditions?: string | null      // maladies chroniques
+  surgeries?: string | null               // antécédents chirurgicaux
+  current_treatments?: string | null      // traitements de fond
+  vaccinations?: string | null            // vaccins / statut vaccinal
   notes?: string | null
   created_at: string
 }

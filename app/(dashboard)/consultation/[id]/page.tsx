@@ -21,7 +21,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const { data: apt } = await supabase
     .from('appointments')
-    .select('id, date, time, amount_paid, amount_due, payment_method, invoice_no, consultation_type:consultation_types(name, default_price), patient:patients(id, first_name, last_name, age, phone, cin, mutuelle, allergies, chronic_conditions, current_treatments)')
+    .select('id, date, time, amount_paid, amount_due, payment_method, invoice_no, consultation_type:consultation_types(name, default_price), patient:patients(id, first_name, last_name, age, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .single()
