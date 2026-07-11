@@ -190,10 +190,15 @@ export default function ConsultationClient({
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Pill className="h-3.5 w-3.5" /> Ordonnances récentes</h3>
               {recentPrescriptions.map((p) => (
-                <a key={p.id} href={`/ordonnance/p/${p.id}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-gray-600 hover:text-primary-600 mb-1.5 border-l-2 border-gray-100 pl-2">
-                  <span className="text-gray-400">{formatDateFr(p.created_at)}</span>
-                  <span className="line-clamp-1 whitespace-pre-wrap">{p.content}</span>
-                </a>
+                <button
+                  key={p.id}
+                  onClick={() => goTo(`/ordonnance/p/${p.id}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
+                  className="block w-full text-left text-xs text-gray-600 hover:text-primary-600 mb-1.5 border-l-2 border-gray-100 hover:border-primary-300 pl-2"
+                  title="Modifier cette ordonnance"
+                >
+                  <span className="text-gray-400">{formatDateFr(p.created_at)} · modifier</span>
+                  <span className="block line-clamp-1 whitespace-pre-wrap">{p.content}</span>
+                </button>
               ))}
             </div>
           )}
