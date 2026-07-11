@@ -31,10 +31,12 @@ export default async function ConsultationPage({ params }: { params: { id: strin
   const consultationType = Array.isArray(apt.consultation_type) ? apt.consultation_type[0] : apt.consultation_type
 
   // Données médicales pour le panneau gauche
-  const [notesRes, presRes, vitalsRes] = await Promise.all([
+  const [notesRes, presRes, vitalsRes, thisAptPresRes] = await Promise.all([
     supabase.from('consultation_notes').select('id, note, created_at, appointment_id').eq('patient_id', patient.id).order('created_at', { ascending: false }).limit(5),
     supabase.from('prescriptions').select('id, content, created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }).limit(3),
     supabase.from('vital_signs').select('id, values, measured_at').eq('patient_id', patient.id).order('measured_at', { ascending: false }).limit(3),
+    // Ordonnances rédigées PENDANT cette consultation (ce RDV)
+    supabase.from('prescriptions').select('id, content, created_at').eq('appointment_id', apt.id).order('created_at', { ascending: true }),
   ])
 
   // Note déjà saisie pour CE rdv (édition)
@@ -55,6 +57,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       patient={patient}
       recentNotes={notesRes.data ?? []}
       recentPrescriptions={presRes.data ?? []}
+      consultationPrescriptions={thisAptPresRes.data ?? []}
       recentVitals={vitalsRes.data ?? []}
       existingNoteId={existingNote?.id ?? null}
       existingNote={existingNote?.note ?? ''}

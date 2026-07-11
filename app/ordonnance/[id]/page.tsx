@@ -7,7 +7,7 @@ import { OrdonnanceEditor } from './OrdonnanceEditor'
 
 interface Props {
   params: { id: string }
-  searchParams: { back?: string }
+  searchParams: { back?: string; new?: string }
 }
 
 export const dynamic = 'force-dynamic'
@@ -38,15 +38,19 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
 
   const patient = Array.isArray(apt.patient) ? apt.patient[0] : apt.patient
 
-  // Ordonnance existante pour ce RDV (édition) — la plus récente
-  const { data: existing } = await supabase
-    .from('prescriptions')
-    .select('id, content')
-    .eq('appointment_id', apt.id)
-    .eq('doctor_id', doctor.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // ?new=1 → forcer une NOUVELLE ordonnance (plusieurs par consultation).
+  // Sinon, on édite la plus récente de ce RDV.
+  const forceNew = searchParams.new === '1'
+  const { data: existing } = forceNew
+    ? { data: null }
+    : await supabase
+        .from('prescriptions')
+        .select('id, content')
+        .eq('appointment_id', apt.id)
+        .eq('doctor_id', doctor.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
   const favorites = ((doctor.prescription_favorites as string[] | null) ?? []).filter((f) => typeof f === 'string')
   const recentLines = await getRecentPrescriptionLines(supabase, doctor.id, favorites)

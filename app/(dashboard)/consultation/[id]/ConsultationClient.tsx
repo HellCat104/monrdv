@@ -19,7 +19,7 @@ interface Patient { id: string; first_name: string; last_name: string; age?: num
 
 export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, hasInvoice, defaultPrice,
-  patient, recentNotes, recentPrescriptions, recentVitals,
+  patient, recentNotes, recentPrescriptions, consultationPrescriptions, recentVitals,
   existingNoteId, existingNote, vitalDefs, vitalDefsAll,
 }: {
   doctorId: string
@@ -31,6 +31,7 @@ export default function ConsultationClient({
   patient: Patient
   recentNotes: Row[]
   recentPrescriptions: Row[]
+  consultationPrescriptions: Row[]
   recentVitals: Row[]
   existingNoteId: string | null
   existingNote: string
@@ -244,6 +245,41 @@ export default function ConsultationClient({
             />
           </div>
 
+          {/* Ordonnances de cette consultation (plusieurs possibles) */}
+          <div className="bg-white border border-gray-100 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <Pill className="h-4 w-4 text-primary-500" /> Ordonnances de la consultation ({consultationPrescriptions.length})
+              </h3>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => goTo(`/ordonnance/${appointmentId}?new=1&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Nouvelle
+              </Button>
+            </div>
+            {consultationPrescriptions.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">Aucune ordonnance. Cliquez « Nouvelle » pour en rédiger une (vous pouvez en faire plusieurs).</p>
+            ) : (
+              <div className="space-y-1.5">
+                {consultationPrescriptions.map((p, i) => (
+                  <button
+                    key={p.id}
+                    onClick={() => goTo(`/ordonnance/p/${p.id}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
+                    className="w-full text-left flex items-start gap-2 rounded-lg border border-gray-100 hover:border-primary-300 hover:bg-primary-50/40 p-2.5 transition-colors"
+                    title="Modifier cette ordonnance"
+                  >
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary-100 text-primary-600 text-[11px] font-semibold flex items-center justify-center mt-0.5">{i + 1}</span>
+                    <span className="min-w-0">
+                      <span className="block text-xs text-gray-800 line-clamp-2 whitespace-pre-wrap">{p.content}</span>
+                      <span className="block text-[11px] text-primary-500 mt-0.5">Modifier</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {vitalDefs.length > 0 && (
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Activity className="h-4 w-4 text-primary-500" /> Constantes du jour</h3>
@@ -272,8 +308,8 @@ export default function ConsultationClient({
           <div className="bg-white border border-gray-100 rounded-xl p-3 space-y-2 sticky top-4">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">Actions</p>
 
-            <button onClick={() => goTo(`/ordonnance/${appointmentId}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
-              <Pill className="h-4 w-4 text-primary-500" /> Ordonnance
+            <button onClick={() => goTo(`/ordonnance/${appointmentId}?new=1&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+              <Pill className="h-4 w-4 text-primary-500" /> Nouvelle ordonnance
             </button>
 
             <button onClick={() => goTo(`/patients?certificat=${patient.id}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
