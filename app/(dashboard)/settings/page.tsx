@@ -13,7 +13,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals, type VitalDef } from '@/types'
-import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity } from 'lucide-react'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 
 export default function SettingsPage() {
@@ -57,6 +57,7 @@ export default function SettingsPage() {
   const [newVitalUnit, setNewVitalUnit] = useState('')
   // Spécialités additionnelles (en plus de la principale)
   const [extraSpecs, setExtraSpecs] = useState<string[]>([])
+  const [specPickerKey, setSpecPickerKey] = useState(0)
   const supabase = createClient()
 
   useEffect(() => {
@@ -481,23 +482,42 @@ export default function SettingsPage() {
                 ajoutez-les ici : vous apparaîtrez dans la recherche sous chacune, et le patient
                 choisira la spécialité à la réservation.
               </p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {SPECIALITES_LIST.filter((s) => s !== form.specialty && s !== 'Autre').map((s) => {
-                  const on = extraSpecs.includes(s)
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setExtraSpecs((prev) => on ? prev.filter((x) => x !== s) : [...prev, s])}
-                      className={`text-xs font-medium rounded-full px-3 py-1.5 border transition-colors ${
-                        on ? 'bg-primary-500 text-white border-primary-500' : 'bg-white text-gray-500 border-gray-200 hover:border-primary-300'
-                      }`}
-                    >
-                      {on ? '✓ ' : '+ '}{s}
-                    </button>
-                  )
-                })}
-              </div>
+              {/* Menu déroulant pour ajouter (remonté à chaque ajout pour réafficher le placeholder) */}
+              <Select
+                key={specPickerKey}
+                onValueChange={(v) => {
+                  setExtraSpecs((prev) => (prev.includes(v) ? prev : [...prev, v]))
+                  setSpecPickerKey((k) => k + 1)
+                }}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Ajouter une spécialité…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SPECIALITES_LIST
+                    .filter((s) => s !== form.specialty && s !== 'Autre' && !extraSpecs.includes(s))
+                    .map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+
+              {/* Spécialités choisies — étiquettes supprimables */}
+              {extraSpecs.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {extraSpecs.map((s) => (
+                    <span key={s} className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full pl-3 pr-1.5 py-1 bg-primary-50 text-primary-700 border border-primary-200">
+                      {s}
+                      <button
+                        type="button"
+                        onClick={() => setExtraSpecs((prev) => prev.filter((x) => x !== s))}
+                        className="rounded-full hover:bg-primary-200 p-0.5"
+                        aria-label={`Retirer ${s}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">
