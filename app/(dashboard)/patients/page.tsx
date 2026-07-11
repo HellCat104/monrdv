@@ -1304,11 +1304,21 @@ export default function PatientsPage() {
 
               {/* Ordonnances */}
               <div className="border-t border-gray-100 pt-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
-                  <Pill className="h-4 w-4 text-primary-500" /> Ordonnances ({prescriptions.length})
-                </h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                    <Pill className="h-4 w-4 text-primary-500" /> Ordonnances ({prescriptions.length})
+                  </h4>
+                  {selectedPatient && (
+                    <a
+                      href={`/ordonnance/patient/${selectedPatient.id}?back=${encodeURIComponent(`/patients?patient=${selectedPatient.id}`)}`}
+                      className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 bg-primary-50 border border-primary-100 rounded-lg px-2.5 py-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Nouvelle ordonnance
+                    </a>
+                  )}
+                </div>
                 {prescriptions.length === 0 ? (
-                  <p className="text-xs text-gray-400 italic">Aucune ordonnance. Créez-en une depuis l&apos;agenda (bouton « Ordonnance » d&apos;un RDV).</p>
+                  <p className="text-xs text-gray-400 italic">Aucune ordonnance. Cliquez sur « Nouvelle ordonnance » ci-dessus.</p>
                 ) : (
                   <div className="space-y-2">
                     {prescriptions.map((p) => (

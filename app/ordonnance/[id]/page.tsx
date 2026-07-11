@@ -7,11 +7,12 @@ import { OrdonnanceEditor } from './OrdonnanceEditor'
 
 interface Props {
   params: { id: string }
+  searchParams: { back?: string }
 }
 
 export const dynamic = 'force-dynamic'
 
-export default async function OrdonnancePage({ params }: Props) {
+export default async function OrdonnancePage({ params, searchParams }: Props) {
   const supabase = createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -60,6 +61,13 @@ export default async function OrdonnancePage({ params }: Props) {
       existingContent={existing?.content ?? ''}
       favorites={favorites}
       recentLines={recentLines}
+      backHref={safeBack(searchParams.back)}
     />
   )
+}
+
+// N'accepte qu'un chemin interne (évite les redirections ouvertes)
+function safeBack(back?: string): string | undefined {
+  if (back && back.startsWith('/') && !back.startsWith('//')) return back
+  return undefined
 }
