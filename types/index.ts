@@ -82,7 +82,8 @@ export interface Patient {
   chronic_conditions?: string | null      // maladies chroniques
   surgeries?: string | null               // antécédents chirurgicaux
   current_treatments?: string | null      // traitements de fond
-  vaccinations?: string | null            // vaccins / statut vaccinal
+  vaccinations?: string | null            // vaccins / statut vaccinal (texte libre)
+  vaccines?: Record<string, string> | null // calendrier vaccinal structuré (pédiatrie)
   notes?: string | null
   created_at: string
 }
