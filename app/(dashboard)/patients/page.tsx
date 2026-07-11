@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import DentalChart from '@/components/dashboard/DentalChart'
+import GrowthChart from '@/components/dashboard/GrowthChart'
 import { isDentalDoctor } from '@/lib/dental'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -1284,6 +1285,17 @@ export default function PatientsPage() {
               {/* Schéma dentaire — uniquement pour les dentistes */}
               {selectedPatient && doctorId && isDentalDoctor(doctorSpecialties) && (
                 <DentalChart key={selectedPatient.id} patientId={selectedPatient.id} doctorId={doctorId} />
+              )}
+
+              {/* Courbe de croissance — pédiatres, si date de naissance renseignée */}
+              {selectedPatient && isPediatricDoctor(doctorSpecialties) && (
+                editBirthDate
+                  ? <GrowthChart key={selectedPatient.id} birthDate={editBirthDate} vitals={vitals} />
+                  : (
+                    <div className="border-t border-gray-100 pt-4">
+                      <p className="text-xs text-gray-400 italic">Renseignez la <b>date de naissance</b> ci-dessus pour afficher la courbe de croissance.</p>
+                    </div>
+                  )
               )}
 
               {/* Notes de consultation datées (timeline) */}
