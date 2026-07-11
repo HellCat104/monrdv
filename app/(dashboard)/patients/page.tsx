@@ -53,6 +53,7 @@ export default function PatientsPage() {
   const [editAge, setEditAge] = useState<string>('')
   const [editCin, setEditCin] = useState<string>('')
   const [editMutuelle, setEditMutuelle] = useState<string>('')
+  const [mutuelleOther, setMutuelleOther] = useState(false)
   const [editNotes, setEditNotes] = useState<string>('')
   const [editAllergies, setEditAllergies] = useState<string>('')
   const [editChronic, setEditChronic] = useState<string>('')
@@ -178,6 +179,8 @@ export default function PatientsPage() {
     setEditAge(patient.age != null ? String(patient.age) : '')
     setEditCin(patient.cin ?? '')
     setEditMutuelle(patient.mutuelle ?? '')
+    // Mutuelle hors liste standard → mode « Autre » (saisie libre)
+    setMutuelleOther(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
     setEditNotes(patient.notes ?? '')
     setEditAllergies(patient.allergies ?? '')
     setEditChronic(patient.chronic_conditions ?? '')
@@ -1017,7 +1020,7 @@ export default function PatientsPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs text-gray-500">CIN</label>
+                    <label className="text-xs text-gray-500">CIN (carte d&apos;identité)</label>
                     <Input
                       value={editCin}
                       onChange={(e) => setEditCin(e.target.value.toUpperCase())}
@@ -1026,12 +1029,27 @@ export default function PatientsPage() {
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs text-gray-500">Mutuelle</label>
-                    <Select value={editMutuelle || undefined} onValueChange={setEditMutuelle}>
+                    <Select
+                      value={mutuelleOther ? 'Autre' : (editMutuelle || undefined)}
+                      onValueChange={(v) => {
+                        if (v === 'Autre') { setMutuelleOther(true); setEditMutuelle('') }
+                        else { setMutuelleOther(false); setEditMutuelle(v) }
+                      }}
+                    >
                       <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
                       <SelectContent>
                         {MUTUELLES_MAROC.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        <SelectItem value="Autre">Autre…</SelectItem>
                       </SelectContent>
                     </Select>
+                    {mutuelleOther && (
+                      <Input
+                        value={editMutuelle}
+                        onChange={(e) => setEditMutuelle(e.target.value)}
+                        placeholder="Précisez la mutuelle"
+                        className="mt-1.5"
+                      />
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1.5">
