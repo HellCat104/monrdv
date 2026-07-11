@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
-import { allVitalDefs, resolveEnabledVitals, type VitalDef } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, type VitalDef } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw } from 'lucide-react'
@@ -51,6 +51,8 @@ export default function PatientsPage() {
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [editAge, setEditAge] = useState<string>('')
+  const [editCin, setEditCin] = useState<string>('')
+  const [editMutuelle, setEditMutuelle] = useState<string>('')
   const [editNotes, setEditNotes] = useState<string>('')
   const [editAllergies, setEditAllergies] = useState<string>('')
   const [editChronic, setEditChronic] = useState<string>('')
@@ -174,6 +176,8 @@ export default function PatientsPage() {
   async function openPatientHistory(patient: PatientWithStats) {
     setSelectedPatient(patient)
     setEditAge(patient.age != null ? String(patient.age) : '')
+    setEditCin(patient.cin ?? '')
+    setEditMutuelle(patient.mutuelle ?? '')
     setEditNotes(patient.notes ?? '')
     setEditAllergies(patient.allergies ?? '')
     setEditChronic(patient.chronic_conditions ?? '')
@@ -493,6 +497,8 @@ export default function PatientsPage() {
     setSaving(true)
     const updates = {
       age: editAge ? Number(editAge) : null,
+      cin: editCin.trim() ? editCin.trim().toUpperCase() : null,
+      mutuelle: editMutuelle.trim() || null,
       notes: editNotes || null,
       allergies: editAllergies || null,
       chronic_conditions: editChronic || null,
@@ -998,17 +1004,35 @@ export default function PatientsPage() {
               {/* Fiche patient */}
               <div className="space-y-3">
                 <h4 className="text-sm font-semibold text-gray-700">Fiche patient (privée)</h4>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-500">Âge</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={120}
-                    value={editAge}
-                    onChange={(e) => setEditAge(e.target.value)}
-                    placeholder="Ex: 35"
-                    className="w-28"
-                  />
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-500">Âge</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={120}
+                      value={editAge}
+                      onChange={(e) => setEditAge(e.target.value)}
+                      placeholder="Ex: 35"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-500">CIN</label>
+                    <Input
+                      value={editCin}
+                      onChange={(e) => setEditCin(e.target.value.toUpperCase())}
+                      placeholder="AB123456"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-500">Mutuelle</label>
+                    <Select value={editMutuelle || undefined} onValueChange={setEditMutuelle}>
+                      <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
+                      <SelectContent>
+                        {MUTUELLES_MAROC.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs text-gray-500 flex items-center gap-1.5">
