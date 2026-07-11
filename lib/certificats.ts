@@ -64,7 +64,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
     extraField: { key: 'destinataire', label: 'Confrère destinataire', type: 'text', placeholder: 'Dr. X, cardiologue' },
     build: (p, d, dest) =>
       `Cher confrère,\n\nJe vous adresse ${identite(p)} pour avis spécialisé et prise en charge.\n\n` +
-      `Motif d'adressage et renseignements cliniques :\n…\n\n` +
+      `Motif d'adressage et renseignements cliniques :\n\n\n` +
       `Vous remerciant de votre retour, veuillez agréer, cher confrère, mes salutations confraternelles.\n\n` +
       `À l'attention de : ${dest || '…'}\nDr. ${d.name} — le ${formatDateFr(new Date())}`,
   },
@@ -73,7 +73,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
     title: 'Demande d’analyses',
     build: (p, d) =>
       `Demande d'examens biologiques pour :\n\n${identite(p)}\n\n` +
-      `Examens demandés :\n- NFS\n- Glycémie à jeun\n- Bilan lipidique (CT, HDL, LDL, TG)\n- Créatinine\n- TSH\n\n(Adaptez la liste ci-dessus.)\n\n` +
+      `Examens demandés :\n\n\n` +
       `Dr. ${d.name} — le ${formatDateFr(new Date())}`,
   },
   {
@@ -81,7 +81,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
     title: 'Certificat libre',
     build: (p, d) =>
       entete(d).replace('{PATIENT}', identite(p)) +
-      `…\n(Rédigez librement le contenu de ce certificat.)` +
+      `\n\n` +
       pied(),
   },
 ]
