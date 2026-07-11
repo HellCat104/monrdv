@@ -51,7 +51,8 @@ export default function ConsultationClient({
 
   const [paid, setPaid] = useState(appointmentPaid)
   const [paidAmount, setPaidAmount] = useState<number | null>(amountPaid)
-  const [payAmount, setPayAmount] = useState<string>(defaultPrice != null ? String(defaultPrice) : '')
+  const [payDue, setPayDue] = useState<string>(defaultPrice != null ? String(defaultPrice) : '')
+  const [payPaid, setPayPaid] = useState<string>(defaultPrice != null ? String(defaultPrice) : '')
   const [payMethod, setPayMethod] = useState<string>('especes')
   const [payingNow, setPayingNow] = useState(false)
   const [finishing, setFinishing] = useState(false)
@@ -115,15 +116,17 @@ export default function ConsultationClient({
   }
 
   async function encaisser() {
-    const amount = parseFloat(payAmount.replace(',', '.'))
-    if (!Number.isFinite(amount) || amount < 0) { alert('Entrez un montant valide.'); return }
+    const paidVal = parseFloat(payPaid.replace(',', '.'))
+    if (!Number.isFinite(paidVal) || paidVal < 0) { alert('Entrez un montant encaissé valide.'); return }
+    const dueVal = payDue.trim() === '' ? paidVal : parseFloat(payDue.replace(',', '.'))
+    if (!Number.isFinite(dueVal) || dueVal < 0) { alert('Total dû invalide.'); return }
     setPayingNow(true)
     const { error } = await supabase
       .from('appointments')
-      .update({ amount_paid: amount, amount_due: amount, payment_method: payMethod, paid_at: new Date().toISOString() })
+      .update({ amount_paid: paidVal, amount_due: dueVal, payment_method: payMethod, paid_at: new Date().toISOString() })
       .eq('id', appointmentId)
     setPayingNow(false)
-    if (!error) { setPaid(true); setPaidAmount(amount) }
+    if (!error) { setPaid(true); setPaidAmount(paidVal) }
     else alert('L\'encaissement a échoué. Réessayez.')
   }
 
@@ -328,17 +331,43 @@ export default function ConsultationClient({
             ) : (
               <div className="border border-gray-200 rounded-lg p-3 space-y-2">
                 <p className="text-xs font-medium text-gray-600 flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5 text-green-500" /> Encaisser</p>
-                <div className="relative">
-                  <Input
-                    type="number" inputMode="decimal" min="0" step="any"
-                    value={payAmount}
-                    onChange={(e) => setPayAmount(e.target.value)}
-                    placeholder="Montant"
-                    className="pr-9 text-sm"
-                    aria-label="Montant à encaisser"
-                  />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">DH</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-gray-500">Total dû</label>
+                    <div className="relative">
+                      <Input type="number" inputMode="decimal" min="0" step="any" value={payDue}
+                        onChange={(e) => setPayDue(e.target.value)} placeholder="0" className="pr-8 text-sm" aria-label="Total dû" />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">DH</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-gray-500">Encaissé</label>
+                    <div className="relative">
+                      <Input type="number" inputMode="decimal" min="0" step="any" value={payPaid}
+                        onChange={(e) => setPayPaid(e.target.value)} placeholder="0" className="pr-8 text-sm" aria-label="Encaissé" />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">DH</span>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Reste à payer + solder */}
+                {(() => {
+                  const due = parseFloat(payDue.replace(',', '.'))
+                  const paid = parseFloat(payPaid.replace(',', '.'))
+                  const reste = Math.round((due - paid) * 100) / 100
+                  if (Number.isFinite(due) && Number.isFinite(paid) && reste > 0) {
+                    return (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-orange-600 font-medium">Reste : {reste} DH</span>
+                        <button type="button" onClick={() => setPayPaid(payDue)} className="text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 hover:bg-green-100">
+                          Solder
+                        </button>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
+
                 <select
                   value={payMethod}
                   onChange={(e) => setPayMethod(e.target.value)}
@@ -349,13 +378,13 @@ export default function ConsultationClient({
                   <option value="cheque">Chèque</option>
                   <option value="virement">Virement</option>
                 </select>
-                <Button size="sm" className="w-full bg-green-600 hover:bg-green-700" onClick={encaisser} disabled={payingNow || !payAmount}>
+                <Button size="sm" className="w-full bg-green-600 hover:bg-green-700" onClick={encaisser} disabled={payingNow || !payPaid}>
                   {payingNow ? 'Enregistrement…' : 'Valider l\'encaissement'}
                 </Button>
               </div>
             )}
 
-            <p className="text-[11px] text-gray-400 px-1 pt-1">Pour un paiement partiel (acompte), utilisez « Encaisser » depuis l&apos;agenda.</p>
+            <p className="text-[11px] text-gray-400 px-1 pt-1">Pour un acompte, mettez « Encaissé » inférieur au « Total dû ».</p>
           </div>
         </aside>
       </div>
