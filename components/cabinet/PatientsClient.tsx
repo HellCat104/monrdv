@@ -23,6 +23,7 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
   // Création
   const [addOpen, setAddOpen] = useState(false)
   const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', age: '', cin: '', mutuelle: '' })
+  const [mutuelleOther, setMutuelleOther] = useState(false)
   const [saving, setSaving] = useState(false)
   const [addError, setAddError] = useState('')
 
@@ -70,6 +71,7 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
       setPatients((prev) => [d.patient, ...prev])
       setAddOpen(false)
       setForm({ first_name: '', last_name: '', phone: '', age: '', cin: '', mutuelle: '' })
+      setMutuelleOther(false)
     } finally {
       setSaving(false)
     }
@@ -209,12 +211,27 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
               </div>
               <div className="space-y-1.5">
                 <Label>Mutuelle</Label>
-                <Select value={form.mutuelle || undefined} onValueChange={(v) => setForm({ ...form, mutuelle: v })}>
+                <Select
+                  value={mutuelleOther ? 'Autre' : (form.mutuelle || undefined)}
+                  onValueChange={(v) => {
+                    if (v === 'Autre') { setMutuelleOther(true); setForm((f) => ({ ...f, mutuelle: '' })) }
+                    else { setMutuelleOther(false); setForm((f) => ({ ...f, mutuelle: v })) }
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
                   <SelectContent>
                     {MUTUELLES_MAROC.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    <SelectItem value="Autre">Autre…</SelectItem>
                   </SelectContent>
                 </Select>
+                {mutuelleOther && (
+                  <Input
+                    value={form.mutuelle}
+                    onChange={(e) => setForm({ ...form, mutuelle: e.target.value })}
+                    placeholder="Précisez la mutuelle"
+                    className="mt-1.5"
+                  />
+                )}
               </div>
             </div>
             {addError && <p className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">{addError}</p>}
