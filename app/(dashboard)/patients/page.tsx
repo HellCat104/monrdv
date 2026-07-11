@@ -153,12 +153,16 @@ export default function PatientsPage() {
     setPatients(enriched)
     setLoading(false)
 
-    // Ouvre automatiquement une fiche si ?patient=<id> est dans l'URL
+    // Ouvre automatiquement une fiche si ?patient=<id> ou ?certificat=<id>
     const params = new URLSearchParams(window.location.search)
-    const patientId = params.get('patient')
+    const patientId = params.get('patient') || params.get('certificat')
     if (patientId) {
       const target = enriched.find((p) => p.id === patientId)
-      if (target) openPatientHistory(target)
+      if (target) {
+        await openPatientHistory(target)
+        // ?certificat=<id> → ouvre directement le dialog « Nouveau certificat »
+        if (params.get('certificat')) setTimeout(() => openCertDialog(), 400)
+      }
     }
   }
 

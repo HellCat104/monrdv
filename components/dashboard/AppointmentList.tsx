@@ -10,7 +10,63 @@ import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMeth
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Phone, Clock, UserCheck, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2 } from 'lucide-react'
+import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle } from 'lucide-react'
+
+// Élément du menu « ⋯ » d'une carte RDV
+export interface MoreMenuItem {
+  label: string
+  icon: typeof MoreHorizontal
+  href?: string
+  onClick?: () => void
+  danger?: boolean
+}
+
+// Petit menu déroulant maison (pas de dépendance) pour les actions occasionnelles
+function MoreMenu({ items }: { items: MoreMenuItem[] }) {
+  const [open, setOpen] = useState(false)
+  if (items.length === 0) return null
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Plus d'actions"
+        className="flex items-center justify-center h-6 w-7 rounded-full border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600 transition-colors"
+      >
+        <MoreHorizontal className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <>
+          {/* clic à l'extérieur = fermer */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-7 z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1">
+            {items.map(({ label, icon: Icon, href, onClick, danger }) => (
+              href ? (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-gray-600 hover:bg-gray-50"
+                >
+                  <Icon className="h-3.5 w-3.5 text-gray-400" /> {label}
+                </a>
+              ) : (
+                <button
+                  key={label}
+                  onClick={() => { setOpen(false); onClick?.() }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-50 ${danger ? 'text-red-600' : 'text-gray-600'}`}
+                >
+                  <Icon className={`h-3.5 w-3.5 ${danger ? 'text-red-400' : 'text-gray-400'}`} /> {label}
+                </button>
+              )
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 export interface PaymentPayload {
   amount_paid: number | null
@@ -79,12 +135,6 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
 
   async function handleAttendance(id: string, attendance: AppointmentAttendance) {
     await onAttendanceChange?.(id, attendance)
-  }
-
-  // "Patient arrivé" → marque présent puis ouvre directement la fiche patient
-  async function handleArrived(apt: Appointment) {
-    await onAttendanceChange?.(apt.id, 'present')
-    if (apt.patient_id) onViewPatient?.(apt.patient_id)
   }
 
   // Ouvre le dialog en pré-remplissant depuis le RDV (et le tarif du motif)
@@ -212,121 +262,106 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 })()}
               </div>
 
-              {/* Patient arrivé + Payé — actions rapides du jour */}
+              {/* Actions du jour — un bouton principal selon l'étape + menu ⋯ */}
               {apt.status === 'confirmed' && (
-                <div className="flex gap-1.5 mt-2 flex-wrap max-w-full">
-                  {onAttendanceChange && (
+                <div className="flex gap-1.5 mt-2 flex-wrap max-w-full items-center">
+                  {/* Étape 1 : le patient n'est pas encore là */}
+                  {apt.attendance !== 'present' && onAttendanceChange && (
                     <button
-                      onClick={() => handleArrived(apt)}
+                      onClick={() => handleAttendance(apt.id, 'present')}
                       className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium"
                     >
                       <DoorOpen className="h-3 w-3" /> Patient arrivé
                     </button>
                   )}
-                  {onPayment && (
-                    <button
-                      onClick={() => openPayDialog(apt)}
-                      className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors font-medium ${
-                        apt.amount_paid != null
-                          ? (paymentStatus(apt) === 'partial'
-                              ? 'bg-orange-100 text-orange-700 border-orange-200'
-                              : 'bg-green-100 text-green-700 border-green-200')
-                          : 'border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-600'
-                      }`}
-                    >
-                      <Wallet className="h-3 w-3" /> {apt.amount_paid != null ? 'Encaissement' : 'Encaisser'}
-                    </button>
-                  )}
-                  {apt.patient_id && (
-                    <a
-                      href={`/ordonnance/${apt.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-primary-300 hover:text-primary-600 transition-colors font-medium"
-                    >
-                      <FileText className="h-3 w-3" /> Ordonnance
-                    </a>
-                  )}
-                  {apt.amount_paid != null && (
-                    <a
-                      href={`/facture/${apt.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-primary-300 hover:text-primary-600 transition-colors font-medium"
-                    >
-                      <Printer className="h-3 w-3" /> Facture
-                    </a>
-                  )}
-                  {apt.invoice_no && (
-                    <button
-                      onClick={() => {
-                        setCreditDone(null); setCreditError('')
-                        setCreditDialog({
-                          open: true, id: apt.id, invoiceNo: apt.invoice_no!,
-                          amount: apt.amount_paid != null ? String(apt.amount_paid) : '',
-                          reason: '',
-                        })
-                      }}
-                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600 transition-colors font-medium"
-                    >
-                      <Undo2 className="h-3 w-3" /> Avoir
-                    </button>
-                  )}
-                </div>
-              )}
 
-              {/* Boutons présence — uniquement pour les RDV confirmés */}
-              {apt.status === 'confirmed' && onAttendanceChange && (
-                <div className="flex gap-1.5 mt-2 flex-wrap max-w-full">
-                  <button
-                    onClick={() => handleAttendance(apt.id, apt.attendance === 'present' ? null : 'present')}
-                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${
-                      apt.attendance === 'present'
-                        ? 'bg-green-100 text-green-700 border-green-200'
-                        : 'border-gray-200 text-gray-400 hover:border-green-200 hover:text-green-600'
-                    }`}
-                  >
-                    <UserCheck className="h-3 w-3" /> Présent
-                  </button>
-                  <button
-                    onClick={() => handleAttendance(apt.id, apt.attendance === 'late' ? null : 'late')}
-                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${
-                      apt.attendance === 'late'
-                        ? 'bg-orange-100 text-orange-700 border-orange-200'
-                        : 'border-gray-200 text-gray-400 hover:border-orange-200 hover:text-orange-600'
-                    }`}
-                  >
-                    <Timer className="h-3 w-3" /> Retard
-                  </button>
-                  <button
-                    onClick={() => handleAttendance(apt.id, apt.attendance === 'absent' ? null : 'absent')}
-                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${
-                      apt.attendance === 'absent'
-                        ? 'bg-red-100 text-red-700 border-red-200'
-                        : 'border-gray-200 text-gray-400 hover:border-red-200 hover:text-red-600'
-                    }`}
-                  >
-                    <UserX className="h-3 w-3" /> Absent
-                  </button>
+                  {/* Étape 2 : présent → la consultation devient l'action principale */}
+                  {apt.attendance === 'present' && apt.patient_id && (
+                    <a
+                      href={`/consultation/${apt.id}`}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium"
+                    >
+                      <Play className="h-3 w-3" /> Consultation
+                    </a>
+                  )}
+
+                  {/* Encaissement : bouton tant que non payé, badge-état ensuite */}
+                  {onPayment && (
+                    apt.amount_paid == null ? (
+                      <button
+                        onClick={() => openPayDialog(apt)}
+                        className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-600 transition-colors font-medium"
+                      >
+                        <Wallet className="h-3 w-3" /> Encaisser
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => openPayDialog(apt)}
+                        title="Modifier l'encaissement"
+                        className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors font-medium ${
+                          paymentStatus(apt) === 'partial'
+                            ? 'bg-orange-100 text-orange-700 border-orange-200'
+                            : 'bg-green-100 text-green-700 border-green-200'
+                        }`}
+                      >
+                        <Wallet className="h-3 w-3" />
+                        {paymentStatus(apt) === 'partial' ? `${apt.amount_paid}/${apt.amount_due} DH` : `✓ ${apt.amount_paid} DH`}
+                      </button>
+                    )
+                  )}
+
+                  {/* Menu ⋯ : actions occasionnelles */}
+                  <MoreMenu
+                    items={[
+                      apt.patient_id ? { label: 'Ordonnance', icon: FileText, href: `/ordonnance/${apt.id}` } : null,
+                      apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
+                      apt.invoice_no ? {
+                        label: 'Émettre un avoir', icon: Undo2,
+                        onClick: () => {
+                          setCreditDone(null); setCreditError('')
+                          setCreditDialog({
+                            open: true, id: apt.id, invoiceNo: apt.invoice_no!,
+                            amount: apt.amount_paid != null ? String(apt.amount_paid) : '',
+                            reason: '',
+                          })
+                        },
+                      } : null,
+                      onAttendanceChange ? {
+                        label: apt.attendance === 'late' ? 'Retirer « en retard »' : 'Marquer en retard', icon: Timer,
+                        onClick: () => handleAttendance(apt.id, apt.attendance === 'late' ? null : 'late'),
+                      } : null,
+                      onAttendanceChange ? {
+                        label: apt.attendance === 'absent' ? 'Retirer « absent »' : 'Marquer absent', icon: UserX,
+                        onClick: () => handleAttendance(apt.id, apt.attendance === 'absent' ? null : 'absent'),
+                      } : null,
+                      onAttendanceChange && apt.attendance ? {
+                        label: 'Réinitialiser la présence', icon: RotateCcw,
+                        onClick: () => handleAttendance(apt.id, null),
+                      } : null,
+                      onStatusChange ? {
+                        label: 'Annuler le RDV', icon: XCircle, danger: true,
+                        onClick: () => setConfirmDialog({ open: true, id: apt.id, action: 'cancelled', label: 'annuler' }),
+                      } : null,
+                    ].filter(Boolean) as MoreMenuItem[]}
+                  />
                 </div>
               )}
             </div>
 
             {/* Actions droite */}
             <div className="flex flex-col gap-1.5 shrink-0 items-end">
-              {/* Confirmer / Annuler */}
-              {apt.status !== 'cancelled' && onStatusChange && (
+              {/* Confirmer / Annuler — seulement pour les RDV en attente
+                  (pour les confirmés, « Annuler le RDV » est dans le menu ⋯) */}
+              {apt.status === 'pending' && onStatusChange && (
                 <div className="flex gap-2">
-                  {apt.status === 'pending' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-green-600 border-green-200 hover:bg-green-50 h-8 px-2 text-xs"
-                      onClick={() => setConfirmDialog({ open: true, id: apt.id, action: 'confirmed', label: 'confirmer' })}
-                    >
-                      Confirmer
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-green-600 border-green-200 hover:bg-green-50 h-8 px-2 text-xs"
+                    onClick={() => setConfirmDialog({ open: true, id: apt.id, action: 'confirmed', label: 'confirmer' })}
+                  >
+                    Confirmer
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
