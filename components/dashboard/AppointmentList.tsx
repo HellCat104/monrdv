@@ -10,7 +10,7 @@ import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMeth
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle, Check } from 'lucide-react'
+import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle, Check, Pill } from 'lucide-react'
 
 // Élément du menu « ⋯ » d'une carte RDV
 export interface MoreMenuItem {
@@ -225,8 +225,34 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   <summary className="text-xs font-medium text-primary-600 cursor-pointer select-none list-none flex items-center gap-1">
                     <FileText className="h-3.5 w-3.5" /> Résumé de la consultation
                   </summary>
-                  <div className="mt-1.5 text-xs text-gray-700 whitespace-pre-wrap bg-white border border-gray-100 rounded-lg p-2.5">
-                    {apt.consultation_summary?.trim() ? apt.consultation_summary : <span className="text-gray-400 italic">Aucune note de consultation enregistrée.</span>}
+                  <div className="mt-1.5 bg-white border border-gray-100 rounded-lg p-2.5 space-y-2">
+                    {/* Note */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Note</p>
+                      <p className="text-xs text-gray-700 whitespace-pre-wrap">
+                        {apt.consultation_summary?.trim() ? apt.consultation_summary : <span className="text-gray-400 italic">Aucune note.</span>}
+                      </p>
+                    </div>
+
+                    {/* Ordonnances */}
+                    {(apt.consultation_prescriptions?.length ?? 0) > 0 && (
+                      <div className="border-t border-gray-50 pt-1.5">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 flex items-center gap-1"><Pill className="h-3 w-3" /> Ordonnances</p>
+                        {apt.consultation_prescriptions!.map((p) => (
+                          <a key={p.id} href={`/ordonnance/p/${p.id}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-gray-600 hover:text-primary-600 truncate">• {p.content.replace(/\n/g, ' · ')}</a>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Certificats */}
+                    {(apt.consultation_certificates?.length ?? 0) > 0 && (
+                      <div className="border-t border-gray-50 pt-1.5">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 flex items-center gap-1"><FileText className="h-3 w-3" /> Certificats</p>
+                        {apt.consultation_certificates!.map((c) => (
+                          <a key={c.id} href={`/certificat/${c.id}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-gray-600 hover:text-primary-600 truncate">• {c.title}{c.motif ? ` (${c.motif})` : ''}</a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </details>
               </div>

@@ -315,7 +315,7 @@ export default function ConsultationClient({
               <Pill className="h-4 w-4 text-primary-500" /> Nouvelle ordonnance
             </button>
 
-            <button onClick={() => goTo(`/certificat/nouveau/${patient.id}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+            <button onClick={() => goTo(`/certificat/nouveau/${patient.id}?apt=${appointmentId}&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
               <FileText className="h-4 w-4 text-primary-500" /> Certificat
             </button>
 

@@ -83,16 +83,32 @@ export default function AppointmentsPage() {
       const { data } = await query
       let list = data ?? []
 
-      // Pour les RDV clôturés (parti), charge la note de consultation (résumé)
+      // RDV clôturés (parti) : charge note + ordonnances + certificats (résumé)
       const doneIds = list.filter((a: Appointment) => a.queue_status === 'parti').map((a: Appointment) => a.id)
       if (doneIds.length > 0) {
-        const { data: notes } = await supabase
-          .from('consultation_notes')
-          .select('appointment_id, note')
-          .in('appointment_id', doneIds)
-        const byApt = new Map<string, string>()
-        for (const n of notes ?? []) if (n.appointment_id) byApt.set(n.appointment_id, n.note)
-        list = list.map((a: Appointment) => (a.queue_status === 'parti' ? { ...a, consultation_summary: byApt.get(a.id) ?? null } : a))
+        const [notesRes, presRes, certsRes] = await Promise.all([
+          supabase.from('consultation_notes').select('appointment_id, note').in('appointment_id', doneIds),
+          supabase.from('prescriptions').select('id, appointment_id, content').in('appointment_id', doneIds),
+          supabase.from('certificates').select('id, appointment_id, title, motif').in('appointment_id', doneIds),
+        ])
+        const noteBy = new Map<string, string>()
+        for (const n of notesRes.data ?? []) if (n.appointment_id) noteBy.set(n.appointment_id, n.note)
+        const presBy = new Map<string, { id: string; content: string }[]>()
+        for (const p of presRes.data ?? []) {
+          if (!p.appointment_id) continue
+          const arr = presBy.get(p.appointment_id) ?? []; arr.push({ id: p.id, content: p.content }); presBy.set(p.appointment_id, arr)
+        }
+        const certBy = new Map<string, { id: string; title: string; motif: string | null }[]>()
+        for (const c of certsRes.data ?? []) {
+          if (!c.appointment_id) continue
+          const arr = certBy.get(c.appointment_id) ?? []; arr.push({ id: c.id, title: c.title, motif: c.motif }); certBy.set(c.appointment_id, arr)
+        }
+        list = list.map((a: Appointment) => (a.queue_status === 'parti' ? {
+          ...a,
+          consultation_summary: noteBy.get(a.id) ?? null,
+          consultation_prescriptions: presBy.get(a.id) ?? [],
+          consultation_certificates: certBy.get(a.id) ?? [],
+        } : a))
       }
 
       setAppointments(list)

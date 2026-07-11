@@ -11,7 +11,7 @@ function safeBack(back?: string): string {
   return '/patients'
 }
 
-export default async function NewCertificatePage({ params, searchParams }: { params: { patientId: string }; searchParams: { back?: string } }) {
+export default async function NewCertificatePage({ params, searchParams }: { params: { patientId: string }; searchParams: { back?: string; apt?: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -32,6 +32,7 @@ export default async function NewCertificatePage({ params, searchParams }: { par
       doctorId={doctor.id}
       doctorName={doctor.name}
       patient={patient}
+      appointmentId={searchParams.apt ?? null}
       backHref={safeBack(searchParams.back)}
     />
   )

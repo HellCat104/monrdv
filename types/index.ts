@@ -250,7 +250,10 @@ export interface Appointment {
   paid_at?: string | null
   consent_at?: string | null
   queue_status?: string | null  // salle d'attente : arrive | en_consultation | parti
-  consultation_summary?: string | null // note de consultation (résumé, chargé pour l'agenda)
+  // Résumé de consultation (chargés pour l'agenda sur les RDV clôturés)
+  consultation_summary?: string | null                              // note de consultation
+  consultation_prescriptions?: { id: string; content: string }[]    // ordonnances du RDV
+  consultation_certificates?: { id: string; title: string; motif: string | null }[] // certificats du RDV
   created_at: string
   // Relations jointes
   patient?: Patient

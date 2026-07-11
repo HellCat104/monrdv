@@ -14,8 +14,8 @@ import { ArrowLeft, FileText, Printer } from 'lucide-react'
 
 interface Patient { id: string; first_name: string; last_name: string; age?: number | null; cin?: string | null }
 
-export default function NewCertificate({ doctorId, doctorName, patient, backHref }: {
-  doctorId: string; doctorName: string; patient: Patient; backHref: string
+export default function NewCertificate({ doctorId, doctorName, patient, appointmentId, backHref }: {
+  doctorId: string; doctorName: string; patient: Patient; appointmentId: string | null; backHref: string
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -53,6 +53,7 @@ export default function NewCertificate({ doctorId, doctorName, patient, backHref
       .insert({
         doctor_id: doctorId,
         patient_id: patient.id,
+        appointment_id: appointmentId,
         type,
         title: tpl?.title ?? 'Certificat',
         motif: motif.trim() || null,
