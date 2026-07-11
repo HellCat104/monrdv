@@ -50,6 +50,10 @@ export default function ConsultationClient({
 
   const [paid, setPaid] = useState(appointmentPaid)
   const [paidAmount, setPaidAmount] = useState<number | null>(amountPaid)
+  const [payAmount, setPayAmount] = useState<string>(defaultPrice != null ? String(defaultPrice) : '')
+  const [payMethod, setPayMethod] = useState<string>('especes')
+  const [payingNow, setPayingNow] = useState(false)
+  const [finishing, setFinishing] = useState(false)
 
   const vLabel = (k: string) => vitalDefsAll.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefsAll.find((v) => v.key === k)?.unit || ''
@@ -110,18 +114,33 @@ export default function ConsultationClient({
   }
 
   async function encaisser() {
-    const amount = defaultPrice ?? 0
+    const amount = parseFloat(payAmount.replace(',', '.'))
+    if (!Number.isFinite(amount) || amount < 0) { alert('Entrez un montant valide.'); return }
+    setPayingNow(true)
     const { error } = await supabase
       .from('appointments')
-      .update({ amount_paid: amount, amount_due: defaultPrice, payment_method: 'especes', paid_at: new Date().toISOString() })
+      .update({ amount_paid: amount, amount_due: amount, payment_method: payMethod, paid_at: new Date().toISOString() })
       .eq('id', appointmentId)
+    setPayingNow(false)
     if (!error) { setPaid(true); setPaidAmount(amount) }
+    else alert('L\'encaissement a échoué. Réessayez.')
   }
 
+  // Clôture le RDV : note enregistrée, patient marqué présent et « parti »
   async function terminer() {
-    if (note.trim() && noteState !== 'saved') await saveNote()
-    router.push('/appointments')
-    router.refresh()
+    setFinishing(true)
+    try {
+      if (note.trim()) await saveNote()
+      await supabase
+        .from('appointments')
+        .update({ attendance: 'present', queue_status: 'parti' })
+        .eq('id', appointmentId)
+      router.push('/appointments')
+      router.refresh()
+    } catch {
+      setFinishing(false)
+      alert('La clôture a échoué. Réessayez.')
+    }
   }
 
   return (
@@ -140,8 +159,8 @@ export default function ConsultationClient({
             <p className="text-xs text-gray-500">Consultation en cours</p>
           </div>
         </div>
-        <Button onClick={terminer}>
-          <CheckCircle2 className="h-4 w-4 mr-1.5" /> Terminer la consultation
+        <Button onClick={terminer} disabled={finishing}>
+          <CheckCircle2 className="h-4 w-4 mr-1.5" /> {finishing ? 'Clôture…' : 'Terminer la consultation'}
         </Button>
       </div>
 
@@ -262,22 +281,45 @@ export default function ConsultationClient({
             </button>
 
             {paid ? (
-              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
-                <Check className="h-4 w-4" /> Encaissé{paidAmount != null ? ` · ${paidAmount} DH` : ''}
-              </div>
+              <>
+                <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+                  <Check className="h-4 w-4" /> Encaissé{paidAmount != null ? ` · ${paidAmount} DH` : ''}
+                </div>
+                <a href={`/facture/${appointmentId}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+                  <Printer className="h-4 w-4 text-primary-500" /> Facture
+                </a>
+              </>
             ) : (
-              <button onClick={encaisser} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-green-300 hover:bg-green-50 transition-colors">
-                <Wallet className="h-4 w-4 text-green-500" /> Encaisser{defaultPrice != null ? ` ${defaultPrice} DH` : ''}
-              </button>
+              <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+                <p className="text-xs font-medium text-gray-600 flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5 text-green-500" /> Encaisser</p>
+                <div className="relative">
+                  <Input
+                    type="number" inputMode="decimal" min="0" step="any"
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                    placeholder="Montant"
+                    className="pr-9 text-sm"
+                    aria-label="Montant à encaisser"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">DH</span>
+                </div>
+                <select
+                  value={payMethod}
+                  onChange={(e) => setPayMethod(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                >
+                  <option value="especes">Espèces</option>
+                  <option value="carte">Carte</option>
+                  <option value="cheque">Chèque</option>
+                  <option value="virement">Virement</option>
+                </select>
+                <Button size="sm" className="w-full bg-green-600 hover:bg-green-700" onClick={encaisser} disabled={payingNow || !payAmount}>
+                  {payingNow ? 'Enregistrement…' : 'Valider l\'encaissement'}
+                </Button>
+              </div>
             )}
 
-            {paid && (
-              <a href={`/facture/${appointmentId}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
-                <Printer className="h-4 w-4 text-primary-500" /> Facture
-              </a>
-            )}
-
-            <p className="text-[11px] text-gray-400 px-1 pt-1">L&apos;encaissement rapide se fait en espèces au tarif du motif. Pour un paiement partiel ou un autre mode, utilisez « Encaisser » depuis l&apos;agenda.</p>
+            <p className="text-[11px] text-gray-400 px-1 pt-1">Pour un paiement partiel (acompte), utilisez « Encaisser » depuis l&apos;agenda.</p>
           </div>
         </aside>
       </div>
