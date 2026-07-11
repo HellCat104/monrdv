@@ -249,6 +249,8 @@ export interface Appointment {
   invoice_no?: string | null    // n° de facture séquentiel (F-AAAA-NNNN)
   paid_at?: string | null
   consent_at?: string | null
+  queue_status?: string | null  // salle d'attente : arrive | en_consultation | parti
+  consultation_summary?: string | null // note de consultation (résumé, chargé pour l'agenda)
   created_at: string
   // Relations jointes
   patient?: Patient

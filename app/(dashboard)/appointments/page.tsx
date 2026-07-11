@@ -81,7 +81,21 @@ export default function AppointmentsPage() {
       }
 
       const { data } = await query
-      setAppointments(data ?? [])
+      let list = data ?? []
+
+      // Pour les RDV clôturés (parti), charge la note de consultation (résumé)
+      const doneIds = list.filter((a: Appointment) => a.queue_status === 'parti').map((a: Appointment) => a.id)
+      if (doneIds.length > 0) {
+        const { data: notes } = await supabase
+          .from('consultation_notes')
+          .select('appointment_id, note')
+          .in('appointment_id', doneIds)
+        const byApt = new Map<string, string>()
+        for (const n of notes ?? []) if (n.appointment_id) byApt.set(n.appointment_id, n.note)
+        list = list.map((a: Appointment) => (a.queue_status === 'parti' ? { ...a, consultation_summary: byApt.get(a.id) ?? null } : a))
+      }
+
+      setAppointments(list)
     } finally {
       setLoading(false)
     }

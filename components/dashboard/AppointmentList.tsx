@@ -10,7 +10,7 @@ import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMeth
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle } from 'lucide-react'
+import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle, Check } from 'lucide-react'
 
 // Élément du menu « ⋯ » d'une carte RDV
 export interface MoreMenuItem {
@@ -198,7 +198,59 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
   return (
     <>
       <div className="space-y-3">
-        {appointments.map((apt) => (
+        {appointments.map((apt) => apt.queue_status === 'parti' ? (
+          /* ── RDV clôturé : carte repliée + résumé de consultation ── */
+          <div key={apt.id} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/60">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-semibold text-xs shrink-0">
+                {apt.patient ? getInitials(apt.patient.first_name, apt.patient.last_name) : '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-gray-800 text-sm">
+                    {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : 'Patient'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600">
+                    <Check className="h-3 w-3" /> Consultation terminée
+                  </span>
+                  {apt.amount_paid != null && (
+                    <span className="text-xs text-green-600 font-medium">{apt.amount_paid} DH{apt.payment_method ? ` · ${PAYMENT_METHOD_LABELS[apt.payment_method]}` : ''}</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> {formatDateShort(apt.date)} à {formatTime(apt.time)}
+                </p>
+
+                <details className="mt-2 group">
+                  <summary className="text-xs font-medium text-primary-600 cursor-pointer select-none list-none flex items-center gap-1">
+                    <FileText className="h-3.5 w-3.5" /> Résumé de la consultation
+                  </summary>
+                  <div className="mt-1.5 text-xs text-gray-700 whitespace-pre-wrap bg-white border border-gray-100 rounded-lg p-2.5">
+                    {apt.consultation_summary?.trim() ? apt.consultation_summary : <span className="text-gray-400 italic">Aucune note de consultation enregistrée.</span>}
+                  </div>
+                </details>
+              </div>
+
+              <div className="shrink-0">
+                <MoreMenu
+                  items={[
+                    apt.patient_id ? { label: 'Reprendre la consultation', icon: Play, href: `/consultation/${apt.id}` } : null,
+                    apt.patient_id ? { label: 'Ordonnance', icon: FileText, href: `/ordonnance/${apt.id}` } : null,
+                    apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
+                    apt.invoice_no ? {
+                      label: 'Émettre un avoir', icon: Undo2,
+                      onClick: () => {
+                        setCreditDone(null); setCreditError('')
+                        setCreditDialog({ open: true, id: apt.id, invoiceNo: apt.invoice_no!, amount: apt.amount_paid != null ? String(apt.amount_paid) : '', reason: '' })
+                      },
+                    } : null,
+                    onViewPatient && apt.patient_id ? { label: 'Voir la fiche patient', icon: User, onClick: () => onViewPatient(apt.patient_id) } : null,
+                  ].filter(Boolean) as MoreMenuItem[]}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
           <div
             key={apt.id}
             className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:border-primary-200 hover:shadow-sm transition-all"
@@ -385,6 +437,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
           </div>
         ))}
       </div>
+      {/* fin liste */}
 
       {/* Dialog confirmation statut */}
       <Dialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}>
