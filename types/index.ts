@@ -73,6 +73,8 @@ export interface Patient {
   phone: string
   email?: string | null
   age?: number | null
+  birth_date?: string | null // date de naissance (YYYY-MM-DD) — âge précis + courbes
+  blood_group?: string | null // A+, A-, B+, … O-
   cin?: string | null       // carte d'identité nationale (Maroc)
   mutuelle?: string | null  // CNSS / CNOPS / assurance privée…
   // Dossier médical enrichi (antécédents structurés)
@@ -541,3 +543,11 @@ export const STAFF_PERMISSION_LABELS = STAFF_PERMISSION_GROUPS.flatMap((g) => g.
 
 // Types de mutuelle courants au Maroc (fiche patient)
 export const MUTUELLES_MAROC = ['CNSS (AMO)', 'CNOPS', 'FAR', 'Assurance privée', 'Aucune'] as const
+
+// Groupes sanguins (fiche patient)
+export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const
+
+// Spécialités « pédiatriques » → active courbes de croissance + calendrier vaccinal
+export function isPediatricDoctor(specialties: (string | null | undefined)[]): boolean {
+  return specialties.some((s) => !!s && /p[ée]diatr/i.test(s))
+}

@@ -15,7 +15,7 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
-interface Patient { id: string; first_name: string; last_name: string; age?: number | null; phone?: string | null; cin?: string | null; mutuelle?: string | null; allergies?: string | null; chronic_conditions?: string | null; surgeries?: string | null; current_treatments?: string | null; vaccinations?: string | null }
+interface Patient { id: string; first_name: string; last_name: string; age?: number | null; birth_date?: string | null; blood_group?: string | null; phone?: string | null; cin?: string | null; mutuelle?: string | null; allergies?: string | null; chronic_conditions?: string | null; surgeries?: string | null; current_treatments?: string | null; vaccinations?: string | null }
 
 export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, hasInvoice, defaultPrice,
@@ -173,6 +173,7 @@ export default function ConsultationClient({
         <aside className="lg:col-span-4 space-y-3">
           <div className="bg-white border border-gray-100 rounded-xl p-4 text-sm space-y-2">
             <p className="text-gray-600">📞 {patient.phone || '—'}</p>
+            {patient.blood_group && <p className="text-gray-700 text-xs"><b>Groupe sanguin :</b> <span className="text-red-600 font-semibold">{patient.blood_group}</span></p>}
             {patient.cin && <p className="text-gray-500 text-xs">CIN : {patient.cin}</p>}
             {patient.mutuelle && <p className="text-gray-500 text-xs">Mutuelle : {patient.mutuelle}</p>}
             {patient.allergies && (

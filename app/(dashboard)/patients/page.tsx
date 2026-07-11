@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
-import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, type VitalDef } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, type VitalDef } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
@@ -51,6 +51,8 @@ export default function PatientsPage() {
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [editAge, setEditAge] = useState<string>('')
+  const [editBirthDate, setEditBirthDate] = useState<string>('')
+  const [editBloodGroup, setEditBloodGroup] = useState<string>('')
   const [editCin, setEditCin] = useState<string>('')
   const [editMutuelle, setEditMutuelle] = useState<string>('')
   const [mutuelleOther, setMutuelleOther] = useState(false)
@@ -179,6 +181,8 @@ export default function PatientsPage() {
   async function openPatientHistory(patient: PatientWithStats) {
     setSelectedPatient(patient)
     setEditAge(patient.age != null ? String(patient.age) : '')
+    setEditBirthDate(patient.birth_date ?? '')
+    setEditBloodGroup(patient.blood_group ?? '')
     setEditCin(patient.cin ?? '')
     setEditMutuelle(patient.mutuelle ?? '')
     // Mutuelle hors liste standard → mode « Autre » (saisie libre)
@@ -504,6 +508,8 @@ export default function PatientsPage() {
     setSaving(true)
     const updates = {
       age: editAge ? Number(editAge) : null,
+      birth_date: editBirthDate || null,
+      blood_group: editBloodGroup || null,
       cin: editCin.trim() ? editCin.trim().toUpperCase() : null,
       mutuelle: editMutuelle.trim() || null,
       notes: editNotes || null,
@@ -1024,6 +1030,24 @@ export default function PatientsPage() {
                       onChange={(e) => setEditAge(e.target.value)}
                       placeholder="Ex: 35"
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-500">Date de naissance</label>
+                    <Input
+                      type="date"
+                      value={editBirthDate}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setEditBirthDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-500">Groupe sanguin</label>
+                    <Select value={editBloodGroup || undefined} onValueChange={setEditBloodGroup}>
+                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectContent>
+                        {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs text-gray-500">CIN (carte d&apos;identité)</label>
