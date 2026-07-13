@@ -26,52 +26,51 @@ export default async function CertificatPage({ params }: { params: { id: string 
     .single()
   if (!cert) notFound()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const patient = cert.patient as any
-
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
       <PrintBar />
 
       {/* Feuille A4 */}
-      <div className="max-w-2xl mx-auto bg-white shadow-sm rounded-lg p-10 print:shadow-none print:rounded-none print:p-0">
-        {/* En-tête médecin */}
-        <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Dr. {doctor.name}</h1>
-            <p className="text-sm text-gray-500">{doctor.specialty}</p>
-            {doctor.address && <p className="text-sm text-gray-500 mt-1">{doctor.address}</p>}
-            {doctor.city && <p className="text-sm text-gray-500">{doctor.city}</p>}
-            {doctor.phone && <p className="text-sm text-gray-500 mt-1">Tél : {doctor.phone}</p>}
-            {(doctor.ice || doctor.inpe) && (
-              <p className="text-xs text-gray-400 mt-1">
-                {doctor.inpe && <span>INPE : {doctor.inpe}</span>}
-                {doctor.ice && doctor.inpe && <span> · </span>}
-                {doctor.ice && <span>ICE : {doctor.ice}</span>}
-              </p>
-            )}
-          </div>
-          <div className="text-right">
-            <h2 className="text-lg font-bold text-gray-800 uppercase">{cert.title}</h2>
-            <p className="text-sm text-gray-500 mt-1">{formatDateFr(cert.created_at)}</p>
-            {patient && (
-              <p className="text-xs text-gray-400 mt-1">
-                {patient.first_name} {patient.last_name}
-              </p>
-            )}
-          </div>
+      <div className="max-w-2xl mx-auto bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none print:px-0 print:py-0">
+        {/* En-tête médecin — centré */}
+        <header className="text-center border-b-2 border-gray-800 pb-4 mb-8">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
+          {doctor.specialty && <p className="text-sm text-gray-600 mt-0.5">{doctor.specialty}</p>}
+          <p className="text-xs text-gray-500 mt-2">
+            {[doctor.address, doctor.city].filter(Boolean).join(', ')}
+            {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
+          </p>
+          {(doctor.ice || doctor.inpe) && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              {doctor.inpe && <span>INPE : {doctor.inpe}</span>}
+              {doctor.ice && doctor.inpe && <span> · </span>}
+              {doctor.ice && <span>ICE : {doctor.ice}</span>}
+            </p>
+          )}
+        </header>
+
+        {/* Titre du document — centré avec filet */}
+        <div className="text-center mb-6">
+          <h2 className="inline-block text-lg font-bold uppercase tracking-[0.18em] text-gray-900 border-b-2 border-gray-800 pb-1">
+            {cert.title}
+          </h2>
         </div>
 
+        {/* Lieu et date — aligné à droite */}
+        <p className="text-sm text-gray-600 text-right mb-8">
+          {doctor.city ? `${doctor.city}, le ` : 'Le '}{formatDateFr(cert.created_at)}
+        </p>
+
         {/* Corps du certificat */}
-        <div className="text-sm text-gray-900 leading-relaxed whitespace-pre-wrap min-h-[16rem]">
+        <div className="text-[15px] text-gray-900 leading-loose whitespace-pre-wrap min-h-[14rem]">
           {cert.content}
         </div>
 
         {/* Signature */}
-        <div className="mt-16 flex justify-end">
+        <div className="mt-20 flex justify-end">
           <div className="text-center">
-            <div className="w-48 border-t border-gray-300 pt-1">
-              <p className="text-xs text-gray-400">Signature et cachet</p>
+            <div className="w-52 border-t border-gray-400 pt-1.5">
+              <p className="text-xs text-gray-500">Signature et cachet</p>
             </div>
           </div>
         </div>
