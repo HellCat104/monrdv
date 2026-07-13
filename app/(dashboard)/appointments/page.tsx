@@ -143,6 +143,20 @@ export default function AppointmentsPage() {
     await loadAppointments()
   }
 
+  // Déplace un RDV vers une nouvelle date/heure. Lance en cas de collision (409).
+  async function handleReschedule(id: string, date: string, time: string) {
+    const res = await fetch(`/api/appointments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, time }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      throw new Error(d.error || 'Échec du déplacement du rendez-vous.')
+    }
+    await loadAppointments()
+  }
+
   async function handleAttendanceChange(id: string, attendance: AppointmentAttendance) {
     await fetch(`/api/appointments/${id}`, {
       method: 'PATCH',
@@ -355,6 +369,7 @@ export default function AppointmentsPage() {
               onAttendanceChange={handleAttendanceChange}
               onPayment={handlePayment}
               onViewPatient={(patientId) => router.push(`/patients?patient=${patientId}`)}
+              onReschedule={handleReschedule}
             />
           )}
         </CardContent>

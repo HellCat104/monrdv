@@ -194,11 +194,28 @@ export async function PATCH(req: NextRequest) {
     patch.status = 'cancelled'
   }
 
+  // Déplacement (nouvelle date / heure)
+  if ('date' in body || 'time' in body) {
+    if (!ctx.permissions.manage_appointments) return NextResponse.json({ error: 'Permission manquante (gestion des RDV)' }, { status: 403 })
+    const nd = String(body.date ?? ''), nt = String(body.time ?? '')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(nd) || !/^\d{2}:\d{2}$/.test(nt)) return NextResponse.json({ error: 'Date ou heure invalide' }, { status: 400 })
+    const today = format(getNowInMaroc(), 'yyyy-MM-dd')
+    if (nd < today) return NextResponse.json({ error: 'Impossible de déplacer dans le passé' }, { status: 400 })
+    patch.date = nd
+    patch.time = nt
+  }
+
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Aucune modification' }, { status: 400 })
 
   const { data: updated, error } = await admin.from('appointments')
     .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('*').single()
-  if (error || !updated) return NextResponse.json({ error: 'Échec de la mise à jour' }, { status: 500 })
+  if (error) {
+    if (error.code === '23505' || error.code === '23P01') {
+      return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant.' }, { status: 409 })
+    }
+    return NextResponse.json({ error: 'Échec de la mise à jour' }, { status: 500 })
+  }
+  if (!updated) return NextResponse.json({ error: 'Échec de la mise à jour' }, { status: 500 })
 
   return NextResponse.json(updated)
 }

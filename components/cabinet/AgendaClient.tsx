@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getNowInMaroc, formatTime } from '@/lib/utils'
 import { format, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock } from 'lucide-react'
 import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,6 +40,15 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
   const [payFor, setPayFor] = useState<Apt | null>(null)
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState('especes')
+
+  // Déplacer un RDV
+  const [moveFor, setMoveFor] = useState<Apt | null>(null)
+  const [moveDate, setMoveDate] = useState('')
+  const [moveTime, setMoveTime] = useState('')
+  const [moveSlots, setMoveSlots] = useState<{ time: string; available: boolean }[]>([])
+  const [moveLoadingSlots, setMoveLoadingSlots] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const [moveError, setMoveError] = useState('')
 
   const load = useCallback(async (d: string) => {
     setLoading(true)
@@ -124,6 +133,29 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
     const due = type?.default_price ?? null
     const ok = await patchRdv(payFor.id, { amount_paid: amount, amount_due: due != null && due > amount ? due : null, payment_method: payMethod })
     if (ok) { setPayFor(null); setPayAmount('') }
+  }
+
+  // Créneaux dispo pour le déplacement
+  useEffect(() => {
+    if (!moveFor || !moveDate || !doctorId) { setMoveSlots([]); return }
+    setMoveLoadingSlots(true)
+    const typeParam = moveFor.consultation_type_id ? `&type=${moveFor.consultation_type_id}` : ''
+    fetch(`/api/slots?doctor_id=${doctorId}&date=${moveDate}${typeParam}`)
+      .then((r) => r.json()).then((d) => setMoveSlots(d.slots ?? [])).finally(() => setMoveLoadingSlots(false))
+  }, [moveFor, moveDate, doctorId])
+
+  async function confirmMoveRdv() {
+    if (!moveFor || !moveDate || !moveTime) return
+    setMoving(true); setMoveError('')
+    const res = await fetch('/api/cabinet/appointments', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: moveFor.id, date: moveDate, time: moveTime }),
+    })
+    const d = await res.json().catch(() => ({}))
+    setMoving(false)
+    if (!res.ok) { setMoveError(d.error || 'Échec du déplacement.'); return }
+    setMoveFor(null)
+    await load(date)
   }
 
   const dayShift = (n: number) => setDate(format(addDays(new Date(date + 'T12:00:00'), n), 'yyyy-MM-dd'))
@@ -213,6 +245,16 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
                 )
               )}
 
+              {/* Déplacer */}
+              {permissions.manage_appointments && a.amount_paid == null && (
+                <button
+                  onClick={() => { setMoveError(''); setMoveFor(a); setMoveDate(''); setMoveTime('') }}
+                  className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 rounded-lg px-2 py-1 hover:bg-primary-50"
+                >
+                  <CalendarClock className="h-3.5 w-3.5" /> Déplacer
+                </button>
+              )}
+
               {/* Annulation */}
               {permissions.manage_appointments && a.amount_paid == null && (
                 <button
@@ -284,6 +326,37 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
               <Button type="submit" disabled={saving || !form.time}>{saving ? 'Création…' : 'Créer le RDV'}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog déplacer */}
+      <Dialog open={!!moveFor} onOpenChange={(o) => !o && setMoveFor(null)}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader><DialogTitle>Déplacer — {moveFor?.patient ? `${moveFor.patient.first_name} ${moveFor.patient.last_name}` : ''}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500">Actuellement le {moveFor ? format(new Date(moveFor.date + 'T12:00:00'), 'd MMM', { locale: fr }) : ''} à {moveFor ? formatTime(moveFor.time) : ''}</p>
+            <div className="space-y-1.5">
+              <Label>Nouvelle date</Label>
+              <Input type="date" value={moveDate} min={format(getNowInMaroc(), 'yyyy-MM-dd')} onChange={(e) => { setMoveDate(e.target.value); setMoveTime('') }} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Nouvelle heure</Label>
+              <Select value={moveTime || undefined} onValueChange={setMoveTime} disabled={!moveDate || moveLoadingSlots}>
+                <SelectTrigger><SelectValue placeholder={!moveDate ? 'Choisir une date' : moveLoadingSlots ? 'Chargement…' : 'Choisir une heure'} /></SelectTrigger>
+                <SelectContent>
+                  {moveSlots.filter((s) => s.available).map((s) => <SelectItem key={s.time} value={s.time}>{s.time}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {moveDate && !moveLoadingSlots && moveSlots.filter((s) => s.available).length === 0 && (
+                <p className="text-xs text-red-500">Aucun créneau libre ce jour.</p>
+              )}
+            </div>
+            {moveError && <p className="text-sm text-red-500 bg-red-50 p-2 rounded-lg">{moveError}</p>}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setMoveFor(null)}>Annuler</Button>
+            <Button type="button" onClick={confirmMoveRdv} disabled={moving || !moveDate || !moveTime}>{moving ? 'Déplacement…' : 'Déplacer'}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

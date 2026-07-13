@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -10,7 +10,7 @@ import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMeth
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle, Check, Pill } from 'lucide-react'
+import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle, Check, Pill, CalendarClock } from 'lucide-react'
 
 // Élément du menu « ⋯ » d'une carte RDV
 export interface MoreMenuItem {
@@ -80,9 +80,10 @@ interface AppointmentListProps {
   onAttendanceChange?: (id: string, attendance: AppointmentAttendance) => Promise<void>
   onPayment?: (id: string, payload: PaymentPayload) => Promise<void>
   onViewPatient?: (patientId: string) => void
+  onReschedule?: (id: string, date: string, time: string) => Promise<void>
 }
 
-export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment, onViewPatient }: AppointmentListProps) {
+export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment, onViewPatient, onReschedule }: AppointmentListProps) {
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean; id: string; action: 'confirmed' | 'cancelled'; label: string
   }>({ open: false, id: '', action: 'confirmed', label: '' })
@@ -93,6 +94,36 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
   }>({ open: false, id: '', due: '', paid: '', method: '' })
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState('')
+  // Dialog de déplacement (reprogrammation) d'un RDV
+  const [moveDialog, setMoveDialog] = useState<{ open: boolean; apt: Appointment | null; date: string; time: string }>({ open: false, apt: null, date: '', time: '' })
+  const [moveSlots, setMoveSlots] = useState<{ time: string; available: boolean }[]>([])
+  const [moveLoadingSlots, setMoveLoadingSlots] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const [moveError, setMoveError] = useState('')
+
+  // Charge les créneaux dispo quand on choisit une date dans le dialog « Déplacer »
+  useEffect(() => {
+    if (!moveDialog.open || !moveDialog.apt || !moveDialog.date) { setMoveSlots([]); return }
+    setMoveLoadingSlots(true)
+    const typeParam = moveDialog.apt.consultation_type_id ? `&type=${moveDialog.apt.consultation_type_id}` : ''
+    fetch(`/api/slots?doctor_id=${moveDialog.apt.doctor_id}&date=${moveDialog.date}${typeParam}`)
+      .then((r) => r.json())
+      .then((d) => setMoveSlots(d.slots ?? []))
+      .finally(() => setMoveLoadingSlots(false))
+  }, [moveDialog.open, moveDialog.apt, moveDialog.date])
+
+  async function confirmMove() {
+    if (!moveDialog.apt || !moveDialog.date || !moveDialog.time || !onReschedule) return
+    setMoving(true); setMoveError('')
+    try {
+      await onReschedule(moveDialog.apt.id, moveDialog.date, moveDialog.time)
+      setMoveDialog({ open: false, apt: null, date: '', time: '' })
+    } catch (e) {
+      setMoveError(e instanceof Error ? e.message : 'Échec du déplacement.')
+    } finally {
+      setMoving(false)
+    }
+  }
   // Dialog d'émission d'avoir (annulation/correction de facture)
   const [creditDialog, setCreditDialog] = useState<{
     open: boolean; id: string; invoiceNo: string; amount: string; reason: string
@@ -391,6 +422,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   {/* Menu ⋯ : actions occasionnelles */}
                   <MoreMenu
                     items={[
+                      onReschedule ? { label: 'Déplacer le RDV', icon: CalendarClock, onClick: () => { setMoveError(''); setMoveDialog({ open: true, apt, date: '', time: '' }) } } : null,
                       apt.patient_id ? { label: 'Ordonnance', icon: FileText, href: `/ordonnance/${apt.id}` } : null,
                       apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
                       apt.invoice_no ? {
@@ -464,6 +496,55 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
         ))}
       </div>
       {/* fin liste */}
+
+      {/* Dialog : déplacer un RDV */}
+      <Dialog open={moveDialog.open} onOpenChange={(o) => { if (!o) setMoveDialog({ open: false, apt: null, date: '', time: '' }) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Déplacer le rendez-vous</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500">
+              {moveDialog.apt?.patient ? `${moveDialog.apt.patient.first_name} ${moveDialog.apt.patient.last_name}` : 'Patient'}
+              {moveDialog.apt ? ` — actuellement le ${formatDateShort(moveDialog.apt.date)} à ${formatTime(moveDialog.apt.time)}` : ''}
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-xs text-gray-500">Nouvelle date</label>
+              <Input
+                type="date"
+                value={moveDialog.date}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setMoveDialog((p) => ({ ...p, date: e.target.value, time: '' }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs text-gray-500">Nouvelle heure</label>
+              <Select
+                value={moveDialog.time || undefined}
+                onValueChange={(v) => setMoveDialog((p) => ({ ...p, time: v }))}
+                disabled={!moveDialog.date || moveLoadingSlots}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={!moveDialog.date ? 'Choisir une date' : moveLoadingSlots ? 'Chargement…' : 'Choisir une heure'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {moveSlots.filter((s) => s.available).map((s) => <SelectItem key={s.time} value={s.time}>{s.time}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {moveDialog.date && !moveLoadingSlots && moveSlots.filter((s) => s.available).length === 0 && (
+                <p className="text-xs text-red-500">Aucun créneau libre ce jour.</p>
+              )}
+            </div>
+            {moveError && <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{moveError}</p>}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setMoveDialog({ open: false, apt: null, date: '', time: '' })}>Annuler</Button>
+            <Button onClick={confirmMove} disabled={moving || !moveDialog.date || !moveDialog.time}>
+              {moving ? 'Déplacement…' : 'Déplacer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog confirmation statut */}
       <Dialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}>
