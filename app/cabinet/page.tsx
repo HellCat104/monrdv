@@ -12,5 +12,5 @@ export default async function CabinetAgendaPage() {
     return <p className="text-sm text-gray-500">Vous n’avez pas accès à l’agenda. Demandez au médecin d’activer cette permission.</p>
   }
 
-  return <AgendaClient permissions={ctx.permissions} />
+  return <AgendaClient permissions={ctx.permissions} doctorName={ctx.doctor.name} />
 }

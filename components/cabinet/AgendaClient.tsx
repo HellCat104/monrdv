@@ -13,14 +13,17 @@ import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay }
 import { fr } from 'date-fns/locale'
 import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban } from 'lucide-react'
 import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
+import DaySheet from '@/components/shared/DaySheet'
+import { FileText } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
 interface CType { id: string; name: string; duration_minutes: number | null; default_price: number | null }
 const NO_TYPE = '__none__'
 
-export default function AgendaClient({ permissions }: { permissions: StaffPermissions }) {
+export default function AgendaClient({ permissions, doctorName = 'Cabinet médical' }: { permissions: StaffPermissions; doctorName?: string }) {
   const [date, setDate] = useState(() => format(getNowInMaroc(), 'yyyy-MM-dd'))
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day')
   const [weekAppts, setWeekAppts] = useState<Apt[]>([])
   const [weekLoading, setWeekLoading] = useState(false)
@@ -232,7 +235,10 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
           <Calendar className="h-5 w-5 text-primary-500" /> Agenda
         </h1>
         {permissions.manage_appointments && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => setSheetOpen(true)}>
+              <FileText className="h-4 w-4 mr-1" /> Feuille de route
+            </Button>
             <Button size="sm" variant="outline" onClick={() => { setBlockError(''); setBlockFullDay(false); setBlockOpen(true) }}>
               <Ban className="h-4 w-4 mr-1" /> Bloquer un créneau
             </Button>
@@ -542,6 +548,27 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {sheetOpen && (
+        <DaySheet
+          doctorName={doctorName}
+          date={date}
+          items={active.map((a) => ({
+            id: a.id,
+            time: a.time,
+            name: a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient',
+            motif: a.consultation_type?.name || a.notes || null,
+            phone: permissions.patients_contact ? a.patient?.phone ?? null : null,
+            attendance: a.attendance ?? null,
+            amount_paid: a.amount_paid ?? null,
+            payment_method: a.payment_method ?? null,
+          }))}
+          blocks={blocks}
+          showPhone={permissions.patients_contact}
+          showMoney={permissions.payments}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
     </div>
   )
 }

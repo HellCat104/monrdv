@@ -14,7 +14,8 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import type { Appointment, Doctor, AppointmentStatus, AppointmentAttendance } from '@/types'
-import { Plus, Search, Calendar, Ban, X } from 'lucide-react'
+import { Plus, Search, Calendar, Ban, X, FileText } from 'lucide-react'
+import DaySheet from '@/components/shared/DaySheet'
 import {
   format, startOfWeek, endOfWeek, addDays, subDays,
   startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay,
@@ -30,6 +31,7 @@ export default function AppointmentsPage() {
   const [doctor, setDoctor] = useState<Doctor | null>(null)
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('day')
   const [currentDate, setCurrentDate] = useState(getNowInMaroc())
   const [searchQuery, setSearchQuery] = useState('')
@@ -285,7 +287,10 @@ export default function AppointmentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Rendez-vous</h1>
           <p className="text-sm text-gray-500 mt-1">{filtered.length} RDV affichés</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => setSheetOpen(true)} disabled={!doctor}>
+            <FileText className="h-4 w-4 mr-2" /> Feuille de route
+          </Button>
           <Button variant="outline" onClick={() => { setBlockError(''); setBlockOpen(true) }} disabled={!doctor}>
             <Ban className="h-4 w-4 mr-2" /> Bloquer un créneau
           </Button>
@@ -449,6 +454,27 @@ export default function AppointmentsPage() {
           onOpenChange={setAddOpen}
           doctor={doctor}
           onSuccess={loadAppointments}
+        />
+      )}
+
+      {sheetOpen && doctor && (
+        <DaySheet
+          doctorName={doctor.name}
+          date={format(currentDate, 'yyyy-MM-dd')}
+          items={appointments
+            .filter((a) => a.date === format(currentDate, 'yyyy-MM-dd') && a.status !== 'cancelled')
+            .map((a) => ({
+              id: a.id,
+              time: a.time,
+              name: a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient',
+              motif: a.consultation_type?.name || a.notes || null,
+              phone: a.patient?.phone ?? null,
+              attendance: a.attendance ?? null,
+              amount_paid: a.amount_paid ?? null,
+              payment_method: a.payment_method ?? null,
+            }))}
+          blocks={dayBlocks}
+          onClose={() => setSheetOpen(false)}
         />
       )}
 
