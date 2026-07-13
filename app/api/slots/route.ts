@@ -2,7 +2,7 @@
 // Supporte les motifs de consultation à durée variable (?type=<consultation_type_id>).
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSlotsForDuration, getDayKey, getDayBreaks, getNowInMaroc, type OccupiedInterval } from '@/lib/utils'
+import { getSlotsForDuration, getDayKey, getDayBreaks, getNowInMaroc, toMinutes, type OccupiedInterval } from '@/lib/utils'
 import { parseISO, format } from 'date-fns'
 
 // GET /api/slots?doctor_id=...&date=YYYY-MM-DD[&type=<uuid>]
@@ -61,14 +61,13 @@ export async function GET(req: NextRequest) {
     if (ctype?.duration_minutes) duration = ctype.duration_minutes
   }
 
-  // Requêtes 2 & 3 en parallèle — dates bloquées + RDV existants (avec leurs durées)
+  // Requêtes 2 & 3 en parallèle — blocages (jour entier ou plages) + RDV existants
   const [blockedResult, bookedResult] = await Promise.all([
     supabase
       .from('blocked_dates')
-      .select('id')
+      .select('start_time, end_time')
       .eq('doctor_id', doctorId)
-      .eq('date', date)
-      .maybeSingle(),
+      .eq('date', date),
     supabase
       .from('appointments')
       .select('time, duration_minutes')
@@ -77,17 +76,28 @@ export async function GET(req: NextRequest) {
       .neq('status', 'cancelled'),
   ])
 
-  if (blockedResult.data) {
+  const blocks = blockedResult.data ?? []
+  // Un blocage sans horaire = journée entière fermée
+  if (blocks.some((b) => !b.start_time)) {
     return NextResponse.json({ slots: [] }, {
       headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' },
     })
   }
 
+  // Les plages bloquées comptent comme des intervalles occupés
+  const blockedIntervals: OccupiedInterval[] = blocks
+    .filter((b) => b.start_time && b.end_time)
+    .map((b) => {
+      const start = String(b.start_time).substring(0, 5)
+      const dur = Math.max(1, toMinutes(String(b.end_time).substring(0, 5)) - toMinutes(start))
+      return { time: start, duration: dur }
+    })
+
   // Chaque RDV existant occupe [time, time + sa durée) — durée de base si absente
-  const occupied: OccupiedInterval[] = (bookedResult.data ?? []).map((b) => ({
+  const occupied: OccupiedInterval[] = [...blockedIntervals, ...(bookedResult.data ?? []).map((b) => ({
     time: b.time.substring(0, 5),
     duration: b.duration_minutes || doctor.appointment_duration,
-  }))
+  }))]
 
   let slots = getSlotsForDuration(
     daySchedule.start,
