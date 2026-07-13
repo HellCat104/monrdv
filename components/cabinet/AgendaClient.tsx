@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getNowInMaroc, formatTime } from '@/lib/utils'
 import { format, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock } from 'lucide-react'
+import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban } from 'lucide-react'
 import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,6 +41,17 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState('especes')
 
+  // Blocage de créneau
+  type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
+  const [blocks, setBlocks] = useState<Block[]>([])
+  const [blockOpen, setBlockOpen] = useState(false)
+  const [blockFullDay, setBlockFullDay] = useState(false)
+  const [blockStart, setBlockStart] = useState('13:00')
+  const [blockEnd, setBlockEnd] = useState('14:00')
+  const [blockReason, setBlockReason] = useState('')
+  const [blocking, setBlocking] = useState(false)
+  const [blockError, setBlockError] = useState('')
+
   // Déplacer un RDV
   const [moveFor, setMoveFor] = useState<Apt | null>(null)
   const [moveDate, setMoveDate] = useState('')
@@ -67,6 +78,37 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
   }, [])
 
   useEffect(() => { load(date) }, [date, load])
+
+  const loadBlocks = useCallback(async (d: string) => {
+    try {
+      const res = await fetch(`/api/cabinet/blocks?date=${d}`)
+      if (res.ok) { const data = await res.json(); setBlocks(data.blocks ?? []) }
+    } catch { /* silencieux */ }
+  }, [])
+  useEffect(() => { loadBlocks(date) }, [date, loadBlocks])
+
+  async function addBlock() {
+    setBlockError(''); setBlocking(true)
+    try {
+      const res = await fetch('/api/cabinet/blocks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, full_day: blockFullDay, start_time: blockStart, end_time: blockEnd, reason: blockReason || undefined }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setBlockError(data.error || 'Échec du blocage.'); return }
+      setBlockOpen(false); setBlockReason('')
+      await loadBlocks(date)
+    } catch {
+      setBlockError('Erreur réseau.')
+    } finally {
+      setBlocking(false)
+    }
+  }
+
+  async function removeBlock(id: string) {
+    const res = await fetch(`/api/cabinet/blocks?id=${id}`, { method: 'DELETE' })
+    if (res.ok) setBlocks((prev) => prev.filter((b) => b.id !== id))
+  }
 
   // Le doctor_id sert uniquement à interroger l'API publique des créneaux.
   useEffect(() => {
@@ -170,9 +212,14 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
           <Calendar className="h-5 w-5 text-primary-500" /> Agenda
         </h1>
         {permissions.manage_appointments && (
-          <Button size="sm" onClick={() => { setAddError(''); setAddOpen(true) }}>
-            <Plus className="h-4 w-4 mr-1" /> Nouveau RDV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => { setBlockError(''); setBlockFullDay(false); setBlockOpen(true) }}>
+              <Ban className="h-4 w-4 mr-1" /> Bloquer un créneau
+            </Button>
+            <Button size="sm" onClick={() => { setAddError(''); setAddOpen(true) }}>
+              <Plus className="h-4 w-4 mr-1" /> Nouveau RDV
+            </Button>
+          </div>
         )}
       </div>
 
@@ -185,6 +232,21 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
           {format(new Date(date + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })}{isToday ? " · aujourd'hui" : ''}
         </span>
       </div>
+
+      {blocks.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {blocks.map((b) => (
+            <span key={b.id} className="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-2 py-1">
+              <Ban className="h-3 w-3" />
+              {b.start_time ? `${String(b.start_time).substring(0, 5)}–${String(b.end_time).substring(0, 5)}` : 'Journée entière'}
+              {b.reason ? ` · ${b.reason}` : ''}
+              {permissions.manage_appointments && (
+                <button onClick={() => removeBlock(b.id)} className="hover:text-amber-900" aria-label="Débloquer"><X className="h-3 w-3" /></button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
 
       {error && <p className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">{error}</p>}
 
@@ -356,6 +418,35 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => setMoveFor(null)}>Annuler</Button>
             <Button type="button" onClick={confirmMoveRdv} disabled={moving || !moveDate || !moveTime}>{moving ? 'Déplacement…' : 'Déplacer'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog blocage de créneau */}
+      <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader><DialogTitle>Bloquer un créneau — {format(new Date(date + 'T12:00:00'), 'd MMM', { locale: fr })}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500">Le créneau devient indisponible en ligne et dans l&apos;agenda du médecin.</p>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={blockFullDay} onChange={(e) => setBlockFullDay(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+              Bloquer toute la journée
+            </label>
+            {!blockFullDay && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label>De</Label><Input type="time" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>À</Label><Input type="time" value={blockEnd} onChange={(e) => setBlockEnd(e.target.value)} /></div>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Motif (optionnel)</Label>
+              <Input value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder="Ex : urgence, pause…" />
+            </div>
+            {blockError && <p className="text-sm text-red-500 bg-red-50 p-2 rounded-lg">{blockError}</p>}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setBlockOpen(false)}>Annuler</Button>
+            <Button type="button" onClick={addBlock} disabled={blocking}>{blocking ? 'Blocage…' : 'Bloquer'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

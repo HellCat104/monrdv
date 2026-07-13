@@ -11,8 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import type { Appointment, Doctor, AppointmentStatus, AppointmentAttendance } from '@/types'
-import { Plus, Search, Calendar } from 'lucide-react'
+import { Plus, Search, Calendar, Ban, X } from 'lucide-react'
 import {
   format, startOfWeek, endOfWeek, addDays, subDays,
   startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay,
@@ -32,6 +34,16 @@ export default function AppointmentsPage() {
   const [currentDate, setCurrentDate] = useState(getNowInMaroc())
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | 'all'>('all')
+  // Blocage de créneau
+  type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
+  const [dayBlocks, setDayBlocks] = useState<Block[]>([])
+  const [blockOpen, setBlockOpen] = useState(false)
+  const [blockStart, setBlockStart] = useState('13:00')
+  const [blockEnd, setBlockEnd] = useState('14:00')
+  const [blockReason, setBlockReason] = useState('')
+  const [blockFullDay, setBlockFullDay] = useState(false)
+  const [blocking, setBlocking] = useState(false)
+  const [blockError, setBlockError] = useState('')
 
   const supabase = createClient()
 
@@ -120,6 +132,43 @@ export default function AppointmentsPage() {
   useEffect(() => {
     loadAppointments()
   }, [loadAppointments])
+
+  // Blocages du jour affiché (vue Jour)
+  const loadDayBlocks = useCallback(async () => {
+    if (!doctor || viewMode !== 'day') { setDayBlocks([]); return }
+    const dStr = format(currentDate, 'yyyy-MM-dd')
+    const { data } = await supabase.from('blocked_dates')
+      .select('id, date, start_time, end_time, reason')
+      .eq('doctor_id', doctor.id).eq('date', dStr).order('start_time', { ascending: true })
+    setDayBlocks((data ?? []) as Block[])
+  }, [doctor, viewMode, currentDate, supabase])
+
+  useEffect(() => { loadDayBlocks() }, [loadDayBlocks])
+
+  async function addBlock() {
+    if (!doctor) return
+    if (!blockFullDay && (!blockStart || !blockEnd || blockEnd <= blockStart)) {
+      setBlockError('L\'heure de fin doit être après l\'heure de début.'); return
+    }
+    setBlocking(true); setBlockError('')
+    const { error } = await supabase.from('blocked_dates').insert({
+      doctor_id: doctor.id,
+      date: format(currentDate, 'yyyy-MM-dd'),
+      start_time: blockFullDay ? null : blockStart,
+      end_time: blockFullDay ? null : blockEnd,
+      reason: blockReason.trim() || null,
+    })
+    setBlocking(false)
+    if (error) { setBlockError('Échec du blocage. Réessayez.'); return }
+    setBlockOpen(false); setBlockReason('')
+    await loadDayBlocks()
+    await loadAppointments()
+  }
+
+  async function removeBlock(id: string) {
+    await supabase.from('blocked_dates').delete().eq('id', id)
+    await loadDayBlocks()
+  }
 
   // Filtre par recherche côté client
   const filtered = appointments.filter((apt) => {
@@ -236,11 +285,29 @@ export default function AppointmentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Rendez-vous</h1>
           <p className="text-sm text-gray-500 mt-1">{filtered.length} RDV affichés</p>
         </div>
-        <Button onClick={() => setAddOpen(true)} disabled={!doctor}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nouveau RDV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => { setBlockError(''); setBlockOpen(true) }} disabled={!doctor}>
+            <Ban className="h-4 w-4 mr-2" /> Bloquer un créneau
+          </Button>
+          <Button onClick={() => setAddOpen(true)} disabled={!doctor}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nouveau RDV
+          </Button>
+        </div>
       </div>
+
+      {/* Créneaux bloqués du jour (vue Jour) */}
+      {viewMode === 'day' && dayBlocks.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {dayBlocks.map((b) => (
+            <span key={b.id} className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-700 border border-red-100 rounded-full pl-3 pr-1.5 py-1">
+              <Ban className="h-3 w-3" />
+              {b.start_time ? `${b.start_time.slice(0, 5)}–${(b.end_time ?? '').slice(0, 5)}` : 'Journée bloquée'}{b.reason ? ` · ${b.reason}` : ''}
+              <button onClick={() => removeBlock(b.id)} className="rounded-full hover:bg-red-200 p-0.5" aria-label="Débloquer"><X className="h-3 w-3" /></button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Filtres */}
       <Card>
@@ -384,6 +451,41 @@ export default function AppointmentsPage() {
           onSuccess={loadAppointments}
         />
       )}
+
+      {/* Dialog : bloquer un créneau */}
+      <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Bloquer un créneau — {format(currentDate, 'EEEE d MMMM', { locale: fr })}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500">Le créneau bloqué devient indisponible pour les patients (en ligne) et pour votre secrétaire.</p>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={blockFullDay} onChange={(e) => setBlockFullDay(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary-500" />
+              Bloquer toute la journée
+            </label>
+            {!blockFullDay && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>De</Label>
+                  <Input type="time" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>À</Label>
+                  <Input type="time" value={blockEnd} onChange={(e) => setBlockEnd(e.target.value)} />
+                </div>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Motif (optionnel)</Label>
+              <Input value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder="Ex : urgence, visite extérieure, pause…" />
+            </div>
+            {blockError && <p className="text-sm text-red-500 bg-red-50 p-2 rounded-lg">{blockError}</p>}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setBlockOpen(false)}>Annuler</Button>
+            <Button onClick={addBlock} disabled={blocking}>{blocking ? 'Blocage…' : 'Bloquer'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
