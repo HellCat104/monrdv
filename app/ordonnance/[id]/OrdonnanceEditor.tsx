@@ -118,8 +118,8 @@ export function OrdonnanceEditor({
         <div className="flex-1 bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none print:px-0 print:py-0">
           {/* En-tête médecin — centré */}
           <header className="text-center border-b-2 border-gray-800 pb-4 mb-8">
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
-            {doctor.specialty && <p className="text-sm text-gray-600 mt-0.5">{doctor.specialty}</p>}
+            <h1 className="text-lg font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
+            {doctor.specialty && <p className="text-[13px] text-gray-600 mt-0.5">{doctor.specialty}</p>}
             <p className="text-xs text-gray-500 mt-2">
               {[doctor.address, doctor.city].filter(Boolean).join(', ')}
               {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
@@ -135,17 +135,17 @@ export function OrdonnanceEditor({
 
           {/* Titre du document — centré avec filet */}
           <div className="text-center mb-6">
-            <h2 className="inline-block text-lg font-bold uppercase tracking-[0.18em] text-gray-900 border-b-2 border-gray-800 pb-1">
+            <h2 className="inline-block text-sm font-bold uppercase tracking-[0.18em] text-gray-900 border-b-2 border-gray-800 pb-1">
               Ordonnance
             </h2>
           </div>
 
           {/* Lieu, date et patient */}
           <div className="mb-8">
-            <p className="text-sm text-gray-600 text-right mb-3">
+            <p className="text-[13px] text-gray-600 text-right mb-3">
               {doctor.city ? `${doctor.city}, le ` : 'Le '}{formatDateFr(appointmentDate)}
             </p>
-            <p className="text-[15px] text-gray-800">
+            <p className="text-[13px] text-gray-800">
               <span className="text-gray-500">Patient : </span>
               <span className="font-semibold">{patient.first_name} {patient.last_name}</span>
               {patient.age != null && <span className="text-gray-500"> · {patient.age} ans</span>}
@@ -164,10 +164,10 @@ export function OrdonnanceEditor({
             onChange={(e) => setContent(e.target.value)}
             placeholder={'Rédigez l\'ordonnance ici…\n\nEx :\n- Paracétamol 1000 mg — 1 comprimé 3×/jour pendant 5 jours\n- Repos 48h'}
             rows={14}
-            className="w-full text-[15px] text-gray-800 leading-relaxed border border-gray-200 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 print:hidden"
+            className="w-full text-[13px] text-gray-800 leading-relaxed border border-gray-200 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 print:hidden"
           />
           {/* Rendu imprimé du même contenu (fiable au print) */}
-          <div className="hidden print:block text-[15px] text-gray-900 leading-loose whitespace-pre-wrap min-h-[16rem]">
+          <div className="hidden print:block text-[13px] text-gray-900 leading-relaxed whitespace-pre-wrap min-h-[16rem]">
             {content}
           </div>
 

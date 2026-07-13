@@ -34,8 +34,8 @@ export default async function CertificatPage({ params }: { params: { id: string 
       <div className="max-w-2xl mx-auto bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none print:px-0 print:py-0">
         {/* En-tête médecin — centré */}
         <header className="text-center border-b-2 border-gray-800 pb-4 mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
-          {doctor.specialty && <p className="text-sm text-gray-600 mt-0.5">{doctor.specialty}</p>}
+          <h1 className="text-lg font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
+          {doctor.specialty && <p className="text-[13px] text-gray-600 mt-0.5">{doctor.specialty}</p>}
           <p className="text-xs text-gray-500 mt-2">
             {[doctor.address, doctor.city].filter(Boolean).join(', ')}
             {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
@@ -51,18 +51,18 @@ export default async function CertificatPage({ params }: { params: { id: string 
 
         {/* Titre du document — centré avec filet */}
         <div className="text-center mb-6">
-          <h2 className="inline-block text-lg font-bold uppercase tracking-[0.18em] text-gray-900 border-b-2 border-gray-800 pb-1">
+          <h2 className="inline-block text-sm font-bold uppercase tracking-[0.18em] text-gray-900 border-b-2 border-gray-800 pb-1">
             {cert.title}
           </h2>
         </div>
 
         {/* Lieu et date — aligné à droite */}
-        <p className="text-sm text-gray-600 text-right mb-8">
+        <p className="text-[13px] text-gray-600 text-right mb-8">
           {doctor.city ? `${doctor.city}, le ` : 'Le '}{formatDateFr(cert.created_at)}
         </p>
 
         {/* Corps du certificat */}
-        <div className="text-[15px] text-gray-900 leading-loose whitespace-pre-wrap min-h-[14rem]">
+        <div className="text-[13px] text-gray-900 leading-relaxed whitespace-pre-wrap min-h-[14rem]">
           {cert.content}
         </div>
 
