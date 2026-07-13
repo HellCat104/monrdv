@@ -374,20 +374,12 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
               {/* Actions du jour — un bouton principal selon l'étape + menu ⋯ */}
               {apt.status === 'confirmed' && (
                 <div className="flex gap-1.5 mt-2 flex-wrap max-w-full items-center">
-                  {/* Étape 1 : le patient n'est pas encore là */}
-                  {apt.attendance !== 'present' && onAttendanceChange && (
-                    <button
-                      onClick={() => handleAttendance(apt.id, 'present')}
-                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium"
-                    >
-                      <DoorOpen className="h-3 w-3" /> Patient arrivé
-                    </button>
-                  )}
-
-                  {/* Étape 2 : présent → la consultation devient l'action principale */}
-                  {apt.attendance === 'present' && apt.patient_id && (
+                  {/* Action principale : ouvrir la consultation (marque le patient
+                      présent au passage s'il ne l'était pas encore) */}
+                  {apt.patient_id && (
                     <a
                       href={`/consultation/${apt.id}`}
+                      onClick={() => { if (apt.attendance !== 'present') onAttendanceChange?.(apt.id, 'present') }}
                       className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-primary-500 text-white hover:bg-primary-600 transition-colors font-medium"
                     >
                       <Play className="h-3 w-3" /> Consultation
@@ -435,6 +427,10 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                             reason: '',
                           })
                         },
+                      } : null,
+                      onAttendanceChange && apt.attendance !== 'present' ? {
+                        label: 'Patient arrivé', icon: DoorOpen,
+                        onClick: () => handleAttendance(apt.id, 'present'),
                       } : null,
                       onAttendanceChange ? {
                         label: apt.attendance === 'late' ? 'Retirer « en retard »' : 'Marquer en retard', icon: Timer,
