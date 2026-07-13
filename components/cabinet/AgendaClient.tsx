@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getNowInMaroc, formatTime } from '@/lib/utils'
-import { format, addDays } from 'date-fns'
+import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban } from 'lucide-react'
 import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
@@ -21,6 +21,9 @@ const NO_TYPE = '__none__'
 
 export default function AgendaClient({ permissions }: { permissions: StaffPermissions }) {
   const [date, setDate] = useState(() => format(getNowInMaroc(), 'yyyy-MM-dd'))
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day')
+  const [weekAppts, setWeekAppts] = useState<Apt[]>([])
+  const [weekLoading, setWeekLoading] = useState(false)
   const [appts, setAppts] = useState<Apt[]>([])
   const [types, setTypes] = useState<CType[]>([])
   const [loading, setLoading] = useState(true)
@@ -78,6 +81,23 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
   }, [])
 
   useEffect(() => { load(date) }, [date, load])
+
+  // Vue semaine : lundi -> dimanche contenant la date courante
+  const weekDays = eachDayOfInterval({
+    start: startOfWeek(new Date(date + 'T12:00:00'), { weekStartsOn: 1 }),
+    end: endOfWeek(new Date(date + 'T12:00:00'), { weekStartsOn: 1 }),
+  })
+  const loadWeek = useCallback(async (d: string) => {
+    setWeekLoading(true)
+    try {
+      const base = new Date(d + 'T12:00:00')
+      const from = format(startOfWeek(base, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+      const to = format(endOfWeek(base, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+      const res = await fetch(`/api/cabinet/appointments?from=${from}&to=${to}`)
+      if (res.ok) { const data = await res.json(); setWeekAppts(data.appointments ?? []) }
+    } catch { /* silencieux */ } finally { setWeekLoading(false) }
+  }, [])
+  useEffect(() => { if (viewMode === 'week') loadWeek(date) }, [viewMode, date, loadWeek])
 
   const loadBlocks = useCallback(async (d: string) => {
     try {
@@ -223,17 +243,27 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
         )}
       </div>
 
-      {/* Navigation par jour */}
-      <div className="flex items-center gap-2">
-        <button onClick={() => dayShift(-1)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Jour précédent"><ChevronLeft className="h-4 w-4" /></button>
+      {/* Navigation + bascule Jour / Semaine */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={() => dayShift(viewMode === 'week' ? -7 : -1)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Précédent"><ChevronLeft className="h-4 w-4" /></button>
         <Input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="w-40" />
-        <button onClick={() => dayShift(1)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Jour suivant"><ChevronRight className="h-4 w-4" /></button>
+        <button onClick={() => dayShift(viewMode === 'week' ? 7 : 1)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Suivant"><ChevronRight className="h-4 w-4" /></button>
         <span className="text-sm text-gray-500 capitalize ml-1">
-          {format(new Date(date + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })}{isToday ? " · aujourd'hui" : ''}
+          {viewMode === 'day'
+            ? `${format(new Date(date + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })}${isToday ? " · aujourd'hui" : ''}`
+            : `${format(weekDays[0], 'd', { locale: fr })} – ${format(weekDays[6], 'd MMM', { locale: fr })}`}
         </span>
+        <div className="ml-auto inline-flex rounded-lg border border-gray-200 p-0.5">
+          {(['day', 'week'] as const).map((m) => (
+            <button key={m} onClick={() => setViewMode(m)}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition ${viewMode === m ? 'bg-primary-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+              {m === 'day' ? 'Jour' : 'Semaine'}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {blocks.length > 0 && (
+      {viewMode === 'day' && blocks.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {blocks.map((b) => (
             <span key={b.id} className="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-2 py-1">
@@ -250,7 +280,43 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
 
       {error && <p className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">{error}</p>}
 
-      {loading ? (
+      {viewMode === 'week' ? (
+        weekLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            {weekDays.map((_, i) => <div key={i} className="h-40 bg-gray-100 rounded-xl animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            {weekDays.map((d) => {
+              const dStr = format(d, 'yyyy-MM-dd')
+              const dayList = weekAppts
+                .filter((a) => a.date === dStr && a.status !== 'cancelled')
+                .sort((a, b) => String(a.time).localeCompare(String(b.time)))
+              const today = isSameDay(d, getNowInMaroc())
+              return (
+                <button key={dStr} onClick={() => { setDate(dStr); setViewMode('day') }}
+                  className={`text-left bg-white border rounded-xl p-2 min-h-[8rem] hover:border-primary-300 transition ${today ? 'border-primary-400' : 'border-gray-100'}`}>
+                  <div className={`text-xs font-semibold mb-1.5 capitalize ${today ? 'text-primary-600' : 'text-gray-700'}`}>
+                    {format(d, 'EEE d', { locale: fr })}
+                  </div>
+                  {dayList.length === 0 ? (
+                    <p className="text-[11px] text-gray-300">—</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {dayList.slice(0, 6).map((a) => (
+                        <div key={a.id} className="text-[11px] leading-tight bg-primary-50 text-primary-700 rounded px-1.5 py-0.5 truncate">
+                          <span className="font-medium">{formatTime(a.time)}</span> {a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : ''}
+                        </div>
+                      ))}
+                      {dayList.length > 6 && <p className="text-[10px] text-gray-400">+{dayList.length - 6} autres</p>}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )
+      ) : loading ? (
         <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}</div>
       ) : active.length === 0 ? (
         <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-400 text-sm">
@@ -331,7 +397,7 @@ export default function AgendaClient({ permissions }: { permissions: StaffPermis
         </div>
       )}
 
-      {cancelled.length > 0 && (
+      {viewMode === 'day' && cancelled.length > 0 && (
         <p className="text-[11px] text-gray-400">{cancelled.length} RDV annulé(s) ce jour.</p>
       )}
 

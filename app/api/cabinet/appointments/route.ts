@@ -17,24 +17,43 @@ export async function GET(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   if (!ctx.permissions.agenda) return NextResponse.json({ error: 'Permission manquante' }, { status: 403 })
 
+  // Vue semaine : ?from=YYYY-MM-DD&to=YYYY-MM-DD renvoie la plage.
+  // Sinon ?date= (ou aujourd'hui) pour la vue jour.
+  const from = req.nextUrl.searchParams.get('from')
+  const to = req.nextUrl.searchParams.get('to')
+  const isRange = !!from && !!to
   const date = req.nextUrl.searchParams.get('date') || format(getNowInMaroc(), 'yyyy-MM-dd')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Date invalide' }, { status: 400 })
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/
+  if (isRange) {
+    if (!dateRe.test(from!) || !dateRe.test(to!) || to! < from!) return NextResponse.json({ error: 'Plage invalide' }, { status: 400 })
+  } else if (!dateRe.test(date)) {
+    return NextResponse.json({ error: 'Date invalide' }, { status: 400 })
+  }
 
   const admin = createAdminClient()
-  const [aptRes, typesRes, docRes] = await Promise.all([
-    admin.from('appointments')
-      .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
-      .eq('doctor_id', ctx.doctor.id).eq('date', date).order('time', { ascending: true }),
+  let aptQuery = admin.from('appointments')
+    .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
+    .eq('doctor_id', ctx.doctor.id)
+  aptQuery = isRange
+    ? aptQuery.gte('date', from!).lte('date', to!).order('date', { ascending: true }).order('time', { ascending: true })
+    : aptQuery.eq('date', date).order('time', { ascending: true })
+
+  const [aptRes, typesRes, docRes, blocksRes] = await Promise.all([
+    aptQuery,
     admin.from('consultation_types')
       .select('id, name, duration_minutes, default_price')
       .eq('doctor_id', ctx.doctor.id).eq('active', true).order('created_at', { ascending: true }),
     admin.from('doctors').select('appointment_duration').eq('id', ctx.doctor.id).single(),
+    isRange
+      ? admin.from('blocked_dates').select('id, date, start_time, end_time, reason').eq('doctor_id', ctx.doctor.id).gte('date', from!).lte('date', to!)
+      : Promise.resolve({ data: [] as unknown[] }),
   ])
 
   return NextResponse.json({
     appointments: aptRes.data ?? [],
     consultationTypes: typesRes.data ?? [],
     defaultDuration: docRes.data?.appointment_duration ?? 30,
+    blocks: blocksRes.data ?? [],
     permissions: ctx.permissions,
   })
 }
