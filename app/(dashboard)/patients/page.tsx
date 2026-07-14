@@ -970,8 +970,10 @@ export default function PatientsPage() {
                 const nextApt = patientAppointments
                   .filter((a) => a.date >= todayStr && a.status !== 'cancelled')
                   .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0]
-                const unpaid = patientAppointments.filter((a) => a.amount_due != null && a.amount_paid == null)
-                const unpaidTotal = unpaid.reduce((s, a) => s + (a.amount_due ?? 0), 0)
+                // Impayé = reste à charge : un montant dû existe et n'est pas
+                // entièrement réglé (inclut les paiements partiels : 150 sur 200 → 50).
+                const unpaid = patientAppointments.filter((a) => a.amount_due != null && (a.amount_paid ?? 0) < a.amount_due)
+                const unpaidTotal = unpaid.reduce((s, a) => s + ((a.amount_due ?? 0) - (a.amount_paid ?? 0)), 0)
                 const firstLine = (t?: string | null) => (t ?? '').split('\n').map((l) => l.trim()).filter(Boolean)[0] || ''
                 const cell = 'bg-white rounded-lg border border-gray-100 p-2.5'
                 return (
@@ -985,8 +987,8 @@ export default function PatientsPage() {
                         <p className="font-medium text-gray-800">{nextApt ? `${formatDateFr(nextApt.date)} · ${String(nextApt.time).substring(0, 5)}` : <span className="text-gray-400">Aucun programmé</span>}</p>
                       </div>
                       <div className={cell}>
-                        <p className="text-[11px] text-gray-400 mb-0.5">Factures impayées</p>
-                        <p className={`font-medium ${unpaid.length ? 'text-red-600' : 'text-green-600'}`}>{unpaid.length ? `${unpaid.length} · ${unpaidTotal} DH` : 'À jour'}</p>
+                        <p className="text-[11px] text-gray-400 mb-0.5">Reste à payer</p>
+                        <p className={`font-medium ${unpaid.length ? 'text-red-600' : 'text-green-600'}`}>{unpaid.length ? `${unpaidTotal} DH (${unpaid.length} RDV)` : 'À jour'}</p>
                       </div>
                       <div className={cell}>
                         <p className="text-[11px] text-gray-400 mb-0.5">Traitement en cours</p>
