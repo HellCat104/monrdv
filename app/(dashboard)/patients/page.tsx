@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
-import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, type VitalDef } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { getInitials, formatDateShort, formatDateFr, getNowInMaroc } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
@@ -195,7 +195,7 @@ export default function PatientsPage() {
     setEditSurgeries(patient.surgeries ?? '')
     setEditTreatments(patient.current_treatments ?? '')
     setEditVaccinations(patient.vaccinations ?? '')
-    setNewNote('')
+    setNewNote(isPsychiatricDoctor(doctorSpecialties) ? PSY_NOTE_TEMPLATE : '')
     setConsultNotes([])
     setDocuments([])
     setRecalls([])
@@ -337,7 +337,7 @@ export default function PatientsPage() {
   }
 
   async function addConsultNote() {
-    if (!selectedPatient || !doctorId || !newNote.trim()) return
+    if (!selectedPatient || !doctorId || !newNote.trim() || newNote === PSY_NOTE_TEMPLATE) return
     setAddingNote(true)
     const { data, error } = await supabase
       .from('consultation_notes')
@@ -351,7 +351,7 @@ export default function PatientsPage() {
     setAddingNote(false)
     if (!error && data) {
       setConsultNotes((prev) => [data, ...prev])
-      setNewNote('')
+      setNewNote(isPsychiatricDoctor(doctorSpecialties) ? PSY_NOTE_TEMPLATE : '')
     }
   }
 
@@ -695,6 +695,9 @@ export default function PatientsPage() {
       // recent : par date de création (ordre de chargement déjà desc)
       return (b.created_at ?? '').localeCompare(a.created_at ?? '')
     })
+
+  // Psychiatre : dossier épuré (pas de groupe sanguin / vaccins / constantes)
+  const isPsy = isPsychiatricDoctor(doctorSpecialties)
 
   return (
     <div className="space-y-6">
@@ -1111,15 +1114,17 @@ export default function PatientsPage() {
                       onChange={(e) => setEditBirthDate(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-gray-500">Groupe sanguin</label>
-                    <Select value={editBloodGroup || undefined} onValueChange={setEditBloodGroup}>
-                      <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {!isPsy && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-gray-500">Groupe sanguin</label>
+                      <Select value={editBloodGroup || undefined} onValueChange={setEditBloodGroup}>
+                        <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          {BLOOD_GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="space-y-1.5">
                     <label className="text-xs text-gray-500">CIN (carte d&apos;identité)</label>
                     <Input
@@ -1201,18 +1206,20 @@ export default function PatientsPage() {
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-gray-500 flex items-center gap-1.5">
-                    <Syringe className="h-3.5 w-3.5 text-green-400" /> Vaccins / statut vaccinal
-                  </label>
-                  <textarea
-                    value={editVaccinations}
-                    onChange={(e) => setEditVaccinations(e.target.value)}
-                    placeholder="Ex: DTP à jour (2024), grippe 2025, hépatite B…"
-                    rows={2}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
-                  />
-                </div>
+                {!isPsy && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                      <Syringe className="h-3.5 w-3.5 text-green-400" /> Vaccins / statut vaccinal
+                    </label>
+                    <textarea
+                      value={editVaccinations}
+                      onChange={(e) => setEditVaccinations(e.target.value)}
+                      placeholder="Ex: DTP à jour (2024), grippe 2025, hépatite B…"
+                      rows={2}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <label className="text-xs text-gray-500">Notes / observations</label>
                   <textarea
@@ -1299,8 +1306,8 @@ export default function PatientsPage() {
                 </p>
               </div>
 
-              {/* Constantes vitales — affichées selon la spécialité */}
-              {enabledVitals.length > 0 && (
+              {/* Constantes vitales — affichées selon la spécialité (masquées en psychiatrie) */}
+              {!isPsy && enabledVitals.length > 0 && (
                 <div className="border-t border-gray-100 pt-4">
                   <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                     <Activity className="h-4 w-4 text-primary-500" />
@@ -1383,14 +1390,14 @@ export default function PatientsPage() {
                   <textarea
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
-                    placeholder="Ajouter une note datée (diagnostic, observation du jour…)"
-                    rows={2}
+                    placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Ajouter une note datée (diagnostic, observation du jour…)'}
+                    rows={isPsy ? 6 : 2}
                     className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
                   <Button
                     size="sm"
                     onClick={addConsultNote}
-                    disabled={addingNote || !newNote.trim()}
+                    disabled={addingNote || !newNote.trim() || newNote === PSY_NOTE_TEMPLATE}
                     className="shrink-0 self-start"
                   >
                     <Plus className="h-4 w-4" />
