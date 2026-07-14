@@ -4,8 +4,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
-import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc } from '@/lib/utils'
-import { format } from 'date-fns'
+import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey } from '@/lib/utils'
+import { format, parseISO, addDays, addMonths } from 'date-fns'
+import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,12 +50,20 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ data: [] as unknown[] }),
   ])
 
+  // Mode confidentiel : on retire le motif et le type de consultation
+  // (la secrétaire ne voit que nom, heure, tél. et ses actions).
+  let appointments = aptRes.data ?? []
+  if (ctx.confidential) {
+    appointments = appointments.map((a) => ({ ...a, notes: null, consultation_type: [] }))
+  }
+
   return NextResponse.json({
-    appointments: aptRes.data ?? [],
-    consultationTypes: typesRes.data ?? [],
+    appointments,
+    consultationTypes: ctx.confidential ? [] : (typesRes.data ?? []),
     defaultDuration: docRes.data?.appointment_duration ?? 30,
     blocks: blocksRes.data ?? [],
     permissions: ctx.permissions,
+    confidential: ctx.confidential,
   })
 }
 
@@ -95,7 +104,7 @@ export async function POST(req: NextRequest) {
 
   // Durée : celle du motif choisi, sinon la durée standard du médecin
   const { data: doc } = await admin.from('doctors')
-    .select('appointment_duration, specialty, specialties').eq('id', doctorId).single()
+    .select('appointment_duration, specialty, specialties, working_hours').eq('id', doctorId).single()
   let duration = doc?.appointment_duration ?? 30
   if (typeId) {
     const { data: ctype } = await admin.from('consultation_types')
@@ -125,31 +134,58 @@ export async function POST(req: NextRequest) {
     ? doc.specialties : (doc?.specialty ? [doc.specialty] : [])
   const specialty = docSpecs.length === 1 ? docSpecs[0] : null
 
-  const { data: appointment, error: aptErr } = await admin.from('appointments')
-    .insert({
-      doctor_id: doctorId,
-      patient_id: patientId,
-      date,
-      time,
-      status: 'confirmed',
-      notes,
-      cancel_token: generateCancelToken(),
-      consultation_type_id: typeId,
-      specialty,
-      duration_minutes: duration,
-      consent_at: null,
-    })
-    .select('*').single()
+  // RDV récurrents : chaque occurrence est un vrai RDV, déplaçable/annulable
+  // individuellement. Sans récurrence -> une seule date (comportement d'origine).
+  const rec = body.recurrence as { freq?: string; count?: number } | undefined
+  const freq = rec && ['weekly', 'biweekly', 'monthly'].includes(String(rec.freq)) ? String(rec.freq) : null
+  const count = freq ? Math.min(26, Math.max(2, Math.floor(Number(rec?.count) || 0))) : 1
+  const groupId = count > 1 ? randomUUID() : null
 
-  if (aptErr || !appointment) {
-    // 23505 = même heure de départ ; 23P01 = chevauchement (contrainte d'exclusion)
-    if (aptErr?.code === '23505' || aptErr?.code === '23P01') {
-      return NextResponse.json({ error: 'Ce créneau est déjà pris. Choisissez-en un autre.' }, { status: 409 })
-    }
-    return NextResponse.json({ error: 'Erreur création RDV' }, { status: 500 })
+  const base = parseISO(date)
+  const workingHours = (doc?.working_hours ?? {}) as Record<string, { enabled?: boolean } | undefined>
+  const occurrences: string[] = []
+  for (let k = 0; k < count; k++) {
+    const d = freq === 'monthly' ? addMonths(base, k) : addDays(base, (freq === 'biweekly' ? 14 : 7) * k)
+    // La 1re occurrence (le créneau choisi) est toujours tentée ; les suivantes
+    // sont ignorées si le médecin ne travaille pas ce jour-là.
+    if (k > 0 && workingHours[getDayKey(d)]?.enabled === false) continue
+    occurrences.push(format(d, 'yyyy-MM-dd'))
   }
 
-  return NextResponse.json({ appointment }, { status: 201 })
+  const created: Record<string, unknown>[] = []
+  const skipped: string[] = []
+  let hardError = false
+  for (const ds of occurrences) {
+    const { data: appt, error: e } = await admin.from('appointments')
+      .insert({
+        doctor_id: doctorId,
+        patient_id: patientId,
+        date: ds,
+        time,
+        status: 'confirmed',
+        notes,
+        cancel_token: generateCancelToken(),
+        consultation_type_id: typeId,
+        specialty,
+        duration_minutes: duration,
+        consent_at: null,
+        recurrence_group_id: groupId,
+      })
+      .select('*').single()
+    if (e || !appt) {
+      // 23505 = même heure de départ ; 23P01 = chevauchement (contrainte d'exclusion)
+      if (e?.code === '23505' || e?.code === '23P01') { skipped.push(ds); continue }
+      hardError = true; continue
+    }
+    created.push(appt)
+  }
+
+  if (created.length === 0) {
+    if (hardError) return NextResponse.json({ error: 'Erreur création RDV' }, { status: 500 })
+    return NextResponse.json({ error: 'Ce créneau est déjà pris. Choisissez-en un autre.' }, { status: 409 })
+  }
+
+  return NextResponse.json({ appointment: created[0], created: created.length, skipped }, { status: 201 })
 }
 
 // PATCH — présence / paiement / annulation, selon les permissions

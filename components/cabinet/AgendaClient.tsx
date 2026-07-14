@@ -36,6 +36,8 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const [addOpen, setAddOpen] = useState(false)
   const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', time: '', notes: '' })
   const [typeId, setTypeId] = useState(NO_TYPE)
+  const [recurFreq, setRecurFreq] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none')
+  const [recurCount, setRecurCount] = useState(4)
   const [slots, setSlots] = useState<{ time: string; available: boolean }[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -163,13 +165,20 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
           ...form,
           date,
           consultation_type_id: typeId !== NO_TYPE ? typeId : undefined,
+          recurrence: recurFreq !== 'none' ? { freq: recurFreq, count: recurCount } : undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setAddError(data.error || 'Erreur lors de la création'); return }
+      // Récurrence : informer du nombre créé et des occurrences ignorées (créneaux pris)
+      if (recurFreq !== 'none') {
+        const skipped = Array.isArray(data.skipped) ? data.skipped.length : 0
+        alert(`${data.created ?? 1} rendez-vous créés${skipped > 0 ? ` · ${skipped} ignoré(s) (créneau déjà pris — à replacer à la main)` : ''}.`)
+      }
       setAddOpen(false)
       setForm({ first_name: '', last_name: '', phone: '', time: '', notes: '' })
       setTypeId(NO_TYPE)
+      setRecurFreq('none'); setRecurCount(4)
       await load(date)
     } catch {
       setAddError('Erreur réseau')
@@ -450,6 +459,33 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 <p className="text-xs text-red-500">Aucun créneau disponible ce jour.</p>
               )}
             </div>
+            {/* Récurrence : même heure, répétée sur plusieurs semaines/mois */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Répéter</Label>
+                <Select value={recurFreq} onValueChange={(v) => setRecurFreq(v as typeof recurFreq)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Rendez-vous unique</SelectItem>
+                    <SelectItem value="weekly">Chaque semaine</SelectItem>
+                    <SelectItem value="biweekly">Toutes les 2 semaines</SelectItem>
+                    <SelectItem value="monthly">Chaque mois</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {recurFreq !== 'none' && (
+                <div className="space-y-1.5">
+                  <Label>Nombre de séances</Label>
+                  <Input type="number" min={2} max={26} value={recurCount}
+                    onChange={(e) => setRecurCount(Math.min(26, Math.max(2, Number(e.target.value) || 2)))} />
+                </div>
+              )}
+            </div>
+            {recurFreq !== 'none' && (
+              <p className="text-xs text-gray-500 -mt-1">
+                {recurCount} rendez-vous à {form.time || '—'}, {recurFreq === 'weekly' ? 'chaque semaine' : recurFreq === 'biweekly' ? 'toutes les 2 semaines' : 'chaque mois'}. Chacun reste déplaçable indépendamment.
+              </p>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="c_notes">Notes (optionnel)</Label>
               <Input id="c_notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Précisions…" />

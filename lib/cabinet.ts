@@ -9,6 +9,8 @@ export interface StaffContext {
   staff: CabinetStaff
   doctor: { id: string; name: string; specialty: string | null; city: string | null }
   permissions: StaffPermissions
+  /** Mode confidentiel du médecin : masque tout le contenu clinique à la secrétaire. */
+  confidential: boolean
 }
 
 export async function getStaffContext(): Promise<StaffContext | null> {
@@ -29,7 +31,7 @@ export async function getStaffContext(): Promise<StaffContext | null> {
 
   const { data: doctor } = await admin
     .from('doctors')
-    .select('id, name, specialty, city')
+    .select('id, name, specialty, city, confidential_mode')
     .eq('id', staff.doctor_id)
     .single()
   if (!doctor) return null
@@ -37,5 +39,16 @@ export async function getStaffContext(): Promise<StaffContext | null> {
   // Fusion avec les défauts : les permissions ajoutées après l'invitation
   // d'une secrétaire existante prennent leur valeur par défaut.
   const permissions = { ...DEFAULT_STAFF_PERMISSIONS, ...((staff.permissions ?? {}) as Partial<StaffPermissions>) }
-  return { email: user.email, staff: staff as CabinetStaff, doctor, permissions }
+
+  // Mode confidentiel : quelles que soient les permissions accordées, on coupe
+  // l'accès au clinique (antécédents + ordonnances). Le motif et le type de
+  // consultation sont retirés côté route agenda.
+  const confidential = doctor.confidential_mode === true
+  if (confidential) {
+    permissions.patients_medical = false
+    permissions.prescriptions_view = false
+  }
+
+  const doctorPublic = { id: doctor.id, name: doctor.name, specialty: doctor.specialty, city: doctor.city }
+  return { email: user.email, staff: staff as CabinetStaff, doctor: doctorPublic, permissions, confidential }
 }

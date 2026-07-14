@@ -32,6 +32,7 @@ export default function SettingsPage() {
     appointment_duration: 30,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
     has_secretary: false,
+    confidential_mode: false,
   })
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -86,6 +87,7 @@ export default function SettingsPage() {
           appointment_duration: data.appointment_duration,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
           has_secretary: !!data.has_secretary,
+          confidential_mode: !!data.confidential_mode,
         })
         setEnabledVitals(resolveEnabledVitals(data.enabled_vitals, data.specialty))
         setCustomVitals(((data.custom_vitals as VitalDef[] | null) ?? []))
@@ -206,6 +208,7 @@ export default function SettingsPage() {
           appointment_duration: form.appointment_duration,
           working_hours: form.working_hours,
           has_secretary: form.has_secretary,
+          confidential_mode: form.confidential_mode,
         })
         .eq('id', doctor.id)
 
@@ -473,6 +476,24 @@ export default function SettingsPage() {
                 </span>
               </span>
             </label>
+
+            {/* Mode confidentiel — utile pour psychiatrie, ou tout médecin soucieux du secret */}
+            {form.has_secretary && (
+              <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3.5 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={form.confidential_mode}
+                  onChange={(e) => setForm({ ...form, confidential_mode: e.target.checked })}
+                  className="h-4 w-4 mt-0.5 rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-sm">
+                  <span className="font-medium text-gray-800">Mode confidentiel</span>
+                  <span className="block text-xs text-gray-400 mt-0.5">
+                    Votre secrétaire ne voit que le <strong>nom, l&apos;heure et le téléphone</strong> du patient — jamais le motif, le type de consultation, les antécédents ni les ordonnances. Recommandé en psychiatrie et pour tout suivi sensible.
+                  </span>
+                </span>
+              </label>
+            )}
 
             {/* Spécialités additionnelles (médecin multi-spécialités) */}
             <div className="space-y-1.5">
