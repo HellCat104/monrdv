@@ -2,7 +2,7 @@
 // actions (ordonnance / certificat / encaisser / facture) à droite. Un seul écran.
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { allVitalDefs, resolveEnabledVitals, type VitalDef } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, isPsychiatricDoctor, type VitalDef } from '@/types'
 import ConsultationClient from './ConsultationClient'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, enabled_vitals, specialty, custom_vitals')
+    .select('id, name, enabled_vitals, specialty, specialties, custom_vitals')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -63,6 +63,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       existingNote={existingNote?.note ?? ''}
       vitalDefs={vitalDefs}
       vitalDefsAll={vitalDefsAll}
+      isPsy={isPsychiatricDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])}
     />
   )
 }

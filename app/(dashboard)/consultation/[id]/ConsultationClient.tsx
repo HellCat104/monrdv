@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDateFr } from '@/lib/utils'
-import type { VitalDef } from '@/types'
+import { PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
   AlertTriangle, CheckCircle2, Plus,
@@ -20,7 +20,7 @@ interface Patient { id: string; first_name: string; last_name: string; age?: num
 export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, hasInvoice, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, recentVitals,
-  existingNoteId, existingNote, vitalDefs, vitalDefsAll,
+  existingNoteId, existingNote, vitalDefs, vitalDefsAll, isPsy = false,
 }: {
   doctorId: string
   appointmentId: string
@@ -37,11 +37,13 @@ export default function ConsultationClient({
   existingNote: string
   vitalDefs: VitalDef[]
   vitalDefsAll: VitalDef[]
+  isPsy?: boolean
 }) {
   const supabase = createClient()
   const router = useRouter()
 
-  const [note, setNote] = useState(existingNote)
+  // Psychiatrie : une note vierge démarre pré-structurée (Motif/Histoire/…)
+  const [note, setNote] = useState(existingNote || (isPsy ? PSY_NOTE_TEMPLATE : ''))
   const [noteId, setNoteId] = useState<string | null>(existingNoteId)
   const [noteState, setNoteState] = useState<'idle' | 'saving' | 'saved'>('idle')
 
@@ -64,7 +66,8 @@ export default function ConsultationClient({
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const saveNote = useCallback(async () => {
-    if (!note.trim() || savingRef.current) return
+    // Rien à enregistrer si vide ou si c'est le modèle non modifié
+    if (!note.trim() || note === PSY_NOTE_TEMPLATE || savingRef.current) return
     savingRef.current = true
     setNoteState('saving')
     try {
@@ -86,7 +89,7 @@ export default function ConsultationClient({
 
   // Enregistrement automatique : 1,5 s après la dernière frappe → rien n'est perdu
   useEffect(() => {
-    if (!note.trim()) return
+    if (!note.trim() || note === PSY_NOTE_TEMPLATE) return
     if (noteTimer.current) clearTimeout(noteTimer.current)
     noteTimer.current = setTimeout(() => { saveNote() }, 1500)
     return () => { if (noteTimer.current) clearTimeout(noteTimer.current) }
@@ -237,7 +240,12 @@ export default function ConsultationClient({
               <h3 className="text-sm font-semibold text-gray-700">Note de consultation</h3>
               <div className="flex items-center gap-2">
                 {noteState === 'saved' && <span className="text-xs text-green-600 flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Enregistrée</span>}
-                <Button variant="outline" size="sm" onClick={saveNote} disabled={noteState === 'saving' || !note.trim()}>
+                {isPsy && !note.trim() && (
+                  <Button variant="outline" size="sm" onClick={() => setNote(PSY_NOTE_TEMPLATE)}>
+                    <FileText className="h-4 w-4 mr-1" /> Modèle
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={saveNote} disabled={noteState === 'saving' || !note.trim() || note === PSY_NOTE_TEMPLATE}>
                   <Save className="h-4 w-4 mr-1" /> {noteState === 'saving' ? '…' : 'Enregistrer'}
                 </Button>
               </div>
@@ -245,7 +253,7 @@ export default function ConsultationClient({
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Motif, examen clinique, diagnostic, conduite à tenir…"
+              placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Motif, examen clinique, diagnostic, conduite à tenir…'}
               rows={14}
               className="w-full text-sm text-gray-800 leading-relaxed border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
             />

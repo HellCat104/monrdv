@@ -552,3 +552,20 @@ export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] a
 export function isPediatricDoctor(specialties: (string | null | undefined)[]): boolean {
   return specialties.some((s) => !!s && /p[ée]diatr/i.test(s))
 }
+
+// Spécialités « psy » (psychiatre, pédopsychiatre) → active la fiche de synthèse
+// et le modèle de note structuré (Motif / Histoire / Évolution / Traitement / RDV)
+export function isPsychiatricDoctor(specialties: (string | null | undefined)[]): boolean {
+  return specialties.some((s) => !!s && /psychiatr|pédopsy|pedopsy/i.test(s))
+}
+
+// Modèle de note structuré (psychiatrie) — pré-remplit une note vierge
+export const PSY_NOTE_TEMPLATE = `Motif :
+
+Histoire :
+
+Évolution :
+
+Traitement :
+
+Prochain RDV : `

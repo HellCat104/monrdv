@@ -15,9 +15,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
-import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, type VitalDef } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, type VitalDef } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
-import { getInitials, formatDateShort, formatDateFr } from '@/lib/utils'
+import { getInitials, formatDateShort, formatDateFr, getNowInMaroc } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
@@ -960,6 +960,75 @@ export default function PatientsPage() {
 
           {selectedPatient && (
             <div className="space-y-4">
+              {/* Fiche de synthèse « en 10 secondes » — psychiatrie */}
+              {isPsychiatricDoctor(doctorSpecialties) && (() => {
+                const now = getNowInMaroc()
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+                const nextApt = patientAppointments
+                  .filter((a) => a.date >= todayStr && a.status !== 'cancelled')
+                  .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0]
+                const unpaid = patientAppointments.filter((a) => a.amount_due != null && a.amount_paid == null)
+                const unpaidTotal = unpaid.reduce((s, a) => s + (a.amount_due ?? 0), 0)
+                const firstLine = (t?: string | null) => (t ?? '').split('\n').map((l) => l.trim()).filter(Boolean)[0] || ''
+                const cell = 'bg-white rounded-lg border border-gray-100 p-2.5'
+                return (
+                  <div className="rounded-xl border border-primary-200 bg-primary-50/60 p-3 space-y-3">
+                    <h3 className="text-xs font-bold text-primary-700 uppercase tracking-wide flex items-center gap-1.5">
+                      <Activity className="h-3.5 w-3.5" /> Synthèse
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className={cell}>
+                        <p className="text-[11px] text-gray-400 mb-0.5">Prochain RDV</p>
+                        <p className="font-medium text-gray-800">{nextApt ? `${formatDateFr(nextApt.date)} · ${String(nextApt.time).substring(0, 5)}` : <span className="text-gray-400">Aucun programmé</span>}</p>
+                      </div>
+                      <div className={cell}>
+                        <p className="text-[11px] text-gray-400 mb-0.5">Factures impayées</p>
+                        <p className={`font-medium ${unpaid.length ? 'text-red-600' : 'text-green-600'}`}>{unpaid.length ? `${unpaid.length} · ${unpaidTotal} DH` : 'À jour'}</p>
+                      </div>
+                      <div className={cell}>
+                        <p className="text-[11px] text-gray-400 mb-0.5">Traitement en cours</p>
+                        <p className="text-gray-800 line-clamp-2">{editTreatments.trim() || <span className="text-gray-400">—</span>}</p>
+                      </div>
+                      <div className={cell}>
+                        <p className="text-[11px] text-gray-400 mb-0.5">Allergies / antécédents</p>
+                        <p className="text-gray-800 line-clamp-2">
+                          {editAllergies.trim() && <span className="text-red-600">{editAllergies.trim()}</span>}
+                          {editAllergies.trim() && editChronic.trim() && ' · '}
+                          {editChronic.trim()}
+                          {!editAllergies.trim() && !editChronic.trim() && <span className="text-gray-400">—</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className={cell}>
+                        <p className="text-[11px] text-gray-400 mb-1">3 dernières notes</p>
+                        {consultNotes.length === 0 ? <p className="text-xs text-gray-400">Aucune</p> : (
+                          <ul className="space-y-1">
+                            {consultNotes.slice(0, 3).map((n) => (
+                              <li key={n.id} className="text-xs text-gray-600 truncate">
+                                <span className="text-gray-400">{formatDateShort(n.created_at)} · </span>{firstLine(n.note) || '(vide)'}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div className={cell}>
+                        <p className="text-[11px] text-gray-400 mb-1">Dernières ordonnances</p>
+                        {prescriptions.length === 0 ? <p className="text-xs text-gray-400">Aucune</p> : (
+                          <ul className="space-y-1">
+                            {prescriptions.slice(0, 3).map((p) => (
+                              <li key={p.id} className="text-xs text-gray-600 truncate">
+                                <span className="text-gray-400">{formatDateShort(p.created_at)} · </span>{firstLine(p.content) || '—'}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
               {/* Infos contact + dossier complet */}
               <div className="bg-gray-50 rounded-lg p-3 text-sm flex items-center justify-between gap-3 flex-wrap">
                 <span className="flex items-center gap-2 text-gray-600">
