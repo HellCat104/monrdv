@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import DentalChart from '@/components/dashboard/DentalChart'
 import GrowthChart from '@/components/dashboard/GrowthChart'
@@ -34,6 +35,7 @@ interface PatientWithStats extends Patient {
 }
 
 export default function PatientsPage() {
+  const router = useRouter()
   const [patients, setPatients] = useState<PatientWithStats[]>([])
   const [doctorId, setDoctorId] = useState<string | null>(null)
   const [doctorName, setDoctorName] = useState('')
@@ -796,7 +798,7 @@ export default function PatientsPage() {
             <Card
               key={patient.id}
               className={`cursor-pointer hover:border-primary-200 hover:shadow-sm transition-all ${selectionMode && selectedIds.has(patient.id) ? 'border-primary-300 bg-primary-50/40' : ''}`}
-              onClick={() => selectionMode ? toggleSelect(patient.id) : openPatientHistory(patient)}
+              onClick={() => selectionMode ? toggleSelect(patient.id) : router.push(`/patients/${patient.id}`)}
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-4">

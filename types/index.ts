@@ -76,6 +76,7 @@ export interface Patient {
   birth_date?: string | null // date de naissance (YYYY-MM-DD) — âge précis + courbes
   blood_group?: string | null // A+, A-, B+, … O-
   cin?: string | null       // carte d'identité nationale (Maroc)
+  address?: string | null   // adresse postale (courriers, factures)
   mutuelle?: string | null  // CNSS / CNOPS / assurance privée…
   // Dossier médical enrichi (antécédents structurés)
   allergies?: string | null
