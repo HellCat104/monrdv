@@ -13,7 +13,7 @@ export default async function CertificatPage({ params }: { params: { id: string 
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe')
+    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -40,11 +40,9 @@ export default async function CertificatPage({ params }: { params: { id: string 
             {[doctor.address, doctor.city].filter(Boolean).join(', ')}
             {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
           </p>
-          {(doctor.ice || doctor.inpe) && (
+          {(doctor.cnom_number || doctor.ice || doctor.inpe) && (
             <p className="text-xs text-gray-400 mt-0.5">
-              {doctor.inpe && <span>INPE : {doctor.inpe}</span>}
-              {doctor.ice && doctor.inpe && <span> · </span>}
-              {doctor.ice && <span>ICE : {doctor.ice}</span>}
+              {[doctor.cnom_number && `Ordre : ${doctor.cnom_number}`, doctor.inpe && `INPE : ${doctor.inpe}`, doctor.ice && `ICE : ${doctor.ice}`].filter(Boolean).join(' · ')}
             </p>
           )}
         </header>

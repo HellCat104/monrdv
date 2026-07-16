@@ -15,6 +15,7 @@ interface DoctorInfo {
   phone?: string | null
   ice?: string | null
   inpe?: string | null
+  cnom_number?: string | null
 }
 
 interface PatientInfo {
@@ -124,11 +125,9 @@ export function OrdonnanceEditor({
               {[doctor.address, doctor.city].filter(Boolean).join(', ')}
               {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
             </p>
-            {(doctor.ice || doctor.inpe) && (
+            {(doctor.cnom_number || doctor.ice || doctor.inpe) && (
               <p className="text-xs text-gray-400 mt-0.5">
-                {doctor.inpe && <span>INPE : {doctor.inpe}</span>}
-                {doctor.ice && doctor.inpe && <span> · </span>}
-                {doctor.ice && <span>ICE : {doctor.ice}</span>}
+                {[doctor.cnom_number && `Ordre : ${doctor.cnom_number}`, doctor.inpe && `INPE : ${doctor.inpe}`, doctor.ice && `ICE : ${doctor.ice}`].filter(Boolean).join(' · ')}
               </p>
             )}
           </header>

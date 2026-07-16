@@ -27,7 +27,7 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, prescription_favorites')
+    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()

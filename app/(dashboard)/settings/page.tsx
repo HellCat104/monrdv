@@ -29,6 +29,7 @@ export default function SettingsPage() {
     bio: '',
     ice: '',
     inpe: '',
+    cnom_number: '',
     appointment_duration: 30,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
     has_secretary: false,
@@ -84,6 +85,7 @@ export default function SettingsPage() {
           bio: data.bio ?? '',
           ice: data.ice ?? '',
           inpe: data.inpe ?? '',
+          cnom_number: data.cnom_number ?? '',
           appointment_duration: data.appointment_duration,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
           has_secretary: !!data.has_secretary,
@@ -203,6 +205,7 @@ export default function SettingsPage() {
           bio: form.bio || null,
           ice: form.ice.trim() || null,
           inpe: form.inpe.trim() || null,
+          cnom_number: form.cnom_number.trim() || null,
           enabled_vitals: enabledVitals,
           custom_vitals: customVitals,
           appointment_duration: form.appointment_duration,
@@ -609,9 +612,18 @@ export default function SettingsPage() {
                   placeholder="N° professionnel de santé"
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="s_cnom">N° Ordre (CNOM)</Label>
+                <Input
+                  id="s_cnom"
+                  value={form.cnom_number}
+                  onChange={(e) => setForm({ ...form, cnom_number: e.target.value })}
+                  placeholder="N° d'inscription à l'Ordre des médecins"
+                />
+              </div>
             </div>
             <p className="text-xs text-gray-400 -mt-2">
-              Ces identifiants apparaîtront sur les factures/reçus imprimés.
+              Ces identifiants apparaîtront sur vos ordonnances, certificats et factures imprimés.
             </p>
           </CardContent>
         </Card>

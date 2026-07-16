@@ -20,7 +20,7 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, prescription_favorites')
+    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites')
     .eq('email', user.email)
     .single()
 
