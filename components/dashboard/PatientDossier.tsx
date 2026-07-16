@@ -42,6 +42,7 @@ export default function PatientDossier({
   const [editAge, setEditAge] = useState(patient.age != null ? String(patient.age) : '')
   const [editBirthDate, setEditBirthDate] = useState(patient.birth_date ?? '')
   const [editSex, setEditSex] = useState<'M' | 'F' | ''>(patient.sex ?? '')
+  const [editGestWeeks, setEditGestWeeks] = useState(patient.gestational_age_weeks != null ? String(patient.gestational_age_weeks) : '')
   const [editParent1, setEditParent1] = useState(patient.parent1_name ?? '')
   const [editParent2, setEditParent2] = useState(patient.parent2_name ?? '')
   const [editParent1Phone, setEditParent1Phone] = useState(patient.parent1_phone ?? '')
@@ -149,6 +150,7 @@ export default function PatientDossier({
       age: editAge ? Number(editAge) : null,
       birth_date: editBirthDate || null,
       sex: editSex || null,
+      gestational_age_weeks: editGestWeeks ? Math.min(43, Math.max(22, Number(editGestWeeks))) : null,
       parent1_name: editParent1.trim() || null,
       parent2_name: editParent2.trim() || null,
       parent1_phone: editParent1Phone.trim() || null,
@@ -315,15 +317,21 @@ export default function PatientDossier({
               </div>
               {isPediatricDoctor(specialties) && (
                 <>
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-gray-400">Sexe (couloirs OMS des courbes)</Label>
-                    <div className="flex gap-1.5">
-                      {([['M', 'Garçon'], ['F', 'Fille']] as const).map(([v, lbl]) => (
-                        <button key={v} type="button" onClick={() => setEditSex(editSex === v ? '' : v)}
-                          className={`flex-1 text-xs px-2 py-1.5 rounded-lg border transition ${editSex === v ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                          {lbl}
-                        </button>
-                      ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-gray-400">Sexe (couloirs OMS)</Label>
+                      <div className="flex gap-1.5">
+                        {([['M', 'Garçon'], ['F', 'Fille']] as const).map(([v, lbl]) => (
+                          <button key={v} type="button" onClick={() => setEditSex(editSex === v ? '' : v)}
+                            className={`flex-1 text-xs px-2 py-1.5 rounded-lg border transition ${editSex === v ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-gray-400" title="Si né(e) avant 37 SA, la courbe utilise l'âge corrigé jusqu'à 24 mois">Terme (SA) — préma</Label>
+                      <Input type="number" min={22} max={43} value={editGestWeeks} onChange={(e) => setEditGestWeeks(e.target.value)} placeholder="Ex : 34" className="h-9" />
                     </div>
                   </div>
                   {([
@@ -476,7 +484,7 @@ export default function PatientDossier({
           {isDentalDoctor(specialties) && <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />}
           {isPediatricDoctor(specialties) && editBirthDate && (
             <div className="space-y-4">
-              <GrowthChart key={`g-${patient.id}`} birthDate={editBirthDate} vitals={vitals} sex={editSex || null} />
+              <GrowthChart key={`g-${patient.id}`} birthDate={editBirthDate} vitals={vitals} sex={editSex || null} gestationalWeeks={editGestWeeks ? Number(editGestWeeks) : null} />
               <VaccinationCard key={`v-${patient.id}`} patientId={patient.id} birthDate={editBirthDate} initial={patient.vaccines ?? {}} />
               <MilestonesCard key={`ms-${patient.id}`} patientId={patient.id} birthDate={editBirthDate} initial={patient.milestones ?? {}} />
             </div>

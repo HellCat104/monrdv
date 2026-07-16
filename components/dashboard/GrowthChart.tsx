@@ -24,25 +24,38 @@ function ageInMonths(birth: string, at: string): number {
 
 const P_LABELS = ['P3', 'P15', 'P50', 'P85', 'P97']
 
-export default function GrowthChart({ birthDate, vitals, sex }: { birthDate: string; vitals: Vital[]; sex?: Sex | null }) {
+export default function GrowthChart({ birthDate, vitals, sex, gestationalWeeks, readOnly }: {
+  birthDate: string
+  vitals: Vital[]
+  sex?: Sex | null
+  gestationalWeeks?: number | null
+  readOnly?: boolean
+}) {
   const [metric, setMetric] = useState<GrowthMetric>('weight')
   const m = METRICS.find((x) => x.key === metric)!
 
+  // Prématuré (< 37 SA) : âge corrigé jusqu'à 24 mois d'âge réel
+  const correctionM = gestationalWeeks && gestationalWeeks < 37 ? ((40 - gestationalWeeks) * 7) / 30.4375 : 0
+
   // Points de l'enfant — l'IMC est calculé quand poids + taille sont mesurés ensemble
   const pts = useMemo(() => {
+    const ageAt = (at: string) => {
+      const real = ageInMonths(birthDate, at)
+      return correctionM > 0 && real < 24 ? Math.max(0, real - correctionM) : real
+    }
     return vitals
       .map((v) => {
         if (metric === 'bmi') {
           const w = v.values?.weight, h = v.values?.height
           if (typeof w !== 'number' || typeof h !== 'number' || h <= 0) return null
-          return { x: ageInMonths(birthDate, v.measured_at), y: Math.round((w / Math.pow(h / 100, 2)) * 10) / 10 }
+          return { x: ageAt(v.measured_at), y: Math.round((w / Math.pow(h / 100, 2)) * 10) / 10 }
         }
         const y = v.values?.[metric]
-        return typeof y === 'number' ? { x: ageInMonths(birthDate, v.measured_at), y } : null
+        return typeof y === 'number' ? { x: ageAt(v.measured_at), y } : null
       })
       .filter((p): p is { x: number; y: number } => p !== null)
       .sort((a, b) => a.x - b.x)
-  }, [vitals, metric, birthDate])
+  }, [vitals, metric, birthDate, correctionM])
 
   // Alertes cliniques : rupture de couloir / mesure hors P3-P97
   const alerts: GrowthAlert[] = useMemo(() => {
@@ -107,6 +120,11 @@ export default function GrowthChart({ birthDate, vitals, sex }: { birthDate: str
       <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
         <TrendingUp className="h-4 w-4 text-primary-500" /> Courbe de croissance
         {sex && <span className="text-[11px] font-normal text-gray-400">— couloirs OMS ({sex === 'M' ? 'garçon' : 'fille'})</span>}
+        {correctionM > 0 && (
+          <span className="text-[11px] font-normal bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-full">
+            âge corrigé · né(e) à {gestationalWeeks} SA
+          </span>
+        )}
       </h4>
 
       <div className="flex gap-1.5 mb-3 flex-wrap">
@@ -130,7 +148,7 @@ export default function GrowthChart({ birthDate, vitals, sex }: { birthDate: str
         </div>
       ))}
 
-      {!sex && pts.length > 0 && (
+      {!sex && pts.length > 0 && !readOnly && (
         <p className="mb-2 text-[11px] bg-blue-50 text-blue-600 rounded-lg px-3 py-2">
           💡 Renseignez le <b>sexe de l&apos;enfant</b> dans sa fiche pour afficher les couloirs de référence OMS (P3 · P50 · P97) et détecter les ruptures de courbe.
         </p>
@@ -182,8 +200,8 @@ export default function GrowthChart({ birthDate, vitals, sex }: { birthDate: str
       )}
       <p className="text-[11px] text-gray-400 mt-1">
         {sex
-          ? 'Couloirs indicatifs OMS 0-5 ans (P3 · P15 · P50 · P85 · P97). Zone foncée : P15-P85. Une mesure qui change de 2 couloirs = rupture à contrôler.'
-          : `Évolution du ${m.label.toLowerCase()} de l'enfant dans le temps. Saisissez les constantes à chaque visite pour un suivi précis.`}
+          ? `Couloirs indicatifs OMS (P3 · P15 · P50 · P85 · P97) — taille/IMC jusqu'à 15 ans, poids jusqu'à 10 ans, PC jusqu'à 5 ans. Zone foncée : P15-P85.${correctionM > 0 ? ' Âge corrigé appliqué jusqu\'à 24 mois.' : ''}`
+          : `Évolution du ${m.label.toLowerCase()} de l'enfant dans le temps.${readOnly ? '' : ' Saisissez les constantes à chaque visite pour un suivi précis.'}`}
       </p>
     </div>
   )
