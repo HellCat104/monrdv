@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import GrowthChart from '@/components/dashboard/GrowthChart'
 import VaccinationCard from '@/components/dashboard/VaccinationCard'
+import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
 import { isDentalDoctor } from '@/lib/dental'
 import { Button } from '@/components/ui/button'
@@ -40,6 +41,7 @@ export default function PatientDossier({
   // Champs éditables de la fiche
   const [editAge, setEditAge] = useState(patient.age != null ? String(patient.age) : '')
   const [editBirthDate, setEditBirthDate] = useState(patient.birth_date ?? '')
+  const [editSex, setEditSex] = useState<'M' | 'F' | ''>(patient.sex ?? '')
   const [editBloodGroup, setEditBloodGroup] = useState(patient.blood_group ?? '')
   const [editCin, setEditCin] = useState(patient.cin ?? '')
   const [editEmail, setEditEmail] = useState(patient.email ?? '')
@@ -99,6 +101,7 @@ export default function PatientDossier({
     const updates = {
       age: editAge ? Number(editAge) : null,
       birth_date: editBirthDate || null,
+      sex: editSex || null,
       blood_group: editBloodGroup || null,
       cin: editCin.trim() ? editCin.trim().toUpperCase() : null,
       email: editEmail.trim() || null,
@@ -258,6 +261,19 @@ export default function PatientDossier({
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Âge</Label><Input type="number" value={editAge} onChange={(e) => setEditAge(e.target.value)} className="h-9" /></div>
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Naissance</Label><Input type="date" value={editBirthDate} max={todayStr} onChange={(e) => setEditBirthDate(e.target.value)} className="h-9" /></div>
               </div>
+              {isPediatricDoctor(specialties) && (
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-gray-400">Sexe (couloirs OMS des courbes)</Label>
+                  <div className="flex gap-1.5">
+                    {([['M', 'Garçon'], ['F', 'Fille']] as const).map(([v, lbl]) => (
+                      <button key={v} type="button" onClick={() => setEditSex(editSex === v ? '' : v)}
+                        className={`flex-1 text-xs px-2 py-1.5 rounded-lg border transition ${editSex === v ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</Label><Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="patient@email.com" className="h-9" /></div>
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><MapPin className="h-3 w-3" /> Adresse</Label><Input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} placeholder="Quartier, ville" className="h-9" /></div>
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><CreditCard className="h-3 w-3" /> CIN</Label><Input value={editCin} onChange={(e) => setEditCin(e.target.value.toUpperCase())} placeholder="AB123456" className="h-9" /></div>
@@ -355,9 +371,15 @@ export default function PatientDossier({
           {isDentalDoctor(specialties) && <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />}
           {isPediatricDoctor(specialties) && editBirthDate && (
             <div className="space-y-4">
-              <GrowthChart key={`g-${patient.id}`} birthDate={editBirthDate} vitals={vitals} />
+              <GrowthChart key={`g-${patient.id}`} birthDate={editBirthDate} vitals={vitals} sex={editSex || null} />
               <VaccinationCard key={`v-${patient.id}`} patientId={patient.id} birthDate={editBirthDate} initial={patient.vaccines ?? {}} />
+              <MilestonesCard key={`ms-${patient.id}`} patientId={patient.id} birthDate={editBirthDate} initial={patient.milestones ?? {}} />
             </div>
+          )}
+          {isPediatricDoctor(specialties) && !editBirthDate && (
+            <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              📅 Renseignez la <b>date de naissance</b> (colonne de gauche) pour activer la courbe de croissance, le calendrier vaccinal et les repères de développement.
+            </p>
           )}
 
           {/* Constantes (hors psy) */}

@@ -74,6 +74,7 @@ export interface Patient {
   email?: string | null
   age?: number | null
   birth_date?: string | null // date de naissance (YYYY-MM-DD) — âge précis + courbes
+  sex?: 'M' | 'F' | null    // sexe (couloirs OMS des courbes de croissance)
   blood_group?: string | null // A+, A-, B+, … O-
   cin?: string | null       // carte d'identité nationale (Maroc)
   address?: string | null   // adresse postale (courriers, factures)
@@ -85,6 +86,7 @@ export interface Patient {
   current_treatments?: string | null      // traitements de fond
   vaccinations?: string | null            // vaccins / statut vaccinal (texte libre)
   vaccines?: Record<string, string> | null // calendrier vaccinal structuré (pédiatrie)
+  milestones?: Record<string, { s: 'ok' | 'ko'; d: string }> | null // repères de développement (pédiatrie)
   notes?: string | null
   created_at: string
 }

@@ -1372,7 +1372,7 @@ export default function PatientsPage() {
               {selectedPatient && isPediatricDoctor(doctorSpecialties) && (
                 editBirthDate ? (
                   <>
-                    <GrowthChart key={`g-${selectedPatient.id}`} birthDate={editBirthDate} vitals={vitals} />
+                    <GrowthChart key={`g-${selectedPatient.id}`} birthDate={editBirthDate} vitals={vitals} sex={selectedPatient.sex ?? null} />
                     <VaccinationCard key={`v-${selectedPatient.id}`} patientId={selectedPatient.id} birthDate={editBirthDate} initial={selectedPatient.vaccines ?? {}} />
                   </>
                 ) : (
