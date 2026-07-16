@@ -24,7 +24,7 @@ export default async function MonDossierPage() {
   // Fiches patient liées à ce compte (une par médecin consulté)
   const { data: records } = await admin
     .from('patients')
-    .select('id, first_name, last_name, birth_date, sex, gestational_age_weeks, vaccines, allergies, chronic_conditions, current_treatments, doctor:doctors(id, name, specialty, custom_vitals)')
+    .select('id, first_name, last_name, birth_date, sex, gestational_age_weeks, vaccines, is_child, allergies, chronic_conditions, current_treatments, doctor:doctors(id, name, specialty, custom_vitals)')
     .eq('user_id', user.id)
   const fiches = (records ?? []) as Row[]
   const ids = fiches.map((p) => p.id)
@@ -55,6 +55,7 @@ export default async function MonDossierPage() {
   const now = new Date()
   const children = fiches.filter((f) => {
     if (!f.birth_date) return false
+    if (f.is_child) return true
     const age = (now.getTime() - new Date(f.birth_date + 'T00:00:00').getTime()) / (1000 * 3600 * 24 * 365.25)
     return age < 16
   })

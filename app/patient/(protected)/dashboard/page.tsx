@@ -12,6 +12,7 @@ interface AppointmentRow {
   time: string
   status: 'pending' | 'confirmed' | 'cancelled'
   notes: string | null
+  patient_id?: string
   doctor: {
     id: string
     name: string
@@ -36,9 +37,10 @@ export default async function PatientDashboardPage() {
   // Fetch only patient records explicitly linked to this authenticated user.
   const { data: patientRecords } = await adminDb
     .from('patients')
-    .select('id')
+    .select('id, first_name, is_child')
     .eq('user_id', user.id)
 
+  const fichesById = new Map((patientRecords ?? []).map((p: { id: string; first_name: string; is_child: boolean | null }) => [p.id, p]))
   const patientIds = (patientRecords ?? []).map((p: { id: string }) => p.id)
 
   let upcoming: AppointmentRow[] = []
@@ -50,7 +52,7 @@ export default async function PatientDashboardPage() {
 
     const { data: allApts } = await adminDb
       .from('appointments')
-      .select('id, date, time, status, notes, doctor:doctors(id, name, specialty, slug)')
+      .select('id, date, time, status, notes, patient_id, doctor:doctors(id, name, specialty, slug)')
       .in('patient_id', patientIds)
       .order('date', { ascending: false })
       .order('time', { ascending: false })
@@ -103,9 +105,10 @@ export default async function PatientDashboardPage() {
             À venir ({upcoming.length})
           </h2>
           <div className="space-y-3">
-            {upcoming.map((apt) => (
-              <AppointmentCard key={apt.id} apt={apt} />
-            ))}
+            {upcoming.map((apt) => {
+              const f = apt.patient_id ? fichesById.get(apt.patient_id) : undefined
+              return <AppointmentCard key={apt.id} apt={apt} childName={f?.is_child ? f.first_name : null} />
+            })}
           </div>
         </section>
       )}
@@ -118,9 +121,10 @@ export default async function PatientDashboardPage() {
             Historique ({past.length})
           </h2>
           <div className="space-y-3 opacity-80">
-            {past.map((apt) => (
-              <AppointmentCard key={apt.id} apt={apt} isPast />
-            ))}
+            {past.map((apt) => {
+              const f = apt.patient_id ? fichesById.get(apt.patient_id) : undefined
+              return <AppointmentCard key={apt.id} apt={apt} isPast childName={f?.is_child ? f.first_name : null} />
+            })}
           </div>
         </section>
       )}
@@ -128,7 +132,7 @@ export default async function PatientDashboardPage() {
   )
 }
 
-function AppointmentCard({ apt, isPast = false }: { apt: AppointmentRow; isPast?: boolean }) {
+function AppointmentCard({ apt, isPast = false, childName = null }: { apt: AppointmentRow; isPast?: boolean; childName?: string | null }) {
   const status = STATUS_UI[apt.status]
   const StatusIcon = status.Icon
 
@@ -151,6 +155,11 @@ function AppointmentCard({ apt, isPast = false }: { apt: AppointmentRow; isPast?
             <div className="min-w-0">
               <p className="font-semibold text-gray-900 text-sm sm:text-base truncate">
                 Dr. {apt.doctor?.name ?? '—'}
+                {childName && (
+                  <span className="ml-1.5 text-[11px] font-medium bg-pink-50 text-pink-600 px-1.5 py-0.5 rounded-full align-middle">
+                    👶 pour {childName}
+                  </span>
+                )}
               </p>
               <p className="text-xs sm:text-sm text-gray-500">{apt.doctor?.specialty}</p>
             </div>

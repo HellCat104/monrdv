@@ -57,6 +57,9 @@ export async function POST(req: NextRequest) {
     specialty,
     consent,
     public: isPublic,
+    for_child: forChild,
+    child_birth_date,
+    child_sex,
   } = body
 
   // Validation minimale
@@ -70,8 +73,17 @@ export async function POST(req: NextRequest) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
       return NextResponse.json({ error: 'Un email valide est obligatoire pour recevoir votre confirmation et votre rappel' }, { status: 400 })
     }
-    // Âge obligatoire (le formulaire le marque requis — on le valide côté serveur)
-    if (!Number.isInteger(age) || age <= 0 || age > 120) {
+    // Âge obligatoire (adulte) — pour un enfant, c'est la date de naissance qui fait foi
+    if (forChild === true) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(child_birth_date ?? ''))) {
+        return NextResponse.json({ error: 'La date de naissance de l\'enfant est obligatoire' }, { status: 400 })
+      }
+      const bd = new Date(child_birth_date + 'T00:00:00')
+      const ageYears = (Date.now() - bd.getTime()) / (1000 * 3600 * 24 * 365.25)
+      if (isNaN(bd.getTime()) || ageYears < 0 || ageYears > 18) {
+        return NextResponse.json({ error: 'Date de naissance de l\'enfant invalide (0-18 ans)' }, { status: 400 })
+      }
+    } else if (!Number.isInteger(age) || age <= 0 || age > 120) {
       return NextResponse.json({ error: 'Un âge valide est obligatoire' }, { status: 400 })
     }
     // Consentement au traitement des données obligatoire (loi 09-08)
@@ -88,6 +100,14 @@ export async function POST(req: NextRequest) {
   const safeEmail  = email ? sanitize(email).substring(0, 254) : undefined
   const safeNotes  = notes ? sanitize(notes).substring(0, 500) : undefined
   const safeAge    = age && Number.isInteger(age) && age > 0 && age <= 120 ? age : undefined
+
+  // Réservation « pour mon enfant » (compte parent connecté requis)
+  const isForChild = forChild === true && isPublic === true
+  const safeChildBirth = isForChild ? String(child_birth_date) : null
+  const safeChildSex = isForChild && (child_sex === 'M' || child_sex === 'F') ? child_sex : null
+  const childAge = safeChildBirth
+    ? Math.max(0, Math.floor((Date.now() - new Date(safeChildBirth + 'T00:00:00').getTime()) / (1000 * 3600 * 24 * 365.25)))
+    : undefined
 
   // Validation du numéro de téléphone marocain
   if (!isValidPhoneMaroc(safePhone)) {
@@ -122,6 +142,10 @@ export async function POST(req: NextRequest) {
   const { data: { user: bookingUser } } = await supabase.auth.getUser()
   if (!isPublic) {
     if (!bookingUser) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  }
+  // « Pour mon enfant » : le lien au compte parent est le cœur de la fonction
+  if (isForChild && !bookingUser) {
+    return NextResponse.json({ error: 'Connectez-vous à votre espace patient pour réserver pour votre enfant' }, { status: 401 })
   }
 
   // Utilise le client admin pour les réservations publiques (bypass RLS)
@@ -241,7 +265,7 @@ export async function POST(req: NextRequest) {
 
   const { data: existingPatient } = await db
     .from('patients')
-    .select('id')
+    .select('id, user_id')
     .eq('doctor_id', doctor_id)
     .eq('phone', formattedPhone)
     .ilike('first_name', safeFirst)
@@ -255,11 +279,18 @@ export async function POST(req: NextRequest) {
     const updates: Record<string, unknown> = {}
     if (safeEmail) updates.email = safeEmail
     if (safeAge) updates.age = safeAge
+    // Fiche enfant : complète naissance/sexe/âge si la fiche n'appartient pas à un autre compte
+    if (isForChild && bookingUser && (existingPatient.user_id === null || existingPatient.user_id === bookingUser.id)) {
+      updates.is_child = true
+      updates.birth_date = safeChildBirth
+      if (safeChildSex) updates.sex = safeChildSex
+      if (childAge != null) updates.age = childAge
+    }
     if (Object.keys(updates).length > 0) {
       await db.from('patients').update(updates).eq('id', patientId)
     }
-    if (shouldLinkPatientToUser) {
-      await db.from('patients').update({ user_id: bookingUser.id }).eq('id', patientId).is('user_id', null)
+    if (shouldLinkPatientToUser || (isForChild && bookingUser)) {
+      await db.from('patients').update({ user_id: bookingUser!.id }).eq('id', patientId).is('user_id', null)
     }
   } else {
     const { data: newPatient, error: patientError } = await db
@@ -270,8 +301,11 @@ export async function POST(req: NextRequest) {
         last_name: safeLast,
         phone: formattedPhone,
         email: safeEmail || null,
-        age: safeAge || null,
-        user_id: shouldLinkPatientToUser ? bookingUser.id : null,
+        age: childAge ?? safeAge ?? null,
+        birth_date: safeChildBirth,
+        sex: safeChildSex,
+        is_child: isForChild,
+        user_id: isForChild && bookingUser ? bookingUser.id : (shouldLinkPatientToUser ? bookingUser.id : null),
       })
       .select('id')
       .single()

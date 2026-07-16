@@ -35,9 +35,13 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
   const [error, setError] = useState('')
   const [confirmed, setConfirmed] = useState(false)
 
-  // Patient connecté : choix "pour moi" / "pour quelqu'un d'autre"
+  // Patient connecté : choix "pour moi" / "pour mon enfant" / "pour quelqu'un d'autre"
   const [myProfile, setMyProfile] = useState<MyProfile | null>(null)
-  const [bookingFor, setBookingFor] = useState<'me' | 'other'>('me')
+  const [bookingFor, setBookingFor] = useState<'me' | 'child' | 'other'>('me')
+  // Enfant : date de naissance + sexe (fiche enfant liée au compte parent)
+  const [childBirth, setChildBirth] = useState('')
+  const [childSex, setChildSex] = useState<'M' | 'F' | ''>('')
+  const [myChildren, setMyChildren] = useState<{ first_name: string; last_name: string; birth_date: string | null; sex: 'M' | 'F' | null }[]>([])
 
   // Au chargement, vérifie si un patient est connecté
   useEffect(() => {
@@ -55,13 +59,19 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
             email: data.email,
             age: data.age != null ? String(data.age) : '',
           }))
+          // Enfants déjà enregistrés sur le compte (réutilisation en 1 clic)
+          fetch('/api/patient/children')
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => d?.children && setMyChildren(d.children))
+            .catch(() => {})
         }
       })
       .catch(() => {})
   }, [])
 
-  function chooseBookingFor(who: 'me' | 'other') {
+  function chooseBookingFor(who: 'me' | 'child' | 'other') {
     setBookingFor(who)
+    setChildBirth(''); setChildSex('')
     if (who === 'me' && myProfile) {
       setForm((f) => ({
         ...f,
@@ -71,10 +81,19 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
         email: myProfile.email,
         age: myProfile.age != null ? String(myProfile.age) : '',
       }))
+    } else if (who === 'child' && myProfile) {
+      // Enfant : identité de l'enfant à saisir, contact = celui du parent
+      setForm((f) => ({ ...f, first_name: '', last_name: '', phone: myProfile.phone, email: myProfile.email, age: '' }))
     } else {
       // Pour quelqu'un d'autre : on vide les champs identité
       setForm((f) => ({ ...f, first_name: '', last_name: '', phone: '', email: '', age: '' }))
     }
+  }
+
+  function pickChild(c: { first_name: string; last_name: string; birth_date: string | null; sex: 'M' | 'F' | null }) {
+    setForm((f) => ({ ...f, first_name: c.first_name, last_name: c.last_name }))
+    setChildBirth(c.birth_date ?? '')
+    setChildSex(c.sex ?? '')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -100,6 +119,10 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
           specialty: specialty ?? undefined,
           consent, // consentement légal (case cochée)
           public: true, // indique que c'est une réservation publique
+          // « Pour mon enfant » : fiche enfant liée au compte parent
+          for_child: bookingFor === 'child' ? true : undefined,
+          child_birth_date: bookingFor === 'child' ? childBirth : undefined,
+          child_sex: bookingFor === 'child' && childSex ? childSex : undefined,
         }),
       })
 
@@ -190,32 +213,49 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
       {myProfile && (
         <div className="space-y-2">
           <p className="text-sm font-medium text-gray-700">Ce rendez-vous est pour…</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => chooseBookingFor('me')}
-              className={`rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                bookingFor === 'me'
-                  ? 'border-primary-400 bg-primary-50 text-primary-700'
-                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
-              }`}
-            >
-              Moi
-            </button>
-            <button
-              type="button"
-              onClick={() => chooseBookingFor('other')}
-              className={`rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                bookingFor === 'other'
-                  ? 'border-primary-400 bg-primary-50 text-primary-700'
-                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
-              }`}
-            >
-              Quelqu&apos;un d&apos;autre
-            </button>
+          <div className="grid grid-cols-3 gap-2">
+            {([['me', 'Moi'], ['child', 'Mon enfant'], ['other', 'Un proche']] as const).map(([who, lbl]) => (
+              <button
+                key={who}
+                type="button"
+                onClick={() => chooseBookingFor(who)}
+                className={`rounded-xl border-2 px-2 py-2.5 text-sm font-medium transition-colors ${
+                  bookingFor === who
+                    ? 'border-primary-400 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                {lbl}
+              </button>
+            ))}
           </div>
           {bookingFor === 'other' && (
             <p className="text-xs text-gray-400">Entrez les informations de la personne concernée par le rendez-vous.</p>
+          )}
+          {bookingFor === 'child' && (
+            <>
+              <p className="text-xs text-gray-400">
+                Le dossier de votre enfant (rendez-vous, vaccins, croissance) sera rattaché à votre compte — retrouvez-le dans « Mon dossier ».
+              </p>
+              {myChildren.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {myChildren.map((c, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => pickChild(c)}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition ${
+                        form.first_name === c.first_name && form.last_name === c.last_name
+                          ? 'bg-primary-500 text-white border-transparent'
+                          : 'bg-white border-gray-200 text-gray-600 hover:border-primary-300'
+                      }`}
+                    >
+                      👶 {c.first_name} {c.last_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -224,18 +264,18 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="b_first_name" className="flex items-center gap-1.5">
-              <User className="h-3 w-3" /> Prénom *
+              <User className="h-3 w-3" /> {bookingFor === 'child' ? 'Prénom de l\'enfant *' : 'Prénom *'}
             </Label>
             <Input
               id="b_first_name"
               value={form.first_name}
               onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-              placeholder="Mohammed"
+              placeholder={bookingFor === 'child' ? 'Yasmine' : 'Mohammed'}
               required
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="b_last_name">Nom *</Label>
+            <Label htmlFor="b_last_name">{bookingFor === 'child' ? 'Nom de l\'enfant *' : 'Nom *'}</Label>
             <Input
               id="b_last_name"
               value={form.last_name}
@@ -245,6 +285,40 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
             />
           </div>
         </div>
+
+        {/* Enfant : date de naissance (obligatoire) + sexe (optionnel) */}
+        {bookingFor === 'child' && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="b_child_birth">Date de naissance *</Label>
+              <Input
+                id="b_child_birth"
+                type="date"
+                value={childBirth}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setChildBirth(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Sexe (optionnel)</Label>
+              <div className="flex gap-1.5">
+                {([['M', 'Garçon'], ['F', 'Fille']] as const).map(([v, lbl]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setChildSex(childSex === v ? '' : v)}
+                    className={`flex-1 text-sm px-2 py-2 rounded-lg border transition ${
+                      childSex === v ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="b_phone" className="flex items-center gap-1.5">
@@ -258,7 +332,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
             placeholder="06 12 34 56 78"
             required
           />
-          <p className="text-xs text-gray-400">Numéro où vous joindre</p>
+          <p className="text-xs text-gray-400">{bookingFor === 'child' ? 'Votre numéro (parent) — c\'est vous que le cabinet contactera' : 'Numéro où vous joindre'}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -276,21 +350,23 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
           <p className="text-xs text-gray-400">Indispensable pour recevoir votre confirmation et votre rappel</p>
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="b_age" className="flex items-center gap-1.5">
-            <Hash className="h-3 w-3" /> Âge *
-          </Label>
-          <Input
-            id="b_age"
-            type="number"
-            min={1}
-            max={120}
-            value={form.age}
-            onChange={(e) => setForm({ ...form, age: e.target.value })}
-            placeholder="35"
-            required
-          />
-        </div>
+        {bookingFor !== 'child' && (
+          <div className="space-y-1.5">
+            <Label htmlFor="b_age" className="flex items-center gap-1.5">
+              <Hash className="h-3 w-3" /> Âge *
+            </Label>
+            <Input
+              id="b_age"
+              type="number"
+              min={1}
+              max={120}
+              value={form.age}
+              onChange={(e) => setForm({ ...form, age: e.target.value })}
+              placeholder="35"
+              required
+            />
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="b_notes" className="flex items-center gap-1.5">
