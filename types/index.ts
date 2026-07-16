@@ -77,6 +77,10 @@ export interface Patient {
   sex?: 'M' | 'F' | null    // sexe (couloirs OMS des courbes de croissance)
   parent1_name?: string | null // parent / tuteur 1 (pédiatrie, facultatif)
   parent2_name?: string | null // parent / tuteur 2 (pédiatrie, facultatif)
+  parent1_phone?: string | null
+  parent2_phone?: string | null
+  primary_contact?: 'parent1' | 'parent2' | null // qui prévenir en priorité
+  family_id?: string | null    // fratrie : même family_id = même famille
   blood_group?: string | null // A+, A-, B+, … O-
   cin?: string | null       // carte d'identité nationale (Maroc)
   address?: string | null   // adresse postale (courriers, factures)

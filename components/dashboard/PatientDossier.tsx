@@ -44,6 +44,15 @@ export default function PatientDossier({
   const [editSex, setEditSex] = useState<'M' | 'F' | ''>(patient.sex ?? '')
   const [editParent1, setEditParent1] = useState(patient.parent1_name ?? '')
   const [editParent2, setEditParent2] = useState(patient.parent2_name ?? '')
+  const [editParent1Phone, setEditParent1Phone] = useState(patient.parent1_phone ?? '')
+  const [editParent2Phone, setEditParent2Phone] = useState(patient.parent2_phone ?? '')
+  const [editPrimary, setEditPrimary] = useState<'parent1' | 'parent2' | ''>(patient.primary_contact ?? '')
+
+  // Fratrie : les enfants d'une même famille partagent family_id
+  const [familyId, setFamilyId] = useState<string | null>(patient.family_id ?? null)
+  const [siblings, setSiblings] = useState<{ id: string; first_name: string; last_name: string; birth_date: string | null }[]>([])
+  const [sibSearch, setSibSearch] = useState('')
+  const [sibResults, setSibResults] = useState<{ id: string; first_name: string; last_name: string; birth_date: string | null }[]>([])
   const [editBloodGroup, setEditBloodGroup] = useState(patient.blood_group ?? '')
   const [editCin, setEditCin] = useState(patient.cin ?? '')
   const [editEmail, setEditEmail] = useState(patient.email ?? '')
@@ -98,6 +107,42 @@ export default function PatientDossier({
   }, [patient.id, supabase])
   useEffect(() => { load() }, [load])
 
+  // Frères et sœurs (même family_id)
+  useEffect(() => {
+    if (!familyId) { setSiblings([]); return }
+    supabase.from('patients')
+      .select('id, first_name, last_name, birth_date')
+      .eq('doctor_id', doctorId).eq('family_id', familyId).neq('id', patient.id)
+      .then(({ data }) => setSiblings(data ?? []))
+  }, [familyId, doctorId, patient.id, supabase])
+
+  // Recherche d'un enfant à lier (dans la patientèle du médecin)
+  useEffect(() => {
+    const q = sibSearch.trim()
+    if (q.length < 2) { setSibResults([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('patients')
+        .select('id, first_name, last_name, birth_date')
+        .eq('doctor_id', doctorId).neq('id', patient.id)
+        .or(`first_name.ilike.%${q.replace(/[%,()]/g, '')}%,last_name.ilike.%${q.replace(/[%,()]/g, '')}%`)
+        .limit(6)
+      setSibResults((data ?? []).filter((p) => !siblings.some((s) => s.id === p.id)))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [sibSearch, doctorId, patient.id, siblings, supabase])
+
+  async function linkSibling(p: { id: string }) {
+    const fid = familyId ?? crypto.randomUUID()
+    const { error } = await supabase.from('patients').update({ family_id: fid }).in('id', [patient.id, p.id])
+    if (error) { alert('Impossible de lier — lancez la migration v34 si ce n\'est pas fait.'); return }
+    setFamilyId(fid); setSibSearch(''); setSibResults([])
+  }
+
+  async function unlinkSibling(id: string) {
+    const { error } = await supabase.from('patients').update({ family_id: null }).eq('id', id)
+    if (!error) setSiblings((prev) => prev.filter((s) => s.id !== id))
+  }
+
   async function saveIdentity() {
     setSaving(true)
     const updates = {
@@ -106,6 +151,9 @@ export default function PatientDossier({
       sex: editSex || null,
       parent1_name: editParent1.trim() || null,
       parent2_name: editParent2.trim() || null,
+      parent1_phone: editParent1Phone.trim() || null,
+      parent2_phone: editParent2Phone.trim() || null,
+      primary_contact: editPrimary || null,
       blood_group: editBloodGroup || null,
       cin: editCin.trim() ? editCin.trim().toUpperCase() : null,
       email: editEmail.trim() || null,
@@ -278,14 +326,24 @@ export default function PatientDossier({
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-gray-400">Parent / tuteur 1 (optionnel)</Label>
-                    <Input value={editParent1} onChange={(e) => setEditParent1(e.target.value)} placeholder="Ex : Fatima Alami (mère)" className="h-9" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-gray-400">Parent / tuteur 2 (optionnel)</Label>
-                    <Input value={editParent2} onChange={(e) => setEditParent2(e.target.value)} placeholder="Ex : Karim Alami (père)" className="h-9" />
-                  </div>
+                  {([
+                    ['parent1', 'Parent / tuteur 1', editParent1, setEditParent1, editParent1Phone, setEditParent1Phone, 'Ex : Fatima Alami (mère)'],
+                    ['parent2', 'Parent / tuteur 2', editParent2, setEditParent2, editParent2Phone, setEditParent2Phone, 'Ex : Karim Alami (père)'],
+                  ] as const).map(([key, lbl, name, setName, phone, setPhone, ph]) => (
+                    <div key={key} className="space-y-1 rounded-lg border border-gray-100 p-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px] text-gray-400">{lbl} (optionnel)</Label>
+                        <button type="button"
+                          onClick={() => setEditPrimary(editPrimary === key ? '' : key)}
+                          title="Contact à prévenir en priorité (rappels, urgences)"
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full border transition ${editPrimary === key ? 'bg-amber-400 text-white border-transparent' : 'text-gray-400 border-gray-200 hover:border-amber-300'}`}>
+                          {editPrimary === key ? '★ Prioritaire' : '☆ Prioritaire'}
+                        </button>
+                      </div>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={ph} className="h-9" />
+                      <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12 34 56 78" className="h-9" />
+                    </div>
+                  ))}
                 </>
               )}
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</Label><Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="patient@email.com" className="h-9" /></div>
@@ -323,6 +381,39 @@ export default function PatientDossier({
               )}
             </div>
           </div>
+
+          {/* Famille / fratrie (pédiatrie) */}
+          {isPediatricDoctor(specialties) && (
+            <div className={sec}>
+              <div className={secTitle}><span className="flex items-center gap-1.5">👨‍👩‍👧 Famille</span></div>
+              {siblings.length > 0 && (
+                <ul className="space-y-1.5 mb-2">
+                  {siblings.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between gap-2">
+                      <button onClick={() => router.push(`/patients/${s.id}`)} className="text-sm text-primary-600 hover:underline text-left truncate">
+                        {s.first_name} {s.last_name}
+                        {s.birth_date && <span className="text-gray-400"> · {new Date(s.birth_date).getFullYear()}</span>}
+                      </button>
+                      <button onClick={() => unlinkSibling(s.id)} title="Retirer de la famille" className="text-gray-300 hover:text-red-500 shrink-0"><X className="h-3.5 w-3.5" /></button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="relative">
+                <Input value={sibSearch} onChange={(e) => setSibSearch(e.target.value)} placeholder="Lier un frère / une sœur…" className="h-9" />
+                {sibResults.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-md overflow-hidden">
+                    {sibResults.map((p) => (
+                      <button key={p.id} onClick={() => linkSibling(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50">
+                        {p.first_name} {p.last_name}{p.birth_date && <span className="text-gray-400"> · {new Date(p.birth_date).getFullYear()}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5">Reliez les enfants d&apos;une même famille : leurs dossiers deviennent accessibles en un clic.</p>
+            </div>
+          )}
 
           {/* Documents */}
           <div className={sec}>
