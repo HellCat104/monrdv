@@ -14,7 +14,8 @@ import { fr } from 'date-fns/locale'
 import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban } from 'lucide-react'
 import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
 import DaySheet from '@/components/shared/DaySheet'
-import { FileText } from 'lucide-react'
+import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
+import { FileText, UserPlus } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
@@ -24,6 +25,8 @@ const NO_TYPE = '__none__'
 export default function AgendaClient({ permissions, doctorName = 'Cabinet médical' }: { permissions: StaffPermissions; doctorName?: string }) {
   const [date, setDate] = useState(() => format(getNowInMaroc(), 'yyyy-MM-dd'))
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [walkInOpen, setWalkInOpen] = useState(false)
+  const [patientCache, setPatientCache] = useState<PatientLite[] | null>(null)
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day')
   const [weekAppts, setWeekAppts] = useState<Apt[]>([])
   const [weekLoading, setWeekLoading] = useState(false)
@@ -187,6 +190,29 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     }
   }
 
+  // ── Patient sans RDV (walk-in) ──
+  async function searchWalkInPatients(q: string): Promise<PatientLite[]> {
+    let list = patientCache
+    if (!list) {
+      const res = await fetch('/api/cabinet/patients')
+      const data = res.ok ? await res.json() : { patients: [] }
+      list = (data.patients ?? []) as PatientLite[]
+      setPatientCache(list)
+    }
+    const ql = q.toLowerCase()
+    return list.filter((p) => `${p.first_name} ${p.last_name}`.toLowerCase().includes(ql) || (p.phone ?? '').includes(q)).slice(0, 8)
+  }
+  async function addWalkIn(arg: { patientId?: string; newPatient?: { first_name: string; last_name: string; phone: string } }) {
+    const res = await fetch('/api/cabinet/appointments', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walk_in: true, patient_id: arg.patientId, ...arg.newPatient }),
+    })
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Échec de l\'ajout') }
+    setPatientCache(null)
+    setDate(format(getNowInMaroc(), 'yyyy-MM-dd'))
+    await load(format(getNowInMaroc(), 'yyyy-MM-dd'))
+  }
+
   async function patchRdv(id: string, patch: Record<string, unknown>) {
     const res = await fetch('/api/cabinet/appointments', {
       method: 'PATCH',
@@ -245,6 +271,9 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         </h1>
         {permissions.manage_appointments && (
           <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => setWalkInOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Sans RDV
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setSheetOpen(true)}>
               <FileText className="h-4 w-4 mr-1" /> Feuille de route
             </Button>
@@ -343,8 +372,9 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
             <div key={a.id} className="flex items-center gap-3 p-3.5 flex-wrap">
               <div className="text-sm font-semibold text-gray-900 w-14 shrink-0">{formatTime(a.time)}</div>
               <div className="flex-1 min-w-[160px]">
-                <p className="font-medium text-gray-900 truncate">
+                <p className="font-medium text-gray-900 truncate flex items-center gap-1.5">
                   {a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}
+                  {a.walk_in && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Sans RDV</span>}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
                   {a.consultation_type?.name || a.notes || 'Consultation'}
@@ -529,6 +559,9 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog patient sans RDV */}
+      <WalkInDialog open={walkInOpen} onOpenChange={setWalkInOpen} onSearch={searchWalkInPatients} onSubmit={addWalkIn} />
 
       {/* Dialog blocage de créneau */}
       <Dialog open={blockOpen} onOpenChange={setBlockOpen}>

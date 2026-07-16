@@ -336,6 +336,11 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     {apt.specialty}
                   </span>
                 )}
+                {apt.walk_in && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700">
+                    Sans RDV
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-4 mt-1 text-xs text-gray-500 flex-wrap">

@@ -76,6 +76,40 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}))
+
+  // ── Patient sans RDV (walk-in) : ajout direct à la file du jour ──
+  if (body.walk_in === true) {
+    const admin0 = createAdminClient()
+    const doctorId0 = ctx.doctor.id
+    let patientId0 = body.patient_id ? String(body.patient_id) : ''
+    if (patientId0) {
+      const { data: p } = await admin0.from('patients').select('id').eq('id', patientId0).eq('doctor_id', doctorId0).maybeSingle()
+      if (!p) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
+    } else {
+      const f = sanitize(String(body.first_name ?? '')).substring(0, 100)
+      const l = sanitize(String(body.last_name ?? '')).substring(0, 100)
+      const ph = sanitize(String(body.phone ?? '')).substring(0, 20)
+      if (!f || !l || !ph) return NextResponse.json({ error: 'Prénom, nom et téléphone requis' }, { status: 400 })
+      if (!isValidPhoneMaroc(ph)) return NextResponse.json({ error: 'Numéro invalide' }, { status: 400 })
+      const { data: created, error: pErr } = await admin0.from('patients')
+        .insert({ doctor_id: doctorId0, first_name: f, last_name: l, phone: formatPhoneMaroc(ph) }).select('id').single()
+      if (pErr || !created) return NextResponse.json({ error: 'Erreur création patient' }, { status: 500 })
+      patientId0 = created.id
+    }
+    const { data: doc0 } = await admin0.from('doctors').select('appointment_duration, specialty, specialties').eq('id', doctorId0).single()
+    const specs0 = (doc0?.specialties && doc0.specialties.length > 0) ? doc0.specialties : (doc0?.specialty ? [doc0.specialty] : [])
+    const now0 = getNowInMaroc()
+    const { data: appt0, error: aErr } = await admin0.from('appointments').insert({
+      doctor_id: doctorId0, patient_id: patientId0,
+      date: format(now0, 'yyyy-MM-dd'), time: format(now0, 'HH:mm'),
+      status: 'confirmed', walk_in: true, queue_status: 'arrive', attendance: 'present',
+      cancel_token: generateCancelToken(), specialty: specs0.length === 1 ? specs0[0] : null,
+      duration_minutes: doc0?.appointment_duration ?? 30, consent_at: null,
+    }).select('*').single()
+    if (aErr || !appt0) return NextResponse.json({ error: 'Échec de l\'ajout à la file' }, { status: 500 })
+    return NextResponse.json({ appointment: appt0 }, { status: 201 })
+  }
+
   const first = sanitize(String(body.first_name ?? '')).substring(0, 100)
   const last = sanitize(String(body.last_name ?? '')).substring(0, 100)
   const phone = sanitize(String(body.phone ?? '')).substring(0, 20)

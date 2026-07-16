@@ -255,6 +255,7 @@ export interface Appointment {
   invoice_no?: string | null    // n° de facture séquentiel (F-AAAA-NNNN)
   paid_at?: string | null
   consent_at?: string | null
+  walk_in?: boolean | null      // patient sans RDV ajouté à la file du jour
   queue_status?: string | null  // salle d'attente : arrive | en_consultation | parti
   // Résumé de consultation (chargés pour l'agenda sur les RDV clôturés)
   consultation_summary?: string | null                              // note de consultation
@@ -283,6 +284,7 @@ export interface PatientDocument {
   file_path: string
   file_name: string
   file_type?: string | null
+  file_size?: number | null   // octets (quota de stockage par médecin)
   created_at: string
 }
 

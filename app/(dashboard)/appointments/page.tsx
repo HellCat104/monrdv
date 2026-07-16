@@ -16,6 +16,8 @@ import { Label } from '@/components/ui/label'
 import type { Appointment, Doctor, AppointmentStatus, AppointmentAttendance } from '@/types'
 import { Plus, Search, Calendar, Ban, X, FileText } from 'lucide-react'
 import DaySheet from '@/components/shared/DaySheet'
+import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
+import { UserPlus } from 'lucide-react'
 import {
   format, startOfWeek, endOfWeek, addDays, subDays,
   startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay,
@@ -31,6 +33,7 @@ export default function AppointmentsPage() {
   const [doctor, setDoctor] = useState<Doctor | null>(null)
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
+  const [walkInOpen, setWalkInOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('day')
   const [currentDate, setCurrentDate] = useState(getNowInMaroc())
@@ -134,6 +137,47 @@ export default function AppointmentsPage() {
   useEffect(() => {
     loadAppointments()
   }, [loadAppointments])
+
+  // ── Patient sans RDV (walk-in) ──────────────────────────────────────────
+  async function searchWalkInPatients(q: string): Promise<PatientLite[]> {
+    if (!doctor) return []
+    const { data } = await supabase.from('patients')
+      .select('id, first_name, last_name, phone')
+      .eq('doctor_id', doctor.id)
+      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,phone.ilike.%${q}%`)
+      .limit(8)
+    return (data ?? []) as PatientLite[]
+  }
+
+  async function addWalkIn(arg: { patientId?: string; newPatient?: { first_name: string; last_name: string; phone: string } }) {
+    if (!doctor) throw new Error('Médecin introuvable')
+    let patientId = arg.patientId
+    if (!patientId && arg.newPatient) {
+      const { data, error } = await supabase.from('patients')
+        .insert({ doctor_id: doctor.id, first_name: arg.newPatient.first_name, last_name: arg.newPatient.last_name, phone: arg.newPatient.phone })
+        .select('id').single()
+      if (error || !data) throw new Error('Échec de la création du patient')
+      patientId = data.id
+    }
+    if (!patientId) throw new Error('Aucun patient')
+
+    const now = getNowInMaroc()
+    const { error } = await supabase.from('appointments').insert({
+      doctor_id: doctor.id,
+      patient_id: patientId,
+      date: format(now, 'yyyy-MM-dd'),
+      time: format(now, 'HH:mm'),
+      status: 'confirmed',
+      walk_in: true,
+      queue_status: 'arrive',
+      attendance: 'present',
+      duration_minutes: doctor.appointment_duration ?? 30,
+    })
+    if (error) throw new Error('Échec de l\'ajout à la file')
+    // Bascule sur aujourd'hui pour voir le patient ajouté
+    setViewMode('day'); setCurrentDate(getNowInMaroc())
+    await loadAppointments()
+  }
 
   // Blocages du jour affiché (vue Jour)
   const loadDayBlocks = useCallback(async () => {
@@ -290,6 +334,9 @@ export default function AppointmentsPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" onClick={() => setSheetOpen(true)} disabled={!doctor}>
             <FileText className="h-4 w-4 mr-2" /> Feuille de route
+          </Button>
+          <Button variant="outline" onClick={() => setWalkInOpen(true)} disabled={!doctor}>
+            <UserPlus className="h-4 w-4 mr-2" /> Sans RDV
           </Button>
           <Button variant="outline" onClick={() => { setBlockError(''); setBlockOpen(true) }} disabled={!doctor}>
             <Ban className="h-4 w-4 mr-2" /> Bloquer un créneau
@@ -477,6 +524,9 @@ export default function AppointmentsPage() {
           onClose={() => setSheetOpen(false)}
         />
       )}
+
+      {/* Dialog : patient sans RDV */}
+      <WalkInDialog open={walkInOpen} onOpenChange={setWalkInOpen} onSearch={searchWalkInPatients} onSubmit={addWalkIn} />
 
       {/* Dialog : bloquer un créneau */}
       <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
