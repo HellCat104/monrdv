@@ -237,6 +237,12 @@ export default function PatientDossier({
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr_320px] gap-4 items-start">
         {/* ── COLONNE GAUCHE : identité ── */}
         <div className="space-y-4">
+          {/* Enregistrer — toujours visible (sticky) */}
+          <div className="sticky top-2 z-20">
+            <Button onClick={saveIdentity} disabled={saving} className="w-full shadow-md">
+              {saved ? <span className="flex items-center gap-1.5"><Check className="h-4 w-4" /> Enregistré !</span> : <span className="flex items-center gap-1.5"><Save className="h-4 w-4" /> {saving ? 'Sauvegarde…' : 'Enregistrer la fiche'}</span>}
+            </Button>
+          </div>
           <div className={sec}>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-semibold">{getInitials(patient.first_name, patient.last_name)}</div>
@@ -302,10 +308,6 @@ export default function PatientDossier({
             )}
           </div>
 
-          {/* Enregistrer la fiche */}
-          <Button onClick={saveIdentity} disabled={saving} className="w-full">
-            {saved ? <span className="flex items-center gap-1.5"><Check className="h-4 w-4" /> Enregistré !</span> : <span className="flex items-center gap-1.5"><Save className="h-4 w-4" /> {saving ? 'Sauvegarde…' : 'Enregistrer la fiche'}</span>}
-          </Button>
           <button onClick={deletePatient} className="w-full text-xs text-gray-400 hover:text-red-500 flex items-center justify-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Supprimer ce patient</button>
         </div>
 
