@@ -75,6 +75,8 @@ export interface Patient {
   age?: number | null
   birth_date?: string | null // date de naissance (YYYY-MM-DD) — âge précis + courbes
   sex?: 'M' | 'F' | null    // sexe (couloirs OMS des courbes de croissance)
+  parent1_name?: string | null // parent / tuteur 1 (pédiatrie, facultatif)
+  parent2_name?: string | null // parent / tuteur 2 (pédiatrie, facultatif)
   blood_group?: string | null // A+, A-, B+, … O-
   cin?: string | null       // carte d'identité nationale (Maroc)
   address?: string | null   // adresse postale (courriers, factures)

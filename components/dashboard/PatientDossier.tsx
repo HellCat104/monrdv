@@ -42,6 +42,8 @@ export default function PatientDossier({
   const [editAge, setEditAge] = useState(patient.age != null ? String(patient.age) : '')
   const [editBirthDate, setEditBirthDate] = useState(patient.birth_date ?? '')
   const [editSex, setEditSex] = useState<'M' | 'F' | ''>(patient.sex ?? '')
+  const [editParent1, setEditParent1] = useState(patient.parent1_name ?? '')
+  const [editParent2, setEditParent2] = useState(patient.parent2_name ?? '')
   const [editBloodGroup, setEditBloodGroup] = useState(patient.blood_group ?? '')
   const [editCin, setEditCin] = useState(patient.cin ?? '')
   const [editEmail, setEditEmail] = useState(patient.email ?? '')
@@ -102,6 +104,8 @@ export default function PatientDossier({
       age: editAge ? Number(editAge) : null,
       birth_date: editBirthDate || null,
       sex: editSex || null,
+      parent1_name: editParent1.trim() || null,
+      parent2_name: editParent2.trim() || null,
       blood_group: editBloodGroup || null,
       cin: editCin.trim() ? editCin.trim().toUpperCase() : null,
       email: editEmail.trim() || null,
@@ -262,17 +266,27 @@ export default function PatientDossier({
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Naissance</Label><Input type="date" value={editBirthDate} max={todayStr} onChange={(e) => setEditBirthDate(e.target.value)} className="h-9" /></div>
               </div>
               {isPediatricDoctor(specialties) && (
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-gray-400">Sexe (couloirs OMS des courbes)</Label>
-                  <div className="flex gap-1.5">
-                    {([['M', 'Garçon'], ['F', 'Fille']] as const).map(([v, lbl]) => (
-                      <button key={v} type="button" onClick={() => setEditSex(editSex === v ? '' : v)}
-                        className={`flex-1 text-xs px-2 py-1.5 rounded-lg border transition ${editSex === v ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                        {lbl}
-                      </button>
-                    ))}
+                <>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-gray-400">Sexe (couloirs OMS des courbes)</Label>
+                    <div className="flex gap-1.5">
+                      {([['M', 'Garçon'], ['F', 'Fille']] as const).map(([v, lbl]) => (
+                        <button key={v} type="button" onClick={() => setEditSex(editSex === v ? '' : v)}
+                          className={`flex-1 text-xs px-2 py-1.5 rounded-lg border transition ${editSex === v ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-gray-400">Parent / tuteur 1 (optionnel)</Label>
+                    <Input value={editParent1} onChange={(e) => setEditParent1(e.target.value)} placeholder="Ex : Fatima Alami (mère)" className="h-9" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-gray-400">Parent / tuteur 2 (optionnel)</Label>
+                    <Input value={editParent2} onChange={(e) => setEditParent2(e.target.value)} placeholder="Ex : Karim Alami (père)" className="h-9" />
+                  </div>
+                </>
               )}
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</Label><Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="patient@email.com" className="h-9" /></div>
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><MapPin className="h-3 w-3" /> Adresse</Label><Input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} placeholder="Quartier, ville" className="h-9" /></div>
