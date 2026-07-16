@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, Users, TrendingDown, CheckCircle } from 'lucide-react'
+import { Calendar, Users, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react'
+import Link from 'next/link'
 import { getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -74,6 +75,13 @@ export default async function DashboardPage() {
     daysLeft = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
   }
 
+  // Profil incomplet : champs importants pour des ordonnances/certificats conformes
+  const missingProfile: string[] = []
+  if (!doctor.address) missingProfile.push('adresse du cabinet')
+  if (!doctor.phone) missingProfile.push('téléphone')
+  if (!doctor.inpe) missingProfile.push('INPE')
+  if (!doctor.cnom_number) missingProfile.push('n° Ordre (CNOM)')
+
   return (
     <div className="space-y-6">
       {/* En-tête */}
@@ -83,6 +91,22 @@ export default async function DashboardPage() {
         </h1>
         <p className="text-gray-500 text-sm mt-1 capitalize">{todayFormatted}</p>
       </div>
+
+      {/* Rappel de profil incomplet (disparaît une fois les champs remplis) */}
+      {missingProfile.length > 0 && (
+        <Link href="/settings" className="block bg-amber-50 border border-amber-200 rounded-xl p-4 hover:bg-amber-100 transition-colors">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-semibold text-amber-800">Complétez votre profil pour des documents conformes</p>
+              <p className="text-amber-700 mt-0.5">
+                Il manque : <strong>{missingProfile.join(', ')}</strong>. Ces informations apparaissent sur vos ordonnances et certificats.
+                <span className="underline ml-1">Compléter maintenant →</span>
+              </p>
+            </div>
+          </div>
+        </Link>
+      )}
 
       {/* Statistiques */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
