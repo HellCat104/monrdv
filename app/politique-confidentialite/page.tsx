@@ -167,16 +167,16 @@ export default function PolitiqueConfidentialite() {
             </Section>
 
             {/* ─── 2. CNDP ─── */}
-            <Section id="engagement" number="2" title="Engagement CNDP et loi 09-08">
+            <Section id="engagement" number="2" title="CNDP et loi 09-08">
               <p className="text-gray-600 leading-relaxed">
-                Conformément à la loi n° 09-08, MonRDV s&apos;engage à effectuer les déclarations requises auprès de la
-                <strong> Commission Nationale de contrôle de la protection des Données à caractère Personnel (CNDP)</strong>{' '}
-                pour les traitements de données à caractère personnel opérés sur la Plateforme.
+                Les traitements de données à caractère personnel opérés sur la Plateforme s&apos;inscrivent dans le cadre
+                de la loi n° 09-08 et relèvent de la{' '}
+                <strong>Commission Nationale de contrôle de la protection des Données à caractère Personnel (CNDP)</strong>.
               </p>
               <p className="text-gray-600 leading-relaxed">
-                En vertu de l&apos;article 13 de la loi 09-08, MonRDV s&apos;engage à ne pas traiter les données
-                au-delà des finalités déclarées, à ne pas céder les données à des tiers sans consentement,
-                et à garantir la sécurité et la confidentialité des données traitées.
+                En vertu de l&apos;article 13 de la loi 09-08, MonRDV ne traite pas les données
+                au-delà des finalités décrites dans la présente politique, ne cède pas les données à des tiers sans consentement,
+                et garantit la sécurité et la confidentialité des données traitées.
               </p>
             </Section>
 

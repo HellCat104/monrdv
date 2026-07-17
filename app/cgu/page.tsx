@@ -462,7 +462,7 @@ export default function CGUPage() {
                 personnes physiques à l&apos;égard du traitement des données à caractère personnel.
               </p>
               <p className="text-gray-600 leading-relaxed">
-                MonRDV s&apos;engage à respecter la loi 09-08 et à effectuer les démarches de déclaration requises auprès de la{' '}
+                MonRDV respecte la loi 09-08, sous le contrôle de la{' '}
                 <strong>Commission Nationale de contrôle de la protection des Données à caractère Personnel (CNDP)</strong>.
               </p>
               <p className="text-gray-600 leading-relaxed">
