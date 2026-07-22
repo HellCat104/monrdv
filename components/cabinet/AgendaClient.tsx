@@ -47,10 +47,12 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const [addError, setAddError] = useState('')
   const [doctorId, setDoctorId] = useState('')
 
-  // Encaissement inline
+  // Encaissement inline (aligné sur le médecin : total dû + reste à payer)
   const [payFor, setPayFor] = useState<Apt | null>(null)
+  const [payDue, setPayDue] = useState('')
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState('especes')
+  const [payError, setPayError] = useState('')
 
   // Blocage de créneau
   type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
@@ -225,14 +227,27 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     return true
   }
 
+  // Ouvre le dialog en pré-remplissant depuis le RDV (et le tarif du motif)
+  function openPayDialog(a: Apt) {
+    const price = types.find((t) => t.id === a.consultation_type_id)?.default_price ?? null
+    const due = a.amount_due ?? price ?? null
+    setPayError('')
+    setPayDue(due != null ? String(due) : '')
+    setPayAmount(a.amount_paid != null ? String(a.amount_paid) : (due != null ? String(due) : ''))
+    setPayMethod(a.payment_method ?? 'especes')
+    setPayFor(a)
+  }
+
   async function savePayment() {
     if (!payFor) return
-    const amount = Number(payAmount)
-    if (!Number.isFinite(amount) || amount < 0) { alert('Montant invalide'); return }
-    const type = types.find((t) => t.id === payFor.consultation_type_id)
-    const due = type?.default_price ?? null
-    const ok = await patchRdv(payFor.id, { amount_paid: amount, amount_due: due != null && due > amount ? due : null, payment_method: payMethod })
-    if (ok) { setPayFor(null); setPayAmount('') }
+    const paid = parseFloat(payAmount.replace(',', '.'))
+    if (isNaN(paid) || paid < 0) { setPayError('Montant encaissé invalide.'); return }
+    const dueRaw = payDue.trim()
+    const due = dueRaw === '' ? null : parseFloat(dueRaw.replace(',', '.'))
+    if (due !== null && (isNaN(due) || due < 0)) { setPayError('Total dû invalide.'); return }
+    setPayError('')
+    const ok = await patchRdv(payFor.id, { amount_paid: paid, amount_due: due, payment_method: payMethod })
+    if (ok) { setPayFor(null); setPayAmount(''); setPayDue('') }
   }
 
   // Créneaux dispo pour le déplacement
@@ -402,15 +417,25 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 </span>
               ) : null}
 
-              {/* Paiement */}
+              {/* Paiement — total dû, reste à payer, paiement partiel (comme le médecin) */}
               {permissions.payments && (
-                a.amount_paid != null ? (
-                  <span className="text-xs text-gray-600 whitespace-nowrap">
-                    {a.amount_paid} DH{a.payment_method ? ` · ${PAYMENT_METHOD_LABELS[a.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? a.payment_method}` : ''}
-                  </span>
-                ) : (
+                a.amount_paid != null ? (() => {
+                  const reste = (a.amount_due ?? 0) - a.amount_paid
+                  const partial = a.amount_due != null && reste > 0
+                  return (
+                    <button
+                      onClick={() => openPayDialog(a)}
+                      title={partial ? 'Solder le reste' : 'Modifier l\'encaissement'}
+                      className={`text-xs whitespace-nowrap rounded-lg px-2 py-1 border ${partial ? 'text-orange-600 border-orange-200 hover:bg-orange-50' : 'text-gray-600 border-transparent hover:bg-gray-50'}`}
+                    >
+                      {partial
+                        ? `${a.amount_paid}/${a.amount_due} DH · reste ${reste}`
+                        : `✓ ${a.amount_paid} DH${a.payment_method ? ` · ${PAYMENT_METHOD_LABELS[a.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? a.payment_method}` : ''}`}
+                    </button>
+                  )
+                })() : (
                   <button
-                    onClick={() => { setPayFor(a); setPayAmount(String(types.find((t) => t.id === a.consultation_type_id)?.default_price ?? '')) }}
+                    onClick={() => openPayDialog(a)}
                     className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 rounded-lg px-2 py-1 hover:bg-primary-50"
                   >
                     <Banknote className="h-3.5 w-3.5" /> Encaisser
@@ -592,15 +617,42 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         </DialogContent>
       </Dialog>
 
-      {/* Dialog encaissement */}
-      <Dialog open={!!payFor} onOpenChange={(o) => !o && setPayFor(null)}>
-        <DialogContent className="max-w-xs">
+      {/* Dialog encaissement — total dû + reste à payer + solder (aligné médecin) */}
+      <Dialog open={!!payFor} onOpenChange={(o) => { if (!o) { setPayFor(null); setPayError('') } }}>
+        <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Encaisser — {payFor?.patient ? `${payFor.patient.first_name} ${payFor.patient.last_name}` : ''}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="pay_amount">Montant payé (DH)</Label>
-              <Input id="pay_amount" type="number" min="0" step="1" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pay_due">Total dû (DH)</Label>
+                <Input id="pay_due" type="number" inputMode="decimal" min="0" step="any" value={payDue} onChange={(e) => { setPayDue(e.target.value); setPayError('') }} placeholder="0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pay_amount">Encaissé (DH)</Label>
+                <Input id="pay_amount" type="number" inputMode="decimal" min="0" step="any" autoFocus value={payAmount} onChange={(e) => { setPayAmount(e.target.value); setPayError('') }} placeholder="0" />
+              </div>
             </div>
+
+            {/* Reste à payer + bouton Solder le reste */}
+            {(() => {
+              const due = parseFloat(payDue.replace(',', '.'))
+              const paid = parseFloat(payAmount.replace(',', '.'))
+              const reste = Math.round((due - paid) * 100) / 100
+              if (!isNaN(due) && !isNaN(paid) && reste > 0) {
+                return (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-orange-600 font-medium">Reste à payer : {reste} DH</p>
+                    <button type="button" onClick={() => { setPayAmount(payDue); setPayError('') }}
+                      className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1 hover:bg-green-100 transition-colors">
+                      Solder le reste
+                    </button>
+                  </div>
+                )
+              }
+              if (!isNaN(due) && !isNaN(paid) && due > 0 && paid >= due) return <p className="text-xs text-green-600 font-medium">Soldé ✓</p>
+              return null
+            })()}
+
             <div className="space-y-1.5">
               <Label>Mode de règlement</Label>
               <Select value={payMethod} onValueChange={setPayMethod}>
@@ -610,9 +662,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 </SelectContent>
               </Select>
             </div>
+            {payError && <p className="text-sm text-red-500 bg-red-50 p-2 rounded-lg">{payError}</p>}
           </div>
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => setPayFor(null)}>Annuler</Button>
+            <Button type="button" variant="outline" onClick={() => { setPayFor(null); setPayError('') }}>Annuler</Button>
             <Button type="button" onClick={savePayment}>Enregistrer</Button>
           </DialogFooter>
         </DialogContent>

@@ -48,6 +48,8 @@ export function AddAppointmentDialog({
     notes: '',
   })
   const [typeId, setTypeId] = useState<string>(NO_TYPE)
+  const [recurFreq, setRecurFreq] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none')
+  const [recurCount, setRecurCount] = useState(4)
   const [consultTypes, setConsultTypes] = useState<ConsultationType[]>([])
   const [slots, setSlots] = useState<TimeSlot[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
@@ -96,6 +98,7 @@ export function AddAppointmentDialog({
           ...form,
           doctor_id: doctor.id,
           consultation_type_id: typeId !== NO_TYPE ? typeId : undefined,
+          recurrence: recurFreq !== 'none' ? { freq: recurFreq, count: recurCount } : undefined,
           public: false,
         }),
       })
@@ -107,6 +110,7 @@ export function AddAppointmentDialog({
       onOpenChange(false)
       setForm({ first_name: '', last_name: '', phone: '', date: '', time: '', notes: '' })
       setTypeId(NO_TYPE)
+      setRecurFreq('none'); setRecurCount(4)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {
@@ -212,6 +216,32 @@ export function AddAppointmentDialog({
               )}
             </div>
           </div>
+
+          {/* Récurrence : même heure, répétée sur plusieurs semaines/mois */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Répéter</Label>
+              <Select value={recurFreq} onValueChange={(v) => setRecurFreq(v as typeof recurFreq)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Rendez-vous unique</SelectItem>
+                  <SelectItem value="weekly">Chaque semaine</SelectItem>
+                  <SelectItem value="biweekly">Toutes les 2 semaines</SelectItem>
+                  <SelectItem value="monthly">Chaque mois</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {recurFreq !== 'none' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="rcount">Nombre de séances</Label>
+                <Input id="rcount" type="number" min={2} max={26} value={recurCount}
+                  onChange={(e) => setRecurCount(Math.min(26, Math.max(2, Number(e.target.value) || 2)))} />
+              </div>
+            )}
+          </div>
+          {recurFreq !== 'none' && (
+            <p className="text-xs text-gray-500 -mt-2">{recurCount} rendez-vous à {form.time || '—'}, {recurFreq === 'weekly' ? 'chaque semaine' : recurFreq === 'biweekly' ? 'toutes les 2 semaines' : 'chaque mois'}. Chacun reste déplaçable séparément.</p>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="notes">Notes (optionnel)</Label>

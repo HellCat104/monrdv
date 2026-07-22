@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks, toMinutes } from '@/lib/utils'
-import { format } from 'date-fns'
+import { format, parseISO, addDays, addMonths } from 'date-fns'
+import { randomUUID } from 'crypto'
 
 // GET /api/appointments?doctor_id=...&date=...
 export async function GET(req: NextRequest) {
@@ -325,6 +326,14 @@ export async function POST(req: NextRequest) {
     ? specialty
     : (docSpecs.length === 1 ? docSpecs[0] : null)
 
+  // RDV récurrents : uniquement pour une création manuelle par le médecin
+  // (jamais en réservation publique). Le RDV principal + les occurrences
+  // partagent recurrence_group_id ; chacune reste déplaçable/annulable seule.
+  const rec = !isPublic ? (body.recurrence as { freq?: string; count?: number } | undefined) : undefined
+  const recFreq = rec && ['weekly', 'biweekly', 'monthly'].includes(String(rec.freq)) ? String(rec.freq) : null
+  const recCount = recFreq ? Math.min(26, Math.max(2, Math.floor(Number(rec?.count) || 0))) : 1
+  const recGroupId = recCount > 1 ? randomUUID() : null
+
   // Crée le rendez-vous
   const { data: appointment, error: aptError } = await db
     .from('appointments')
@@ -339,6 +348,7 @@ export async function POST(req: NextRequest) {
       consultation_type_id: safeTypeId,
       specialty: safeSpecialty,
       duration_minutes: appointmentDuration,
+      recurrence_group_id: recGroupId,
       // Trace du consentement légal (réservation publique uniquement)
       consent_at: isPublic ? new Date().toISOString() : null,
     })
@@ -353,6 +363,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ce créneau vient d\'être réservé. Veuillez en choisir un autre.' }, { status: 409 })
     }
     return NextResponse.json({ error: 'Erreur création RDV' }, { status: 500 })
+  }
+
+  // Occurrences suivantes de la série récurrente (même heure, jours travaillés)
+  if (recGroupId) {
+    const base = parseISO(date)
+    const wh = (doctorCheck.working_hours ?? {}) as Record<string, { enabled?: boolean } | undefined>
+    for (let k = 1; k < recCount; k++) {
+      const d = recFreq === 'monthly' ? addMonths(base, k) : addDays(base, (recFreq === 'biweekly' ? 14 : 7) * k)
+      if (wh[getDayKey(d)]?.enabled === false) continue
+      await db.from('appointments').insert({
+        doctor_id, patient_id: patientId, date: format(d, 'yyyy-MM-dd'), time,
+        status: 'confirmed', notes: safeNotes || null, cancel_token: generateCancelToken(),
+        consultation_type_id: safeTypeId, specialty: safeSpecialty,
+        duration_minutes: appointmentDuration, consent_at: null, recurrence_group_id: recGroupId,
+      })
+      // On ignore silencieusement les collisions (créneau déjà pris ce jour-là)
+    }
   }
 
   // Récupère les infos du médecin pour le SMS et les emails
