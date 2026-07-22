@@ -234,7 +234,7 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient()
   // Le RDV doit appartenir au cabinet de la secrétaire
   const { data: apt } = await admin.from('appointments')
-    .select('id, doctor_id, amount_due, invoice_no').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
+    .select('id, doctor_id, amount_due, invoice_no, consultation_type_id').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
   if (!apt) return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
 
   const patch: Record<string, unknown> = {}
@@ -264,7 +264,17 @@ export async function PATCH(req: NextRequest) {
       patch.amount_paid = null; patch.amount_due = null; patch.payment_method = null; patch.paid_at = null
     } else {
       const paid = Number(body.amount_paid)
-      const due = body.amount_due != null ? Number(body.amount_due) : null
+      let due = body.amount_due != null ? Number(body.amount_due) : null
+      // Sans le droit « Modifier le prix des actes », la secrétaire encaisse
+      // au tarif officiel du médecin : on ignore un total dû envoyé par le client.
+      if (!ctx.permissions.edit_prices) {
+        let official = apt.amount_due ?? null
+        if (official == null && apt.consultation_type_id) {
+          const { data: ct } = await admin.from('consultation_types').select('default_price').eq('id', apt.consultation_type_id).maybeSingle()
+          official = ct?.default_price ?? null
+        }
+        due = official
+      }
       if (!Number.isFinite(paid) || paid < 0 || paid > 100000) return NextResponse.json({ error: 'Montant invalide' }, { status: 400 })
       if (due != null && (!Number.isFinite(due) || due < paid)) return NextResponse.json({ error: 'Le total dû doit être ≥ au montant payé' }, { status: 400 })
       const method = body.payment_method ? String(body.payment_method) : null

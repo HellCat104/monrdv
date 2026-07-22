@@ -625,7 +625,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="pay_due">Total dû (DH)</Label>
-                <Input id="pay_due" type="number" inputMode="decimal" min="0" step="any" value={payDue} onChange={(e) => { setPayDue(e.target.value); setPayError('') }} placeholder="0" />
+                <Input id="pay_due" type="number" inputMode="decimal" min="0" step="any" value={payDue}
+                  onChange={(e) => { setPayDue(e.target.value); setPayError('') }} placeholder="0"
+                  disabled={!permissions.edit_prices}
+                  className={!permissions.edit_prices ? 'bg-gray-50 text-gray-500' : ''} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="pay_amount">Encaissé (DH)</Label>
