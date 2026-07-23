@@ -11,19 +11,23 @@ ALTER TABLE patients ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users
 CREATE INDEX IF NOT EXISTS idx_patients_email   ON patients(email);
 CREATE INDEX IF NOT EXISTS idx_patients_user_id ON patients(user_id);
 
--- 3. RLS : les patients connectés peuvent voir leurs propres rendez-vous
--- (via le user_id ou l'email qui correspond)
-CREATE POLICY IF NOT EXISTS "patients can view own appointments"
-  ON appointments FOR SELECT
-  USING (
-    patient_id IN (
-      SELECT id FROM patients
-      WHERE user_id = auth.uid()
-    )
-  );
-
--- 4. RLS : les patients peuvent annuler leurs propres RDV
---    (la route /api/cancel utilise déjà le cancel_token, pas besoin de RLS ici)
+-- 3. RLS des rendez-vous côté patient — VOLONTAIREMENT ABSENTE
+--
+-- Cette migration contenait une policy « patients can view own appointments »
+-- écrite avec `CREATE POLICY IF NOT EXISTS`, syntaxe qui n'existe pas en
+-- PostgreSQL : l'instruction échouait, la policy n'a donc jamais été créée.
+-- Elle est retirée ici plutôt que « réparée », car l'appliquer serait DANGEREUX :
+-- une policy SELECT sur `appointments` ne filtre pas les colonnes et exposerait
+-- aux patients, via PostgREST, l'intégralité de la ligne — dont `doctor_notes`
+-- (notes privées du médecin), `cancel_token`, `amount_paid` et `invoice_no`.
+--
+-- L'espace patient n'en a pas besoin : ses lectures passent par le serveur
+-- (client service_role) avec une projection explicite des colonnes autorisées,
+-- après filtrage sur `user_id` — voir app/patient/(protected)/ et
+-- app/api/patient/**. L'annulation utilise le `cancel_token` (secret dans l'URL).
+--
+-- Ne pas ré-ajouter de policy publique sur `appointments` sans restreindre les
+-- colonnes (vue dédiée ou fonction SECURITY DEFINER).
 
 -- Vérification finale
 SELECT column_name, data_type
