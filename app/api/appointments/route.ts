@@ -283,8 +283,10 @@ export async function POST(req: NextRequest) {
     const updates: Record<string, unknown> = {}
     if (safeEmail) updates.email = safeEmail
     if (safeAge) updates.age = safeAge
-    // Fiche enfant : complète naissance/sexe/âge si la fiche n'appartient pas à un autre compte
-    if (isForChild && bookingUser && (existingPatient.user_id === null || existingPatient.user_id === bookingUser.id)) {
+    // Fiche enfant : on ne complète QUE si le parent est vérifié (email/téléphone du
+    // compte) ET que la fiche est libre ou déjà la sienne — sinon on pourrait
+    // s'approprier le dossier d'un autre patient en devinant nom + téléphone.
+    if (isForChild && shouldLinkPatientToUser && (existingPatient.user_id === null || existingPatient.user_id === bookingUser!.id)) {
       updates.is_child = true
       updates.birth_date = safeChildBirth
       if (safeChildSex) updates.sex = safeChildSex
@@ -293,7 +295,7 @@ export async function POST(req: NextRequest) {
     if (Object.keys(updates).length > 0) {
       await db.from('patients').update(updates).eq('id', patientId)
     }
-    if (shouldLinkPatientToUser || (isForChild && bookingUser)) {
+    if (shouldLinkPatientToUser) {
       await db.from('patients').update({ user_id: bookingUser!.id }).eq('id', patientId).is('user_id', null)
     }
   } else {
@@ -309,7 +311,10 @@ export async function POST(req: NextRequest) {
         birth_date: safeChildBirth,
         sex: safeChildSex,
         is_child: isForChild,
-        user_id: isForChild && bookingUser ? bookingUser.id : (shouldLinkPatientToUser ? bookingUser.id : null),
+        // Fiche neuve : rattachement direct au compte parent (aucune donnée
+        // préexistante ne peut être détournée). Les fiches EXISTANTES, elles,
+        // exigent la vérification email/téléphone (voir plus haut).
+        user_id: (isForChild && bookingUser) || shouldLinkPatientToUser ? bookingUser!.id : null,
       })
       .select('id')
       .single()
