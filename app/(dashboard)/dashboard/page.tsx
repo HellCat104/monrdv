@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
+import { withConsultationSummary } from '@/lib/consultation-summary'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, Users, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
@@ -44,14 +45,17 @@ export default async function DashboardPage() {
   // Stats du mois
   const { data: monthAppointments } = await supabase
     .from('appointments')
-    .select('status')
+    .select('status, attendance')
     .eq('doctor_id', doctor.id)
     .gte('date', firstOfMonth)
     .lte('date', today)
 
   const monthTotal = monthAppointments?.length ?? 0
   const monthCancelled = monthAppointments?.filter((a) => a.status === 'cancelled').length ?? 0
-  const absenceRate = monthTotal > 0 ? Math.round((monthCancelled / monthTotal) * 100) : 0
+  // Absentéisme = patients réellement non venus (pointage), pas les annulations —
+  // c'est la définition utilisée dans les Statistiques, on s'aligne dessus.
+  const monthAbsent = monthAppointments?.filter((a) => a.attendance === 'absent').length ?? 0
+  const absenceRate = monthTotal > 0 ? Math.round((monthAbsent / monthTotal) * 100) : 0
 
   // Prochain RDV
   const { data: upcomingAppointments } = await supabase
@@ -63,6 +67,10 @@ export default async function DashboardPage() {
     .order('date', { ascending: true })
     .order('time', { ascending: true })
     .limit(5)
+
+  // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »)
+  const todaySummarised = await withConsultationSummary(supabase, todayAppointments ?? [])
+  const upcomingSummarised = await withConsultationSummary(supabase, upcomingAppointments ?? [])
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
 
@@ -133,7 +141,7 @@ export default async function DashboardPage() {
         <StatsCard
           title="Patients absents"
           value={`${absenceRate}%`}
-          subtitle={monthTotal > 0 ? `sur ${monthTotal} RDV ce mois` : 'aucun RDV'}
+          subtitle={monthTotal > 0 ? `${monthAbsent} sur ${monthTotal} RDV ce mois` : 'aucun RDV'}
           icon={Users}
           color={absenceRate > 20 ? 'red' : 'green'}
         />
@@ -164,7 +172,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <AppointmentList appointments={todayAppointments ?? []} />
+            <AppointmentList appointments={todaySummarised} />
           </CardContent>
         </Card>
 
@@ -177,7 +185,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <AppointmentList appointments={upcomingAppointments ?? []} />
+            <AppointmentList appointments={upcomingSummarised} />
           </CardContent>
         </Card>
       </div>

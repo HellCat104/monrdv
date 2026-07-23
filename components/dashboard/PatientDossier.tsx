@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getInitials, formatDateFr, formatDateShort, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
+import { withConsultationSummary } from '@/lib/consultation-summary'
 import { BLOOD_GROUPS, MUTUELLES_MAROC, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
@@ -73,6 +74,7 @@ export default function PatientDossier({
   const [appts, setAppts] = useState<Appointment[]>([])
   const [consultNotes, setConsultNotes] = useState<ConsultationNote[]>([])
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
+  const [certificates, setCertificates] = useState<{ id: string; title: string; motif: string | null; created_at: string }[]>([])
   const [recalls, setRecalls] = useState<Recall[]>([])
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [vitals, setVitals] = useState<VitalSign[]>([])
@@ -90,20 +92,23 @@ export default function PatientDossier({
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [aptRes, notesRes, presRes, recallsRes, docsRes, vitalsRes] = await Promise.all([
+    const [aptRes, notesRes, presRes, recallsRes, docsRes, vitalsRes, certsRes] = await Promise.all([
       supabase.from('appointments').select('*, patient:patients(*)').eq('patient_id', patient.id).order('date', { ascending: false }).order('time', { ascending: false }),
       supabase.from('consultation_notes').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
       supabase.from('prescriptions').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
       supabase.from('recalls').select('*').eq('patient_id', patient.id).order('due_date', { ascending: true }),
       supabase.from('patient_documents').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
       supabase.from('vital_signs').select('*').eq('patient_id', patient.id).order('measured_at', { ascending: false }),
+      supabase.from('certificates').select('id, title, motif, created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }),
     ])
-    setAppts(aptRes.data ?? [])
+    // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »)
+    setAppts(await withConsultationSummary(supabase, aptRes.data ?? []))
     setConsultNotes(notesRes.data ?? [])
     setPrescriptions(presRes.data ?? [])
     setRecalls(recallsRes.data ?? [])
     setDocuments(docsRes.data ?? [])
     setVitals(vitalsRes.data ?? [])
+    setCertificates(certsRes.data ?? [])
     setLoading(false)
   }, [patient.id, supabase])
   useEffect(() => { load() }, [load])
@@ -482,6 +487,23 @@ export default function PatientDossier({
                       <span className="text-gray-400">{formatDateShort(p.created_at)} · </span>{(p.content ?? '').split('\n').filter(Boolean)[0] || 'Ordonnance'}
                     </button>
                     <button onClick={() => renewPrescription(p)} title="Renouveler" className="text-primary-500 hover:text-primary-700 shrink-0"><RefreshCw className="h-3.5 w-3.5" /></button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Certificats — l'écran de création promet qu'ils apparaissent ici */}
+          {certificates.length > 0 && (
+            <div className={sec}>
+              <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Certificats ({certificates.length})</span></div>
+              <ul className="space-y-1.5">
+                {certificates.map((c) => (
+                  <li key={c.id}>
+                    <button onClick={() => window.open(`/certificat/${c.id}`, '_blank')} className="text-sm text-gray-700 hover:text-primary-600 truncate text-left w-full">
+                      <span className="text-gray-400">{formatDateShort(c.created_at)} · </span>{c.title}
+                      {c.motif && <span className="text-gray-400"> — {c.motif}</span>}
+                    </button>
                   </li>
                 ))}
               </ul>

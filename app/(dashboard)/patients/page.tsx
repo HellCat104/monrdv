@@ -164,17 +164,14 @@ export default function PatientsPage() {
     setPatients(enriched)
     setLoading(false)
 
-    // Ouvre automatiquement une fiche si ?patient=<id> ou ?certificat=<id>
+    // Liens profonds : on redirige vers le dossier pleine page (source unique),
+    // au lieu d'ouvrir l'ancienne fenêtre — les deux affichaient des contenus
+    // différents du même patient (certificats absents d'un côté, fratrie de l'autre).
     const params = new URLSearchParams(window.location.search)
-    const patientId = params.get('patient') || params.get('certificat')
-    if (patientId) {
-      const target = enriched.find((p) => p.id === patientId)
-      if (target) {
-        await openPatientHistory(target)
-        // ?certificat=<id> → ouvre directement le dialog « Nouveau certificat »
-        if (params.get('certificat')) setTimeout(() => openCertDialog(), 400)
-      }
-    }
+    const certifId = params.get('certificat')
+    const patientId = params.get('patient')
+    if (certifId) router.push(`/certificat/nouveau/${certifId}`)
+    else if (patientId) router.push(`/patients/${patientId}`)
   }
 
   useEffect(() => {
@@ -937,7 +934,7 @@ export default function PatientsPage() {
                       const p = similarPatient
                       setAddOpen(false); setSimilarPatient(null)
                       setNewPatient({ first_name: '', last_name: '', phone: '', birth_date: '', notes: '' })
-                      if (p) openPatientHistory(p)
+                      if (p) router.push(`/patients/${p.id}`)
                     }}
                   >
                     Ouvrir la fiche existante
