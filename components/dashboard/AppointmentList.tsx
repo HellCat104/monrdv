@@ -292,6 +292,13 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 <MoreMenu
                   items={[
                     apt.patient_id ? { label: 'Reprendre la consultation', icon: Play, href: `/consultation/${apt.id}` } : null,
+                    // Un RDV clôturé non encaissé sortait de la file sans aucun
+                    // moyen d'encaisser : la recette se perdait en fin de journée.
+                    onPayment && paymentStatus(apt) !== 'paid' ? {
+                      label: paymentStatus(apt) === 'partial' ? 'Encaisser le reste' : 'Encaisser',
+                      icon: Wallet,
+                      onClick: () => openPayDialog(apt),
+                    } : null,
                     apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
                     apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
                     apt.invoice_no ? {

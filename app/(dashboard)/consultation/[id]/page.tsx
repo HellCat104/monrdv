@@ -52,8 +52,11 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       appointmentId={apt.id}
       appointmentPaid={apt.amount_paid != null}
       amountPaid={apt.amount_paid ?? null}
+      amountDue={apt.amount_due ?? null}
       hasInvoice={!!apt.invoice_no}
-      defaultPrice={consultationType?.default_price ?? apt.amount_due ?? null}
+      // Même priorité que l'agenda : le montant déjà fixé sur le RDV prime sur le
+      // tarif du motif — sinon le « Total dû » pré-rempli diffère selon l'écran.
+      defaultPrice={apt.amount_due ?? consultationType?.default_price ?? null}
       patient={patient}
       recentNotes={notesRes.data ?? []}
       recentPrescriptions={presRes.data ?? []}

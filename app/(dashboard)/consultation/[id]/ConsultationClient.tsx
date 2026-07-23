@@ -18,7 +18,7 @@ type Row = Record<string, any>
 interface Patient { id: string; first_name: string; last_name: string; age?: number | null; birth_date?: string | null; blood_group?: string | null; phone?: string | null; cin?: string | null; mutuelle?: string | null; allergies?: string | null; chronic_conditions?: string | null; surgeries?: string | null; current_treatments?: string | null; vaccinations?: string | null }
 
 export default function ConsultationClient({
-  doctorId, appointmentId, appointmentPaid, amountPaid, hasInvoice, defaultPrice,
+  doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, hasInvoice, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, recentVitals,
   existingNoteId, existingNote, vitalDefs, vitalDefsAll, isPsy = false,
 }: {
@@ -26,6 +26,7 @@ export default function ConsultationClient({
   appointmentId: string
   appointmentPaid: boolean
   amountPaid: number | null
+  amountDue?: number | null
   hasInvoice: boolean
   defaultPrice: number | null
   patient: Patient
@@ -53,6 +54,7 @@ export default function ConsultationClient({
 
   const [paid, setPaid] = useState(appointmentPaid)
   const [paidAmount, setPaidAmount] = useState<number | null>(amountPaid)
+  const [paidDue, setPaidDue] = useState<number | null>(amountDue ?? null)
   const [payDue, setPayDue] = useState<string>(defaultPrice != null ? String(defaultPrice) : '')
   const [payPaid, setPayPaid] = useState<string>(defaultPrice != null ? String(defaultPrice) : '')
   const [payMethod, setPayMethod] = useState<string>('especes')
@@ -124,17 +126,30 @@ export default function ConsultationClient({
     const dueVal = payDue.trim() === '' ? paidVal : parseFloat(payDue.replace(',', '.'))
     if (!Number.isFinite(dueVal) || dueVal < 0) { alert('Total dû invalide.'); return }
     setPayingNow(true)
-    const { error } = await supabase
-      .from('appointments')
-      .update({ amount_paid: paidVal, amount_due: dueVal, payment_method: payMethod, paid_at: new Date().toISOString() })
-      .eq('id', appointmentId)
+    // Passe par l'API comme l'agenda et le dossier patient : plafonds, cohérence
+    // payé ≤ dû, modes de règlement autorisés et verrous comptables y sont vérifiés.
+    // (L'écriture directe en base court-circuitait toutes ces validations.)
+    const res = await fetch(`/api/appointments/${appointmentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount_paid: paidVal, amount_due: dueVal, payment_method: payMethod }),
+    })
     setPayingNow(false)
-    if (!error) { setPaid(true); setPaidAmount(paidVal) }
-    else alert('L\'encaissement a échoué. Réessayez.')
+    if (res.ok) {
+      setPaid(true); setPaidAmount(paidVal); setPaidDue(dueVal)
+    } else {
+      const d = await res.json().catch(() => ({}))
+      alert(d.error || 'L\'encaissement a échoué. Réessayez.')
+    }
   }
 
   // Clôture le RDV : note enregistrée, patient marqué présent et « parti »
   async function terminer() {
+    // Une fois clôturé, le RDV quitte la file du jour : si rien n'a été encaissé,
+    // la recette se perd facilement. On demande confirmation explicite.
+    if (paidAmount == null) {
+      if (!confirm('Aucun encaissement n\'a été saisi pour cette consultation.\n\nTerminer quand même ? Vous pourrez encaisser plus tard depuis l\'agenda.')) return
+    }
     setFinishing(true)
     try {
       if (note.trim()) await saveNote()
@@ -332,9 +347,26 @@ export default function ConsultationClient({
 
             {paid ? (
               <>
-                <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
-                  <Check className="h-4 w-4" /> Encaissé{paidAmount != null ? ` · ${paidAmount} DH` : ''}
-                </div>
+                {(() => {
+                  // Paiement partiel : ne pas afficher « Encaissé ✓ » alors qu'il
+                  // reste un solde — le médecin doit pouvoir encaisser le reste ici.
+                  const reste = paidDue != null && paidAmount != null
+                    ? Math.round((paidDue - paidAmount) * 100) / 100 : 0
+                  if (reste > 0) {
+                    return (
+                      <div className="px-3 py-2.5 rounded-lg bg-orange-50 border border-orange-200 text-sm">
+                        <p className="text-orange-700 font-medium">{paidAmount}/{paidDue} DH · reste {reste} DH</p>
+                        <button type="button" onClick={() => { setPaid(false); setPayDue(String(paidDue)); setPayPaid(String(paidDue)) }}
+                          className="mt-1 text-xs font-medium text-green-700 underline">Encaisser le reste</button>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+                      <Check className="h-4 w-4" /> Encaissé{paidAmount != null ? ` · ${paidAmount} DH` : ''}
+                    </div>
+                  )
+                })()}
                 <a href={`/facture/${appointmentId}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
                   <Printer className="h-4 w-4 text-primary-500" /> Facture
                 </a>
