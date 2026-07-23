@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatDateFr, ageFromBirthDate } from '@/lib/utils'
+import { formatDateFr, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { Users, UserPlus, Search, Download, Trash2, HeartPulse, Pill, Activity, Plus, CreditCard, ShieldPlus } from 'lucide-react'
 import { MUTUELLES_MAROC, type StaffPermissions, type VitalDef } from '@/types'
 
@@ -204,6 +204,7 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
                 <Label htmlFor="p_birth">Date de naissance</Label>
                 <Input id="p_birth" type="date" max={new Date().toISOString().slice(0, 10)}
                   value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
+                {formatAge(form.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(form.birth_date)}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

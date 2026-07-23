@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getInitials, formatDateFr, formatDateShort, getNowInMaroc, ageFromBirthDate } from '@/lib/utils'
+import { getInitials, formatDateFr, formatDateShort, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { BLOOD_GROUPS, MUTUELLES_MAROC, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
@@ -320,7 +320,8 @@ export default function PatientDossier({
                     disabled={!!editBirthDate}
                     className={`h-9 ${editBirthDate ? 'bg-gray-50 text-gray-500' : ''}`} />
                 </div>
-                <div className="space-y-1"><Label className="text-[11px] text-gray-400">Naissance</Label><Input type="date" value={editBirthDate} max={todayStr} onChange={(e) => setEditBirthDate(e.target.value)} className="h-9" /></div>
+                <div className="space-y-1"><Label className="text-[11px] text-gray-400">Naissance</Label><Input type="date" value={editBirthDate} max={todayStr} onChange={(e) => setEditBirthDate(e.target.value)} className="h-9" />
+                  {formatAge(editBirthDate) && <p className="text-[11px] font-medium text-primary-600">👶 {formatAge(editBirthDate)}</p>}</div>
               </div>
               {isPediatricDoctor(specialties) && (
                 <>

@@ -202,3 +202,28 @@ export function ageFromBirthDate(birth?: string | null): number | null {
   if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--
   return age >= 0 && age <= 120 ? age : null
 }
+
+/** Âge lisible depuis une date de naissance : « 12 jours », « 8 mois »,
+ *  « 3 ans et 2 mois ». Les mois comptent jusqu'à 2 ans (essentiel en pédiatrie). */
+export function formatAge(birth?: string | null): string | null {
+  if (!birth || !/^\d{4}-\d{2}-\d{2}$/.test(birth)) return null
+  const b = new Date(birth + 'T00:00:00')
+  if (isNaN(b.getTime())) return null
+  const now = new Date()
+  if (b.getTime() > now.getTime()) return null
+
+  let months = (now.getFullYear() - b.getFullYear()) * 12 + (now.getMonth() - b.getMonth())
+  if (now.getDate() < b.getDate()) months--
+  if (months < 0) months = 0
+
+  if (months < 1) {
+    const days = Math.floor((now.getTime() - b.getTime()) / 86400000)
+    if (days < 14) return `${days} jour${days > 1 ? 's' : ''}`
+    const weeks = Math.floor(days / 7)
+    return `${weeks} semaines`
+  }
+  if (months < 24) return `${months} mois`
+  const years = Math.floor(months / 12)
+  const rest = months % 12
+  return rest === 0 ? `${years} ans` : `${years} ans et ${rest} mois`
+}

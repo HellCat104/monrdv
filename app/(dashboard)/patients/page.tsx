@@ -18,7 +18,7 @@ import { AppointmentList, type PaymentPayload } from '@/components/dashboard/App
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
 import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
-import { getInitials, formatDateShort, formatDateFr, getNowInMaroc, ageFromBirthDate } from '@/lib/utils'
+import { getInitials, formatDateShort, formatDateFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
@@ -909,6 +909,7 @@ export default function PatientsPage() {
                 value={newPatient.birth_date}
                 onChange={(e) => setNewPatient({ ...newPatient, birth_date: e.target.value })}
               />
+              {formatAge(newPatient.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(newPatient.birth_date)}</p>}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-gray-500">Notes (optionnel)</label>

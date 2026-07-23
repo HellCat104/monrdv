@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { formatDateShort, formatTime } from '@/lib/utils'
+import { formatDateShort, formatTime, formatAge } from '@/lib/utils'
 import { CheckCircle2, User, Phone, MessageSquare, Mail, Hash } from 'lucide-react'
 import type { Doctor, ConsultationType } from '@/types'
 
@@ -299,6 +299,9 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
                 onChange={(e) => setChildBirth(e.target.value)}
                 required
               />
+              {formatAge(childBirth) && (
+                <p className="text-xs font-medium text-primary-600">👶 {formatAge(childBirth)}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Sexe (optionnel)</Label>
