@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getInitials, formatDateFr, formatDateShort, getNowInMaroc } from '@/lib/utils'
+import { getInitials, formatDateFr, formatDateShort, getNowInMaroc, ageFromBirthDate } from '@/lib/utils'
 import { BLOOD_GROUPS, MUTUELLES_MAROC, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
@@ -147,7 +147,7 @@ export default function PatientDossier({
   async function saveIdentity() {
     setSaving(true)
     const updates = {
-      age: editAge ? Number(editAge) : null,
+      age: ageFromBirthDate(editBirthDate) ?? (editAge ? Number(editAge) : null),
       birth_date: editBirthDate || null,
       sex: editSex || null,
       gestational_age_weeks: editGestWeeks ? Math.min(43, Math.max(22, Number(editGestWeeks))) : null,
@@ -312,7 +312,14 @@ export default function PatientDossier({
             <div className="space-y-2.5 text-sm">
               <div className="flex items-center gap-2 text-gray-600"><Phone className="h-3.5 w-3.5 text-primary-500 shrink-0" /> {patient.phone}</div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1"><Label className="text-[11px] text-gray-400">Âge</Label><Input type="number" value={editAge} onChange={(e) => setEditAge(e.target.value)} className="h-9" /></div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-gray-400">Âge {editBirthDate && <span className="text-gray-300">(calculé)</span>}</Label>
+                  <Input type="number"
+                    value={editBirthDate ? (ageFromBirthDate(editBirthDate) ?? '') : editAge}
+                    onChange={(e) => setEditAge(e.target.value)}
+                    disabled={!!editBirthDate}
+                    className={`h-9 ${editBirthDate ? 'bg-gray-50 text-gray-500' : ''}`} />
+                </div>
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Naissance</Label><Input type="date" value={editBirthDate} max={todayStr} onChange={(e) => setEditBirthDate(e.target.value)} className="h-9" /></div>
               </div>
               {isPediatricDoctor(specialties) && (

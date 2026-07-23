@@ -18,7 +18,7 @@ import { AppointmentList, type PaymentPayload } from '@/components/dashboard/App
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
 import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
-import { getInitials, formatDateShort, formatDateFr, getNowInMaroc } from '@/lib/utils'
+import { getInitials, formatDateShort, formatDateFr, getNowInMaroc, ageFromBirthDate } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
@@ -103,7 +103,7 @@ export default function PatientsPage() {
 
   // Ajout d'un patient
   const [addOpen, setAddOpen] = useState(false)
-  const [newPatient, setNewPatient] = useState({ first_name: '', last_name: '', phone: '', notes: '' })
+  const [newPatient, setNewPatient] = useState({ first_name: '', last_name: '', phone: '', birth_date: '', notes: '' })
   const [addingPatient, setAddingPatient] = useState(false)
   const [addError, setAddError] = useState('')
   const [similarPatient, setSimilarPatient] = useState<PatientWithStats | null>(null)
@@ -565,6 +565,8 @@ export default function PatientsPage() {
       first_name: newPatient.first_name.trim(),
       last_name: newPatient.last_name.trim(),
       phone: newPatient.phone.trim(),
+      birth_date: newPatient.birth_date || null,
+      age: ageFromBirthDate(newPatient.birth_date),
       notes: newPatient.notes.trim() || null,
     })
 
@@ -580,7 +582,7 @@ export default function PatientsPage() {
     }
 
     setAddOpen(false)
-    setNewPatient({ first_name: '', last_name: '', phone: '', notes: '' })
+    setNewPatient({ first_name: '', last_name: '', phone: '', birth_date: '', notes: '' })
     setLoading(true)
     await load()
   }
@@ -898,6 +900,17 @@ export default function PatientsPage() {
               />
             </div>
             <div className="space-y-1.5">
+              <label className="text-xs text-gray-500">
+                Date de naissance {isPediatricDoctor(doctorSpecialties) && <span className="text-primary-500">— requise pour les courbes et vaccins</span>}
+              </label>
+              <Input
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                value={newPatient.birth_date}
+                onChange={(e) => setNewPatient({ ...newPatient, birth_date: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
               <label className="text-xs text-gray-500">Notes (optionnel)</label>
               <textarea
                 value={newPatient.notes}
@@ -922,7 +935,7 @@ export default function PatientsPage() {
                     onClick={() => {
                       const p = similarPatient
                       setAddOpen(false); setSimilarPatient(null)
-                      setNewPatient({ first_name: '', last_name: '', phone: '', notes: '' })
+                      setNewPatient({ first_name: '', last_name: '', phone: '', birth_date: '', notes: '' })
                       if (p) openPatientHistory(p)
                     }}
                   >

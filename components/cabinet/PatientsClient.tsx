@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatDateFr } from '@/lib/utils'
+import { formatDateFr, ageFromBirthDate } from '@/lib/utils'
 import { Users, UserPlus, Search, Download, Trash2, HeartPulse, Pill, Activity, Plus, CreditCard, ShieldPlus } from 'lucide-react'
 import { MUTUELLES_MAROC, type StaffPermissions, type VitalDef } from '@/types'
 
@@ -22,7 +22,7 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
 
   // Création
   const [addOpen, setAddOpen] = useState(false)
-  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', age: '', cin: '', mutuelle: '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', age: '', birth_date: '', cin: '', mutuelle: '' })
   const [mutuelleOther, setMutuelleOther] = useState(false)
   const [saving, setSaving] = useState(false)
   const [addError, setAddError] = useState('')
@@ -64,13 +64,14 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
           first_name: form.first_name, last_name: form.last_name, phone: form.phone,
           age: form.age ? parseInt(form.age, 10) : undefined,
           cin: form.cin || undefined, mutuelle: form.mutuelle || undefined,
+          birth_date: form.birth_date || undefined,
         }),
       })
       const d = await res.json().catch(() => ({}))
       if (!res.ok) { setAddError(d.error || 'Erreur'); return }
       setPatients((prev) => [d.patient, ...prev])
       setAddOpen(false)
-      setForm({ first_name: '', last_name: '', phone: '', age: '', cin: '', mutuelle: '' })
+      setForm({ first_name: '', last_name: '', phone: '', age: '', birth_date: '', cin: '', mutuelle: '' })
       setMutuelleOther(false)
     } finally {
       setSaving(false)
@@ -200,9 +201,21 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
                 <Input id="p_phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="06 12 34 56 78" required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="p_age">Âge</Label>
-                <Input id="p_age" type="number" min="0" max="120" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} />
+                <Label htmlFor="p_birth">Date de naissance</Label>
+                <Input id="p_birth" type="date" max={new Date().toISOString().slice(0, 10)}
+                  value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="p_age">Âge {form.birth_date && <span className="text-[11px] text-gray-400">(calculé)</span>}</Label>
+                <Input id="p_age" type="number" min="0" max="120"
+                  value={form.birth_date ? (ageFromBirthDate(form.birth_date) ?? '') : form.age}
+                  onChange={(e) => setForm({ ...form, age: e.target.value })}
+                  disabled={!!form.birth_date}
+                  className={form.birth_date ? 'bg-gray-50 text-gray-500' : ''} />
+              </div>
+              <div />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

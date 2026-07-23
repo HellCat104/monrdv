@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
-import { formatPhoneMaroc, isValidPhoneMaroc } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, ageFromBirthDate } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +37,11 @@ export async function POST(req: NextRequest) {
   const phone = sanitize(String(body.phone ?? '')).substring(0, 20)
   const cin = body.cin ? sanitize(String(body.cin)).substring(0, 20).toUpperCase() : null
   const mutuelle = body.mutuelle ? sanitize(String(body.mutuelle)).substring(0, 50) : null
-  const age = Number.isInteger(body.age) && body.age > 0 && body.age <= 120 ? body.age : null
+  // Date de naissance (indispensable en pédiatrie : courbes, vaccins, développement).
+  // Quand elle est fournie, l'âge en découle — une seule source de vérité.
+  const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.birth_date ?? '')) ? String(body.birth_date) : null
+  const age = ageFromBirthDate(birthDate)
+    ?? (Number.isInteger(body.age) && body.age > 0 && body.age <= 120 ? body.age : null)
 
   if (!first || !last || !phone) return NextResponse.json({ error: 'Prénom, nom et téléphone requis' }, { status: 400 })
   if (!isValidPhoneMaroc(phone)) return NextResponse.json({ error: 'Numéro de téléphone invalide (format marocain)' }, { status: 400 })
@@ -52,8 +56,8 @@ export async function POST(req: NextRequest) {
   if (existing) return NextResponse.json({ error: 'Ce patient existe déjà dans la base.' }, { status: 409 })
 
   const { data: created, error } = await admin.from('patients')
-    .insert({ doctor_id: ctx.doctor.id, first_name: first, last_name: last, phone: formattedPhone, cin, mutuelle, age })
-    .select('id, first_name, last_name, phone, age, cin, mutuelle, created_at').single()
+    .insert({ doctor_id: ctx.doctor.id, first_name: first, last_name: last, phone: formattedPhone, cin, mutuelle, age, birth_date: birthDate })
+    .select('id, first_name, last_name, phone, age, birth_date, cin, mutuelle, created_at').single()
   if (error || !created) return NextResponse.json({ error: 'Erreur création patient' }, { status: 500 })
 
   return NextResponse.json({ patient: created }, { status: 201 })

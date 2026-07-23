@@ -189,3 +189,16 @@ export function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text
   return `${text.substring(0, maxLength)}…`
 }
+
+/** Âge en années révolues à partir d'une date de naissance (YYYY-MM-DD).
+ *  Source unique de vérité : quand la date est connue, l'âge en découle. */
+export function ageFromBirthDate(birth?: string | null): number | null {
+  if (!birth || !/^\d{4}-\d{2}-\d{2}$/.test(birth)) return null
+  const b = new Date(birth + 'T00:00:00')
+  if (isNaN(b.getTime())) return null
+  const now = new Date()
+  let age = now.getFullYear() - b.getFullYear()
+  const m = now.getMonth() - b.getMonth()
+  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--
+  return age >= 0 && age <= 120 ? age : null
+}
