@@ -1,7 +1,7 @@
 // Page publique de réservation — accessible via /dr-hassan ou /slug-medecin
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { BookingPageClient } from './BookingPageClient'
 import Link from 'next/link'
 import type { Metadata } from 'next'
@@ -14,7 +14,7 @@ interface Props {
 
 // Mise en cache React — une seule requête DB par rendu même si appelée plusieurs fois
 const getDoctor = cache(async (slug: string) => {
-  const supabase = createClient()
+  const supabase = createAdminClient()
   // Projection EXPLICITE : ne jamais sérialiser vers le navigateur les colonnes
   // sensibles (email, cnom_number, document_url, rejection_reason, ice, inpe…).
   const { data } = await supabase
