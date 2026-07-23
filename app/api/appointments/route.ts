@@ -96,6 +96,8 @@ export async function POST(req: NextRequest) {
 
   // Sanitisation et limites de longueur pour les champs texte
   const sanitize = (s: string) => s.trim().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+  // Neutralise les jokers LIKE : sans ça, « % » sélectionne n'importe quel patient
+  const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&')
   const safeFirst  = sanitize(first_name).substring(0, 100)
   const safeLast   = sanitize(last_name).substring(0, 100)
   const safePhone  = sanitize(phone).substring(0, 20)
@@ -269,24 +271,33 @@ export async function POST(req: NextRequest) {
 
   const { data: existingPatient } = await db
     .from('patients')
-    .select('id, user_id')
+    .select('id, user_id, email')
     .eq('doctor_id', doctor_id)
     .eq('phone', formattedPhone)
-    .ilike('first_name', safeFirst)
-    .ilike('last_name', safeLast)
+    .ilike('first_name', escapeLike(safeFirst))
+    .ilike('last_name', escapeLike(safeLast))
     .limit(1)
     .maybeSingle()
 
   if (existingPatient) {
     patientId = existingPatient.id
-    // Complète email/âge si fournis — on NE touche PAS au téléphone (clé d'identité)
+    // Propriété d'une fiche PRÉEXISTANTE : jamais sur la foi d'un email envoyé par
+    // le client (un attaquant enverrait le sien). On se fonde uniquement sur des
+    // données déjà en base : l'email de la fiche, ou le téléphone vérifié du compte.
+    const ownsExistingFiche = !!bookingUser && existingPatient.user_id === null && (
+      (!!existingPatient.email && !!bookingUser.email &&
+        existingPatient.email.toLowerCase() === bookingUser.email.toLowerCase()) ||
+      (!!bookingUser.phone && bookingUser.phone === formattedPhone)
+    )
     const updates: Record<string, unknown> = {}
-    if (safeEmail) updates.email = safeEmail
+    // N'écrase jamais l'email d'une fiche existante (sinon un anonyme détourne
+    // confirmations, rappels et jeton d'annulation) — on ne fait que le compléter.
+    if (safeEmail && !existingPatient.email) updates.email = safeEmail
     if (safeAge) updates.age = safeAge
     // Fiche enfant : on ne complète QUE si le parent est vérifié (email/téléphone du
     // compte) ET que la fiche est libre ou déjà la sienne — sinon on pourrait
     // s'approprier le dossier d'un autre patient en devinant nom + téléphone.
-    if (isForChild && shouldLinkPatientToUser && (existingPatient.user_id === null || existingPatient.user_id === bookingUser!.id)) {
+    if (isForChild && ownsExistingFiche) {
       updates.is_child = true
       updates.birth_date = safeChildBirth
       if (safeChildSex) updates.sex = safeChildSex
@@ -295,7 +306,7 @@ export async function POST(req: NextRequest) {
     if (Object.keys(updates).length > 0) {
       await db.from('patients').update(updates).eq('id', patientId)
     }
-    if (shouldLinkPatientToUser) {
+    if (ownsExistingFiche) {
       await db.from('patients').update({ user_id: bookingUser!.id }).eq('id', patientId).is('user_id', null)
     }
   } else {

@@ -8,6 +8,8 @@ import { formatPhoneMaroc, isValidPhoneMaroc, ageFromBirthDate } from '@/lib/uti
 export const dynamic = 'force-dynamic'
 
 const sanitize = (s: string) => s.trim().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+// Neutralise les jokers LIKE (% et _) dans les recherches de doublon
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&')
 
 // GET — liste des patients (coordonnées + CIN/mutuelle, jamais le médical ici)
 export async function GET() {
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
   // Anti-doublon : même téléphone + prénom + nom → fiche existante
   const { data: existing } = await admin.from('patients')
     .select('id').eq('doctor_id', ctx.doctor.id).eq('phone', formattedPhone)
-    .ilike('first_name', first).ilike('last_name', last).limit(1).maybeSingle()
+    .ilike('first_name', escapeLike(first)).ilike('last_name', escapeLike(last)).limit(1).maybeSingle()
   if (existing) return NextResponse.json({ error: 'Ce patient existe déjà dans la base.' }, { status: 409 })
 
   const { data: created, error } = await admin.from('patients')

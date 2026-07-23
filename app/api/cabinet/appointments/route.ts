@@ -11,6 +11,8 @@ import { randomUUID } from 'crypto'
 export const dynamic = 'force-dynamic'
 
 const sanitize = (s: string) => s.trim().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+// Neutralise les jokers LIKE (% et _) dans les recherches de doublon
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&')
 
 // GET /api/cabinet/appointments?date=YYYY-MM-DD — agenda du jour + motifs actifs
 export async function GET(req: NextRequest) {
@@ -155,7 +157,7 @@ export async function POST(req: NextRequest) {
   let patientId: string
   const { data: existing } = await admin.from('patients')
     .select('id').eq('doctor_id', doctorId).eq('phone', formattedPhone)
-    .ilike('first_name', first).ilike('last_name', last).limit(1).maybeSingle()
+    .ilike('first_name', escapeLike(first)).ilike('last_name', escapeLike(last)).limit(1).maybeSingle()
   if (existing) {
     patientId = existing.id
     // Complète la date de naissance si la fiche ne l'avait pas encore
