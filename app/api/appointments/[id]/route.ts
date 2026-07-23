@@ -15,9 +15,19 @@ export async function PATCH(
   const body = await req.json()
   const { status, date, time, doctor_notes, attendance, amount_paid, amount_due, payment_method } = body
 
-  if (!status && doctor_notes === undefined && attendance === undefined
+  if (!status && date === undefined && time === undefined
+      && doctor_notes === undefined && attendance === undefined
       && amount_paid === undefined && amount_due === undefined && payment_method === undefined) {
     return NextResponse.json({ error: 'Paramètre manquant' }, { status: 400 })
+  }
+
+  // Déplacement d'un RDV : formats validés ici, le chevauchement est bloqué par
+  // la contrainte d'exclusion en base (remontée en 409 plus bas).
+  if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    return NextResponse.json({ error: 'Format de date invalide' }, { status: 400 })
+  }
+  if (time !== undefined && !/^\d{2}:\d{2}$/.test(String(time))) {
+    return NextResponse.json({ error: 'Format d\'heure invalide' }, { status: 400 })
   }
 
   // Vérifie que le RDV appartient bien au médecin connecté
@@ -76,6 +86,22 @@ export async function PATCH(
     }
     if (effectiveDue != null && (updates.amount_paid as number) > effectiveDue) {
       return NextResponse.json({ error: 'Le montant payé dépasse le montant dû' }, { status: 400 })
+    }
+  }
+
+  // ── Verrous comptables (mêmes règles que la route secrétaire) ──
+  // Un acte facturé ne peut plus être annulé ni « dépayé » : la piste comptable
+  // doit rester intacte, la correction passe par un avoir.
+  if (status === 'cancelled' || updates.amount_paid === null) {
+    const { data: cur } = await supabase
+      .from('appointments').select('invoice_no')
+      .eq('id', params.id).eq('doctor_id', doctor.id).single()
+    if (cur?.invoice_no) {
+      return NextResponse.json({
+        error: status === 'cancelled'
+          ? `Ce rendez-vous est facturé (${cur.invoice_no}) : émettez un avoir au lieu de l'annuler.`
+          : `Cet acte est facturé (${cur.invoice_no}) : émettez un avoir au lieu d'annuler le paiement.`,
+      }, { status: 409 })
     }
   }
 

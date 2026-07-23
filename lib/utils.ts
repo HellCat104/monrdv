@@ -24,9 +24,11 @@ export function formatDateFr(date: Date | string): string {
   return formatInTimeZone(d, MAROC_TZ, 'EEEE d MMMM yyyy', { locale: fr })
 }
 
-// Formate une date courte (ex: "18/05/2026")
+// Formate une date courte (ex: "18/05/2026").
+// Accepte aussi un timestamp complet ("2026-07-23T09:12:45+00:00") : sans la
+// troncature, l'heure restait collée au jour → "23T09:12:45+00:00/07/2026".
 export function formatDateShort(date: string): string {
-  const [year, month, day] = date.split('-')
+  const [year, month, day] = String(date).slice(0, 10).split('-')
   return `${day}/${month}/${year}`
 }
 

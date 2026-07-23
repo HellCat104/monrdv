@@ -292,7 +292,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 <MoreMenu
                   items={[
                     apt.patient_id ? { label: 'Reprendre la consultation', icon: Play, href: `/consultation/${apt.id}` } : null,
-                    apt.patient_id ? { label: 'Ordonnance', icon: FileText, href: `/ordonnance/${apt.id}` } : null,
+                    apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
                     apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
                     apt.invoice_no ? {
                       label: 'Émettre un avoir', icon: Undo2,
@@ -420,7 +420,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   <MoreMenu
                     items={[
                       onReschedule ? { label: 'Déplacer le RDV', icon: CalendarClock, onClick: () => { setMoveError(''); setMoveDialog({ open: true, apt, date: '', time: '' }) } } : null,
-                      apt.patient_id ? { label: 'Ordonnance', icon: FileText, href: `/ordonnance/${apt.id}` } : null,
+                      apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
                       apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
                       apt.invoice_no ? {
                         label: 'Émettre un avoir', icon: Undo2,
