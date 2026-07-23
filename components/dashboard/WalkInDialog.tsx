@@ -4,6 +4,7 @@
 // (recherche nom/téléphone) ou on crée un nouveau patient. Le patient est
 // ajouté directement à la file du jour, sans réserver de créneau.
 import { useState, useEffect } from 'react'
+import { formatAge } from '@/lib/utils'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,19 +19,19 @@ export function WalkInDialog({
   open: boolean
   onOpenChange: (o: boolean) => void
   onSearch: (query: string) => Promise<PatientLite[]>
-  onSubmit: (arg: { patientId?: string; newPatient?: { first_name: string; last_name: string; phone: string } }) => Promise<void>
+  onSubmit: (arg: { patientId?: string; newPatient?: { first_name: string; last_name: string; phone: string; birth_date?: string } }) => Promise<void>
 }) {
   const [mode, setMode] = useState<'existing' | 'new'>('existing')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<PatientLite[]>([])
   const [selected, setSelected] = useState<PatientLite | null>(null)
-  const [np, setNp] = useState({ first_name: '', last_name: '', phone: '' })
+  const [np, setNp] = useState({ first_name: '', last_name: '', phone: '', birth_date: '' })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   // Réinitialise à l'ouverture
   useEffect(() => {
-    if (open) { setMode('existing'); setQuery(''); setResults([]); setSelected(null); setNp({ first_name: '', last_name: '', phone: '' }); setError('') }
+    if (open) { setMode('existing'); setQuery(''); setResults([]); setSelected(null); setNp({ first_name: '', last_name: '', phone: '', birth_date: '' }); setError('') }
   }, [open])
 
   // Recherche (debounce léger)
@@ -46,7 +47,7 @@ export function WalkInDialog({
     if (mode === 'new' && (!np.first_name.trim() || !np.last_name.trim() || !np.phone.trim())) { setError('Prénom, nom et téléphone requis.'); return }
     setSubmitting(true)
     try {
-      await onSubmit(mode === 'existing' ? { patientId: selected!.id } : { newPatient: { first_name: np.first_name.trim(), last_name: np.last_name.trim(), phone: np.phone.trim() } })
+      await onSubmit(mode === 'existing' ? { patientId: selected!.id } : { newPatient: { first_name: np.first_name.trim(), last_name: np.last_name.trim(), phone: np.phone.trim(), birth_date: np.birth_date || undefined } })
       onOpenChange(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Échec de l\'ajout.')
@@ -101,6 +102,11 @@ export function WalkInDialog({
               <div className="space-y-1.5"><Label>Nom *</Label><Input value={np.last_name} onChange={(e) => setNp({ ...np, last_name: e.target.value })} placeholder="Alami" /></div>
             </div>
             <div className="space-y-1.5"><Label>Téléphone *</Label><Input type="tel" value={np.phone} onChange={(e) => setNp({ ...np, phone: e.target.value })} placeholder="06 12 34 56 78" /></div>
+            <div className="space-y-1.5">
+              <Label>Date de naissance</Label>
+              <Input type="date" max={new Date().toISOString().slice(0, 10)} value={np.birth_date} onChange={(e) => setNp({ ...np, birth_date: e.target.value })} />
+              {formatAge(np.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(np.birth_date)}</p>}
+            </div>
           </div>
         )}
 

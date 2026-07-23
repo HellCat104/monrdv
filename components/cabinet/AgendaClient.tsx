@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getNowInMaroc, formatTime } from '@/lib/utils'
+import { getNowInMaroc, formatTime, formatAge } from '@/lib/utils'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban } from 'lucide-react'
@@ -37,7 +37,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
 
   // Dialog nouveau RDV
   const [addOpen, setAddOpen] = useState(false)
-  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', time: '', notes: '' })
+  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', birth_date: '', time: '', notes: '' })
   const [typeId, setTypeId] = useState(NO_TYPE)
   const [recurFreq, setRecurFreq] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none')
   const [recurCount, setRecurCount] = useState(4)
@@ -181,7 +181,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         alert(`${data.created ?? 1} rendez-vous créés${skipped > 0 ? ` · ${skipped} ignoré(s) (créneau déjà pris — à replacer à la main)` : ''}.`)
       }
       setAddOpen(false)
-      setForm({ first_name: '', last_name: '', phone: '', time: '', notes: '' })
+      setForm({ first_name: '', last_name: '', phone: '', birth_date: '', time: '', notes: '' })
       setTypeId(NO_TYPE)
       setRecurFreq('none'); setRecurCount(4)
       await load(date)
@@ -489,6 +489,12 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
             <div className="space-y-1.5">
               <Label htmlFor="c_phone">Téléphone *</Label>
               <Input id="c_phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="06 12 34 56 78" required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="c_birth">Date de naissance</Label>
+              <Input id="c_birth" type="date" max={format(getNowInMaroc(), 'yyyy-MM-dd')} value={form.birth_date}
+                onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
+              {formatAge(form.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(form.birth_date)}</p>}
             </div>
             {types.length > 0 && (
               <div className="space-y-1.5">

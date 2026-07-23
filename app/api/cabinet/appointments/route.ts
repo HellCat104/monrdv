@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
-import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey, ageFromBirthDate } from '@/lib/utils'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { randomUUID } from 'crypto'
 
@@ -91,8 +91,9 @@ export async function POST(req: NextRequest) {
       const ph = sanitize(String(body.phone ?? '')).substring(0, 20)
       if (!f || !l || !ph) return NextResponse.json({ error: 'Prénom, nom et téléphone requis' }, { status: 400 })
       if (!isValidPhoneMaroc(ph)) return NextResponse.json({ error: 'Numéro invalide' }, { status: 400 })
+      const bd0 = /^\d{4}-\d{2}-\d{2}$/.test(String(body.birth_date ?? '')) ? String(body.birth_date) : null
       const { data: created, error: pErr } = await admin0.from('patients')
-        .insert({ doctor_id: doctorId0, first_name: f, last_name: l, phone: formatPhoneMaroc(ph) }).select('id').single()
+        .insert({ doctor_id: doctorId0, first_name: f, last_name: l, phone: formatPhoneMaroc(ph), birth_date: bd0, age: ageFromBirthDate(bd0) }).select('id').single()
       if (pErr || !created) return NextResponse.json({ error: 'Erreur création patient' }, { status: 500 })
       patientId0 = created.id
     }
@@ -117,6 +118,8 @@ export async function POST(req: NextRequest) {
   const date = String(body.date ?? '')
   const time = String(body.time ?? '')
   const typeId = body.consultation_type_id ? String(body.consultation_type_id) : null
+  // Date de naissance : alimente d'emblée les modules pédiatriques (courbes, vaccins)
+  const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.birth_date ?? '')) ? String(body.birth_date) : null
 
   if (!first || !last || !phone || !date || !time) {
     return NextResponse.json({ error: 'Champs requis manquants' }, { status: 400 })
@@ -155,9 +158,11 @@ export async function POST(req: NextRequest) {
     .ilike('first_name', first).ilike('last_name', last).limit(1).maybeSingle()
   if (existing) {
     patientId = existing.id
+    // Complète la date de naissance si la fiche ne l'avait pas encore
+    if (birthDate) await admin.from('patients').update({ birth_date: birthDate, age: ageFromBirthDate(birthDate) }).eq('id', patientId).is('birth_date', null)
   } else {
     const { data: created, error: pErr } = await admin.from('patients')
-      .insert({ doctor_id: doctorId, first_name: first, last_name: last, phone: formattedPhone })
+      .insert({ doctor_id: doctorId, first_name: first, last_name: last, phone: formattedPhone, birth_date: birthDate, age: ageFromBirthDate(birthDate) })
       .select('id').single()
     if (pErr || !created) return NextResponse.json({ error: 'Erreur création patient' }, { status: 500 })
     patientId = created.id

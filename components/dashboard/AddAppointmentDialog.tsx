@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { formatAge } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -43,6 +44,7 @@ export function AddAppointmentDialog({
     first_name: '',
     last_name: '',
     phone: '',
+    birth_date: '',
     date: '',
     time: '',
     notes: '',
@@ -108,7 +110,7 @@ export function AddAppointmentDialog({
       }
       onSuccess()
       onOpenChange(false)
-      setForm({ first_name: '', last_name: '', phone: '', date: '', time: '', notes: '' })
+      setForm({ first_name: '', last_name: '', phone: '', birth_date: '', date: '', time: '', notes: '' })
       setTypeId(NO_TYPE)
       setRecurFreq('none'); setRecurCount(4)
     } catch (err: unknown) {
@@ -161,6 +163,18 @@ export function AddAppointmentDialog({
               placeholder="06 12 34 56 78"
               required
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="a_birth">Date de naissance</Label>
+            <Input
+              id="a_birth"
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={form.birth_date}
+              onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+            />
+            {formatAge(form.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(form.birth_date)}</p>}
           </div>
 
           {/* Motif (si le médecin a défini des motifs) — ajuste la durée du créneau */}

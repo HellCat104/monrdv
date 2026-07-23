@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
     specialty,
     consent,
     public: isPublic,
+    birth_date: birthDateInput,
     for_child: forChild,
     child_birth_date,
     child_sex,
@@ -104,7 +105,9 @@ export async function POST(req: NextRequest) {
 
   // Réservation « pour mon enfant » (compte parent connecté requis)
   const isForChild = forChild === true && isPublic === true
-  const safeChildBirth = isForChild ? String(child_birth_date) : null
+  // Date de naissance générique (RDV créé par le médecin/cabinet)
+  const genericBirth = /^\d{4}-\d{2}-\d{2}$/.test(String(birthDateInput ?? '')) ? String(birthDateInput) : null
+  const safeChildBirth = isForChild ? String(child_birth_date) : genericBirth
   const safeChildSex = isForChild && (child_sex === 'M' || child_sex === 'F') ? child_sex : null
   const childAge = safeChildBirth
     ? Math.max(0, Math.floor((Date.now() - new Date(safeChildBirth + 'T00:00:00').getTime()) / (1000 * 3600 * 24 * 365.25)))
