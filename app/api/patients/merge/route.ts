@@ -31,10 +31,29 @@ export async function POST(req: NextRequest) {
   const keep = both.find((p) => p.id === keepId)!
   const merge = both.find((p) => p.id === mergeId)!
 
+  // ── Garde-fous : refuser la fusion de deux personnes DIFFÉRENTES ──
+  // La fusion est irréversible et mélange dossiers médicaux ET accès patient.
+  // Deux comptes patients distincts = deux personnes, jamais un doublon.
+  if (keep.user_id && merge.user_id && keep.user_id !== merge.user_id) {
+    return NextResponse.json({
+      error: 'Ces deux fiches sont rattachées à deux comptes patients différents : il ne s\'agit pas d\'un doublon. Fusion refusée.',
+    }, { status: 409 })
+  }
+  // Deux dates de naissance renseignées et différentes = deux personnes
+  // (cas fréquent en pédiatrie : frères et sœurs de même nom).
+  if (keep.birth_date && merge.birth_date && keep.birth_date !== merge.birth_date) {
+    return NextResponse.json({
+      error: 'Ces deux fiches ont des dates de naissance différentes : il ne s\'agit pas d\'un doublon. Fusion refusée.',
+    }, { status: 409 })
+  }
+
   const db = createAdminClient()
 
   // 1. Réassigne tous les enregistrements liés vers la fiche conservée
-  for (const table of ['appointments', 'consultation_notes', 'prescriptions', 'vital_signs', 'patient_documents']) {
+  // `certificates` et `recalls` sont liés au patient en CASCADE : sans réassignation,
+  // ils étaient supprimés silencieusement avec la fiche source.
+  for (const table of ['appointments', 'consultation_notes', 'prescriptions', 'vital_signs',
+    'patient_documents', 'certificates', 'recalls']) {
     const { error } = await db.from(table).update({ patient_id: keepId }).eq('patient_id', mergeId)
     if (error) {
       return NextResponse.json({ error: `Échec de la fusion (${table})` }, { status: 500 })
@@ -43,7 +62,13 @@ export async function POST(req: NextRequest) {
 
   // 2. Complète les champs vides de la cible avec ceux de la source (sans écraser)
   const fill: Record<string, unknown> = {}
-  for (const f of ['email', 'age', 'allergies', 'chronic_conditions', 'current_treatments', 'notes', 'user_id'] as const) {
+  // `user_id` est transféré uniquement si la fiche conservée n'en a pas : c'est le
+  // cas légitime (même patient inscrit deux fois) — les cas ambigus ont été
+  // refusés plus haut.
+  for (const f of ['email', 'age', 'allergies', 'chronic_conditions', 'current_treatments', 'notes', 'user_id',
+    'birth_date', 'sex', 'cin', 'mutuelle', 'address', 'blood_group', 'surgeries', 'vaccinations',
+    'gestational_age_weeks', 'parent1_name', 'parent1_phone', 'parent2_name', 'parent2_phone',
+    'primary_contact', 'family_id', 'is_child'] as const) {
     if ((keep[f] == null || keep[f] === '') && merge[f] != null && merge[f] !== '') fill[f] = merge[f]
   }
   if (Object.keys(fill).length > 0) {
