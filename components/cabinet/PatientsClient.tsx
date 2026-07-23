@@ -259,6 +259,28 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
                 {detail.patient.mutuelle && <p className="text-gray-600 flex items-center gap-1.5"><ShieldPlus className="h-3.5 w-3.5" /> Mutuelle : {detail.patient.mutuelle}</p>}
               </div>
 
+              {/* Parents / tuteurs (pédiatrie) — c'est le parent qu'on appelle, pas l'enfant */}
+              {(detail.patient.parent1_name || detail.patient.parent2_name) && (
+                <div className="bg-pink-50 border border-pink-100 rounded-lg p-3">
+                  <h3 className="font-semibold text-gray-800 flex items-center gap-1.5 mb-1.5">
+                    <Users className="h-4 w-4 text-pink-500" /> Parents / tuteurs
+                  </h3>
+                  {([1, 2] as const).map((n) => {
+                    const name = n === 1 ? detail.patient.parent1_name : detail.patient.parent2_name
+                    const tel  = n === 1 ? detail.patient.parent1_phone : detail.patient.parent2_phone
+                    if (!name && !tel) return null
+                    const isPrimary = detail.patient.primary_contact === `parent${n}`
+                    return (
+                      <p key={n} className="text-gray-700 flex items-center gap-1.5 flex-wrap">
+                        {isPrimary && <span title="À prévenir en priorité" className="text-amber-500">★</span>}
+                        <span className={isPrimary ? 'font-semibold' : ''}>{name || `Parent ${n}`}</span>
+                        {tel && <a href={`tel:${tel}`} className="text-primary-600 hover:underline">📞 {tel}</a>}
+                      </p>
+                    )
+                  })}
+                </div>
+              )}
+
               {/* Antécédents — seulement si permission médicale */}
               {detail.medical && (
                 <div>
