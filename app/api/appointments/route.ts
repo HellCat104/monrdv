@@ -281,33 +281,29 @@ export async function POST(req: NextRequest) {
 
   if (existingPatient) {
     patientId = existingPatient.id
-    // Propriété d'une fiche PRÉEXISTANTE : jamais sur la foi d'un email envoyé par
-    // le client (un attaquant enverrait le sien). On se fonde uniquement sur des
-    // données déjà en base : l'email de la fiche, ou le téléphone vérifié du compte.
-    const ownsExistingFiche = !!bookingUser && existingPatient.user_id === null && (
-      (!!existingPatient.email && !!bookingUser.email &&
-        existingPatient.email.toLowerCase() === bookingUser.email.toLowerCase()) ||
-      (!!bookingUser.phone && bookingUser.phone === formattedPhone)
-    )
-    const updates: Record<string, unknown> = {}
-    // N'écrase jamais l'email d'une fiche existante (sinon un anonyme détourne
-    // confirmations, rappels et jeton d'annulation) — on ne fait que le compléter.
-    if (safeEmail && !existingPatient.email) updates.email = safeEmail
-    if (safeAge) updates.age = safeAge
-    // Fiche enfant : on ne complète QUE si le parent est vérifié (email/téléphone du
-    // compte) ET que la fiche est libre ou déjà la sienne — sinon on pourrait
-    // s'approprier le dossier d'un autre patient en devinant nom + téléphone.
-    if (isForChild && ownsExistingFiche) {
-      updates.is_child = true
-      updates.birth_date = safeChildBirth
-      if (safeChildSex) updates.sex = safeChildSex
-      if (childAge != null) updates.age = childAge
-    }
-    if (Object.keys(updates).length > 0) {
-      await db.from('patients').update(updates).eq('id', patientId)
-    }
-    if (ownsExistingFiche) {
-      await db.from('patients').update({ user_id: bookingUser!.id }).eq('id', patientId).is('user_id', null)
+    // SÉCURITÉ — appropriation de dossier : on ne modifie une fiche PRÉEXISTANTE
+    // (email, date de naissance…) et on ne la rattache à un compte QUE si ce compte
+    // la possède DÉJÀ (user_id). Aucun signal fourni par le client — email ou
+    // téléphone auto-déclarés — ne peut conférer la propriété : sinon connaître
+    // nom + téléphone (souvent publics) suffirait à s'approprier le dossier médical
+    // d'autrui. En particulier : on n'écrit JAMAIS l'email sur une fiche non possédée
+    // (l'écrire permettait ensuite de la revendiquer par « email de la fiche = email
+    // du compte », et détournait confirmations/rappels/jeton d'annulation).
+    // Le rattachement d'une fiche créée au cabinet passe par la fusion (côté médecin).
+    const alreadyMine = !!bookingUser && !!existingPatient.user_id && existingPatient.user_id === bookingUser.id
+    if (alreadyMine) {
+      const updates: Record<string, unknown> = {}
+      if (safeEmail && !existingPatient.email) updates.email = safeEmail
+      if (safeAge) updates.age = safeAge
+      if (isForChild) {
+        updates.is_child = true
+        updates.birth_date = safeChildBirth
+        if (safeChildSex) updates.sex = safeChildSex
+        if (childAge != null) updates.age = childAge
+      }
+      if (Object.keys(updates).length > 0) {
+        await db.from('patients').update(updates).eq('id', patientId)
+      }
     }
   } else {
     const { data: newPatient, error: patientError } = await db
