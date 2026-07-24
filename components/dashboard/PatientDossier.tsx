@@ -19,7 +19,7 @@ import { withConsultationSummary } from '@/lib/consultation-summary'
 import { BLOOD_GROUPS, MUTUELLES_MAROC, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
-  Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar } from 'lucide-react'
+  Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -55,6 +55,9 @@ export default function PatientDossier({
   const [siblings, setSiblings] = useState<{ id: string; first_name: string; last_name: string; birth_date: string | null }[]>([])
   const [sibSearch, setSibSearch] = useState('')
   const [sibResults, setSibResults] = useState<{ id: string; first_name: string; last_name: string; birth_date: string | null }[]>([])
+  // Recherche de doublon à fusionner
+  const [mergeSearch, setMergeSearch] = useState('')
+  const [mergeResults, setMergeResults] = useState<{ id: string; first_name: string; last_name: string; phone: string | null }[]>([])
   const [editBloodGroup, setEditBloodGroup] = useState(patient.blood_group ?? '')
   const [editCin, setEditCin] = useState(patient.cin ?? '')
   const [editEmail, setEditEmail] = useState(patient.email ?? '')
@@ -137,6 +140,21 @@ export default function PatientDossier({
     return () => clearTimeout(t)
   }, [sibSearch, doctorId, patient.id, siblings, supabase])
 
+  // Recherche d'un doublon à fusionner (dans la patientèle du médecin)
+  useEffect(() => {
+    const q = mergeSearch.trim()
+    if (q.length < 2) { setMergeResults([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('patients')
+        .select('id, first_name, last_name, phone')
+        .eq('doctor_id', doctorId).neq('id', patient.id)
+        .or(`first_name.ilike.%${q.replace(/[%,()]/g, '')}%,last_name.ilike.%${q.replace(/[%,()]/g, '')}%`)
+        .limit(6)
+      setMergeResults(data ?? [])
+    }, 300)
+    return () => clearTimeout(t)
+  }, [mergeSearch, doctorId, patient.id, supabase])
+
   async function linkSibling(p: { id: string }) {
     const fid = familyId ?? crypto.randomUUID()
     const { error } = await supabase.from('patients').update({ family_id: fid }).in('id', [patient.id, p.id])
@@ -186,6 +204,35 @@ export default function PatientDossier({
       .insert({ doctor_id: doctorId, patient_id: patient.id, note: newNote.trim() }).select().single()
     setAddingNote(false)
     if (!error && data) { setConsultNotes((prev) => [data, ...prev]); setNewNote(isPsy ? PSY_NOTE_TEMPLATE : '') }
+  }
+
+  // Fusion d'un doublon (deux fiches du même patient) dans celle-ci
+  async function mergeDuplicate(dupId: string, dupLabel: string) {
+    if (!confirm(`Fusionner « ${dupLabel} » dans cette fiche ?\n\nSes RDV, notes, ordonnances, certificats et documents seront déplacés ici, puis le doublon sera supprimé. Action définitive.`)) return
+    const res = await fetch('/api/patients/merge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keepId: patient.id, mergeId: dupId }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) { alert(d.error || 'Échec de la fusion.'); return }
+    setMergeSearch(''); setMergeResults([])
+    await load()
+  }
+
+  // Signer (verrouiller définitivement) une note de consultation
+  async function signNote(id: string) {
+    if (!confirm('Signer cette note ? Elle sera définitivement verrouillée et ne pourra plus être modifiée ni supprimée.')) return
+    const signedAt = new Date().toISOString()
+    const { error } = await supabase.from('consultation_notes').update({ signed_at: signedAt }).eq('id', id)
+    if (error) { alert('La signature a échoué.'); return }
+    setConsultNotes((prev) => prev.map((n) => (n.id === id ? { ...n, signed_at: signedAt } : n)))
+  }
+  // Supprimer une note (impossible si elle est signée — protégé aussi en base)
+  async function deleteNote(id: string) {
+    if (!confirm('Supprimer cette note ?')) return
+    const { error } = await supabase.from('consultation_notes').delete().eq('id', id)
+    if (error) { alert('La suppression a échoué (une note signée ne peut pas être supprimée).'); return }
+    setConsultNotes((prev) => prev.filter((n) => n.id !== id))
   }
 
   async function addRecall() {
@@ -450,6 +497,24 @@ export default function PatientDossier({
             )}
           </div>
 
+          {/* Fusionner un doublon */}
+          <div className={sec}>
+            <div className={secTitle}><span className="flex items-center gap-1.5"><Users className="h-4 w-4" /> Fusionner un doublon</span></div>
+            <p className="text-[11px] text-gray-400 mb-1.5">Deux fiches pour le même patient ? Recherchez l&apos;autre fiche pour tout regrouper ici.</p>
+            <Input value={mergeSearch} onChange={(e) => setMergeSearch(e.target.value)} placeholder="Nom du doublon…" className="h-9" />
+            {mergeResults.length > 0 && (
+              <div className="mt-1.5 border border-gray-100 rounded-lg divide-y divide-gray-50">
+                {mergeResults.map((p) => (
+                  <button key={p.id} onClick={() => mergeDuplicate(p.id, `${p.first_name} ${p.last_name}`)}
+                    className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between gap-2">
+                    <span>{p.first_name} {p.last_name}{p.phone ? ` · ${p.phone}` : ''}</span>
+                    <span className="text-primary-600 font-medium shrink-0">Fusionner</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button onClick={deletePatient} className="w-full text-xs text-gray-400 hover:text-red-500 flex items-center justify-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Supprimer ce patient</button>
         </div>
 
@@ -613,8 +678,18 @@ export default function PatientDossier({
             <Button size="sm" onClick={addConsultNote} disabled={addingNote || !newNote.trim() || newNote === PSY_NOTE_TEMPLATE} className="w-full"><Plus className="h-4 w-4 mr-1" /> Ajouter la note</Button>
             <div className="space-y-2 mt-3">
               {consultNotes.slice(0, 8).map((n) => (
-                <div key={n.id} className="bg-gray-50 rounded-lg p-2.5">
-                  <p className="text-[11px] text-gray-400 mb-0.5">{formatDateShort(n.created_at)}</p>
+                <div key={n.id} className={`rounded-lg p-2.5 ${n.signed_at ? 'bg-green-50/70 border border-green-100' : 'bg-gray-50'}`}>
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <p className="text-[11px] text-gray-400">{formatDateShort(n.created_at)}</p>
+                    {n.signed_at ? (
+                      <span className="text-[10px] text-green-600 font-medium flex items-center gap-0.5"><Check className="h-3 w-3" /> Signée</span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <button onClick={() => signNote(n.id)} className="text-[10px] text-primary-600 hover:underline">Signer</button>
+                        <button onClick={() => deleteNote(n.id)} className="text-gray-300 hover:text-red-500" title="Supprimer"><X className="h-3 w-3" /></button>
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">{n.note}</p>
                 </div>
               ))}

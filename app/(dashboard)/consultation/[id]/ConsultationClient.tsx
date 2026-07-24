@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { formatDateFr } from '@/lib/utils'
+import { formatDateFr, formatAge } from '@/lib/utils'
 import { PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
@@ -178,7 +178,8 @@ export default function ConsultationClient({
           <div>
             <h1 className="text-xl font-bold text-gray-900">
               {patient.first_name} {patient.last_name}
-              {patient.age != null && <span className="text-gray-400 font-normal text-base"> · {patient.age} ans</span>}
+              {(formatAge(patient.birth_date) ?? (patient.age != null ? `${patient.age} ans` : null)) &&
+                <span className="text-gray-400 font-normal text-base"> · {formatAge(patient.birth_date) ?? `${patient.age} ans`}</span>}
             </h1>
             <p className="text-xs text-gray-500">Consultation en cours</p>
           </div>
