@@ -271,6 +271,7 @@ export interface Appointment {
   consultation_summary?: string | null                              // note de consultation
   consultation_prescriptions?: { id: string; content: string }[]    // ordonnances du RDV
   consultation_certificates?: { id: string; title: string; motif: string | null }[] // certificats du RDV
+  consultation_vitals?: Record<string, number> | null               // constantes prises pendant le RDV
   created_at: string
   // Relations jointes
   patient?: Patient

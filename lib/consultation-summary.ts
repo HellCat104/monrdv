@@ -14,10 +14,11 @@ export async function withConsultationSummary<T extends Appointment>(
   const doneIds = appointments.filter((a) => a.queue_status === 'parti').map((a) => a.id)
   if (doneIds.length === 0) return appointments
 
-  const [notesRes, presRes, certsRes] = await Promise.all([
+  const [notesRes, presRes, certsRes, vitalsRes] = await Promise.all([
     supabase.from('consultation_notes').select('appointment_id, note').in('appointment_id', doneIds),
     supabase.from('prescriptions').select('id, appointment_id, content').in('appointment_id', doneIds),
     supabase.from('certificates').select('id, appointment_id, title, motif').in('appointment_id', doneIds),
+    supabase.from('vital_signs').select('appointment_id, values, measured_at').in('appointment_id', doneIds),
   ])
 
   const noteBy = new Map<string, string>()
@@ -39,10 +40,16 @@ export async function withConsultationSummary<T extends Appointment>(
     certBy.set(c.appointment_id, arr)
   }
 
+  const vitalsBy = new Map<string, Record<string, number>>()
+  for (const v of vitalsRes.data ?? []) {
+    if (v.appointment_id) vitalsBy.set(v.appointment_id, v.values as Record<string, number>)
+  }
+
   return appointments.map((a) => (a.queue_status === 'parti' ? {
     ...a,
     consultation_summary: noteBy.get(a.id) ?? null,
     consultation_prescriptions: presBy.get(a.id) ?? [],
     consultation_certificates: certBy.get(a.id) ?? [],
+    consultation_vitals: vitalsBy.get(a.id) ?? null,
   } : a))
 }

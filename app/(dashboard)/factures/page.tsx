@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getNowInMaroc, MAROC_TZ } from '@/lib/utils'
+import { getNowInMaroc, MAROC_TZ, formatDateShort } from '@/lib/utils'
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear, parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { Search, Download, Printer, Receipt, Undo2, ListChecks } from 'lucide-react'
@@ -77,6 +77,19 @@ export default function FacturesPage() {
   }, [factures, period, search])
 
   const total = rows.reduce((s, f) => s + (f.amount_paid ?? 0), 0)
+
+  // Les avoirs suivent le même filtre de période que les factures (sinon « ce mois-ci »
+  // affichait les avoirs de toutes les années).
+  const avoirsRows = useMemo(() => {
+    const { start, end } = periodRange(period, getNowInMaroc())
+    const q = search.trim().toLowerCase()
+    return avoirs
+      .map((a) => ({ ...a, _date: formatInTimeZone(parseISO(a.created_at), MAROC_TZ, 'yyyy-MM-dd') }))
+      .filter((a) => a._date >= start && a._date <= end)
+      .filter((a) => !q || (a.patient_name ?? '').toLowerCase().includes(q) || (a.credit_no ?? '').toLowerCase().includes(q))
+      .sort((a, b) => b._date.localeCompare(a._date))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avoirs, period, search])
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -215,7 +228,7 @@ export default function FacturesPage() {
                             aria-label={`Sélectionner la facture ${f.invoice_no ?? ''}`} />
                         </td>
                       )}
-                      <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap">{f._date}</td>
+                      <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap">{formatDateShort(f._date)}</td>
                       <td className="py-2.5 px-4 font-medium text-gray-900 whitespace-nowrap">{f.invoice_no ?? '—'}</td>
                       <td className="py-2.5 px-4 text-gray-700">{f._patient || '—'}</td>
                       <td className="py-2.5 px-4 text-right whitespace-nowrap text-gray-900">
@@ -236,15 +249,16 @@ export default function FacturesPage() {
         </CardContent>
       </Card>
 
-      {avoirs.length > 0 && (
+      {avoirsRows.length > 0 && (
         <div>
-          <h2 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2"><Undo2 className="h-4 w-4 text-red-500" /> Avoirs émis ({avoirs.length})</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2"><Undo2 className="h-4 w-4 text-red-500" /> Avoirs émis ({avoirsRows.length})</h2>
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-gray-400 text-xs uppercase tracking-wide border-b border-gray-100">
+                      <th className="py-2.5 px-4 font-medium">Date</th>
                       <th className="py-2.5 px-4 font-medium">N° avoir</th>
                       <th className="py-2.5 px-4 font-medium">Facture annulée</th>
                       <th className="py-2.5 px-4 font-medium">Patient</th>
@@ -253,8 +267,9 @@ export default function FacturesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {avoirs.map((a) => (
+                    {avoirsRows.map((a) => (
                       <tr key={a.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap">{formatDateShort(a._date)}</td>
                         <td className="py-2.5 px-4 font-medium text-gray-900 whitespace-nowrap">{a.credit_no ?? '—'}</td>
                         <td className="py-2.5 px-4 text-gray-600">{a.original_invoice_no}</td>
                         <td className="py-2.5 px-4 text-gray-700">{a.patient_name || '—'}</td>

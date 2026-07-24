@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { formatDateShort, formatTime, getInitials } from '@/lib/utils'
-import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS } from '@/types'
+import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, VITAL_DEFS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMethod } from '@/types'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle, Check, Pill, CalendarClock } from 'lucide-react'
+import { Phone, Clock, UserX, Timer, User, DoorOpen, Wallet, Printer, ClipboardList, FileText, Undo2, MoreHorizontal, Play, RotateCcw, XCircle, Check, Pill, CalendarClock, Activity } from 'lucide-react'
+
+const VITAL_LABELS: Record<string, string> = Object.fromEntries(VITAL_DEFS.map((v) => [v.key, v.label]))
 
 // Élément du menu « ⋯ » d'une carte RDV
 export interface MoreMenuItem {
@@ -282,6 +284,14 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                         {apt.consultation_certificates!.map((c) => (
                           <a key={c.id} href={`/certificat/${c.id}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-gray-600 hover:text-primary-600 truncate">• {c.title}{c.motif ? ` (${c.motif})` : ''}</a>
                         ))}
+                      </div>
+                    )}
+                    {apt.consultation_vitals && Object.keys(apt.consultation_vitals).length > 0 && (
+                      <div className="border-t border-gray-50 pt-1.5">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 flex items-center gap-1"><Activity className="h-3 w-3" /> Constantes</p>
+                        <p className="text-xs text-gray-600">
+                          {Object.entries(apt.consultation_vitals).map(([k, v]) => `${VITAL_LABELS[k] ?? k} ${v}`).join(' · ')}
+                        </p>
                       </div>
                     )}
                   </div>

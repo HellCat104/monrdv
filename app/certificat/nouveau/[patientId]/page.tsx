@@ -27,12 +27,23 @@ export default async function NewCertificatePage({ params, searchParams }: { par
     .single()
   if (!patient) notFound()
 
+  // Le RDV passé en paramètre doit appartenir à CE patient (et à ce médecin),
+  // sinon on rattacherait le certificat au dossier d'un autre patient.
+  let safeApt: string | null = null
+  if (searchParams.apt) {
+    const { data: apt } = await supabase
+      .from('appointments').select('id')
+      .eq('id', searchParams.apt).eq('doctor_id', doctor.id).eq('patient_id', patient.id)
+      .maybeSingle()
+    safeApt = apt?.id ?? null
+  }
+
   return (
     <NewCertificate
       doctorId={doctor.id}
       doctorName={doctor.name}
       patient={patient}
-      appointmentId={searchParams.apt ?? null}
+      appointmentId={safeApt}
       backHref={safeBack(searchParams.back)}
     />
   )

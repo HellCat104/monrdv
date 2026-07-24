@@ -31,16 +31,18 @@ export default async function ConsultationPage({ params }: { params: { id: strin
   const consultationType = Array.isArray(apt.consultation_type) ? apt.consultation_type[0] : apt.consultation_type
 
   // Données médicales pour le panneau gauche
-  const [notesRes, presRes, vitalsRes, thisAptPresRes] = await Promise.all([
+  const [notesRes, presRes, vitalsRes, thisAptPresRes, thisAptNoteRes] = await Promise.all([
     supabase.from('consultation_notes').select('id, note, created_at, appointment_id').eq('patient_id', patient.id).order('created_at', { ascending: false }).limit(5),
     supabase.from('prescriptions').select('id, content, created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }).limit(3),
     supabase.from('vital_signs').select('id, values, measured_at').eq('patient_id', patient.id).order('measured_at', { ascending: false }).limit(3),
     // Ordonnances rédigées PENDANT cette consultation (ce RDV)
     supabase.from('prescriptions').select('id, content, created_at').eq('appointment_id', apt.id).order('created_at', { ascending: true }),
+    // Note de CE rdv, cherchée directement par appointment_id (et non parmi les 5
+    // dernières notes du patient : un chronique en cumule plus, on créait un doublon).
+    supabase.from('consultation_notes').select('id, note, signed_at').eq('appointment_id', apt.id).order('created_at', { ascending: true }).limit(1).maybeSingle(),
   ])
 
-  // Note déjà saisie pour CE rdv (édition)
-  const existingNote = (notesRes.data ?? []).find((n) => n.appointment_id === apt.id) ?? null
+  const existingNote = thisAptNoteRes.data ?? null
 
   const vitalDefsAll = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabled = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
@@ -53,7 +55,6 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       appointmentPaid={apt.amount_paid != null}
       amountPaid={apt.amount_paid ?? null}
       amountDue={apt.amount_due ?? null}
-      hasInvoice={!!apt.invoice_no}
       // Même priorité que l'agenda : le montant déjà fixé sur le RDV prime sur le
       // tarif du motif — sinon le « Total dû » pré-rempli diffère selon l'écran.
       defaultPrice={apt.amount_due ?? consultationType?.default_price ?? null}
@@ -64,6 +65,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       recentVitals={vitalsRes.data ?? []}
       existingNoteId={existingNote?.id ?? null}
       existingNote={existingNote?.note ?? ''}
+      noteSigned={!!existingNote?.signed_at}
       vitalDefs={vitalDefs}
       vitalDefsAll={vitalDefsAll}
       isPsy={isPsychiatricDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])}

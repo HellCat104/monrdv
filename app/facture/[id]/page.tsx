@@ -39,7 +39,18 @@ export default async function FacturePage({ params }: Props) {
   // Pas de facture pour un RDV non encaissé (évite une facture vide bancale)
   if (apt.amount_paid == null) redirect('/appointments')
 
+  // Avoir éventuel sur cette facture : la facture doit le mentionner (elle ne
+  // doit pas se réimprimer à l'identique comme si de rien n'était).
+  const { data: avoir } = apt.invoice_no
+    ? await supabase.from('credit_notes')
+        .select('credit_no, created_at, amount, reason')
+        .eq('appointment_id', apt.id).eq('doctor_id', doctor.id)
+        .order('created_at', { ascending: false }).maybeSingle()
+    : { data: null }
+
   const numero = apt.invoice_no || `F-${apt.id.slice(0, 8).toUpperCase()}`
+  // Sans numéro officiel, ce n'est pas une facture au sens fiscal : on parle de « reçu ».
+  const docTitle = apt.invoice_no ? 'FACTURE' : 'REÇU'
   const motif = apt.consultation_type?.name || apt.notes || 'Consultation médicale'
   const montant = apt.amount_paid
   // Paiement partiel : total dû vs encaissé
@@ -74,11 +85,16 @@ export default async function FacturePage({ params }: Props) {
             )}
           </div>
           <div className="text-right">
-            <h2 className="text-lg font-bold text-gray-800">REÇU</h2>
+            <h2 className="text-lg font-bold text-gray-800">{docTitle}</h2>
             <p className="text-sm text-gray-500 mt-1">N° {numero}</p>
             <p className="text-sm text-gray-500">
               {apt.paid_at ? formatDateFr(apt.paid_at) : formatDateFr(apt.date)}
             </p>
+            {avoir && (
+              <p className="mt-1 inline-block text-xs font-semibold text-red-600 border border-red-200 bg-red-50 rounded px-2 py-0.5">
+                Annulée par l&apos;avoir {avoir.credit_no}
+              </p>
+            )}
           </div>
         </div>
 
@@ -142,7 +158,7 @@ export default async function FacturePage({ params }: Props) {
         {/* Pied de page */}
         <div className="mt-12 pt-6 border-t border-gray-100 text-center">
           <p className="text-xs text-gray-400">
-            Reçu généré le {formatDateFr(new Date())} via MonRDV
+            {docTitle === 'FACTURE' ? 'Facture' : 'Reçu'} généré le {formatDateFr(new Date())} via MonRDV
           </p>
         </div>
       </div>

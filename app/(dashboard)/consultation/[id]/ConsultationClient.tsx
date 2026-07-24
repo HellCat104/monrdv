@@ -18,16 +18,15 @@ type Row = Record<string, any>
 interface Patient { id: string; first_name: string; last_name: string; age?: number | null; birth_date?: string | null; blood_group?: string | null; phone?: string | null; cin?: string | null; mutuelle?: string | null; allergies?: string | null; chronic_conditions?: string | null; surgeries?: string | null; current_treatments?: string | null; vaccinations?: string | null }
 
 export default function ConsultationClient({
-  doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, hasInvoice, defaultPrice,
+  doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, recentVitals,
-  existingNoteId, existingNote, vitalDefs, vitalDefsAll, isPsy = false,
+  existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
 }: {
   doctorId: string
   appointmentId: string
   appointmentPaid: boolean
   amountPaid: number | null
   amountDue?: number | null
-  hasInvoice: boolean
   defaultPrice: number | null
   patient: Patient
   recentNotes: Row[]
@@ -36,6 +35,7 @@ export default function ConsultationClient({
   recentVitals: Row[]
   existingNoteId: string | null
   existingNote: string
+  noteSigned?: boolean
   vitalDefs: VitalDef[]
   vitalDefsAll: VitalDef[]
   isPsy?: boolean
@@ -68,8 +68,9 @@ export default function ConsultationClient({
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const saveNote = useCallback(async () => {
-    // Rien à enregistrer si vide ou si c'est le modèle non modifié
-    if (!note.trim() || note === PSY_NOTE_TEMPLATE || savingRef.current) return
+    // Rien à enregistrer si vide, si c'est le modèle non modifié, ou si la note
+    // est signée (verrouillée en base : l'écriture échouerait silencieusement).
+    if (noteSigned || !note.trim() || note === PSY_NOTE_TEMPLATE || savingRef.current) return
     savingRef.current = true
     setNoteState('saving')
     try {
@@ -87,7 +88,7 @@ export default function ConsultationClient({
     } finally {
       savingRef.current = false
     }
-  }, [note, noteId, appointmentId, patient.id, doctorId, supabase])
+  }, [note, noteId, appointmentId, patient.id, doctorId, supabase, noteSigned])
 
   // Enregistrement automatique : 1,5 s après la dernière frappe → rien n'est perdu
   useEffect(() => {
@@ -114,7 +115,8 @@ export default function ConsultationClient({
     setSavingVital(true)
     const { data } = await supabase
       .from('vital_signs')
-      .insert({ doctor_id: doctorId, patient_id: patient.id, values })
+      // Rattachée à ce RDV : la mesure remonte dans le résumé de consultation.
+      .insert({ doctor_id: doctorId, patient_id: patient.id, appointment_id: appointmentId, values })
       .select('id, values, measured_at').single()
     setSavingVital(false)
     if (data) { setVitals((prev) => [data, ...prev]); setVitalInput({}) }
@@ -254,23 +256,27 @@ export default function ConsultationClient({
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-gray-700">Note de consultation</h3>
               <div className="flex items-center gap-2">
-                {noteState === 'saved' && <span className="text-xs text-green-600 flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Enregistrée</span>}
-                {isPsy && !note.trim() && (
+                {noteSigned && <span className="text-xs text-gray-500 flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Signée · verrouillée</span>}
+                {!noteSigned && noteState === 'saved' && <span className="text-xs text-green-600 flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Enregistrée</span>}
+                {!noteSigned && isPsy && !note.trim() && (
                   <Button variant="outline" size="sm" onClick={() => setNote(PSY_NOTE_TEMPLATE)}>
                     <FileText className="h-4 w-4 mr-1" /> Modèle
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={saveNote} disabled={noteState === 'saving' || !note.trim() || note === PSY_NOTE_TEMPLATE}>
-                  <Save className="h-4 w-4 mr-1" /> {noteState === 'saving' ? '…' : 'Enregistrer'}
-                </Button>
+                {!noteSigned && (
+                  <Button variant="outline" size="sm" onClick={saveNote} disabled={noteState === 'saving' || !note.trim() || note === PSY_NOTE_TEMPLATE}>
+                    <Save className="h-4 w-4 mr-1" /> {noteState === 'saving' ? '…' : 'Enregistrer'}
+                  </Button>
+                )}
               </div>
             </div>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
+              readOnly={noteSigned}
               placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Motif, examen clinique, diagnostic, conduite à tenir…'}
               rows={14}
-              className="w-full text-sm text-gray-800 leading-relaxed border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+              className={`w-full text-sm text-gray-800 leading-relaxed border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 ${noteSigned ? 'bg-gray-50 cursor-not-allowed' : ''}`}
             />
           </div>
 
