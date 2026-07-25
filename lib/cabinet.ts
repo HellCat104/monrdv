@@ -45,8 +45,13 @@ export async function getStaffContext(): Promise<StaffContext | null> {
   // consultation sont retirés côté route agenda.
   const confidential = doctor.confidential_mode === true
   if (confidential) {
+    // Mode confidentiel = la secrétaire ne voit RIEN de clinique. On coupe donc
+    // aussi les constantes (poids/tension…), qui sont des données de santé au même
+    // titre que les antécédents et les ordonnances — sinon elles fuyaient malgré
+    // le mode confidentiel (détail patient + saisie).
     permissions.patients_medical = false
     permissions.prescriptions_view = false
+    permissions.vitals_entry = false
   }
 
   const doctorPublic = { id: doctor.id, name: doctor.name, specialty: doctor.specialty, city: doctor.city }
