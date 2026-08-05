@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
   const slug        = sanitizeSlug(formData.get('slug'))
   const cnom_number = sanitizeString(formData.get('cnom_number'))
 
-  // Forfait choisi à l'inscription (défaut : Agenda, le moins engageant)
-  const plan = formData.get('plan') === 'complet' ? 'complet' : 'agenda'
+  // Le forfait n'est pas demandé à l'inscription : la colonne `plan` démarre à
+  // 'agenda' (défaut SQL). Le passage au Cabinet complet se fait ensuite depuis
+  // Abonnement (demande du médecin, confirmée par l'admin après paiement).
 
   // Code délégué (facultatif) : normalisé en MAJUSCULES sans espaces pour que
   // « adham 01 » et « ADHAM01 » soient comptés comme le même délégué.
@@ -113,7 +114,6 @@ export async function POST(req: NextRequest) {
       status: 'pending',
       appointment_duration: 30,
       has_secretary: withSecretary,
-      plan,
       referral_code,
     })
     .select('id')

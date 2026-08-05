@@ -29,8 +29,8 @@ export default function InscriptionPage() {
     cnom_number: '',
   })
 
-  // Forfait choisi (Agenda 149 DH / Cabinet complet 299 DH)
-  const [plan, setPlan] = useState<'agenda' | 'complet'>('complet')
+  // Le forfait n'est pas choisi ici : tout compte démarre en « Agenda ».
+  // Le passage au Cabinet complet se demande ensuite depuis Abonnement.
 
   // Code du délégué qui a amené le médecin (facultatif)
   const [referralCode, setReferralCode] = useState('')
@@ -106,7 +106,6 @@ export default function InscriptionPage() {
     try {
       const formData = new FormData()
       Object.entries(form).forEach(([k, v]) => formData.append(k, v))
-      formData.append('plan', plan)
       if (referralCode.trim()) formData.append('referral_code', referralCode.trim())
       if (hasSecretary === 'oui') {
         formData.append('secretary_name', secretary.name.trim())
@@ -321,29 +320,6 @@ export default function InscriptionPage() {
                 <p className="text-xs text-gray-400">
                   Si un conseiller MonRDV vous a accompagné, saisissez son code. Sinon, laissez vide.
                 </p>
-              </div>
-
-              {/* Forfait — détermine les fonctionnalités débloquées (voir lib/plan.ts) */}
-              <div className="space-y-2">
-                <Label>Quel forfait vous convient ?</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {([
-                    { v: 'agenda' as const, title: 'Agenda', price: '149 DHS / mois', desc: 'Rendez-vous en ligne, agenda, salle d\'attente.' },
-                    { v: 'complet' as const, title: 'Cabinet complet', price: '299 DHS / mois', desc: 'En plus : dossiers patients, ordonnances, facturation.' },
-                  ]).map((o) => (
-                    <button
-                      key={o.v}
-                      type="button"
-                      onClick={() => setPlan(o.v)}
-                      className={`text-left p-3 rounded-xl border-2 transition ${plan === o.v ? 'bg-primary-50 border-primary-500' : 'bg-white border-gray-200 hover:border-gray-300'}`}
-                    >
-                      <span className="block text-sm font-bold text-gray-900">{o.title}</span>
-                      <span className="block text-sm font-semibold text-primary-600">{o.price}</span>
-                      <span className="block text-xs text-gray-500 mt-1">{o.desc}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400">30 jours d&apos;essai gratuit — vous pourrez changer de forfait à tout moment.</p>
               </div>
 
               {/* Secrétaire médicale — crée un second compte lié au cabinet */}
