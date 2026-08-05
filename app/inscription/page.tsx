@@ -32,6 +32,9 @@ export default function InscriptionPage() {
   // Forfait choisi (Agenda 149 DH / Cabinet complet 299 DH)
   const [plan, setPlan] = useState<'agenda' | 'complet'>('complet')
 
+  // Code du délégué qui a amené le médecin (facultatif)
+  const [referralCode, setReferralCode] = useState('')
+
   // Secrétaire médicale (facultatif — crée un second compte lié au cabinet)
   const [hasSecretary, setHasSecretary] = useState<'oui' | 'non'>('non')
   const [secretary, setSecretary] = useState({ name: '', email: '', password: '' })
@@ -104,6 +107,7 @@ export default function InscriptionPage() {
       const formData = new FormData()
       Object.entries(form).forEach(([k, v]) => formData.append(k, v))
       formData.append('plan', plan)
+      if (referralCode.trim()) formData.append('referral_code', referralCode.trim())
       if (hasSecretary === 'oui') {
         formData.append('secretary_name', secretary.name.trim())
         formData.append('secretary_email', secretary.email.trim())
@@ -302,6 +306,21 @@ export default function InscriptionPage() {
                   />
                 </div>
                 <p className="text-xs text-gray-400">Numéro d'inscription au Conseil National de l'Ordre des Médecins du Maroc</p>
+              </div>
+
+              {/* Code délégué — facultatif, sert au suivi commercial */}
+              <div className="space-y-1.5">
+                <Label htmlFor="referral_code">Code délégué (optionnel)</Label>
+                <Input
+                  id="referral_code"
+                  value={referralCode}
+                  onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                  placeholder="Ex : ADHAM01"
+                  maxLength={20}
+                />
+                <p className="text-xs text-gray-400">
+                  Si un conseiller MonRDV vous a accompagné, saisissez son code. Sinon, laissez vide.
+                </p>
               </div>
 
               {/* Forfait — détermine les fonctionnalités débloquées (voir lib/plan.ts) */}

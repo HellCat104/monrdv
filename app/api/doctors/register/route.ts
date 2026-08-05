@@ -19,6 +19,11 @@ export async function POST(req: NextRequest) {
   // Forfait choisi à l'inscription (défaut : Agenda, le moins engageant)
   const plan = formData.get('plan') === 'complet' ? 'complet' : 'agenda'
 
+  // Code délégué (facultatif) : normalisé en MAJUSCULES sans espaces pour que
+  // « adham 01 » et « ADHAM01 » soient comptés comme le même délégué.
+  const referral_code =
+    sanitizeString(formData.get('referral_code')).toUpperCase().replace(/\s+/g, '').slice(0, 20) || null
+
   // Secrétaire (facultatif — « Avez-vous une secrétaire médicale ? »)
   const secName     = sanitizeString(formData.get('secretary_name'))
   const secEmail    = sanitizeEmail(formData.get('secretary_email'))
@@ -109,6 +114,7 @@ export async function POST(req: NextRequest) {
       appointment_duration: 30,
       has_secretary: withSecretary,
       plan,
+      referral_code,
     })
     .select('id')
     .single()

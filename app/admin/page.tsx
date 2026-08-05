@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { getInitials, formatDateShort } from '@/lib/utils'
 import {
   CheckCircle2, XCircle, FileText, Clock, Users,
-  ToggleLeft, ToggleRight, CalendarDays, LogOut, RefreshCw, ArrowLeftRight,
+  ToggleLeft, ToggleRight, CalendarDays, LogOut, RefreshCw, ArrowLeftRight, UserCheck,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -29,6 +29,7 @@ interface DoctorRow {
   created_at: string
   plan: 'agenda' | 'complet' | null
   pending_plan: 'agenda' | 'complet' | null
+  referral_code: string | null
 }
 
 const STATUS_CONFIG = {
@@ -356,6 +357,17 @@ export default function AdminPage() {
                           {doctor.plan === 'complet' ? 'Cabinet complet' : 'Agenda'}
                           <ArrowLeftRight className="h-3 w-3 opacity-60" />
                         </button>
+
+                        {/* Délégué qui a amené ce médecin (code saisi à l'inscription) */}
+                        {doctor.referral_code && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700"
+                            title="Code délégué saisi à l'inscription"
+                          >
+                            <UserCheck className="h-3 w-3" />
+                            {doctor.referral_code}
+                          </span>
+                        )}
 
                         {/* Demande de changement de forfait en attente */}
                         {doctor.pending_plan && doctor.pending_plan !== doctor.plan && (
