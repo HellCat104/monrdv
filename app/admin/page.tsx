@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { getInitials, formatDateShort } from '@/lib/utils'
 import {
   CheckCircle2, XCircle, FileText, Clock, Users,
-  ToggleLeft, ToggleRight, CalendarDays, LogOut, RefreshCw,
+  ToggleLeft, ToggleRight, CalendarDays, LogOut, RefreshCw, ArrowLeftRight,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -66,6 +66,7 @@ export default function AdminPage() {
   const [rejectReason, setRejectReason]         = useState('')
   const [expirationDialog, setExpirationDialog] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: '', name: '' })
   const [newExpiration, setNewExpiration]       = useState('')
+  const [planDialog, setPlanDialog]             = useState<{ open: boolean; id: string; name: string; target: 'agenda' | 'complet' }>({ open: false, id: '', name: '', target: 'agenda' })
 
   // ── helpers ────────────────────────────────────────────────────────────────
   function showToast(message: string, type: 'success' | 'error') {
@@ -184,6 +185,20 @@ export default function AdminPage() {
     if (ok) showToast(`Dr. ${name} → forfait ${plan === 'complet' ? 'Cabinet complet' : 'Agenda'} ✓`, 'success')
     await refresh()
     setActionLoading(null)
+  }
+
+  // Clic sur le badge de forfait : demande confirmation avant de basculer.
+  // Un passage en Agenda masque les dossiers/factures côté médecin (sans les
+  // supprimer) — d'où la confirmation explicite.
+  function askTogglePlan(doctor: DoctorRow) {
+    const target = doctor.plan === 'complet' ? 'agenda' : 'complet'
+    setPlanDialog({ open: true, id: doctor.id, name: doctor.name, target })
+  }
+
+  async function confirmTogglePlan() {
+    const { id, name, target } = planDialog
+    setPlanDialog({ open: false, id: '', name: '', target: 'agenda' })
+    await handleSetPlan(id, name, target)
   }
 
   async function handleSetExpiration() {
@@ -327,12 +342,20 @@ export default function AdminPage() {
                           {doctor.subscription_status === 'actif' ? '● Actif' : '○ Inactif'}
                         </span>
 
-                        {/* Badge forfait */}
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          doctor.plan === 'complet' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'
-                        }`}>
+                        {/* Badge forfait — cliquable : bascule Agenda ↔ Cabinet complet */}
+                        <button
+                          onClick={() => askTogglePlan(doctor)}
+                          disabled={actionLoading === doctor.id}
+                          title="Changer le forfait"
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                            doctor.plan === 'complet'
+                              ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
                           {doctor.plan === 'complet' ? 'Cabinet complet' : 'Agenda'}
-                        </span>
+                          <ArrowLeftRight className="h-3 w-3 opacity-60" />
+                        </button>
 
                         {/* Demande de changement de forfait en attente */}
                         {doctor.pending_plan && doctor.pending_plan !== doctor.plan && (
@@ -487,6 +510,44 @@ export default function AdminPage() {
             </Button>
             <Button onClick={handleSetExpiration} disabled={!!actionLoading}>
               Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — changement de forfait */}
+      <Dialog
+        open={planDialog.open}
+        onOpenChange={(o) => setPlanDialog({ open: o, id: '', name: '', target: 'agenda' })}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Changer le forfait — Dr. {planDialog.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-700">
+              Passer ce compte en{' '}
+              <strong>{planDialog.target === 'complet' ? 'Cabinet complet (299 DHS)' : 'Agenda (149 DHS)'}</strong> ?
+            </p>
+            {planDialog.target === 'agenda' ? (
+              <p className="text-sm text-orange-600 bg-orange-50 rounded-lg p-3">
+                Les dossiers médicaux, ordonnances, factures et statistiques seront
+                <strong> masqués</strong> pour ce médecin. Aucune donnée n&apos;est supprimée :
+                tout réapparaît s&apos;il repasse en Cabinet complet.
+              </p>
+            ) : (
+              <p className="text-sm text-green-700 bg-green-50 rounded-lg p-3">
+                Le médecin retrouve immédiatement les dossiers patients, la consultation,
+                les ordonnances, la facturation et les statistiques.
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPlanDialog({ open: false, id: '', name: '', target: 'agenda' })}>
+              Annuler
+            </Button>
+            <Button onClick={confirmTogglePlan} disabled={!!actionLoading}>
+              Confirmer
             </Button>
           </DialogFooter>
         </DialogContent>
