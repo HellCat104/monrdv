@@ -3,6 +3,7 @@
 // numéroté (AV-AAAA-NNNN) qui la référence.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { canAccess } from '@/lib/plan'
 
 export async function POST(
   req: NextRequest,
@@ -13,8 +14,11 @@ export async function POST(
   if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   const { data: doctor } = await supabase
-    .from('doctors').select('id').eq('email', user.email).single()
+    .from('doctors').select('id, plan').eq('email', user.email).single()
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
+  if (!canAccess(doctor.plan, 'billing')) {
+    return NextResponse.json({ error: 'La facturation nécessite le forfait Cabinet complet' }, { status: 403 })
+  }
 
   // Le RDV doit appartenir au médecin ET être facturé.
   const { data: apt } = await supabase

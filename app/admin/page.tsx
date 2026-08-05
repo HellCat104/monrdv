@@ -27,6 +27,8 @@ interface DoctorRow {
   cnom_number: string | null
   rejection_reason: string | null
   created_at: string
+  plan: 'agenda' | 'complet' | null
+  pending_plan: 'agenda' | 'complet' | null
 }
 
 const STATUS_CONFIG = {
@@ -175,6 +177,15 @@ export default function AdminPage() {
     setActionLoading(null)
   }
 
+  // Bascule le forfait (seule voie possible : la colonne est verrouillée côté médecin)
+  async function handleSetPlan(id: string, name: string, plan: 'agenda' | 'complet') {
+    setActionLoading(id)
+    const ok = await apiFetch(id, { action: 'set_plan', plan })
+    if (ok) showToast(`Dr. ${name} → forfait ${plan === 'complet' ? 'Cabinet complet' : 'Agenda'} ✓`, 'success')
+    await refresh()
+    setActionLoading(null)
+  }
+
   async function handleSetExpiration() {
     const id = expirationDialog.id
     const name = expirationDialog.name
@@ -315,6 +326,25 @@ export default function AdminPage() {
                         }`}>
                           {doctor.subscription_status === 'actif' ? '● Actif' : '○ Inactif'}
                         </span>
+
+                        {/* Badge forfait */}
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                          doctor.plan === 'complet' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {doctor.plan === 'complet' ? 'Cabinet complet' : 'Agenda'}
+                        </span>
+
+                        {/* Demande de changement de forfait en attente */}
+                        {doctor.pending_plan && doctor.pending_plan !== doctor.plan && (
+                          <button
+                            onClick={() => handleSetPlan(doctor.id, doctor.name, doctor.pending_plan!)}
+                            disabled={actionLoading === doctor.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
+                            title="Confirmer le changement de forfait"
+                          >
+                            ⏳ Demande : {doctor.pending_plan === 'complet' ? 'Cabinet complet' : 'Agenda'} — confirmer
+                          </button>
+                        )}
                       </div>
 
                       <p className="text-sm text-gray-500 mt-0.5">

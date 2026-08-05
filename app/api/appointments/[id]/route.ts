@@ -1,6 +1,7 @@
 // API : mise à jour et suppression d'un RDV
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { canAccess } from '@/lib/plan'
 import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor } from '@/lib/email'
 
 // PATCH /api/appointments/[id] — modifie le statut (confirm/cancel)
@@ -33,11 +34,17 @@ export async function PATCH(
   // Vérifie que le RDV appartient bien au médecin connecté
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name')
+    .select('id, name, plan')
     .eq('email', user.email)
     .single()
 
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
+
+  // Encaissement : réservé au forfait Cabinet complet
+  if ((amount_paid !== undefined || amount_due !== undefined || payment_method !== undefined)
+      && !canAccess(doctor.plan, 'billing')) {
+    return NextResponse.json({ error: 'La facturation nécessite le forfait Cabinet complet' }, { status: 403 })
+  }
 
   const updates: Record<string, unknown> = {}
   if (status)              updates.status       = status

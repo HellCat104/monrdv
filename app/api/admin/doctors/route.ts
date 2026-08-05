@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   // ── Mode liste ────────────────────────────────────────────────────────────
   let query = adminDb
     .from('doctors')
-    .select('id, name, email, specialty, phone, slug, status, subscription_status, date_expiration, cnom_number, rejection_reason, created_at')
+    .select('id, name, email, specialty, phone, slug, status, subscription_status, date_expiration, cnom_number, rejection_reason, created_at, plan, pending_plan')
     .order('created_at', { ascending: false })
 
   if (status && status !== 'all') {

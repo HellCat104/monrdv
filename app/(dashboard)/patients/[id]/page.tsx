@@ -1,8 +1,11 @@
 // Dossier patient — pleine page, 3 colonnes (identité / historique / suivi).
+// Forfait Agenda : fiche minimale (nom, prénom, téléphone, notes) sans données de santé.
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { allVitalDefs, resolveEnabledVitals, type VitalDef } from '@/types'
+import { canAccess } from '@/lib/plan'
 import PatientDossier from '@/components/dashboard/PatientDossier'
+import PatientDossierLite from '@/components/dashboard/PatientDossierLite'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +16,7 @@ export default async function PatientDossierPage({ params }: { params: { id: str
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, slug, specialty, specialties, enabled_vitals, custom_vitals')
+    .select('id, name, slug, specialty, specialties, enabled_vitals, custom_vitals, plan')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -25,6 +28,11 @@ export default async function PatientDossierPage({ params }: { params: { id: str
     .eq('doctor_id', doctor.id)
     .single()
   if (!patient) notFound()
+
+  // Forfait Agenda : fiche contact réduite, aucun accès au dossier médical
+  if (!canAccess(doctor.plan, 'records')) {
+    return <PatientDossierLite initialPatient={patient} />
+  }
 
   const specialties = ((doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])).filter(Boolean)
   const vitalDefsAll: VitalDef[] = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])

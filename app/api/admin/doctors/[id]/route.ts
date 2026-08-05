@@ -17,14 +17,35 @@ export async function PATCH(
   }
 
   const body = await req.json()
-  const { action, rejection_reason, date_expiration } = body
-  // action: 'approve' | 'reject' | 'toggle_subscription' | 'set_expiration'
+  const { action, rejection_reason, date_expiration, plan } = body
+  // action: 'approve' | 'reject' | 'toggle_subscription' | 'set_expiration' | 'set_plan'
 
-  if (!['approve', 'reject', 'toggle_subscription', 'set_expiration', 'extend_subscription'].includes(action)) {
+  if (!['approve', 'reject', 'toggle_subscription', 'set_expiration', 'extend_subscription', 'set_plan'].includes(action)) {
     return NextResponse.json({ error: 'Action invalide' }, { status: 400 })
   }
 
   const adminDb = createAdminClient()
+
+  // ── Changer le forfait (Agenda 149 / Cabinet complet 299) ────────────────
+  // Seule voie possible : la colonne `plan` est verrouillée pour le médecin
+  // (trigger trg_protect_doctor_plan). Solde aussi la demande en attente.
+  if (action === 'set_plan') {
+    if (plan !== 'agenda' && plan !== 'complet') {
+      return NextResponse.json({ error: 'Forfait invalide' }, { status: 400 })
+    }
+
+    const { error: updateErr } = await adminDb
+      .from('doctors')
+      .update({ plan, pending_plan: null })
+      .eq('id', params.id)
+
+    if (updateErr) {
+      console.error('[Admin] set_plan error:', updateErr)
+      return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, plan })
+  }
 
   // ── Toggle abonnement actif/inactif ──────────────────────────────────────
   if (action === 'toggle_subscription') {

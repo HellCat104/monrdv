@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { canAccess } from '@/lib/plan'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -42,13 +44,16 @@ export default function FacturesPage() {
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: doctor } = await supabase.from('doctors').select('id').eq('email', user.email).single()
+      const { data: doctor } = await supabase.from('doctors').select('id, plan').eq('email', user.email).single()
       if (!doctor) return
+      // Facturation réservée au forfait Cabinet complet
+      if (!canAccess(doctor.plan, 'billing')) { router.replace('/dashboard'); return }
       const [fRes, aRes] = await Promise.all([
         supabase.from('appointments')
           .select('id, date, paid_at, invoice_no, amount_paid, amount_due, payment_method, patient:patients(first_name, last_name)')

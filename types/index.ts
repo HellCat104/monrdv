@@ -14,6 +14,10 @@ export interface Doctor {
   bio?: string | null
   status?: string
   subscription_status?: string
+  // Forfait : 'agenda' (149 DH, RDV seuls) | 'complet' (299 DH, cabinet complet)
+  plan?: 'agenda' | 'complet'
+  pending_plan?: 'agenda' | 'complet' | null  // demande de changement à confirmer
+  price_hidden?: boolean                       // masque les tarifs (médecins pilotes)
   cnom_number?: string
   // Identifiants légaux (facture marocaine)
   ice?: string | null

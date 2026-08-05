@@ -37,15 +37,21 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   // « Mon équipe » n'apparaît que si le médecin a déclaré une secrétaire
   const [hasSecretary, setHasSecretary] = useState(false)
+  // Forfait : en 'agenda', Factures et Statistiques sont masquées.
+  // Défaut 'agenda' (comme has_secretary=false) : on n'affiche qu'après confirmation.
+  const [plan, setPlan] = useState<'agenda' | 'complet'>('agenda')
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
-      supabase.from('doctors').select('has_secretary').eq('email', user.email).single()
-        .then(({ data }) => setHasSecretary(!!data?.has_secretary))
+      supabase.from('doctors').select('has_secretary, plan').eq('email', user.email).single()
+        .then(({ data }) => {
+          setHasSecretary(!!data?.has_secretary)
+          setPlan(data?.plan === 'complet' ? 'complet' : 'agenda')
+        })
     })
-  }, [pathname]) // re-vérifie après un passage dans Paramètres / Mon équipe
+  }, [pathname]) // re-vérifie après un passage dans Paramètres / Mon équipe / Abonnement
 
   async function handleLogout() {
     const supabase = createClient()
@@ -53,7 +59,12 @@ export function Sidebar() {
     router.push('/login')
   }
 
-  const visibleItems = navItems.filter((i) => i.href !== '/equipe' || hasSecretary)
+  // Forfait Agenda : Factures et Statistiques sont réservées au forfait Cabinet.
+  // (Patients reste visible : fiche réduite nom/prénom/tél/notes en mode agenda.)
+  const planHidden = plan === 'agenda' ? ['/factures', '/statistiques'] : []
+  const visibleItems = navItems.filter(
+    (i) => (i.href !== '/equipe' || hasSecretary) && !planHidden.includes(i.href)
+  )
 
   const NavLinks = () => (
     <>

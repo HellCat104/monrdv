@@ -286,8 +286,10 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
           </div>
         </div>
 
-        {/* Enfant : date de naissance (obligatoire) + sexe (optionnel) */}
-        {bookingFor === 'child' && (
+        {/* Enfant : date de naissance (obligatoire) + sexe (optionnel).
+            Forfait Agenda : on ne collecte AUCUNE donnée au-delà du contact
+            (CNDP) — ces champs sont donc réservés au forfait Cabinet. */}
+        {bookingFor === 'child' && doctor.plan !== 'agenda' && (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="b_child_birth">Date de naissance *</Label>
@@ -353,7 +355,8 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
           <p className="text-xs text-gray-400">Indispensable pour recevoir votre confirmation et votre rappel</p>
         </div>
 
-        {bookingFor !== 'child' && (
+        {/* Âge : non collecté chez les médecins au forfait Agenda (CNDP) */}
+        {bookingFor !== 'child' && doctor.plan !== 'agenda' && (
           <div className="space-y-1.5">
             <Label htmlFor="b_age" className="flex items-center gap-1.5">
               <Hash className="h-3 w-3" /> Âge *

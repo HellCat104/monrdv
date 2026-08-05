@@ -464,6 +464,7 @@ export default function AppointmentsPage() {
               onPayment={handlePayment}
               onViewPatient={(patientId) => router.push(`/patients?patient=${patientId}`)}
               onReschedule={handleReschedule}
+              plan={doctor?.plan === 'complet' ? 'complet' : 'agenda'}
             />
           )}
         </CardContent>

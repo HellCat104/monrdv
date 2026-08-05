@@ -2,6 +2,7 @@
 // par un RDV). La prescription n'est liée à aucun rendez-vous (appointment_id null).
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { canAccess } from '@/lib/plan'
 import { getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
 import { format } from 'date-fns'
@@ -27,10 +28,12 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites')
+    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites, plan')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
+  // Ordonnances réservées au forfait Cabinet complet
+  if (!canAccess(doctor.plan, 'prescriptions')) redirect('/appointments')
 
   // Le patient doit appartenir au médecin
   const { data: patient } = await supabase

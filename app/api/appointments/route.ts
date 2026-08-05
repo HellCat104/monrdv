@@ -75,23 +75,13 @@ export async function POST(req: NextRequest) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
       return NextResponse.json({ error: 'Un email valide est obligatoire pour recevoir votre confirmation et votre rappel' }, { status: 400 })
     }
-    // Âge obligatoire (adulte) — pour un enfant, c'est la date de naissance qui fait foi
-    if (forChild === true) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(child_birth_date ?? ''))) {
-        return NextResponse.json({ error: 'La date de naissance de l\'enfant est obligatoire' }, { status: 400 })
-      }
-      const bd = new Date(child_birth_date + 'T00:00:00')
-      const ageYears = (Date.now() - bd.getTime()) / (1000 * 3600 * 24 * 365.25)
-      if (isNaN(bd.getTime()) || ageYears < 0 || ageYears > 18) {
-        return NextResponse.json({ error: 'Date de naissance de l\'enfant invalide (0-18 ans)' }, { status: 400 })
-      }
-    } else if (!Number.isInteger(age) || age <= 0 || age > 120) {
-      return NextResponse.json({ error: 'Un âge valide est obligatoire' }, { status: 400 })
-    }
     // Consentement au traitement des données obligatoire (loi 09-08)
     if (consent !== true) {
       return NextResponse.json({ error: 'Vous devez accepter le traitement de vos données' }, { status: 400 })
     }
+    // NB : l'exigence d'âge / date de naissance dépend du forfait du médecin
+    // (aucune donnée démographique en forfait Agenda) — vérifiée plus bas,
+    // une fois le médecin chargé.
   }
 
   // Sanitisation et limites de longueur pour les champs texte
@@ -103,15 +93,15 @@ export async function POST(req: NextRequest) {
   const safePhone  = sanitize(phone).substring(0, 20)
   const safeEmail  = email ? sanitize(email).substring(0, 254) : undefined
   const safeNotes  = notes ? sanitize(notes).substring(0, 500) : undefined
-  const safeAge    = age && Number.isInteger(age) && age > 0 && age <= 120 ? age : undefined
+  let safeAge      = age && Number.isInteger(age) && age > 0 && age <= 120 ? age : undefined
 
   // Réservation « pour mon enfant » (compte parent connecté requis)
   const isForChild = forChild === true && isPublic === true
   // Date de naissance générique (RDV créé par le médecin/cabinet)
   const genericBirth = /^\d{4}-\d{2}-\d{2}$/.test(String(birthDateInput ?? '')) ? String(birthDateInput) : null
-  const safeChildBirth = isForChild ? String(child_birth_date) : genericBirth
-  const safeChildSex = isForChild && (child_sex === 'M' || child_sex === 'F') ? child_sex : null
-  const childAge = safeChildBirth
+  let safeChildBirth = isForChild && /^\d{4}-\d{2}-\d{2}$/.test(String(child_birth_date ?? '')) ? String(child_birth_date) : genericBirth
+  let safeChildSex: 'M' | 'F' | null = isForChild && (child_sex === 'M' || child_sex === 'F') ? child_sex : null
+  let childAge = safeChildBirth
     ? Math.max(0, Math.floor((Date.now() - new Date(safeChildBirth + 'T00:00:00').getTime()) / (1000 * 3600 * 24 * 365.25)))
     : undefined
 
@@ -160,7 +150,7 @@ export async function POST(req: NextRequest) {
   // Vérifie que le médecin existe, est approuvé et a un abonnement actif
   const { data: doctorCheck } = await db
     .from('doctors')
-    .select('id, status, subscription_status, working_hours, appointment_duration, specialty, specialties')
+    .select('id, status, subscription_status, working_hours, appointment_duration, specialty, specialties, plan')
     .eq('id', doctor_id)
     .single()
 
@@ -170,6 +160,31 @@ export async function POST(req: NextRequest) {
 
   if (doctorCheck.subscription_status !== 'actif') {
     return NextResponse.json({ error: 'Ce médecin n\'accepte pas les réservations en ligne' }, { status: 403 })
+  }
+
+  // Données démographiques selon le forfait :
+  // - Forfait Agenda : on ne collecte QUE le contact (nom, prénom, téléphone,
+  //   email) — ni âge, ni date de naissance, ni sexe (CNDP).
+  // - Forfait Cabinet : âge (adulte) ou date de naissance (enfant) obligatoires.
+  const collectDemographics = doctorCheck.plan !== 'agenda'
+  if (!collectDemographics) {
+    safeAge = undefined
+    safeChildBirth = null
+    safeChildSex = null
+    childAge = undefined
+  } else if (isPublic) {
+    if (forChild === true) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(child_birth_date ?? ''))) {
+        return NextResponse.json({ error: 'La date de naissance de l\'enfant est obligatoire' }, { status: 400 })
+      }
+      const bd = new Date(child_birth_date + 'T00:00:00')
+      const ageYears = (Date.now() - bd.getTime()) / (1000 * 3600 * 24 * 365.25)
+      if (isNaN(bd.getTime()) || ageYears < 0 || ageYears > 18) {
+        return NextResponse.json({ error: 'Date de naissance de l\'enfant invalide (0-18 ans)' }, { status: 400 })
+      }
+    } else if (!Number.isInteger(age) || age <= 0 || age > 120) {
+      return NextResponse.json({ error: 'Un âge valide est obligatoire' }, { status: 400 })
+    }
   }
 
   // Résout la durée du RDV côté serveur (jamais confiance au client) :

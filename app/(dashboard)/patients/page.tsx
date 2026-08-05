@@ -40,6 +40,8 @@ export default function PatientsPage() {
   const [doctorId, setDoctorId] = useState<string | null>(null)
   const [doctorName, setDoctorName] = useState('')
   const [doctorSlug, setDoctorSlug] = useState<string>('')
+  // Forfait : en 'agenda', la fiche reste minimale (pas de date de naissance — CNDP)
+  const [doctorPlan, setDoctorPlan] = useState<'agenda' | 'complet'>('agenda')
   const [enabledVitals, setEnabledVitals] = useState<string[]>([])
   const [vitalDefs, setVitalDefs] = useState<VitalDef[]>(() => allVitalDefs())
   const [loading, setLoading] = useState(true)
@@ -125,7 +127,7 @@ export default function PatientsPage() {
 
     const { data: doctor } = await supabase
       .from('doctors')
-      .select('id, name, slug, specialty, specialties, enabled_vitals, custom_vitals')
+      .select('id, name, slug, specialty, specialties, enabled_vitals, custom_vitals, plan')
       .eq('email', user.email)
       .single()
 
@@ -133,6 +135,7 @@ export default function PatientsPage() {
     setDoctorId(doctor.id)
     setDoctorName(doctor.name ?? '')
     setDoctorSlug(doctor.slug ?? '')
+    setDoctorPlan(doctor.plan === 'complet' ? 'complet' : 'agenda')
     setEnabledVitals(resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty))
     setVitalDefs(allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? []))
     setDoctorSpecialties(
@@ -896,24 +899,26 @@ export default function PatientsPage() {
                 required
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs text-gray-500">
-                Date de naissance {isPediatricDoctor(doctorSpecialties) && <span className="text-primary-500">— requise pour les courbes et vaccins</span>}
-              </label>
-              <Input
-                type="date"
-                max={new Date().toISOString().slice(0, 10)}
-                value={newPatient.birth_date}
-                onChange={(e) => setNewPatient({ ...newPatient, birth_date: e.target.value })}
-              />
-              {formatAge(newPatient.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(newPatient.birth_date)}</p>}
-            </div>
+            {doctorPlan === 'complet' && (
+              <div className="space-y-1.5">
+                <label className="text-xs text-gray-500">
+                  Date de naissance {isPediatricDoctor(doctorSpecialties) && <span className="text-primary-500">— requise pour les courbes et vaccins</span>}
+                </label>
+                <Input
+                  type="date"
+                  max={new Date().toISOString().slice(0, 10)}
+                  value={newPatient.birth_date}
+                  onChange={(e) => setNewPatient({ ...newPatient, birth_date: e.target.value })}
+                />
+                {formatAge(newPatient.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(newPatient.birth_date)}</p>}
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-xs text-gray-500">Notes (optionnel)</label>
               <textarea
                 value={newPatient.notes}
                 onChange={(e) => setNewPatient({ ...newPatient, notes: e.target.value })}
-                placeholder="Antécédents, observations…"
+                placeholder={doctorPlan === 'complet' ? 'Antécédents, observations…' : 'Ex. préfère le matin, à rappeler…'}
                 rows={3}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
               />

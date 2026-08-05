@@ -16,6 +16,9 @@ export async function POST(req: NextRequest) {
   const slug        = sanitizeSlug(formData.get('slug'))
   const cnom_number = sanitizeString(formData.get('cnom_number'))
 
+  // Forfait choisi à l'inscription (défaut : Agenda, le moins engageant)
+  const plan = formData.get('plan') === 'complet' ? 'complet' : 'agenda'
+
   // Secrétaire (facultatif — « Avez-vous une secrétaire médicale ? »)
   const secName     = sanitizeString(formData.get('secretary_name'))
   const secEmail    = sanitizeEmail(formData.get('secretary_email'))
@@ -105,6 +108,7 @@ export async function POST(req: NextRequest) {
       status: 'pending',
       appointment_duration: 30,
       has_secretary: withSecretary,
+      plan,
     })
     .select('id')
     .single()

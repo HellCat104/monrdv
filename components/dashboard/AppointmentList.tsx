@@ -83,9 +83,14 @@ interface AppointmentListProps {
   onPayment?: (id: string, payload: PaymentPayload) => Promise<void>
   onViewPatient?: (patientId: string) => void
   onReschedule?: (id: string, date: string, time: string) => Promise<void>
+  /** Forfait du médecin : en 'agenda', les actions Cabinet (consultation,
+   *  ordonnance, facture, encaissement) sont masquées. Défaut 'complet'. */
+  plan?: 'agenda' | 'complet'
 }
 
-export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment, onViewPatient, onReschedule }: AppointmentListProps) {
+export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, plan = 'complet' }: AppointmentListProps) {
+  // Forfait Agenda : pas d'encaissement (le reste des actions est filtré plus bas)
+  const onPayment = plan === 'agenda' ? undefined : onPaymentProp
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean; id: string; action: 'confirmed' | 'cancelled'; label: string
   }>({ open: false, id: '', action: 'confirmed', label: '' })
@@ -301,7 +306,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
               <div className="shrink-0">
                 <MoreMenu
                   items={[
-                    apt.patient_id ? { label: 'Reprendre la consultation', icon: Play, href: `/consultation/${apt.id}` } : null,
+                    plan === 'complet' && apt.patient_id ? { label: 'Reprendre la consultation', icon: Play, href: `/consultation/${apt.id}` } : null,
                     // Un RDV clôturé non encaissé sortait de la file sans aucun
                     // moyen d'encaisser : la recette se perdait en fin de journée.
                     onPayment && paymentStatus(apt) !== 'paid' ? {
@@ -309,9 +314,9 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                       icon: Wallet,
                       onClick: () => openPayDialog(apt),
                     } : null,
-                    apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
-                    apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
-                    apt.invoice_no ? {
+                    plan === 'complet' && apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
+                    plan === 'complet' && apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
+                    plan === 'complet' && apt.invoice_no ? {
                       label: 'Émettre un avoir', icon: Undo2,
                       onClick: () => {
                         setCreditDone(null); setCreditError('')
@@ -398,7 +403,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 <div className="flex gap-1.5 mt-2 flex-wrap max-w-full items-center">
                   {/* Action principale : ouvrir la consultation (marque le patient
                       présent au passage s'il ne l'était pas encore) */}
-                  {apt.patient_id && (
+                  {plan === 'complet' && apt.patient_id && (
                     <a
                       href={`/consultation/${apt.id}`}
                       onClick={() => { if (apt.attendance !== 'present') onAttendanceChange?.(apt.id, 'present') }}
@@ -437,9 +442,9 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   <MoreMenu
                     items={[
                       onReschedule ? { label: 'Déplacer le RDV', icon: CalendarClock, onClick: () => { setMoveError(''); setMoveDialog({ open: true, apt, date: '', time: '' }) } } : null,
-                      apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
-                      apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
-                      apt.invoice_no ? {
+                      plan === 'complet' && apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
+                      plan === 'complet' && apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
+                      plan === 'complet' && apt.invoice_no ? {
                         label: 'Émettre un avoir', icon: Undo2,
                         onClick: () => {
                           setCreditDone(null); setCreditError('')

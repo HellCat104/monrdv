@@ -2,6 +2,7 @@
 // Évite de renvoyer le médecin dans la fiche/agenda pendant une consultation.
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { canAccess } from '@/lib/plan'
 import { ageFromBirthDate } from '@/lib/utils'
 import NewCertificate from './NewCertificate'
 
@@ -17,8 +18,10 @@ export default async function NewCertificatePage({ params, searchParams }: { par
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: doctor } = await supabase.from('doctors').select('id, name').eq('email', user.email).single()
+  const { data: doctor } = await supabase.from('doctors').select('id, name, plan').eq('email', user.email).single()
   if (!doctor) notFound()
+  // Certificats réservés au forfait Cabinet complet
+  if (!canAccess(doctor.plan, 'prescriptions')) redirect('/appointments')
 
   const { data: patient } = await supabase
     .from('patients')

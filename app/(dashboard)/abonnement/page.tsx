@@ -3,39 +3,65 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CreditCard, CheckCircle2, AlertTriangle, XCircle, Clock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { PLAN_LABELS, PLAN_PRICES_DHS, normalizePlan, type DoctorPlan } from '@/lib/plan'
+import { CreditCard, CheckCircle2, AlertTriangle, XCircle, Clock, ArrowUpRight, Check } from 'lucide-react'
 
 interface DoctorSub {
   name: string
   date_expiration: string | null
   subscription_status: string
+  plan: string | null
+  pending_plan: string | null
+  price_hidden: boolean | null
+}
+
+// Ce que chaque forfait débloque (aligné sur lib/plan.ts)
+const PLAN_FEATURES: Record<DoctorPlan, string[]> = {
+  agenda: [
+    'Page de réservation en ligne 24h/24',
+    'Agenda et gestion des rendez-vous',
+    'Salle d\'attente et présences',
+    'Fiche patient : nom, téléphone, notes',
+    'Rappels automatiques et agenda du matin',
+  ],
+  complet: [
+    'Tout le forfait Agenda',
+    'Dossiers patients complets (antécédents, constantes)',
+    'Consultation et notes médicales',
+    'Ordonnances et certificats',
+    'Facturation, reçus, avoirs et caisse',
+    'Statistiques et modules par spécialité',
+  ],
 }
 
 export default function AbonnementPage() {
   const [doctor, setDoctor] = useState<DoctorSub | null>(null)
   const [daysLeft, setDaysLeft] = useState<number | null>(null)
+  const [requesting, setRequesting] = useState(false)
 
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase
-        .from('doctors')
-        .select('name, date_expiration, subscription_status')
-        .eq('email', user.email)
-        .single()
-      if (data) {
-        setDoctor(data)
-        if (data.date_expiration) {
-          const [year, month, day] = data.date_expiration.split('-').map(Number)
-          const exp = new Date(year, month - 1, day)
-          const now = new Date()
-          now.setHours(0, 0, 0, 0)
-          setDaysLeft(Math.floor((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-        }
+  async function load() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('doctors')
+      .select('name, date_expiration, subscription_status, plan, pending_plan, price_hidden')
+      .eq('email', user.email)
+      .single()
+    if (data) {
+      setDoctor(data)
+      if (data.date_expiration) {
+        const [year, month, day] = data.date_expiration.split('-').map(Number)
+        const exp = new Date(year, month - 1, day)
+        const now = new Date()
+        now.setHours(0, 0, 0, 0)
+        setDaysLeft(Math.floor((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
       }
     }
+  }
+
+  useEffect(() => {
     load()
   }, [])
 
@@ -43,14 +69,38 @@ export default function AbonnementPage() {
   const isExpired = daysLeft !== null && daysLeft <= 0
   const isRed     = daysLeft !== null && daysLeft > 0 && daysLeft <= 5
   const isWarning = daysLeft !== null && daysLeft > 5 && daysLeft <= 15
-  const isGood    = daysLeft === null || daysLeft > 15
+
+  const plan = normalizePlan(doctor?.plan)
+  const priceHidden = doctor?.price_hidden === true
+  const pendingUpgrade = doctor?.pending_plan === 'complet' && plan !== 'complet'
+  const price = PLAN_PRICES_DHS[plan]
+
+  // Enregistre la DEMANDE de passage au forfait Cabinet. Le changement réel de
+  // forfait est appliqué par l'admin après confirmation du virement (le champ
+  // `plan` est verrouillé en base pour le médecin).
+  async function requestUpgrade() {
+    setRequesting(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('doctors').update({ pending_plan: 'complet' }).eq('email', user.email)
+      await load()
+    }
+    setRequesting(false)
+  }
 
   const whatsappMessage = encodeURIComponent(
-    `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement de 299 DHS pour renouveler mon abonnement.`
+    priceHidden
+      ? `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement pour renouveler mon abonnement.`
+      : `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement de ${price} DHS pour renouveler mon abonnement (forfait ${PLAN_LABELS[plan]}).`
+  )
+
+  const upgradeMessage = encodeURIComponent(
+    `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je souhaite passer au forfait Cabinet complet${priceHidden ? '' : ` (${PLAN_PRICES_DHS.complet} DHS / mois)`}.`
   )
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Mon abonnement</h1>
         <p className="text-sm text-gray-500 mt-1">Gérez votre abonnement MonRDV</p>
@@ -89,23 +139,89 @@ export default function AbonnementPage() {
         </CardContent>
       </Card>
 
-      {/* Tarif */}
+      {/* Les deux forfaits */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-primary-500" />
-            Tarif mensuel
+            Votre forfait
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-gray-900">299</span>
-            <span className="text-xl text-gray-500">DHS</span>
-            <span className="text-gray-400 text-sm">/ mois</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(['agenda', 'complet'] as DoctorPlan[]).map((p) => {
+              const current = plan === p
+              return (
+                <div
+                  key={p}
+                  className={`rounded-xl border-2 p-5 ${current ? 'border-primary-500 bg-primary-50/40' : 'border-gray-200'}`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="font-bold text-gray-900">{PLAN_LABELS[p]}</h3>
+                    {current && (
+                      <span className="text-[11px] font-semibold uppercase tracking-wide bg-primary-500 text-white px-2 py-0.5 rounded-full">
+                        Votre forfait
+                      </span>
+                    )}
+                  </div>
+
+                  {!priceHidden && (
+                    <div className="flex items-baseline gap-1.5 mb-3">
+                      <span className="text-3xl font-bold text-gray-900">{PLAN_PRICES_DHS[p]}</span>
+                      <span className="text-sm text-gray-500">DHS / mois</span>
+                    </div>
+                  )}
+
+                  <ul className="space-y-1.5">
+                    {PLAN_FEATURES[p].map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
+                        <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
           </div>
-          <p className="text-sm text-gray-500 mt-2">
-            Accès illimité à toutes les fonctionnalités MonRDV — gestion des RDV, fiche patients, page de réservation publique.
-          </p>
+
+          {/* Passage au forfait supérieur */}
+          {plan === 'agenda' && (
+            <div className="mt-5 rounded-xl bg-gray-50 p-5">
+              {pendingUpgrade ? (
+                <div className="flex items-start gap-3">
+                  <Clock className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">Demande de changement en cours</p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Votre passage au forfait Cabinet complet sera activé dès confirmation de votre paiement.
+                      Prévenez-nous sur WhatsApp pour accélérer l&apos;activation.
+                    </p>
+                    <a
+                      href={`https://wa.me/212621900874?text=${upgradeMessage}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 mt-3 text-sm font-semibold text-green-600 hover:text-green-700"
+                    >
+                      Prévenir sur WhatsApp <ArrowUpRight className="h-4 w-4" />
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">Besoin des dossiers patients et de la facturation ?</p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Passez au forfait Cabinet complet — vos données restent intactes, tout se débloque aussitôt.
+                    </p>
+                  </div>
+                  <Button onClick={requestUpgrade} disabled={requesting} className="shrink-0">
+                    {requesting ? 'Envoi…' : 'Passer au forfait Cabinet'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -121,7 +237,11 @@ export default function AbonnementPage() {
           <div className="space-y-3">
             <div className="flex gap-3">
               <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
-              <p className="text-sm text-gray-700">Effectuez un virement bancaire de <strong>299 DHS</strong> sur le compte suivant :</p>
+              <p className="text-sm text-gray-700">
+                {priceHidden
+                  ? <>Effectuez votre virement bancaire sur le compte suivant :</>
+                  : <>Effectuez un virement bancaire de <strong>{price} DHS</strong> sur le compte suivant :</>}
+              </p>
             </div>
             <div className="bg-gray-50 rounded-lg p-4 ml-9 space-y-1 text-sm">
               <p><span className="text-gray-500">Bénéficiaire :</span> <strong>MonRDV</strong></p>

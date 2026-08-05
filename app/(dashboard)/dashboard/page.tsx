@@ -172,7 +172,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <AppointmentList appointments={todaySummarised} />
+            <AppointmentList appointments={todaySummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
           </CardContent>
         </Card>
 
@@ -185,7 +185,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <AppointmentList appointments={upcomingSummarised} />
+            <AppointmentList appointments={upcomingSummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
           </CardContent>
         </Card>
       </div>

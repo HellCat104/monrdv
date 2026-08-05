@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { canAccess } from '@/lib/plan'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -75,6 +77,7 @@ export default function StatistiquesPage() {
   const [exp, setExp] = useState({ date: format(getNowInMaroc(), 'yyyy-MM-dd'), label: '', amount: '' })
   const [addingExp, setAddingExp] = useState(false)
   const supabase = createClient()
+  const router = useRouter()
 
   async function loadAll(docId: string) {
     const [aptRes, expRes, creditRes] = await Promise.all([
@@ -93,8 +96,10 @@ export default function StatistiquesPage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: doctor } = await supabase.from('doctors').select('id').eq('email', user.email).single()
+      const { data: doctor } = await supabase.from('doctors').select('id, plan').eq('email', user.email).single()
       if (!doctor) return
+      // Statistiques réservées au forfait Cabinet complet
+      if (!canAccess(doctor.plan, 'stats')) { router.replace('/dashboard'); return }
       setDoctorId(doctor.id)
       await loadAll(doctor.id)
       setLoading(false)

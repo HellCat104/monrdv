@@ -3,6 +3,7 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { allVitalDefs, resolveEnabledVitals, isPsychiatricDoctor, type VitalDef } from '@/types'
+import { canAccess } from '@/lib/plan'
 import ConsultationClient from './ConsultationClient'
 
 export const dynamic = 'force-dynamic'
@@ -14,10 +15,12 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, enabled_vitals, specialty, specialties, custom_vitals')
+    .select('id, name, enabled_vitals, specialty, specialties, custom_vitals, plan')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
+  // L'écran consultation est réservé au forfait Cabinet complet
+  if (!canAccess(doctor.plan, 'consultation')) redirect('/appointments')
 
   const { data: apt } = await supabase
     .from('appointments')
