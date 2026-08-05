@@ -121,7 +121,7 @@ export default function PolitiqueConfidentialite() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-1">Politique de confidentialité</h1>
-              <p className="text-sm text-gray-400">Dernière mise à jour : mai 2026 — Version 1.0</p>
+              <p className="text-sm text-gray-400">Dernière mise à jour : août 2026 — Version 1.1</p>
               <div className="h-1 w-16 bg-green-500 rounded-full mt-3" />
             </div>
           </div>
@@ -183,6 +183,30 @@ export default function PolitiqueConfidentialite() {
             {/* ─── 3. Données collectées ─── */}
             <Section id="donnees" number="3" title="Données collectées">
 
+              <SubSection title="3.0 Deux niveaux de collecte selon le forfait du médecin :">
+                <p className="text-gray-600 leading-relaxed">
+                  L&apos;étendue des données collectées dépend du forfait souscrit par le médecin que
+                  vous consultez :
+                </p>
+                <ul className="list-disc list-inside text-gray-600 space-y-1.5 ml-1 mt-2">
+                  <li>
+                    <strong>Forfait Agenda</strong> — la collecte se limite à la prise de rendez-vous :
+                    nom, prénom, téléphone, date et heure du rendez-vous, et éventuellement une note
+                    de contact. <strong>Aucune donnée de santé n&apos;est collectée ni conservée</strong> :
+                    ni date de naissance, ni sexe, ni antécédent, ni ordonnance.
+                  </li>
+                  <li>
+                    <strong>Forfait Cabinet complet</strong> — le médecin peut en outre tenir un dossier
+                    médical (antécédents, constantes, notes de consultation), éditer des ordonnances et
+                    des certificats, et établir une facturation. Ces données relèvent de la protection
+                    renforcée décrite à l&apos;article 6.
+                  </li>
+                </ul>
+                <p className="text-gray-600 leading-relaxed mt-2">
+                  Les tableaux ci-dessous précisent, pour chaque donnée, le forfait concerné.
+                </p>
+              </SubSection>
+
               <SubSection title="3.1 Données des patients :">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-gray-600 border-collapse">
@@ -228,6 +252,23 @@ export default function PolitiqueConfidentialite() {
                         <td className="p-3 border border-gray-200">Historique des rendez-vous</td>
                         <td className="p-3 border border-gray-200 text-center">✅ Oui</td>
                         <td className="p-3 border border-gray-200">Consultation via l&apos;espace patient personnel</td>
+                      </tr>
+                      <tr className="bg-gray-50">
+                        <td className="p-3 border border-gray-200">
+                          Date de naissance, sexe
+                          <span className="block text-xs text-primary-600 font-medium">Forfait Cabinet complet uniquement</span>
+                        </td>
+                        <td className="p-3 border border-gray-200 text-center">⬜ Non</td>
+                        <td className="p-3 border border-gray-200">Suivi médical (ex. courbes de croissance en pédiatrie)</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 border border-gray-200">
+                          Dossier médical : antécédents, allergies, traitements, constantes, notes,
+                          ordonnances, certificats
+                          <span className="block text-xs text-primary-600 font-medium">Forfait Cabinet complet uniquement</span>
+                        </td>
+                        <td className="p-3 border border-gray-200 text-center">⬜ Non</td>
+                        <td className="p-3 border border-gray-200">Tenue du dossier de soins par le médecin (voir article 6)</td>
                       </tr>
                     </tbody>
                   </table>
@@ -332,6 +373,15 @@ export default function PolitiqueConfidentialite() {
                 personnel</strong> au sens de l&apos;article 1er de la loi 09-08 (ex. : motif de consultation,
                 notes médicales du médecin). Ces données bénéficient d&apos;une protection renforcée.
               </p>
+              <InfoBox>
+                <p className="font-semibold mb-1">📋 Selon le forfait de votre médecin</p>
+                <p>
+                  Si votre médecin utilise le <strong>forfait Agenda</strong>, la plateforme ne collecte
+                  et ne conserve <strong>aucune donnée de santé</strong> vous concernant : seules vos
+                  coordonnées et l&apos;horaire de votre rendez-vous sont enregistrés. Le présent article
+                  ne s&apos;applique qu&apos;aux médecins ayant souscrit le <strong>forfait Cabinet complet</strong>.
+                </p>
+              </InfoBox>
               <p className="text-gray-600 leading-relaxed">
                 Conformément à l&apos;article 23 de la loi 09-08, le traitement de données de santé est
                 autorisé uniquement lorsque la personne concernée a donné son <strong>consentement exprès</strong>.

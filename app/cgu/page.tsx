@@ -119,7 +119,7 @@ export default function CGUPage() {
           <h1 className="text-3xl font-bold text-gray-900 mb-1">
             Conditions Générales d&apos;Utilisation
           </h1>
-          <p className="text-sm text-gray-400 mb-2">Dernière mise à jour : mai 2026 — Version 1.0</p>
+          <p className="text-sm text-gray-400 mb-2">Dernière mise à jour : août 2026 — Version 1.1</p>
           <div className="h-1 w-16 bg-primary-500 rounded-full mb-10" />
 
           <div className="space-y-10">
@@ -180,7 +180,19 @@ export default function CGUPage() {
                   <li>L&apos;envoi de confirmations et rappels par email</li>
                   <li>La gestion d&apos;agenda pour les professionnels de santé</li>
                   <li>Un espace patient sécurisé pour consulter et annuler ses rendez-vous</li>
+                  <li>Selon le forfait souscrit par le médecin : la tenue de dossiers patients, l&apos;édition d&apos;ordonnances et de certificats, ainsi que la facturation du cabinet</li>
                 </ul>
+              </SubSection>
+
+              <SubSection title="Deux niveaux de service :">
+                <p className="text-gray-600 leading-relaxed">
+                  Les fonctionnalités accessibles dépendent du forfait souscrit par le médecin (voir article 9).
+                  Sous le forfait <strong>Agenda</strong>, la plateforme se limite à la prise de rendez-vous :
+                  <strong> aucune donnée de santé n&apos;est collectée ni conservée</strong>. Sous le forfait
+                  <strong> Cabinet complet</strong>, le médecin dispose en outre d&apos;outils de gestion médicale
+                  (dossiers, ordonnances, certificats) et administrative (facturation), dont il est le
+                  responsable de traitement.
+                </p>
               </SubSection>
 
               <InfoBox>
@@ -296,35 +308,94 @@ export default function CGUPage() {
 
             {/* ─── 9. Abonnement ─── */}
             <Section id="abonnement" number="9" title="Abonnement médecin">
-              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">299<br/>DH</span>
+              <p className="text-gray-600 leading-relaxed mb-4">
+                MonRDV est proposé au choix sous <strong>deux forfaits mensuels</strong>. Tout compte nouvellement
+                créé démarre sous le forfait <strong>Agenda</strong> ; le passage au forfait
+                <strong> Cabinet complet</strong> s&apos;effectue à la demande du médecin depuis son espace
+                « Abonnement », et prend effet après confirmation du règlement.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Forfait Agenda */}
+                <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-gray-400 rounded-xl flex items-center justify-center shrink-0">
+                      <span className="text-white font-bold text-sm">149<br/>DH</span>
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-900 text-lg">Agenda</p>
+                      <p className="text-gray-500 text-sm">Gestion des rendez-vous</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-bold text-gray-900 text-lg">Abonnement mensuel</p>
-                    <p className="text-gray-500 text-sm">Accès à toutes les fonctionnalités professionnelles</p>
-                  </div>
+                  <ul className="text-sm text-gray-600 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      Profil public et page de réservation en ligne
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      Agenda illimité, salle d&apos;attente et présences
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      Confirmations, rappels et récapitulatif quotidien
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      Fiche patient limitée aux coordonnées (nom, prénom, téléphone, notes)
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-gray-300 mt-0.5">✕</span>
+                      <span className="text-gray-400">Aucune donnée de santé collectée ni conservée</span>
+                    </li>
+                  </ul>
                 </div>
-                <ul className="text-sm text-gray-600 space-y-2">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-0.5">✓</span>
-                    Profil public visible par les patients
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-0.5">✓</span>
-                    Agenda illimité, notifications email patients
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-0.5">✓</span>
-                    Récapitulatif quotidien par email
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-0.5">✓</span>
-                    Gestion des patients, notes médicales privées
-                  </li>
-                </ul>
+
+                {/* Forfait Cabinet complet */}
+                <div className="bg-primary-50 border-2 border-primary-200 rounded-2xl p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center shrink-0">
+                      <span className="text-white font-bold text-sm">299<br/>DH</span>
+                    </div>
+                    <div>
+                      <p className="font-bold text-gray-900 text-lg">Cabinet complet</p>
+                      <p className="text-gray-500 text-sm">Gestion complète du cabinet</p>
+                    </div>
+                  </div>
+                  <ul className="text-sm text-gray-600 space-y-2">
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      L&apos;ensemble des fonctionnalités du forfait Agenda
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      Dossiers patients et antécédents médicaux
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      Consultations, notes médicales et constantes
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      Ordonnances et certificats médicaux
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      Facturation, caisse et statistiques
+                    </li>
+                  </ul>
+                </div>
               </div>
+
+              <SubSection title="Changement de forfait :">
+                <p className="text-gray-600 leading-relaxed">
+                  Le médecin peut demander à tout moment le passage d&apos;un forfait à l&apos;autre.
+                  Le retour au forfait <strong>Agenda</strong> rend inaccessibles les fonctionnalités
+                  du forfait Cabinet complet ; <strong>les données déjà enregistrées ne sont pas supprimées</strong>
+                  et redeviennent accessibles en cas de retour au forfait Cabinet complet. Le médecin
+                  conserve à tout moment son droit d&apos;export et de suppression de ses données.
+                </p>
+              </SubSection>
 
               <SubSection title="Période d'essai :">
                 <p className="text-gray-600 leading-relaxed">
@@ -336,7 +407,7 @@ export default function CGUPage() {
 
               <SubSection title="Facturation et paiement :">
                 <ul className="list-disc list-inside text-gray-600 space-y-1.5 ml-1">
-                  <li>Le montant de l&apos;abonnement est de <strong>299 DHS (dirhams marocains) par mois</strong>, toutes taxes comprises</li>
+                  <li>Le montant de l&apos;abonnement est de <strong>149 DHS par mois</strong> pour le forfait Agenda et de <strong>299 DHS par mois</strong> pour le forfait Cabinet complet (dirhams marocains, toutes taxes comprises)</li>
                   <li>Le paiement s&apos;effectue par <strong>virement bancaire</strong> au début de chaque période mensuelle</li>
                   <li>Une facture est émise et envoyée par email à chaque règlement</li>
                   <li>L&apos;abonnement est renouvelé automatiquement chaque mois sauf résiliation explicite</li>
