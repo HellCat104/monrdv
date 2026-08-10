@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { displayName } from '@/lib/profession'
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -95,7 +96,7 @@ export default async function DashboardPage() {
       {/* En-tête */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          Bonjour, Dr. {doctor.name.split(' ')[0]} 👋
+          Bonjour, {displayName(doctor.name.split(' ')[0], doctor.specialty)} 👋
         </h1>
         <p className="text-gray-500 text-sm mt-1 capitalize">{todayFormatted}</p>
       </div>

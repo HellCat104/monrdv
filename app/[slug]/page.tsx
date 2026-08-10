@@ -1,5 +1,6 @@
 // Page publique de réservation — accessible via /dr-hassan ou /slug-medecin
 import { cache } from 'react'
+import { displayName } from '@/lib/profession'
 import { notFound } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { BookingPageClient } from './BookingPageClient'
@@ -33,10 +34,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!doctor) return { title: 'Médecin introuvable | MonRDV', robots: { index: false } }
 
   const cityPart = doctor.city ? ` à ${doctor.city}` : ''
-  const title = `Dr. ${doctor.name} — ${doctor.specialty}${cityPart} | MonRDV`
+  const title = `${displayName(doctor.name, doctor.specialty)} — ${doctor.specialty}${cityPart} | MonRDV`
   const description = doctor.bio
-    ? `${doctor.bio.substring(0, 120)}… Prenez rendez-vous en ligne avec Dr. ${doctor.name}${cityPart} sur MonRDV.`
-    : `Prenez rendez-vous en ligne avec Dr. ${doctor.name}, ${doctor.specialty}${cityPart}. Confirmation immédiate, disponible 24h/24 sur MonRDV.`
+    ? `${doctor.bio.substring(0, 120)}… Prenez rendez-vous en ligne avec ${displayName(doctor.name, doctor.specialty)}${cityPart} sur MonRDV.`
+    : `Prenez rendez-vous en ligne avec ${displayName(doctor.name, doctor.specialty)}, ${doctor.specialty}${cityPart}. Confirmation immédiate, disponible 24h/24 sur MonRDV.`
 
   const canonicalSlug = params.slug.startsWith('dr-') ? params.slug : `dr-${params.slug}`
 
@@ -44,7 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title,
     description,
     keywords: [
-      `Dr. ${doctor.name}`,
+      `${displayName(doctor.name, doctor.specialty)}`,
       `${doctor.specialty}${cityPart}`,
       `rendez-vous ${doctor.specialty}`,
       `médecin ${doctor.city ?? 'Maroc'}`,
@@ -87,7 +88,7 @@ export default async function BookingPage({ params }: Props) {
             <span className="text-3xl">⏸️</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Dr. {doctor.name} n&apos;est pas disponible
+            {displayName(doctor.name, doctor.specialty)} n&apos;est pas disponible
           </h1>
           <p className="text-gray-500 mb-8">
             Ce médecin ne prend pas de rendez-vous en ligne pour le moment.
@@ -117,7 +118,7 @@ export default async function BookingPage({ params }: Props) {
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Physician',
-    name: `Dr. ${doctor.name}`,
+    name: `${displayName(doctor.name, doctor.specialty)}`,
     medicalSpecialty: doctor.specialty,
     description: doctor.bio ?? `${doctor.specialty}${cityPart}. Prise de rendez-vous en ligne sur MonRDV.`,
     url: `${APP_URL}/${canonicalSlug}`,

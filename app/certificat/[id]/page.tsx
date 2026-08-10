@@ -1,5 +1,6 @@
 // Certificat médical imprimable — réservé au médecin propriétaire.
 import { createClient } from '@/lib/supabase/server'
+import { displayName } from '@/lib/profession'
 import { notFound, redirect } from 'next/navigation'
 import { formatDateFr } from '@/lib/utils'
 import { PrintBar } from './PrintBar'
@@ -34,7 +35,7 @@ export default async function CertificatPage({ params }: { params: { id: string 
       <div className="max-w-2xl mx-auto bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none print:px-0 print:py-0">
         {/* En-tête médecin — centré */}
         <header className="text-center border-b-2 border-gray-800 pb-4 mb-8">
-          <h1 className="text-lg font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
+          <h1 className="text-lg font-bold tracking-tight text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
           {doctor.specialty && <p className="text-[13px] text-gray-600 mt-0.5">{doctor.specialty}</p>}
           <p className="text-xs text-gray-500 mt-2">
             {[doctor.address, doctor.city].filter(Boolean).join(', ')}

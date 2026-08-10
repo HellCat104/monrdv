@@ -472,6 +472,19 @@ export const ATTENDANCE_COLORS: Record<NonNullable<AppointmentAttendance>, strin
 }
 
 // ── Comptes secrétaire (personnel du cabinet) ───────────────────────────────
+// Forfait de séances prépayées (psychologues, kinés, suivis réguliers)
+export interface SessionPackage {
+  id: string
+  doctor_id: string
+  patient_id: string
+  label: string | null
+  total_sessions: number
+  used_sessions: number
+  amount: number | null
+  status: 'actif' | 'termine' | 'annule'
+  created_at: string
+}
+
 export interface StaffPermissions {
   // Agenda & accueil
   agenda: boolean               // voir l'agenda

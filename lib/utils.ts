@@ -37,6 +37,15 @@ export function formatTime(time: string): string {
   return time.substring(0, 5)
 }
 
+// Horodatage d'une note (ex: « 12/08/2026 à 14:30 »).
+// Les timestamps sont stockés en UTC : on les ramène à l'heure du Maroc pour
+// afficher le moment où le praticien a réellement écrit la note.
+export function formatDateTimeFr(ts: string): string {
+  const d = parseISO(ts)
+  if (isNaN(d.getTime())) return formatDateShort(ts)
+  return formatInTimeZone(d, MAROC_TZ, "dd/MM/yyyy 'à' HH:mm")
+}
+
 // Génère tous les créneaux horaires d'une journée selon les horaires du médecin.
 // Exclut les créneaux qui chevauchent la pause déjeuner (si définie).
 // Normalise les pauses d'un jour : nouveau format (breaks[]) + ancien (breakStart/breakEnd)

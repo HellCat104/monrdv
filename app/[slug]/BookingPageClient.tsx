@@ -16,6 +16,7 @@ function waNumber(raw: string): string {
   return digits
 }
 import type { Doctor, TimeSlot, ConsultationType } from '@/types'
+import { displayName } from '@/lib/profession'
 
 // Chargement différé du calendrier — réduit le JS initial de ~30 kB
 const DatePicker = dynamic(
@@ -148,7 +149,7 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
             {doctor.photo_url ? (
               <Image
                 src={doctor.photo_url}
-                alt={`Dr. ${doctor.name}`}
+                alt={displayName(doctor.name, doctor.specialty)}
                 width={64}
                 height={64}
                 className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-gray-100"

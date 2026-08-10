@@ -8,6 +8,7 @@ import { VACCINE_SCHEDULE, recommendedDate } from '@/lib/vaccines'
 import GrowthChart from '@/components/dashboard/GrowthChart'
 import { format } from 'date-fns'
 import { FolderHeart, Pill, Activity, Paperclip, HeartPulse, Download, Stethoscope, FileCheck, Baby, Syringe, Calendar } from 'lucide-react'
+import { displayName } from '@/lib/profession'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,7 +109,7 @@ export default async function MonDossierPage() {
               return (
                 <div key={f.id} className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5 space-y-3">
                   <p className="font-semibold text-gray-900">{f.first_name} {f.last_name}
-                    <span className="text-xs text-gray-400 font-normal"> · suivi par Dr. {f.doctor?.name}</span>
+                    <span className="text-xs text-gray-400 font-normal"> · suivi par {displayName(f.doctor?.name ?? '', f.doctor?.specialty)}</span>
                   </p>
 
                   {/* Prochain RDV */}
@@ -151,7 +152,7 @@ export default async function MonDossierPage() {
             {fiches.filter((f) => f.allergies || f.chronic_conditions || f.current_treatments).map((f) => (
               <div key={f.id} className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5 text-sm space-y-1.5">
                 <p className="text-xs text-gray-400 flex items-center gap-1.5">
-                  <Stethoscope className="h-3.5 w-3.5" /> Dossier chez Dr. {f.doctor?.name} · {f.doctor?.specialty}
+                  <Stethoscope className="h-3.5 w-3.5" /> Dossier chez {displayName(f.doctor?.name ?? '', f.doctor?.specialty)} · {f.doctor?.specialty}
                 </p>
                 {f.allergies && <p className="text-red-600"><b>Allergies :</b> {f.allergies}</p>}
                 {f.chronic_conditions && <p className="text-gray-700"><b>Antécédents :</b> {f.chronic_conditions}</p>}
@@ -174,7 +175,7 @@ export default async function MonDossierPage() {
               return (
                 <div key={p.id} className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-5">
                   <p className="text-xs text-gray-400 mb-2 capitalize">
-                    {formatDateFr(p.created_at)}{doc ? ` — prescrite par Dr. ${doc.name}` : ''}
+                    {formatDateFr(p.created_at)}{doc ? ` — prescrite par ${displayName(doc.name, doc.specialty)}` : ''}
                   </p>
                   {/* Copie informative : filigrane + pas d'en-tête officiel ni d'impression */}
                   <div className="relative overflow-hidden select-none">
@@ -208,7 +209,7 @@ export default async function MonDossierPage() {
                 <div key={ct.id} className="p-3.5 sm:px-5">
                   <p className="text-sm text-gray-800">{ct.title}</p>
                   <p className="text-[11px] text-gray-400 capitalize">
-                    {formatDateFr(ct.created_at)}{ct.motif ? ` · motif : ${ct.motif}` : ''}{doc ? ` · Dr. ${doc.name}` : ''}
+                    {formatDateFr(ct.created_at)}{ct.motif ? ` · motif : ${ct.motif}` : ''}{doc ? ` · ${displayName(doc.name, doc.specialty)}` : ''}
                   </p>
                 </div>
               )

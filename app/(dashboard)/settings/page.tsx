@@ -697,6 +697,7 @@ export default function SettingsPage() {
                   <SelectItem value="30">30 minutes</SelectItem>
                   <SelectItem value="45">45 minutes</SelectItem>
                   <SelectItem value="60">1 heure</SelectItem>
+                  <SelectItem value="90">1 h 30</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-sm text-gray-500">par consultation</p>

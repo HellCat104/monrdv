@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { displayName } from '@/lib/profession'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -154,7 +155,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
         </div>
         <h3 className="text-xl font-bold text-gray-900">Rendez-vous confirmé !</h3>
         <p className="text-gray-600 text-sm">
-          Votre rendez-vous avec <strong>Dr. {doctor.name}</strong> est prévu le{' '}
+          Votre rendez-vous avec <strong>{displayName(doctor.name, doctor.specialty)}</strong> est prévu le{' '}
           <strong>{formatDateShort(selectedDate)}</strong> à{' '}
           <strong>{formatTime(selectedTime)}</strong>.
         </p>
@@ -201,7 +202,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
         <p className="text-lg font-bold text-primary-900 mt-1">
           {formatDateShort(selectedDate)} à {formatTime(selectedTime)}
         </p>
-        <p className="text-xs text-primary-600">Dr. {doctor.name} — {doctor.specialty}</p>
+        <p className="text-xs text-primary-600">{displayName(doctor.name, doctor.specialty)} — {doctor.specialty}</p>
         {consultationType && (
           <p className="text-xs text-primary-600 mt-0.5">
             Motif : <strong>{consultationType.name}</strong> ({consultationType.duration_minutes} min)
@@ -398,7 +399,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
             />
             <span className="text-xs text-blue-800 leading-relaxed">
               J&apos;accepte que mes données personnelles (nom, téléphone, motif) soient transmises à{' '}
-              <strong>Dr. {doctor.name}</strong> dans le seul but de gérer mon rendez-vous médical,
+              <strong>{displayName(doctor.name, doctor.specialty)}</strong> dans le seul but de gérer mon rendez-vous médical,
               conformément à la{' '}
               <a href="/politique-confidentialite" target="_blank" className="underline hover:text-primary-600">
                 politique de confidentialité

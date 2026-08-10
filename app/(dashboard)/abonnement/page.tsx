@@ -5,10 +5,12 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PLAN_LABELS, PLAN_PRICES_DHS, normalizePlan, type DoctorPlan } from '@/lib/plan'
+import { displayName } from '@/lib/profession'
 import { CreditCard, CheckCircle2, AlertTriangle, XCircle, Clock, ArrowUpRight, Check } from 'lucide-react'
 
 interface DoctorSub {
   name: string
+  specialty: string | null
   date_expiration: string | null
   subscription_status: string
   plan: string | null
@@ -46,7 +48,7 @@ export default function AbonnementPage() {
     if (!user) return
     const { data } = await supabase
       .from('doctors')
-      .select('name, date_expiration, subscription_status, plan, pending_plan, price_hidden')
+      .select('name, specialty, date_expiration, subscription_status, plan, pending_plan, price_hidden')
       .eq('email', user.email)
       .single()
     if (data) {
@@ -91,12 +93,12 @@ export default function AbonnementPage() {
 
   const whatsappMessage = encodeURIComponent(
     priceHidden
-      ? `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement pour renouveler mon abonnement.`
-      : `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je viens d'effectuer le paiement de ${price} DHS pour renouveler mon abonnement (forfait ${PLAN_LABELS[plan]}).`
+      ? `Bonjour, je suis ${displayName(doctor?.name ?? '', doctor?.specialty)} sur MonRDV. Je viens d'effectuer le paiement pour renouveler mon abonnement.`
+      : `Bonjour, je suis ${displayName(doctor?.name ?? '', doctor?.specialty)} sur MonRDV. Je viens d'effectuer le paiement de ${price} DHS pour renouveler mon abonnement (forfait ${PLAN_LABELS[plan]}).`
   )
 
   const upgradeMessage = encodeURIComponent(
-    `Bonjour, je suis Dr. ${doctor?.name ?? ''} sur MonRDV. Je souhaite passer au forfait Cabinet complet${priceHidden ? '' : ` (${PLAN_PRICES_DHS.complet} DHS / mois)`}.`
+    `Bonjour, je suis ${displayName(doctor?.name ?? '', doctor?.specialty)} sur MonRDV. Je souhaite passer au forfait Cabinet complet${priceHidden ? '' : ` (${PLAN_PRICES_DHS.complet} DHS / mois)`}.`
   )
 
   return (

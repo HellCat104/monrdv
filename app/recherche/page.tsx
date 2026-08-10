@@ -3,6 +3,7 @@
 // Note : les pages 'use client' ne peuvent pas exporter metadata directement.
 // Le metadata est géré par app/recherche/layout.tsx
 import { useEffect, useState } from 'react'
+import { displayName } from '@/lib/profession'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, MapPin, Clock, Stethoscope, ArrowLeft, Calendar } from 'lucide-react'
@@ -181,7 +182,7 @@ function RechercheContent() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={doctor.photo_url}
-                      alt={`Dr. ${doctor.name}`}
+                      alt={displayName(doctor.name, doctor.specialty)}
                       className="w-14 h-14 rounded-2xl object-cover shrink-0"
                     />
                   ) : (
@@ -192,7 +193,7 @@ function RechercheContent() {
 
                   {/* Infos */}
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-gray-900">Dr. {doctor.name}</h3>
+                    <h3 className="font-bold text-gray-900">{displayName(doctor.name, doctor.specialty)}</h3>
                     <p className="text-primary-600 text-sm font-medium">{specialite || doctor.specialty}</p>
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 flex-wrap">
                       <span className="flex items-center gap-1">

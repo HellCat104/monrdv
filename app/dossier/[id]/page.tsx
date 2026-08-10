@@ -1,6 +1,7 @@
 // Dossier patient complet, imprimable (continuité + conservation légale).
 // Accessible uniquement par le médecin propriétaire du patient.
 import { notFound, redirect } from 'next/navigation'
+import { displayName } from '@/lib/profession'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
@@ -88,7 +89,7 @@ export default async function DossierPage({ params }: Props) {
         {/* En-tête médecin */}
         <div className="flex justify-between items-start border-b border-gray-200 pb-5 mb-6">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Dr. {doctor.name}</h1>
+            <h1 className="text-lg font-bold text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
             <p className="text-sm text-gray-500">{doctor.specialty}</p>
             {doctor.address && <p className="text-xs text-gray-500 mt-1">{doctor.address}{doctor.city ? `, ${doctor.city}` : ''}</p>}
             {doctor.phone && <p className="text-xs text-gray-500">Tél : {doctor.phone}</p>}

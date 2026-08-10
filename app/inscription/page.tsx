@@ -56,11 +56,6 @@ export default function InscriptionPage() {
     e.preventDefault()
     setError('')
 
-    if (!form.cnom_number.trim()) {
-      setError('Veuillez entrer votre numéro CNOM')
-      return
-    }
-
     if (!form.specialty) {
       setError('Veuillez choisir votre spécialité')
       return
@@ -292,7 +287,7 @@ export default function InscriptionPage() {
 
               {/* Numéro CNOM */}
               <div className="space-y-1.5">
-                <Label htmlFor="cnom_number">Numéro CNOM *</Label>
+                <Label htmlFor="cnom_number">Numéro CNOM (optionnel)</Label>
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
@@ -301,10 +296,9 @@ export default function InscriptionPage() {
                     onChange={(e) => setForm({ ...form, cnom_number: e.target.value })}
                     placeholder="Ex : 12345"
                     className="pl-9"
-                    required
                   />
                 </div>
-                <p className="text-xs text-gray-400">Numéro d'inscription au Conseil National de l'Ordre des Médecins du Maroc</p>
+                <p className="text-xs text-gray-400">Numéro d&apos;inscription à l&apos;Ordre des Médecins. À laisser vide si votre profession n&apos;en délivre pas (psychologue, kinésithérapeute…).</p>
               </div>
 
               {/* Code délégué — facultatif, sert au suivi commercial */}

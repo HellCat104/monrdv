@@ -5,6 +5,7 @@ import { Calendar, Clock, Search, CheckCircle2, XCircle, AlertCircle } from 'luc
 import { formatDateShort, formatTime, getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CancelButton } from './CancelButton'
+import { displayName } from '@/lib/profession'
 
 interface AppointmentRow {
   id: string
@@ -154,7 +155,7 @@ function AppointmentCard({ apt, isPast = false, childName = null }: { apt: Appoi
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-semibold text-gray-900 text-sm sm:text-base truncate">
-                Dr. {apt.doctor?.name ?? '—'}
+                {apt.doctor?.name ? displayName(apt.doctor.name, apt.doctor.specialty) : '—'}
                 {childName && (
                   <span className="ml-1.5 text-[11px] font-medium bg-pink-50 text-pink-600 px-1.5 py-0.5 rounded-full align-middle">
                     👶 pour {childName}

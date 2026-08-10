@@ -10,16 +10,17 @@ import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
 import { isDentalDoctor } from '@/lib/dental'
+import { isNonPrescriber } from '@/lib/profession'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getInitials, formatDateFr, formatDateShort, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
+import { getInitials, formatDateFr, formatDateShort, formatDateTimeFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { BLOOD_GROUPS, MUTUELLES_MAROC, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
-  type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef } from '@/types'
+  type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef, type SessionPackage } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
-  Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users } from 'lucide-react'
+  Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users, Ticket } from 'lucide-react'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -38,6 +39,8 @@ export default function PatientDossier({
   const router = useRouter()
   const patient = initialPatient
   const isPsy = isPsychiatricDoctor(specialties)
+  // Psychologue, kinésithérapeute… : ni ordonnances, ni titre de « Docteur »
+  const nonPrescriber = isNonPrescriber(specialties)
 
   // Champs éditables de la fiche
   const [editAge, setEditAge] = useState(patient.age != null ? String(patient.age) : '')
@@ -81,6 +84,7 @@ export default function PatientDossier({
   const [recalls, setRecalls] = useState<Recall[]>([])
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [vitals, setVitals] = useState<VitalSign[]>([])
+  const [packages, setPackages] = useState<SessionPackage[]>([])
   const [loading, setLoading] = useState(true)
 
   // Ajouts
@@ -92,10 +96,14 @@ export default function PatientDossier({
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [vitalInput, setVitalInput] = useState<Record<string, string>>({})
   const [savingVital, setSavingVital] = useState(false)
+  const [pkgTotal, setPkgTotal] = useState('10')
+  const [pkgAmount, setPkgAmount] = useState('')
+  const [pkgLabel, setPkgLabel] = useState('')
+  const [savingPkg, setSavingPkg] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [aptRes, notesRes, presRes, recallsRes, docsRes, vitalsRes, certsRes] = await Promise.all([
+    const [aptRes, notesRes, presRes, recallsRes, docsRes, vitalsRes, certsRes, pkgRes] = await Promise.all([
       supabase.from('appointments').select('*, patient:patients(*)').eq('patient_id', patient.id).order('date', { ascending: false }).order('time', { ascending: false }),
       supabase.from('consultation_notes').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
       supabase.from('prescriptions').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
@@ -103,6 +111,7 @@ export default function PatientDossier({
       supabase.from('patient_documents').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
       supabase.from('vital_signs').select('*').eq('patient_id', patient.id).order('measured_at', { ascending: false }),
       supabase.from('certificates').select('id, title, motif, created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }),
+      supabase.from('session_packages').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
     ])
     // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »)
     setAppts(await withConsultationSummary(supabase, aptRes.data ?? []))
@@ -112,6 +121,7 @@ export default function PatientDossier({
     setDocuments(docsRes.data ?? [])
     setVitals(vitalsRes.data ?? [])
     setCertificates(certsRes.data ?? [])
+    setPackages(pkgRes.data ?? [])
     setLoading(false)
   }, [patient.id, supabase])
   useEffect(() => { load() }, [load])
@@ -233,6 +243,34 @@ export default function PatientDossier({
     const { error } = await supabase.from('consultation_notes').delete().eq('id', id)
     if (error) { alert('La suppression a échoué (une note signée ne peut pas être supprimée).'); return }
     setConsultNotes((prev) => prev.filter((n) => n.id !== id))
+  }
+
+  // ── Forfaits de séances prépayées ────────────────────────────────────────
+  async function addPackage() {
+    const total = Number(pkgTotal)
+    if (!Number.isFinite(total) || total < 1) { alert('Indiquez un nombre de séances valide.'); return }
+    setSavingPkg(true)
+    const { data, error } = await supabase.from('session_packages').insert({
+      doctor_id: doctorId,
+      patient_id: patient.id,
+      label: pkgLabel.trim() || null,
+      total_sessions: total,
+      amount: pkgAmount ? Number(pkgAmount) : null,
+    }).select().single()
+    setSavingPkg(false)
+    if (error || !data) { alert("Le forfait n'a pas pu être créé."); return }
+    setPackages((prev) => [data, ...prev])
+    setPkgLabel(''); setPkgAmount(''); setPkgTotal('10')
+  }
+
+  // Consomme (ou rend) une séance. Le passage en « terminé » est géré en base.
+  async function useSession(pkg: SessionPackage, delta: 1 | -1) {
+    const next = pkg.used_sessions + delta
+    if (next < 0 || next > pkg.total_sessions) return
+    const { data, error } = await supabase.from('session_packages')
+      .update({ used_sessions: next }).eq('id', pkg.id).select().single()
+    if (error || !data) { alert("La mise à jour du forfait a échoué."); return }
+    setPackages((prev) => prev.map((p) => (p.id === pkg.id ? data : p)))
   }
 
   async function addRecall() {
@@ -541,8 +579,64 @@ export default function PatientDossier({
             )}
           </div>
 
-          {/* Ordonnances */}
-          {prescriptions.length > 0 && (
+          {/* Forfaits de séances prépayées */}
+          <div className={sec}>
+            <div className={secTitle}><span className="flex items-center gap-1.5"><Ticket className="h-4 w-4" /> Forfait séances</span></div>
+
+            {packages.filter((p) => p.status !== 'annule').length === 0 ? (
+              <p className="text-xs text-gray-400 italic mb-2">Aucun forfait. Créez-en un pour suivre les séances prépayées.</p>
+            ) : (
+              <ul className="space-y-2 mb-3">
+                {packages.filter((p) => p.status !== 'annule').map((p) => {
+                  const left = p.total_sessions - p.used_sessions
+                  const pct = Math.round((p.used_sessions / p.total_sessions) * 100)
+                  const done = p.status === 'termine'
+                  return (
+                    <li key={p.id} className={`rounded-lg p-2.5 ${done ? 'bg-gray-50' : 'bg-primary-50/60'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-gray-800 truncate">
+                          {p.label || `Forfait ${p.total_sessions} séances`}
+                        </span>
+                        <span className={`text-[11px] font-semibold shrink-0 ${done ? 'text-gray-400' : 'text-primary-600'}`}>
+                          {done ? 'Terminé' : `${left} restante${left > 1 ? 's' : ''}`}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-gray-200 mt-2 overflow-hidden">
+                        <div className={`h-full rounded-full ${done ? 'bg-gray-400' : 'bg-primary-500'}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-1.5">
+                        <span className="text-[11px] text-gray-500">
+                          {p.used_sessions}/{p.total_sessions} utilisées
+                          {p.amount != null && <> · {p.amount} DH</>}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <button onClick={() => useSession(p, -1)} disabled={p.used_sessions === 0}
+                            className="text-[11px] px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-white disabled:opacity-30" title="Retirer une séance">−</button>
+                          <button onClick={() => useSession(p, 1)} disabled={left === 0}
+                            className="text-[11px] px-2 py-0.5 rounded bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-30">Utiliser</button>
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <input value={pkgLabel} onChange={(e) => setPkgLabel(e.target.value)} placeholder="Intitulé (optionnel)"
+                className="flex-1 min-w-[110px] text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
+              <input value={pkgTotal} onChange={(e) => setPkgTotal(e.target.value)} type="number" min="1" placeholder="Nb"
+                className="w-14 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
+              <input value={pkgAmount} onChange={(e) => setPkgAmount(e.target.value)} type="number" min="0" placeholder="DH"
+                className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
+              <Button size="sm" onClick={addPackage} disabled={savingPkg} className="h-[30px] text-xs">
+                {savingPkg ? '…' : 'Créer'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Ordonnances — masquées pour les professions non prescriptrices */}
+          {!nonPrescriber && prescriptions.length > 0 && (
             <div className={sec}>
               <div className={secTitle}><span className="flex items-center gap-1.5"><Pill className="h-4 w-4" /> Ordonnances ({prescriptions.length})</span></div>
               <ul className="space-y-1.5">
@@ -680,7 +774,7 @@ export default function PatientDossier({
               {consultNotes.slice(0, 8).map((n) => (
                 <div key={n.id} className={`rounded-lg p-2.5 ${n.signed_at ? 'bg-green-50/70 border border-green-100' : 'bg-gray-50'}`}>
                   <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <p className="text-[11px] text-gray-400">{formatDateShort(n.created_at)}</p>
+                    <p className="text-[11px] font-medium text-gray-500">Note du {formatDateTimeFr(n.created_at)}</p>
                     {n.signed_at ? (
                       <span className="text-[10px] text-green-600 font-medium flex items-center gap-0.5"><Check className="h-3 w-3" /> Signée</span>
                     ) : (

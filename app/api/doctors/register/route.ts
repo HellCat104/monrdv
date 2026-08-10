@@ -32,7 +32,9 @@ export async function POST(req: NextRequest) {
   const withSecretary = !!(secName && secEmail)
 
   // Validation stricte
-  if (!name || !email || !password || !specialty || !slug || !cnom_number || !city) {
+  // Le CNOM n'est pas exigé : les psychologues, kinésithérapeutes et autres
+  // professions non médicales n'en ont pas.
+  if (!name || !email || !password || !specialty || !slug || !city) {
     return NextResponse.json({ error: 'Tous les champs obligatoires doivent être remplis (dont la ville)' }, { status: 400 })
   }
 
@@ -110,7 +112,7 @@ export async function POST(req: NextRequest) {
       phone: phone || null,
       city: city || null,
       slug,
-      cnom_number,
+      cnom_number: cnom_number || null,
       status: 'pending',
       appointment_duration: 30,
       has_secretary: withSecretary,

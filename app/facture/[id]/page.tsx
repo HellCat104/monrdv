@@ -1,6 +1,7 @@
 // Facture / reçu imprimable d'un rendez-vous payé.
 // Accessible uniquement par le médecin propriétaire du RDV.
 import { notFound, redirect } from 'next/navigation'
+import { displayName } from '@/lib/profession'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatTime } from '@/lib/utils'
 import { PrintButton } from './PrintButton'
@@ -71,7 +72,7 @@ export default async function FacturePage({ params }: Props) {
         {/* En-tête médecin */}
         <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Dr. {doctor.name}</h1>
+            <h1 className="text-xl font-bold text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
             <p className="text-sm text-gray-500">{doctor.specialty}</p>
             {doctor.address && <p className="text-sm text-gray-500 mt-1">{doctor.address}</p>}
             {doctor.city && <p className="text-sm text-gray-500">{doctor.city}</p>}

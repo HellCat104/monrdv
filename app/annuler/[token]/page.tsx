@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { formatDateShort, formatTime } from '@/lib/utils'
 import { XCircle } from 'lucide-react'
 import { CancelConfirm } from './CancelConfirm'
+import { displayName } from '@/lib/profession'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,7 +46,7 @@ export default async function AnnulerPage({ params }: { params: { token: string 
         <h1 className="text-xl font-bold text-gray-900 mb-2">Annuler ce rendez-vous ?</h1>
         <div className="bg-gray-50 rounded-xl p-4 my-4 text-left">
           <p className="text-sm text-gray-700">
-            <strong>Dr. {doctor?.name ?? ''}</strong>
+            <strong>{displayName(doctor?.name ?? '', doctor?.specialty)}</strong>
             {doctor?.specialty ? ` — ${doctor.specialty}` : ''}
           </p>
           <p className="text-sm text-gray-700 mt-1">
