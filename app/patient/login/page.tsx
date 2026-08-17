@@ -30,6 +30,25 @@ export default function PatientLoginPage() {
     setError(null); setSuccess(null); setLoading(false)
   }
 
+  // Traduit les messages d'erreur Supabase (anglais, parfois vides) en français.
+  // Sans ce filtre, un échec d'envoi d'e-mail s'affichait au patient sous la
+  // forme « {} » — le corps de la réponse d'erreur, vide.
+  function messageErreur(brut?: string | null): string {
+    const m = (brut ?? '').toLowerCase().trim()
+    if (!m || m === '{}') return "La création du compte a échoué. Merci de réessayer dans quelques minutes."
+    if (m.includes('already registered') || m.includes('already been registered'))
+      return 'Cet email est déjà utilisé. Connectez-vous.'
+    if (m.includes('sending confirmation email') || m.includes('sending email'))
+      return "Impossible d'envoyer l'email de confirmation pour le moment. Réessayez dans quelques minutes."
+    if (m.includes('rate limit') || m.includes('too many'))
+      return 'Trop de tentatives. Patientez quelques minutes avant de réessayer.'
+    if (m.includes('invalid email') || m.includes('invalid format'))
+      return "Cette adresse email n'est pas valide."
+    if (m.includes('password')) return 'Le mot de passe doit contenir au moins 6 caractères.'
+    if (m.includes('invalid login')) return 'Email ou mot de passe incorrect.'
+    return "Une erreur est survenue. Merci de réessayer."
+  }
+
   function goBack() {
     setMode('home'); reset()
     setPassword(''); setConfirm('')
@@ -68,11 +87,11 @@ export default function PatientLoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (error) {
-      if (error.message.includes('Invalid login')) {
-        setError('Email ou mot de passe incorrect.')
-      } else {
-        setError(error.message)
-      }
+      // Cas fréquent avec la confirmation activée : le compte existe mais
+      // l'e-mail n'a pas encore été validé.
+      setError(/not confirmed|email not confirmed/i.test(error.message)
+        ? "Votre compte n'est pas encore activé. Ouvrez l'email de confirmation que nous vous avons envoyé."
+        : messageErreur(error.message))
     } else {
       router.push('/patient/dashboard')
     }
@@ -87,23 +106,24 @@ export default function PatientLoginPage() {
     if (!consentMedical)      { setError('Vous devez accepter le stockage de vos données médicales.'); return }
     setLoading(true); setError(null)
     const supabase = createClient()
-    const { error } = await supabase.auth.signUp({ email, password })
+    // Le lien de l'e-mail de confirmation doit revenir sur notre callback, qui
+    // échange le code contre une session et redirige vers l'espace patient.
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/api/auth/callback?next=/patient/dashboard` },
+    })
     setLoading(false)
-    if (error) {
-      if (error.message.includes('already registered')) {
-        setError('Cet email est déjà utilisé. Connectez-vous.')
-      } else {
-        setError(error.message)
-      }
+
+    if (error) { setError(messageErreur(error.message)); return }
+
+    // Session présente = confirmation désactivée côté Supabase : on entre directement.
+    // Session absente = un e-mail de confirmation vient de partir.
+    if (data.session) {
+      router.push('/patient/dashboard')
     } else {
-      // Connexion directe après inscription (email_confirm désactivé dans Supabase)
-      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password })
-      if (!loginErr) {
-        router.push('/patient/dashboard')
-      } else {
-        setSuccess('Compte créé ! Vérifiez votre email pour confirmer, puis connectez-vous.')
-        setMode('email-login')
-      }
+      setSuccess(`Compte créé. Un email de confirmation vient d'être envoyé à ${email}. Ouvrez-le pour activer votre compte (pensez à vérifier vos spams).`)
+      setMode('email-login')
     }
   }
 
