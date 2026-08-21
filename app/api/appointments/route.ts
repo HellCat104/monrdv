@@ -1,7 +1,7 @@
 // API : liste et création de rendez-vous
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { sendNewAppointmentToDoctor, sendAppointmentConfirmationToPatient } from '@/lib/email'
+import { sendAppointmentConfirmationToPatient } from '@/lib/email'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks, toMinutes } from '@/lib/utils'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { randomUUID } from 'crypto'
@@ -454,21 +454,6 @@ export async function POST(req: NextRequest) {
   // Envoi des emails — AWAIT obligatoire en serverless, sinon la fonction
   // se termine avant que l'email parte (les promesses non attendues sont tuées).
   const emailTasks: Promise<unknown>[] = []
-
-  // Email de notification au médecin (nouveau RDV)
-  if (doctor) {
-    emailTasks.push(
-      sendNewAppointmentToDoctor({
-        doctorEmail: doctor.email,
-        doctorName: doctor.name,
-        patientName,
-        patientPhone: formattedPhone,
-        date,
-        time,
-        notes: safeNotes,
-      }).catch((err) => console.error('[Email] notif médecin:', err))
-    )
-  }
 
   // Email de confirmation au patient (si email fourni)
   if (safeEmail && doctor) {

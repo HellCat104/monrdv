@@ -152,57 +152,6 @@ export async function sendRejectionEmail(params: {
   }
 }
 
-// Email envoyé au médecin quand un patient prend un nouveau RDV
-export async function sendNewAppointmentToDoctor(params: {
-  doctorEmail: string
-  doctorName: string
-  patientName: string
-  patientPhone: string
-  date: string
-  time: string
-  notes?: string
-}): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.doctorEmail,
-      subject: `📅 Nouveau RDV — ${params.patientName} le ${params.date} à ${params.time}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 22px;">Nouveau rendez-vous 📅</h1>
-          </div>
-          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
-            <p style="color: #374151;">Bonjour Dr. ${h(params.doctorName)},</p>
-            <p style="color: #374151;">Un nouveau rendez-vous a été pris via MonRDV :</p>
-            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-              <tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1; border-radius: 6px 0 0 6px;">Patient</td><td style="padding: 10px 14px;">${h(params.patientName)}</td></tr>
-              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Téléphone</td><td style="padding: 10px 14px;">${h(params.patientPhone)}</td></tr>
-              <tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1;">Date</td><td style="padding: 10px 14px;">${h(params.date)}</td></tr>
-              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Heure</td><td style="padding: 10px 14px;">${h(params.time)}</td></tr>
-              ${params.notes ? `<tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1;">Motif</td><td style="padding: 10px 14px;">${h(params.notes)}</td></tr>` : ''}
-            </table>
-            <div style="text-align: center; margin: 24px 0;">
-              <a href="${APP_URL}/appointments"
-                style="background: #0EA5E9; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold;">
-                Voir mon agenda
-              </a>
-            </div>
-            <p style="color: #9ca3af; font-size: 12px; text-align: center;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
-          </div>
-        </div>
-      `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur notif médecin:', error)
-    return false
-  }
-}
-
 // Email de confirmation envoyé au patient après réservation
 export async function sendAppointmentConfirmationToPatient(params: {
   patientEmail: string
