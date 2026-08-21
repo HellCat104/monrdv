@@ -14,6 +14,7 @@ import { fr } from 'date-fns/locale'
 import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban } from 'lucide-react'
 import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
 import DaySheet from '@/components/shared/DaySheet'
+import { PatientPicker, type PatientChoice } from '@/components/shared/PatientPicker'
 import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
 import { FileText, UserPlus } from 'lucide-react'
 
@@ -37,7 +38,9 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
 
   // Dialog nouveau RDV
   const [addOpen, setAddOpen] = useState(false)
-  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', birth_date: '', time: '', notes: '' })
+  const [form, setForm] = useState({ time: '', notes: '' })
+  // Patient du RDV : fiche existante choisie dans la liste, ou nouvelle fiche
+  const [patient, setPatient] = useState<PatientChoice>(null)
   const [typeId, setTypeId] = useState(NO_TYPE)
   const [recurFreq, setRecurFreq] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none')
   const [recurCount, setRecurCount] = useState(4)
@@ -161,6 +164,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   async function createRdv(e: React.FormEvent) {
     e.preventDefault()
     setAddError('')
+    if (!patient) { setAddError('Choisissez un patient existant ou renseignez ses coordonnées.'); return }
     setSaving(true)
     try {
       const res = await fetch('/api/cabinet/appointments', {
@@ -168,6 +172,9 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          ...(patient && 'patientId' in patient && patient.patientId
+            ? { patient_id: patient.patientId }
+            : patient?.newPatient ?? {}),
           date,
           consultation_type_id: typeId !== NO_TYPE ? typeId : undefined,
           recurrence: recurFreq !== 'none' ? { freq: recurFreq, count: recurCount } : undefined,
@@ -181,7 +188,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         alert(`${data.created ?? 1} rendez-vous créés${skipped > 0 ? ` · ${skipped} ignoré(s) (créneau déjà pris — à replacer à la main)` : ''}.`)
       }
       setAddOpen(false)
-      setForm({ first_name: '', last_name: '', phone: '', birth_date: '', time: '', notes: '' })
+      setForm({ time: '', notes: '' }); setPatient(null)
       setTypeId(NO_TYPE)
       setRecurFreq('none'); setRecurCount(4)
       await load(date)
@@ -476,26 +483,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Nouveau rendez-vous — {format(new Date(date + 'T12:00:00'), 'd MMMM', { locale: fr })}</DialogTitle></DialogHeader>
           <form onSubmit={createRdv} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="c_first">Prénom *</Label>
-                <Input id="c_first" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} placeholder="Mohammed" required />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="c_last">Nom *</Label>
-                <Input id="c_last" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} placeholder="Alami" required />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="c_phone">Téléphone *</Label>
-              <Input id="c_phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="06 12 34 56 78" required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="c_birth">Date de naissance</Label>
-              <Input id="c_birth" type="date" max={format(getNowInMaroc(), 'yyyy-MM-dd')} value={form.birth_date}
-                onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
-              {formatAge(form.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(form.birth_date)}</p>}
-            </div>
+            <PatientPicker onSearch={searchWalkInPatients} onChange={setPatient} showBirthDate />
             {types.length > 0 && (
               <div className="space-y-1.5">
                 <Label>Motif</Label>

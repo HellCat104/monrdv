@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { PatientPicker, type PatientChoice, type PatientLite } from '@/components/shared/PatientPicker'
 import { createClient } from '@/lib/supabase/client'
 import { formatAge } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -34,17 +35,25 @@ interface AddAppointmentDialogProps {
 // Valeur "aucun motif" du Select (durée de base du médecin)
 const NO_TYPE = '__none__'
 
+async function searchPatients(query: string): Promise<PatientLite[]> {
+  const supabase = createClient()
+  const { data } = await supabase
+    .from('patients')
+    .select('id, first_name, last_name, phone')
+    .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,phone.ilike.%${query}%`)
+    .limit(8)
+  return data ?? []
+}
+
 export function AddAppointmentDialog({
   open,
   onOpenChange,
   doctor,
   onSuccess,
 }: AddAppointmentDialogProps) {
+  // Patient du RDV : fiche existante choisie dans la liste, ou nouvelle fiche
+  const [patient, setPatient] = useState<PatientChoice>(null)
   const [form, setForm] = useState({
-    first_name: '',
-    last_name: '',
-    phone: '',
-    birth_date: '',
     date: '',
     time: '',
     notes: '',
@@ -90,6 +99,7 @@ export function AddAppointmentDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (!patient) { setError('Choisissez un patient existant ou renseignez ses coordonnées.'); return }
     setLoading(true)
 
     try {
@@ -98,6 +108,9 @@ export function AddAppointmentDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          ...(patient && 'patientId' in patient && patient.patientId
+            ? { patient_id: patient.patientId }
+            : patient?.newPatient ?? {}),
           doctor_id: doctor.id,
           consultation_type_id: typeId !== NO_TYPE ? typeId : undefined,
           recurrence: recurFreq !== 'none' ? { freq: recurFreq, count: recurCount } : undefined,
@@ -110,7 +123,7 @@ export function AddAppointmentDialog({
       }
       onSuccess()
       onOpenChange(false)
-      setForm({ first_name: '', last_name: '', phone: '', birth_date: '', date: '', time: '', notes: '' })
+      setForm({ date: '', time: '', notes: '' }); setPatient(null)
       setTypeId(NO_TYPE)
       setRecurFreq('none'); setRecurCount(4)
     } catch (err: unknown) {
@@ -130,52 +143,7 @@ export function AddAppointmentDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="first_name">Prénom *</Label>
-              <Input
-                id="first_name"
-                value={form.first_name}
-                onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                placeholder="Mohammed"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="last_name">Nom *</Label>
-              <Input
-                id="last_name"
-                value={form.last_name}
-                onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                placeholder="Alami"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="phone">Téléphone *</Label>
-            <Input
-              id="phone"
-              type="tel"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              placeholder="06 12 34 56 78"
-              required
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="a_birth">Date de naissance</Label>
-            <Input
-              id="a_birth"
-              type="date"
-              max={new Date().toISOString().slice(0, 10)}
-              value={form.birth_date}
-              onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
-            />
-            {formatAge(form.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(form.birth_date)}</p>}
-          </div>
+          <PatientPicker onSearch={searchPatients} onChange={setPatient} showBirthDate />
 
           {/* Motif (si le médecin a défini des motifs) — ajuste la durée du créneau */}
           {hasTypes && (

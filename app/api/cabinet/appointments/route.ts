@@ -123,11 +123,24 @@ export async function POST(req: NextRequest) {
   // Date de naissance : alimente d'emblée les modules pédiatriques (courbes, vaccins)
   const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.birth_date ?? '')) ? String(body.birth_date) : null
 
-  if (!first || !last || !phone || !date || !time) {
-    return NextResponse.json({ error: 'Champs requis manquants' }, { status: 400 })
+  // La secrétaire choisit soit une fiche existante (patient_id), soit elle en
+  // crée une nouvelle. L'e-mail conditionne l'envoi du rappel automatique.
+  const existingId = body.patient_id ? String(body.patient_id) : ''
+  const email = body.email ? sanitize(String(body.email)).substring(0, 254) : null
+
+  if (!date || !time) {
+    return NextResponse.json({ error: 'Date et heure requises' }, { status: 400 })
   }
-  if (!isValidPhoneMaroc(phone)) {
-    return NextResponse.json({ error: 'Numéro de téléphone invalide (format marocain, ex : 0612345678)' }, { status: 400 })
+  if (!existingId) {
+    if (!first || !last || !phone) {
+      return NextResponse.json({ error: 'Champs requis manquants' }, { status: 400 })
+    }
+    if (!isValidPhoneMaroc(phone)) {
+      return NextResponse.json({ error: 'Numéro de téléphone invalide (format marocain, ex : 0612345678)' }, { status: 400 })
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: 'E-mail invalide' }, { status: 400 })
+    }
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
     return NextResponse.json({ error: 'Format de date ou heure invalide' }, { status: 400 })
@@ -152,22 +165,33 @@ export async function POST(req: NextRequest) {
     if (ctype.duration_minutes) duration = ctype.duration_minutes
   }
 
-  // Dédoublonnage patient : téléphone + prénom + nom (même logique que la route principale)
-  const formattedPhone = formatPhoneMaroc(phone)
   let patientId: string
-  const { data: existing } = await admin.from('patients')
-    .select('id').eq('doctor_id', doctorId).eq('phone', formattedPhone)
-    .ilike('first_name', escapeLike(first)).ilike('last_name', escapeLike(last)).limit(1).maybeSingle()
-  if (existing) {
-    patientId = existing.id
-    // Complète la date de naissance si la fiche ne l'avait pas encore
-    if (birthDate) await admin.from('patients').update({ birth_date: birthDate, age: ageFromBirthDate(birthDate) }).eq('id', patientId).is('birth_date', null)
+  if (existingId) {
+    // Fiche choisie dans la liste : on vérifie qu'elle appartient bien à CE
+    // médecin, sinon la secrétaire pourrait rattacher un RDV au patient d'un
+    // autre cabinet en devinant un identifiant.
+    const { data: owned } = await admin.from('patients')
+      .select('id').eq('id', existingId).eq('doctor_id', doctorId).maybeSingle()
+    if (!owned) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
+    patientId = owned.id
   } else {
-    const { data: created, error: pErr } = await admin.from('patients')
-      .insert({ doctor_id: doctorId, first_name: first, last_name: last, phone: formattedPhone, birth_date: birthDate, age: ageFromBirthDate(birthDate) })
-      .select('id').single()
-    if (pErr || !created) return NextResponse.json({ error: 'Erreur création patient' }, { status: 500 })
-    patientId = created.id
+    // Dédoublonnage patient : téléphone + prénom + nom (même logique que la route principale)
+    const formattedPhone = formatPhoneMaroc(phone)
+    const { data: existing } = await admin.from('patients')
+      .select('id').eq('doctor_id', doctorId).eq('phone', formattedPhone)
+      .ilike('first_name', escapeLike(first)).ilike('last_name', escapeLike(last)).limit(1).maybeSingle()
+    if (existing) {
+      patientId = existing.id
+      // Complète les champs que la fiche n'avait pas encore
+      if (birthDate) await admin.from('patients').update({ birth_date: birthDate, age: ageFromBirthDate(birthDate) }).eq('id', patientId).is('birth_date', null)
+      if (email) await admin.from('patients').update({ email }).eq('id', patientId).is('email', null)
+    } else {
+      const { data: created, error: pErr } = await admin.from('patients')
+        .insert({ doctor_id: doctorId, first_name: first, last_name: last, phone: formattedPhone, email, birth_date: birthDate, age: ageFromBirthDate(birthDate) })
+        .select('id').single()
+      if (pErr || !created) return NextResponse.json({ error: 'Erreur création patient' }, { status: 500 })
+      patientId = created.id
+    }
   }
 
   // Spécialité : mono-spécialité → celle du médecin, sinon null (comme la route principale)

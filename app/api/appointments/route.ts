@@ -65,7 +65,15 @@ export async function POST(req: NextRequest) {
   } = body
 
   // Validation minimale
-  if (!doctor_id || !first_name || !last_name || !phone || !date || !time) {
+  // Le médecin peut désigner une fiche existante (patient_id) au lieu de
+  // ressaisir l'identité. Réservé à l'espace praticien : jamais côté public.
+  const pickedPatientId = !isPublic && body.patient_id ? String(body.patient_id) : ''
+
+  if (pickedPatientId) {
+    if (!doctor_id || !date || !time) {
+      return NextResponse.json({ error: 'Paramètre manquant' }, { status: 400 })
+    }
+  } else if (!doctor_id || !first_name || !last_name || !phone || !date || !time) {
     return NextResponse.json({ error: 'Champs obligatoires manquants' }, { status: 400 })
   }
 
@@ -284,7 +292,16 @@ export async function POST(req: NextRequest) {
   // fiable : deux homonymes avec des numéros différents = deux personnes distinctes.
   let patientId: string
 
-  const { data: existingPatient } = await db
+  // Fiche choisie dans la liste par le praticien : on confirme qu'elle lui
+  // appartient (le client RLS le garantit déjà, ce contrôle est explicite).
+  const { data: picked } = pickedPatientId
+    ? await db.from('patients').select('id').eq('id', pickedPatientId).eq('doctor_id', doctor_id).maybeSingle()
+    : { data: null }
+  if (pickedPatientId && !picked) {
+    return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
+  }
+
+  const { data: existingPatient } = pickedPatientId ? { data: null } : await db
     .from('patients')
     .select('id, user_id, email')
     .eq('doctor_id', doctor_id)
@@ -294,7 +311,9 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .maybeSingle()
 
-  if (existingPatient) {
+  if (picked) {
+    patientId = picked.id
+  } else if (existingPatient) {
     patientId = existingPatient.id
     // SÉCURITÉ — appropriation de dossier : on ne modifie une fiche PRÉEXISTANTE
     // (email, date de naissance…) et on ne la rattache à un compte QUE si ce compte
