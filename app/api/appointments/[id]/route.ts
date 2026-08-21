@@ -2,7 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
-import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor } from '@/lib/email'
+import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor, sendRescheduleEmailToPatient } from '@/lib/email'
+import { displayName } from '@/lib/profession'
+import { formatDateShort } from '@/lib/utils'
 
 // PATCH /api/appointments/[id] — modifie le statut (confirm/cancel)
 export async function PATCH(
@@ -112,6 +114,16 @@ export async function PATCH(
     }
   }
 
+  // Déplacement : on relit l'ancien créneau avant l'écriture, pour pouvoir le
+  // rappeler au patient (« ancien » barré / « nouveau » mis en avant).
+  const isReschedule = (date !== undefined || time !== undefined) && status !== 'cancelled'
+  let previous: { date: string; time: string } | null = null
+  if (isReschedule) {
+    const { data: prev } = await supabase.from('appointments')
+      .select('date, time').eq('id', params.id).eq('doctor_id', doctor.id).maybeSingle()
+    previous = prev ?? null
+  }
+
   const { data: appointment, error } = await supabase
     .from('appointments')
     .update(updates)
@@ -127,6 +139,23 @@ export async function PATCH(
       return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant' }, { status: 409 })
     }
     return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
+  }
+
+  // Email de déplacement — seulement si le créneau a réellement bougé
+  if (isReschedule && previous && appointment.patient?.email
+      && (previous.date !== appointment.date || previous.time !== appointment.time)) {
+    const { data: docInfo } = await supabase.from('doctors').select('specialty').eq('id', doctor.id).single()
+    await sendRescheduleEmailToPatient({
+      patientEmail: appointment.patient.email,
+      patientName: `${appointment.patient.first_name} ${appointment.patient.last_name}`.trim(),
+      doctorName: displayName(doctor.name, docInfo?.specialty),
+      specialty: docInfo?.specialty ?? '',
+      oldDate: formatDateShort(previous.date),
+      oldTime: previous.time,
+      newDate: formatDateShort(appointment.date),
+      newTime: appointment.time,
+      cancelToken: appointment.cancel_token ?? undefined,
+    }).catch((err) => console.error('[Email] déplacement patient:', err))
   }
 
   // Emails d'annulation si le statut devient "cancelled"

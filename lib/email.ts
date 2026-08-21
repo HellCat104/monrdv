@@ -463,6 +463,69 @@ export async function sendCancellationEmailToPatient(params: {
   }
 }
 
+// Email envoyé au patient quand son RDV est déplacé (par le médecin ou la
+// secrétaire). L'ancien créneau est rappelé pour lever toute ambiguïté, et le
+// lien d'annulation reste valable : le jeton ne change pas lors d'un
+// déplacement.
+export async function sendRescheduleEmailToPatient(params: {
+  patientEmail: string
+  patientName: string
+  doctorName: string          // déjà préfixé « Dr. » si la profession le justifie
+  specialty: string
+  oldDate: string
+  oldTime: string
+  newDate: string
+  newTime: string
+  cancelToken?: string
+}): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+
+  const cancelBlock = params.cancelToken
+    ? `<p style="color: #6b7280; font-size: 13px; text-align: center; margin-top: 18px;">
+         Ce créneau ne vous convient pas ?
+         <a href="${APP_URL}/annuler/${encodeURIComponent(params.cancelToken)}" style="color: #0EA5E9;">Annuler le rendez-vous</a>
+       </p>`
+    : ''
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.patientEmail,
+      subject: `🗓️ Votre RDV a été déplacé au ${params.newDate} à ${params.newTime}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 22px;">Rendez-vous déplacé 🗓️</h1>
+          </div>
+          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
+            <p style="color: #374151;">Votre rendez-vous avec ${h(params.doctorName)} — ${h(params.specialty)} a été déplacé.</p>
+
+            <div style="background: #f9fafb; border-left: 4px solid #d1d5db; padding: 12px 20px; margin: 18px 0; border-radius: 0 8px 8px 0;">
+              <p style="margin: 2px 0; color: #9ca3af; font-size: 13px;">Ancien créneau</p>
+              <p style="margin: 2px 0; color: #6b7280; text-decoration: line-through;">${h(params.oldDate)} à ${h(params.oldTime)}</p>
+            </div>
+
+            <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 16px 20px; margin: 18px 0; border-radius: 0 8px 8px 0;">
+              <p style="margin: 2px 0; color: #047857; font-size: 13px; font-weight: bold;">NOUVEAU CRÉNEAU</p>
+              <p style="margin: 4px 0; color: #065f46; font-size: 18px; font-weight: bold;">${h(params.newDate)} à ${h(params.newTime)}</p>
+            </div>
+
+            <p style="color: #6b7280; font-size: 14px;">Merci de noter ce changement. Un rappel vous sera envoyé la veille.</p>
+            ${cancelBlock}
+            <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-top: 20px;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+          </div>
+        </div>
+      `,
+    })
+    return true
+  } catch (error) {
+    console.error('[Email] Erreur déplacement patient:', error)
+    return false
+  }
+}
+
 // Email envoyé au médecin quand un patient annule son RDV
 export async function sendCancellationEmailToDoctor(params: {
   doctorEmail: string

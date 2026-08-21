@@ -4,7 +4,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
-import { sendAppointmentConfirmationToPatient } from '@/lib/email'
+import { sendAppointmentConfirmationToPatient, sendRescheduleEmailToPatient } from '@/lib/email'
+import { displayName } from '@/lib/profession'
+import { formatDateShort } from '@/lib/utils'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey, ageFromBirthDate } from '@/lib/utils'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { randomUUID } from 'crypto'
@@ -287,7 +289,7 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient()
   // Le RDV doit appartenir au cabinet de la secrétaire
   const { data: apt } = await admin.from('appointments')
-    .select('id, doctor_id, amount_due, invoice_no, consultation_type_id').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
+    .select('id, doctor_id, amount_due, invoice_no, consultation_type_id, date, time, cancel_token, patient:patients(first_name, last_name, email)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
   if (!apt) return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
 
   const patch: Record<string, unknown> = {}
@@ -368,6 +370,24 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Échec de la mise à jour' }, { status: 500 })
   }
   if (!updated) return NextResponse.json({ error: 'Échec de la mise à jour' }, { status: 500 })
+
+  // Déplacement : prévenir le patient, comme le fait la route médecin.
+  const moved = ('date' in body || 'time' in body) && body.status !== 'cancelled'
+  const pat = apt.patient as { first_name?: string; last_name?: string; email?: string } | null
+  if (moved && pat?.email && (apt.date !== updated.date || apt.time !== updated.time)) {
+    const { data: docInfo } = await admin.from('doctors').select('name, specialty').eq('id', ctx.doctor.id).single()
+    await sendRescheduleEmailToPatient({
+      patientEmail: pat.email,
+      patientName: `${pat.first_name ?? ''} ${pat.last_name ?? ''}`.trim(),
+      doctorName: displayName(docInfo?.name ?? '', docInfo?.specialty),
+      specialty: docInfo?.specialty ?? '',
+      oldDate: formatDateShort(String(apt.date)),
+      oldTime: String(apt.time),
+      newDate: formatDateShort(String(updated.date)),
+      newTime: String(updated.time),
+      cancelToken: updated.cancel_token ?? undefined,
+    }).catch((err) => console.error('[Email] déplacement patient (cabinet):', err))
+  }
 
   return NextResponse.json(updated)
 }
