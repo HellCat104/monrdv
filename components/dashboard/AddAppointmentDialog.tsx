@@ -118,8 +118,10 @@ export function AddAppointmentDialog({
         }),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Erreur lors de la création')
+        // Une erreur serveur peut renvoyer un corps vide : sans ce garde-fou,
+        // l'utilisateur voit « Unexpected end of JSON input » au lieu du motif.
+        const data = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(data.error || `Erreur lors de la création (${res.status})`)
       }
       onSuccess()
       onOpenChange(false)

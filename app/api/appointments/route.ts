@@ -93,13 +93,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Sanitisation et limites de longueur pour les champs texte
-  const sanitize = (s: string) => s.trim().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+  const sanitize = (s: unknown) => (typeof s === 'string' ? s : '').trim().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
   // Neutralise les jokers LIKE : sans ça, « % » sélectionne n'importe quel patient
   const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&')
-  const safeFirst  = sanitize(first_name).substring(0, 100)
-  const safeLast   = sanitize(last_name).substring(0, 100)
-  const safePhone  = sanitize(phone).substring(0, 20)
-  const safeEmail  = email ? sanitize(email).substring(0, 254) : undefined
+  let safeFirst  = sanitize(first_name).substring(0, 100)
+  let safeLast   = sanitize(last_name).substring(0, 100)
+  let safePhone  = sanitize(phone).substring(0, 20)
+  let safeEmail  = email ? sanitize(email).substring(0, 254) : undefined
   const safeNotes  = notes ? sanitize(notes).substring(0, 500) : undefined
   let safeAge      = age && Number.isInteger(age) && age > 0 && age <= 120 ? age : undefined
 
@@ -113,8 +113,8 @@ export async function POST(req: NextRequest) {
     ? Math.max(0, Math.floor((Date.now() - new Date(safeChildBirth + 'T00:00:00').getTime()) / (1000 * 3600 * 24 * 365.25)))
     : undefined
 
-  // Validation du numéro de téléphone marocain
-  if (!isValidPhoneMaroc(safePhone)) {
+  // Validation du numéro de téléphone marocain (la fiche existante fournit le sien)
+  if (!pickedPatientId && !isValidPhoneMaroc(safePhone)) {
     return NextResponse.json({ error: 'Numéro de téléphone invalide (format marocain attendu, ex: 0612345678)' }, { status: 400 })
   }
 
@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const formattedPhone = formatPhoneMaroc(safePhone)
+  let formattedPhone = formatPhoneMaroc(safePhone)
   const cancelToken = generateCancelToken()
   const shouldLinkPatientToUser =
     !!bookingUser && (
@@ -295,10 +295,20 @@ export async function POST(req: NextRequest) {
   // Fiche choisie dans la liste par le praticien : on confirme qu'elle lui
   // appartient (le client RLS le garantit déjà, ce contrôle est explicite).
   const { data: picked } = pickedPatientId
-    ? await db.from('patients').select('id').eq('id', pickedPatientId).eq('doctor_id', doctor_id).maybeSingle()
+    ? await db.from('patients').select('id, first_name, last_name, phone, email')
+        .eq('id', pickedPatientId).eq('doctor_id', doctor_id).maybeSingle()
     : { data: null }
   if (pickedPatientId && !picked) {
     return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
+  }
+  if (picked) {
+    // Le formulaire n'a envoyé aucune identité : on reprend celle de la fiche,
+    // sinon la confirmation et la notification partiraient vides.
+    safeFirst = picked.first_name ?? ''
+    safeLast = picked.last_name ?? ''
+    safePhone = picked.phone ?? ''
+    safeEmail = picked.email ?? undefined
+    formattedPhone = picked.phone ?? ''
   }
 
   const { data: existingPatient } = pickedPatientId ? { data: null } : await db
@@ -461,10 +471,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Email de confirmation au patient (si email fourni)
-  if (email && doctor) {
+  if (safeEmail && doctor) {
     emailTasks.push(
       sendAppointmentConfirmationToPatient({
-        patientEmail: email,
+        patientEmail: safeEmail,
         patientName,
         doctorName: doctor.name,
         specialty: doctor.specialty,
