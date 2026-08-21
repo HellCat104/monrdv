@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
+import { sendAppointmentConfirmationToPatient } from '@/lib/email'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey, ageFromBirthDate } from '@/lib/utils'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { randomUUID } from 'crypto'
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
 
   // Durée : celle du motif choisi, sinon la durée standard du médecin
   const { data: doc } = await admin.from('doctors')
-    .select('appointment_duration, specialty, specialties, working_hours').eq('id', doctorId).single()
+    .select('name, appointment_duration, specialty, specialties, working_hours').eq('id', doctorId).single()
   let duration = doc?.appointment_duration ?? 30
   if (typeId) {
     const { data: ctype } = await admin.from('consultation_types')
@@ -166,14 +167,19 @@ export async function POST(req: NextRequest) {
   }
 
   let patientId: string
+  // Destinataire de la confirmation : renseigné selon la branche empruntée
+  let patientEmail: string | null = email
+  let patientName = `${first} ${last}`.trim()
   if (existingId) {
     // Fiche choisie dans la liste : on vérifie qu'elle appartient bien à CE
     // médecin, sinon la secrétaire pourrait rattacher un RDV au patient d'un
     // autre cabinet en devinant un identifiant.
     const { data: owned } = await admin.from('patients')
-      .select('id').eq('id', existingId).eq('doctor_id', doctorId).maybeSingle()
+      .select('id, first_name, last_name, email').eq('id', existingId).eq('doctor_id', doctorId).maybeSingle()
     if (!owned) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
     patientId = owned.id
+    patientEmail = owned.email ?? null
+    patientName = `${owned.first_name ?? ''} ${owned.last_name ?? ''}`.trim()
   } else {
     // Dédoublonnage patient : téléphone + prénom + nom (même logique que la route principale)
     const formattedPhone = formatPhoneMaroc(phone)
@@ -248,6 +254,22 @@ export async function POST(req: NextRequest) {
   if (created.length === 0) {
     if (hardError) return NextResponse.json({ error: 'Erreur création RDV' }, { status: 500 })
     return NextResponse.json({ error: 'Ce créneau est déjà pris. Choisissez-en un autre.' }, { status: 409 })
+  }
+
+  // Confirmation au patient — comme pour une réservation en ligne, avec son
+  // lien d'annulation. Une série récurrente ne déclenche qu'UN e-mail (celui
+  // de la première séance) : en envoyer huit d'un coup serait du spam.
+  const firstAppt = created[0] as { cancel_token?: string; date?: string; time?: string }
+  if (patientEmail && firstAppt?.cancel_token) {
+    await sendAppointmentConfirmationToPatient({
+      patientEmail,
+      patientName,
+      doctorName: doc?.name ?? '',
+      specialty: specialty ?? doc?.specialty ?? '',
+      date: String(firstAppt.date ?? ''),
+      time: String(firstAppt.time ?? ''),
+      cancelToken: firstAppt.cancel_token,
+    }).catch((err) => console.error('[Email] confirmation patient (cabinet):', err))
   }
 
   return NextResponse.json({ appointment: created[0], created: created.length, skipped }, { status: 201 })
