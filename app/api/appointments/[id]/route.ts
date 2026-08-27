@@ -44,7 +44,7 @@ export async function PATCH(
 
   // Encaissement : réservé au forfait Cabinet complet
   if ((amount_paid !== undefined || amount_due !== undefined || payment_method !== undefined)
-      && !canAccess(doctor.plan, 'billing')) {
+      && !canAccess(doctor.plan, 'invoicing')) {
     return NextResponse.json({ error: 'La facturation nécessite le forfait Cabinet complet' }, { status: 403 })
   }
 

@@ -14,9 +14,11 @@ export interface PlanFeatures {
   consultation: boolean
   /** Ordonnances & certificats */
   prescriptions: boolean
-  /** Factures, reçus, avoirs, caisse */
-  billing: boolean
-  /** Statistiques d'activité et de chiffre d'affaires */
+  /** Encaisser une consultation, tenir la caisse et les dépenses */
+  payments: boolean
+  /** Documents comptables : factures conformes, avoirs, pack pour le fiduciaire */
+  invoicing: boolean
+  /** Accès à l'écran Statistiques (contenu adapté au forfait) */
   stats: boolean
 }
 
@@ -31,18 +33,22 @@ export const PLAN_PRICES_DHS: Record<DoctorPlan, number> = {
 }
 
 const FEATURES: Record<DoctorPlan, PlanFeatures> = {
+  // Le forfait Agenda suit son activité et son argent, mais ne touche ni au
+  // dossier médical ni aux documents comptables légaux.
   agenda: {
     records: false,
     consultation: false,
     prescriptions: false,
-    billing: false,
-    stats: false,
+    payments: true,
+    invoicing: false,
+    stats: true,
   },
   complet: {
     records: true,
     consultation: true,
     prescriptions: true,
-    billing: true,
+    payments: true,
+    invoicing: true,
     stats: true,
   },
 }

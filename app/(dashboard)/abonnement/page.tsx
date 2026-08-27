@@ -26,14 +26,16 @@ const PLAN_FEATURES: Record<DoctorPlan, string[]> = {
     'Salle d\'attente et présences',
     'Fiche patient : nom, téléphone, notes',
     'Rappels automatiques et agenda du matin',
+    'Suivi d\'activité : présences, retards, absences',
+    'Encaissements, caisse et dépenses',
   ],
   complet: [
     'Tout le forfait Agenda',
     'Dossiers patients complets (antécédents, constantes)',
     'Consultation et notes médicales',
     'Ordonnances et certificats',
-    'Facturation, reçus, avoirs et caisse',
-    'Statistiques et modules par spécialité',
+    'Factures conformes, avoirs et pack comptable',
+    'Modules par spécialité',
   ],
 }
 

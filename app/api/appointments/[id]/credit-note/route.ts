@@ -16,7 +16,7 @@ export async function POST(
   const { data: doctor } = await supabase
     .from('doctors').select('id, plan').eq('email', user.email).single()
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
-  if (!canAccess(doctor.plan, 'billing')) {
+  if (!canAccess(doctor.plan, 'invoicing')) {
     return NextResponse.json({ error: 'La facturation nécessite le forfait Cabinet complet' }, { status: 403 })
   }
 

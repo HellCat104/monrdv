@@ -110,6 +110,8 @@ export default function StatistiquesPage() {
   const [exp, setExp] = useState({ date: format(getNowInMaroc(), 'yyyy-MM-dd'), label: '', amount: '', category: EXPENSE_CATEGORIES[0] as string })
   const [expFile, setExpFile] = useState<File | null>(null)
   const [packBusy, setPackBusy] = useState(false)
+  // Documents comptables : réservés au forfait Cabinet complet
+  const [invoicing, setInvoicing] = useState(false)
   const [addingExp, setAddingExp] = useState(false)
   const supabase = createClient()
   const router = useRouter()
@@ -135,6 +137,7 @@ export default function StatistiquesPage() {
       if (!doctor) return
       // Statistiques réservées au forfait Cabinet complet
       if (!canAccess(doctor.plan, 'stats')) { router.replace('/dashboard'); return }
+      setInvoicing(canAccess(doctor.plan, 'invoicing'))
       setDoctorId(doctor.id)
       await loadAll(doctor.id)
       setLoading(false)
@@ -462,12 +465,14 @@ export default function StatistiquesPage() {
           </Select>
           {tab === 'compta' && (
             <>
-              <Button onClick={buildPack} disabled={packBusy} className="shrink-0">
-                <Download className="h-4 w-4 mr-1.5" /> {packBusy ? 'Préparation…' : 'Pack comptable'}
-              </Button>
+              {invoicing && (
+                <Button onClick={buildPack} disabled={packBusy} className="shrink-0">
+                  <Download className="h-4 w-4 mr-1.5" /> {packBusy ? 'Préparation…' : 'Pack comptable'}
+                </Button>
+              )}
               <ExportBtn label="Recettes" disabled={d.rows.length === 0} onPick={(f) => exportRecettes(f)} />
               <ExportBtn label="Dépenses" disabled={d.expenseRows.length === 0} onPick={(f) => exportDepenses(f)} />
-              <ExportBtn label="Avoirs" disabled={d.creditRows.length === 0} onPick={(f) => exportAvoirs(f)} />
+              {invoicing && <ExportBtn label="Avoirs" disabled={d.creditRows.length === 0} onPick={(f) => exportAvoirs(f)} />}
               <ExportBtn label="Impayés" disabled={d.unpaid.length === 0} onPick={(f) => exportImpayes(f)} />
               <ExportBtn label="Journal" disabled={d.rows.length === 0 && d.expenseRows.length === 0} onPick={(f) => exportJournal(f)} />
             </>

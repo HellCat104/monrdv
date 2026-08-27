@@ -90,7 +90,9 @@ interface AppointmentListProps {
 
 export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, plan = 'complet' }: AppointmentListProps) {
   // Forfait Agenda : pas d'encaissement (le reste des actions est filtré plus bas)
-  const onPayment = plan === 'agenda' ? undefined : onPaymentProp
+  // L'encaissement est ouvert aux deux forfaits : seuls les documents
+  // comptables (facture, avoir) restent réservés au Cabinet complet.
+  const onPayment = onPaymentProp
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean; id: string; action: 'confirmed' | 'cancelled'; label: string
   }>({ open: false, id: '', action: 'confirmed', label: '' })

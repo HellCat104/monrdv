@@ -53,7 +53,7 @@ export default function FacturesPage() {
       const { data: doctor } = await supabase.from('doctors').select('id, plan').eq('email', user.email).single()
       if (!doctor) return
       // Facturation réservée au forfait Cabinet complet
-      if (!canAccess(doctor.plan, 'billing')) { router.replace('/dashboard'); return }
+      if (!canAccess(doctor.plan, 'invoicing')) { router.replace('/dashboard'); return }
       const [fRes, aRes] = await Promise.all([
         supabase.from('appointments')
           .select('id, date, paid_at, invoice_no, amount_paid, amount_due, payment_method, patient:patients(first_name, last_name)')
