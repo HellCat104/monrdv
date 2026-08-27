@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
-import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor, sendRescheduleEmailToPatient } from '@/lib/email'
+import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor, sendRescheduleEmailToPatient, sendWithTimeout } from '@/lib/email'
 import { displayName } from '@/lib/profession'
 import { formatDateShort } from '@/lib/utils'
 
@@ -42,10 +42,11 @@ export async function PATCH(
 
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
 
-  // Encaissement : réservé au forfait Cabinet complet
+  // Encaisser est ouvert aux deux forfaits ; seuls les documents comptables
+  // (facture, avoir) restent réservés au Cabinet complet.
   if ((amount_paid !== undefined || amount_due !== undefined || payment_method !== undefined)
-      && !canAccess(doctor.plan, 'invoicing')) {
-    return NextResponse.json({ error: 'La facturation nécessite le forfait Cabinet complet' }, { status: 403 })
+      && !canAccess(doctor.plan, 'payments')) {
+    return NextResponse.json({ error: 'Votre forfait ne permet pas l\'encaissement' }, { status: 403 })
   }
 
   const updates: Record<string, unknown> = {}
@@ -145,7 +146,7 @@ export async function PATCH(
   if (isReschedule && previous && appointment.patient?.email
       && (previous.date !== appointment.date || previous.time !== appointment.time)) {
     const { data: docInfo } = await supabase.from('doctors').select('specialty').eq('id', doctor.id).single()
-    await sendRescheduleEmailToPatient({
+    await sendWithTimeout(sendRescheduleEmailToPatient({
       patientEmail: appointment.patient.email,
       patientName: `${appointment.patient.first_name} ${appointment.patient.last_name}`.trim(),
       doctorName: displayName(doctor.name, docInfo?.specialty),
@@ -155,7 +156,7 @@ export async function PATCH(
       newDate: formatDateShort(appointment.date),
       newTime: appointment.time,
       cancelToken: appointment.cancel_token ?? undefined,
-    }).catch((err) => console.error('[Email] déplacement patient:', err))
+    }), 'déplacement patient')
   }
 
   // Emails d'annulation si le statut devient "cancelled"

@@ -25,6 +25,21 @@ function h(s: string | undefined | null): string {
 }
 
 // Email envoyé au médecin juste après son inscription (en attente de validation)
+/**
+ * Borne un envoi d'e-mail dans le temps.
+ *
+ * En serverless une promesse non attendue est tuée avec la fonction : il faut
+ * donc attendre l'envoi. Mais sans limite, une API d'e-mail lente bloque la
+ * réponse HTTP — l'utilisateur voit l'application « ramer ». On plafonne
+ * l'attente : passé ce délai on rend la main, l'envoi se terminera ou non.
+ */
+export async function sendWithTimeout<T>(task: Promise<T>, label: string, ms = 4000): Promise<void> {
+  await Promise.race([
+    task,
+    new Promise((resolve) => setTimeout(resolve, ms)),
+  ]).catch((err) => console.error(`[Email] ${label}:`, err))
+}
+
 export async function sendPendingEmail(params: {
   to: string
   doctorName: string

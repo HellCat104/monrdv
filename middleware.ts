@@ -3,6 +3,12 @@ import { createServerClient } from '@supabase/ssr'
 
 const rateLimitStore = new Map<string, { count: number; start: number }>()
 
+/** Reporte sur `to` les cookies écrits sur `from` (jetons rafraîchis). */
+function withCookies(to: NextResponse, from: NextResponse): NextResponse {
+  from.cookies.getAll().forEach((c) => to.cookies.set(c))
+  return to
+}
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
@@ -89,7 +95,10 @@ export async function middleware(req: NextRequest) {
     if (!user) {
       // Ces routes (dashboard, settings, appointments, patients, abonnement, admin)
       // sont toutes des routes médecin/admin → login médecin, jamais patient.
-      return NextResponse.redirect(new URL('/login', req.url))
+      // On reporte les cookies de `res` : Supabase vient peut-être d'y écrire
+      // des jetons rafraîchis, et une réponse neuve les perdrait — la session
+      // serait alors cassée au chargement suivant.
+      return withCookies(NextResponse.redirect(new URL('/login', req.url)), res)
     }
 
     // Vérifie que l'admin est bien l'admin

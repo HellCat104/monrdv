@@ -73,6 +73,10 @@ export function Sidebar() {
         <Link
           key={href}
           href={href}
+          // Sans cela, Next.js précharge les 7 entrées du menu en rendant
+          // chaque page côté serveur — soit une quinzaine d'appels
+          // d'authentification à chaque affichage.
+          prefetch={false}
           onClick={() => setMobileOpen(false)}
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',

@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
-import { sendAppointmentConfirmationToPatient, sendRescheduleEmailToPatient } from '@/lib/email'
+import { sendAppointmentConfirmationToPatient, sendRescheduleEmailToPatient, sendWithTimeout } from '@/lib/email'
 import { displayName } from '@/lib/profession'
 import { formatDateShort } from '@/lib/utils'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey, ageFromBirthDate } from '@/lib/utils'
@@ -263,7 +263,7 @@ export async function POST(req: NextRequest) {
   // de la première séance) : en envoyer huit d'un coup serait du spam.
   const firstAppt = created[0] as { cancel_token?: string; date?: string; time?: string }
   if (patientEmail && firstAppt?.cancel_token) {
-    await sendAppointmentConfirmationToPatient({
+    await sendWithTimeout(sendAppointmentConfirmationToPatient({
       patientEmail,
       patientName,
       doctorName: doc?.name ?? '',
@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
       date: String(firstAppt.date ?? ''),
       time: String(firstAppt.time ?? ''),
       cancelToken: firstAppt.cancel_token,
-    }).catch((err) => console.error('[Email] confirmation patient (cabinet):', err))
+    }), 'confirmation patient (cabinet)')
   }
 
   return NextResponse.json({ appointment: created[0], created: created.length, skipped }, { status: 201 })
@@ -376,7 +376,7 @@ export async function PATCH(req: NextRequest) {
   const pat = apt.patient as { first_name?: string; last_name?: string; email?: string } | null
   if (moved && pat?.email && (apt.date !== updated.date || apt.time !== updated.time)) {
     const { data: docInfo } = await admin.from('doctors').select('name, specialty').eq('id', ctx.doctor.id).single()
-    await sendRescheduleEmailToPatient({
+    await sendWithTimeout(sendRescheduleEmailToPatient({
       patientEmail: pat.email,
       patientName: `${pat.first_name ?? ''} ${pat.last_name ?? ''}`.trim(),
       doctorName: displayName(docInfo?.name ?? '', docInfo?.specialty),
@@ -386,7 +386,7 @@ export async function PATCH(req: NextRequest) {
       newDate: formatDateShort(String(updated.date)),
       newTime: String(updated.time),
       cancelToken: updated.cancel_token ?? undefined,
-    }).catch((err) => console.error('[Email] déplacement patient (cabinet):', err))
+    }), 'déplacement patient (cabinet)')
   }
 
   return NextResponse.json(updated)

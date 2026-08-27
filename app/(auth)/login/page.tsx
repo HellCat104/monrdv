@@ -68,8 +68,9 @@ export default function LoginPage() {
         return
       }
 
+      // Pas de router.refresh() ici : push() vers une route serveur en
+      // déclenche déjà le rendu. L'appeler doublait le travail serveur.
       router.push('/dashboard')
-      router.refresh()
     } catch {
       setError('Une erreur est survenue. Veuillez réessayer.')
     } finally {

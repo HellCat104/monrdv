@@ -34,22 +34,29 @@ export default async function DashboardPage() {
   const today = format(getNowInMaroc(), 'yyyy-MM-dd')
   const firstOfMonth = format(getNowInMaroc(), 'yyyy-MM-01')
 
-  // RDV du jour
-  const { data: todayAppointments } = await supabase
-    .from('appointments')
-    .select('*, patient:patients(*)')
-    .eq('doctor_id', doctor.id)
-    .eq('date', today)
-    .neq('status', 'cancelled')
-    .order('time', { ascending: true })
-
-  // Stats du mois
-  const { data: monthAppointments } = await supabase
-    .from('appointments')
-    .select('status, attendance')
-    .eq('doctor_id', doctor.id)
-    .gte('date', firstOfMonth)
-    .lte('date', today)
+  // Ces trois requêtes sont indépendantes : les enchaîner ajoutait inutilement
+  // leurs temps de réponse les uns aux autres.
+  const [
+    { data: todayAppointments },
+    { data: monthAppointments },
+    { data: upcomingAppointments },
+  ] = await Promise.all([
+    // RDV du jour
+    supabase.from('appointments')
+      .select('*, patient:patients(*)')
+      .eq('doctor_id', doctor.id).eq('date', today).neq('status', 'cancelled')
+      .order('time', { ascending: true }),
+    // Stats du mois
+    supabase.from('appointments')
+      .select('status, attendance')
+      .eq('doctor_id', doctor.id).gte('date', firstOfMonth).lte('date', today),
+    // Prochains RDV
+    supabase.from('appointments')
+      .select('*, patient:patients(*)')
+      .eq('doctor_id', doctor.id).gt('date', today).neq('status', 'cancelled')
+      .order('date', { ascending: true }).order('time', { ascending: true })
+      .limit(5),
+  ])
 
   const monthTotal = monthAppointments?.length ?? 0
   const monthCancelled = monthAppointments?.filter((a) => a.status === 'cancelled').length ?? 0
@@ -58,20 +65,12 @@ export default async function DashboardPage() {
   const monthAbsent = monthAppointments?.filter((a) => a.attendance === 'absent').length ?? 0
   const absenceRate = monthTotal > 0 ? Math.round((monthAbsent / monthTotal) * 100) : 0
 
-  // Prochain RDV
-  const { data: upcomingAppointments } = await supabase
-    .from('appointments')
-    .select('*, patient:patients(*)')
-    .eq('doctor_id', doctor.id)
-    .gt('date', today)
-    .neq('status', 'cancelled')
-    .order('date', { ascending: true })
-    .order('time', { ascending: true })
-    .limit(5)
 
   // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »)
-  const todaySummarised = await withConsultationSummary(supabase, todayAppointments ?? [])
-  const upcomingSummarised = await withConsultationSummary(supabase, upcomingAppointments ?? [])
+  const [todaySummarised, upcomingSummarised] = await Promise.all([
+    withConsultationSummary(supabase, todayAppointments ?? []),
+    withConsultationSummary(supabase, upcomingAppointments ?? []),
+  ])
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
 
