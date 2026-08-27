@@ -67,7 +67,13 @@ function ExportBtn({ label, disabled, onPick }: { label: string; disabled?: bool
   )
 }
 
+type Tab = 'activite' | 'compta'
+
 export default function StatistiquesPage() {
+  // Deux lectures distinctes : l'activité se consulte chaque semaine, la
+  // comptabilité en fin de mois. Les mélanger obligeait à traverser l'une
+  // pour atteindre l'autre.
+  const [tab, setTab] = useState<Tab>('activite')
   const [doctorId, setDoctorId] = useState<string | null>(null)
   const [appts, setAppts] = useState<Appointment[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
@@ -296,7 +302,7 @@ export default function StatistiquesPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Statistiques &amp; comptabilité</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Statistiques</h1>
           <p className="text-sm text-gray-500 mt-1 capitalize">{formatDateFr(getNowInMaroc())}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -308,13 +314,69 @@ export default function StatistiquesPage() {
               ))}
             </SelectContent>
           </Select>
-          <ExportBtn label="Recettes" disabled={d.rows.length === 0} onPick={(f) => exportRecettes(f)} />
-          <ExportBtn label="Dépenses" disabled={d.expenseRows.length === 0} onPick={(f) => exportDepenses(f)} />
-          <ExportBtn label="Avoirs" disabled={d.creditRows.length === 0} onPick={(f) => exportAvoirs(f)} />
-          <ExportBtn label="Journal" disabled={d.rows.length === 0 && d.expenseRows.length === 0} onPick={(f) => exportJournal(f)} />
+          {tab === 'compta' && (
+            <>
+              <ExportBtn label="Recettes" disabled={d.rows.length === 0} onPick={(f) => exportRecettes(f)} />
+              <ExportBtn label="Dépenses" disabled={d.expenseRows.length === 0} onPick={(f) => exportDepenses(f)} />
+              <ExportBtn label="Avoirs" disabled={d.creditRows.length === 0} onPick={(f) => exportAvoirs(f)} />
+              <ExportBtn label="Journal" disabled={d.rows.length === 0 && d.expenseRows.length === 0} onPick={(f) => exportJournal(f)} />
+            </>
+          )}
         </div>
       </div>
 
+      <div className="flex gap-1 border-b border-gray-200">
+        {([
+          { id: 'activite' as Tab, label: 'Activité' },
+          { id: 'compta' as Tab, label: 'Comptabilité' },
+        ]).map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              tab === id ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'activite' ? (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Card><CardContent className="p-5">
+              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><UserCheck className="h-4 w-4" /> Consultations · {PERIOD_LABELS[period]}</div>
+              <p className="text-2xl font-bold text-gray-900 mt-2">{d.present + d.late + d.absent}</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-5">
+              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><Timer className="h-4 w-4" /> Taux de présence</div>
+              <p className="text-2xl font-bold text-green-600 mt-2">{d.presenceRate}%</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-5">
+              <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><UserX className="h-4 w-4" /> Absences</div>
+              <p className="text-2xl font-bold text-red-600 mt-2">{d.absent}</p>
+            </CardContent></Card>
+          </div>
+
+      {/* Assiduité */}
+      <Card>
+        <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><UserCheck className="h-4 w-4 text-primary-500" /> Assiduité — {PERIOD_LABELS[period]}</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between text-sm mb-1.5"><span className="text-gray-600">Taux de présence</span><span className="font-bold text-green-600">{d.presenceRate}%</span></div>
+            <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden"><div className="bg-green-500 h-full rounded-full" style={{ width: `${d.presenceRate}%` }} /></div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-green-50 rounded-lg p-3 text-center"><UserCheck className="h-4 w-4 text-green-600 mx-auto mb-1" /><p className="text-xl font-bold text-green-700">{d.present}</p><p className="text-xs text-green-600">Présences</p></div>
+            <div className="bg-orange-50 rounded-lg p-3 text-center"><Timer className="h-4 w-4 text-orange-600 mx-auto mb-1" /><p className="text-xl font-bold text-orange-700">{d.late}</p><p className="text-xs text-orange-600">Retards</p></div>
+            <div className="bg-red-50 rounded-lg p-3 text-center"><UserX className="h-4 w-4 text-red-600 mx-auto mb-1" /><p className="text-xl font-bold text-red-700">{d.absent}</p><p className="text-xs text-red-600">Absences</p></div>
+          </div>
+        </CardContent>
+      </Card>
+        </div>
+      ) : (
+        <div className="space-y-6">
       {/* Recettes / Dépenses / Net — période */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card><CardContent className="p-5">
@@ -413,22 +475,8 @@ export default function StatistiquesPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Assiduité */}
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><UserCheck className="h-4 w-4 text-primary-500" /> Assiduité — {PERIOD_LABELS[period]}</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <div className="flex items-center justify-between text-sm mb-1.5"><span className="text-gray-600">Taux de présence</span><span className="font-bold text-green-600">{d.presenceRate}%</span></div>
-            <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden"><div className="bg-green-500 h-full rounded-full" style={{ width: `${d.presenceRate}%` }} /></div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-green-50 rounded-lg p-3 text-center"><UserCheck className="h-4 w-4 text-green-600 mx-auto mb-1" /><p className="text-xl font-bold text-green-700">{d.present}</p><p className="text-xs text-green-600">Présences</p></div>
-            <div className="bg-orange-50 rounded-lg p-3 text-center"><Timer className="h-4 w-4 text-orange-600 mx-auto mb-1" /><p className="text-xl font-bold text-orange-700">{d.late}</p><p className="text-xs text-orange-600">Retards</p></div>
-            <div className="bg-red-50 rounded-lg p-3 text-center"><UserX className="h-4 w-4 text-red-600 mx-auto mb-1" /><p className="text-xl font-bold text-red-700">{d.absent}</p><p className="text-xs text-red-600">Absences</p></div>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
   )
 }
