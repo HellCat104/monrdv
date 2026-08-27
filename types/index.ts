@@ -154,6 +154,7 @@ export interface Expense {
   date: string        // YYYY-MM-DD
   label: string
   category?: string | null
+  receipt_path?: string | null   // pièce justificative (bucket expense-receipts)
   amount: number
   created_at: string
 }

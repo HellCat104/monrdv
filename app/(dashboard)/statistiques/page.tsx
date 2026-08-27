@@ -18,14 +18,16 @@ import {
 import { formatInTimeZone } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
 import {
-  BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt, FileText, Table2,
+  BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt, FileText, Table2, Paperclip, ArrowUp, ArrowDown,
 } from 'lucide-react'
+import { EXPENSE_CATEGORIES, expenseCategoryLabel, variation } from '@/lib/compta'
 import type { Appointment, Expense, CreditNote } from '@/types'
 
 type Period = 'month' | 'lastmonth' | 'quarter' | 'year' | 'all'
 const PERIOD_LABELS: Record<Period, string> = {
   month: 'Ce mois-ci', lastmonth: 'Mois dernier', quarter: 'Ce trimestre', year: 'Cette année', all: 'Tout',
 }
+const RECEIPT_BUCKET = 'expense-receipts'
 const PM_LABELS: Record<string, string> = { especes: 'Espèces', carte: 'Carte', cheque: 'Chèque', virement: 'Virement' }
 
 function periodRange(p: Period, now: Date): { start: string; end: string } {
@@ -34,6 +36,31 @@ function periodRange(p: Period, now: Date): { start: string; end: string } {
   if (p === 'quarter') return { start: format(startOfQuarter(now), 'yyyy-MM-dd'), end: format(endOfQuarter(now), 'yyyy-MM-dd') }
   if (p === 'year') return { start: format(startOfYear(now), 'yyyy-MM-dd'), end: format(endOfYear(now), 'yyyy-MM-dd') }
   return { start: format(startOfMonth(now), 'yyyy-MM-dd'), end: format(endOfMonth(now), 'yyyy-MM-dd') }
+}
+
+// Même durée, juste avant : c'est la seule comparaison qui ait du sens
+// (comparer un mois à une année ne dirait rien). « Tout » n'a pas de
+// période précédente.
+function previousPeriodRange(p: Period, now: Date): { start: string; end: string } | null {
+  if (p === 'all') return null
+  if (p === 'quarter') { const d = subMonths(now, 3); return { start: format(startOfQuarter(d), 'yyyy-MM-dd'), end: format(endOfQuarter(d), 'yyyy-MM-dd') } }
+  if (p === 'year')    { const d = subMonths(now, 12); return { start: format(startOfYear(d), 'yyyy-MM-dd'), end: format(endOfYear(d), 'yyyy-MM-dd') } }
+  const back = p === 'lastmonth' ? 2 : 1
+  const d = subMonths(now, back)
+  return { start: format(startOfMonth(d), 'yyyy-MM-dd'), end: format(endOfMonth(d), 'yyyy-MM-dd') }
+}
+
+// Écart affiché à côté d'un montant : vert si l'évolution est favorable
+function Delta({ pct, goodWhenUp = true }: { pct: number | null; goodWhenUp?: boolean }) {
+  if (pct === null || pct === 0) return null
+  const up = pct > 0
+  const good = up === goodWhenUp
+  const Icon = up ? ArrowUp : ArrowDown
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${good ? 'text-green-600' : 'text-red-500'}`}>
+      <Icon className="h-3 w-3" />{Math.abs(pct)}%
+    </span>
+  )
 }
 
 // Bouton d'export avec choix du format (Excel/CSV ou PDF) au clic
@@ -80,7 +107,9 @@ export default function StatistiquesPage() {
   const [credits, setCredits] = useState<CreditNote[]>([])
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<Period>('month')
-  const [exp, setExp] = useState({ date: format(getNowInMaroc(), 'yyyy-MM-dd'), label: '', amount: '' })
+  const [exp, setExp] = useState({ date: format(getNowInMaroc(), 'yyyy-MM-dd'), label: '', amount: '', category: EXPENSE_CATEGORIES[0] as string })
+  const [expFile, setExpFile] = useState<File | null>(null)
+  const [packBusy, setPackBusy] = useState(false)
   const [addingExp, setAddingExp] = useState(false)
   const supabase = createClient()
   const router = useRouter()
@@ -88,7 +117,7 @@ export default function StatistiquesPage() {
   async function loadAll(docId: string) {
     const [aptRes, expRes, creditRes] = await Promise.all([
       supabase.from('appointments')
-        .select('date, time, status, attendance, amount_paid, amount_due, payment_method, invoice_no, paid_at, notes, patient:patients(first_name, last_name), consultation_type:consultation_types(name)')
+        .select('id, date, time, status, attendance, amount_paid, amount_due, payment_method, invoice_no, paid_at, notes, patient:patients(first_name, last_name, phone), consultation_type:consultation_types(name)')
         .eq('doctor_id', docId).neq('status', 'cancelled'),
       supabase.from('expenses').select('*').eq('doctor_id', docId).order('date', { ascending: false }),
       supabase.from('credit_notes').select('*').eq('doctor_id', docId).order('created_at', { ascending: false }),
@@ -121,6 +150,8 @@ export default function StatistiquesPage() {
     const now = getNowInMaroc()
     const { start, end } = periodRange(period, now)
     const inRange = (date: string) => date >= start && date <= end
+    const prev = previousPeriodRange(period, now)
+    const inPrev = (date: string) => !!prev && date >= prev.start && date <= prev.end
 
     let recettes = 0, present = 0, absent = 0, late = 0, rdvCount = 0
     const caisse: Record<string, number> = { especes: 0, carte: 0, cheque: 0, virement: 0, autre: 0 }
@@ -157,6 +188,35 @@ export default function StatistiquesPage() {
     const expenseRows = expenses.filter((e) => inRange(e.date)).sort((a, b) => b.date.localeCompare(a.date))
     const depenses = expenseRows.reduce((s, e) => s + Number(e.amount), 0)
 
+    // Période précédente — sert uniquement aux écarts affichés
+    let prevRecettes = 0
+    for (const a of appts) if (a.amount_paid && inPrev(payDate(a))) prevRecettes += Number(a.amount_paid)
+    const prevDepenses = expenses.filter((e) => inPrev(e.date)).reduce((s, e) => s + Number(e.amount), 0)
+
+    // Répartition des dépenses par poste
+    const byCategory = new Map<string, number>()
+    for (const e of expenseRows) {
+      const k = expenseCategoryLabel(e.category)
+      byCategory.set(k, (byCategory.get(k) ?? 0) + Number(e.amount))
+    }
+
+    // Impayés : consultations dont le montant attendu dépasse l'encaissé.
+    // Indépendant de la période — une dette ne s'efface pas au changement de mois.
+    const unpaid = appts
+      .filter((a) => Number(a.amount_due ?? 0) > Number(a.amount_paid ?? 0))
+      .map((a) => {
+        const pat = a.patient as unknown as { first_name?: string; last_name?: string; phone?: string } | null
+        return {
+          id: a.id,
+          date: a.date,
+          patient: `${pat?.first_name ?? ''} ${pat?.last_name ?? ''}`.trim() || 'Patient',
+          phone: pat?.phone ?? '',
+          invoice: a.invoice_no ?? '',
+          due: Number(a.amount_due ?? 0) - Number(a.amount_paid ?? 0),
+        }
+      })
+      .sort((x, y) => x.date.localeCompare(y.date))
+
     // Avoirs émis dans la période (date = date d'émission, en heure marocaine)
     const creditRows = credits
       .map((c) => ({ ...c, _date: formatInTimeZone(parseISO(c.created_at), MAROC_TZ, 'yyyy-MM-dd') }))
@@ -171,9 +231,17 @@ export default function StatistiquesPage() {
     return {
       recettes, depenses, avoirs, net: recettes - avoirs - depenses, caisse, rows, expenseRows, creditRows, rdvCount,
       present, absent, late, presenceRate: totAtt > 0 ? Math.round((present / totAtt) * 100) : 0,
+      prevRecettes, prevDepenses, byCategory, unpaid,
       revenueByMonth,
     }
   }, [appts, expenses, credits, period])
+
+  // Le dépôt est privé : on génère un lien signé de courte durée.
+  async function openReceipt(path: string) {
+    const { data, error } = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(path, 120)
+    if (error || !data) { alert('Justificatif introuvable.'); return }
+    window.open(data.signedUrl, '_blank', 'noopener')
+  }
 
   async function addExpense(e: React.FormEvent) {
     e.preventDefault()
@@ -181,13 +249,27 @@ export default function StatistiquesPage() {
     const amount = parseFloat(exp.amount.replace(',', '.'))
     if (isNaN(amount) || amount < 0) return
     setAddingExp(true)
+
+    // Justificatif : déposé avant l'écriture, pour ne pas créer une dépense
+    // orpheline si l'envoi du fichier échoue.
+    let receiptPath: string | null = null
+    if (expFile) {
+      const safeName = expFile.name.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 80)
+      const path = `${doctorId}/${Date.now()}-${safeName}`
+      const { error: upErr } = await supabase.storage.from(RECEIPT_BUCKET)
+        .upload(path, expFile, { contentType: expFile.type || undefined })
+      if (upErr) { setAddingExp(false); alert('Le justificatif n\'a pas pu être envoyé.'); return }
+      receiptPath = path
+    }
+
     const { data, error } = await supabase.from('expenses')
-      .insert({ doctor_id: doctorId, date: exp.date, label: exp.label.trim().substring(0, 120), amount })
+      .insert({ doctor_id: doctorId, date: exp.date, label: exp.label.trim().substring(0, 120), amount, category: exp.category, receipt_path: receiptPath })
       .select().single()
     setAddingExp(false)
     if (!error && data) {
       setExpenses((prev) => [data as Expense, ...prev])
-      setExp({ date: format(getNowInMaroc(), 'yyyy-MM-dd'), label: '', amount: '' })
+      setExp({ date: format(getNowInMaroc(), 'yyyy-MM-dd'), label: '', amount: '', category: EXPENSE_CATEGORIES[0] })
+      setExpFile(null)
     } else { alert('Échec de l\'ajout de la dépense.') }
   }
 
@@ -257,9 +339,9 @@ export default function StatistiquesPage() {
 
   // Dépenses (détail)
   function exportDepenses(fmt: 'csv' | 'pdf') {
-    const rows: (string | number)[][] = d.expenseRows.map((e) => [e.date, e.label, Number(e.amount)])
+    const rows: (string | number)[][] = d.expenseRows.map((e) => [e.date, expenseCategoryLabel(e.category), e.label, Number(e.amount)])
     rows.push(['', 'TOTAL DÉPENSES', d.depenses])
-    emit(fmt, 'depenses', `Dépenses — ${PERIOD_LABELS[period]}`, ['Date', 'Libellé', 'Montant (DH)'], rows)
+    emit(fmt, 'depenses', `Dépenses — ${PERIOD_LABELS[period]}`, ['Date', 'Catégorie', 'Libellé', 'Montant (DH)'], rows)
   }
 
   // Avoirs (détail)
@@ -267,6 +349,70 @@ export default function StatistiquesPage() {
     const rows: (string | number)[][] = d.creditRows.map((c) => [c._date, c.credit_no || '', c.original_invoice_no, c.patient_name || '', c.reason || '', Number(c.amount)])
     rows.push(['', '', '', '', 'TOTAL AVOIRS', d.avoirs])
     emit(fmt, 'avoirs', `Avoirs — ${PERIOD_LABELS[period]}`, ['Date', 'N° avoir', 'Facture annulée', 'Patient', 'Motif', 'Montant (DH)'], rows)
+  }
+
+  // Pack comptable : une seule archive à transmettre au fiduciaire, contenant
+  // les journaux et TOUTES les pièces justificatives. Sans ça le médecin
+  // exporte quatre fichiers puis les rassemble à la main chaque mois.
+  async function buildPack() {
+    setPackBusy(true)
+    try {
+      const { default: JSZip } = await import('jszip')
+      const zip = new JSZip()
+      const label = PERIOD_LABELS[period]
+      const csv = (headers: string[], rows: (string | number)[][]) =>
+        '\uFEFF' + [headers, ...rows].map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n')
+
+      zip.file('1-recettes.csv', csv(['Date', 'N° facture', 'Patient', 'Motif', 'Mode', 'Montant (DH)'],
+        d.rows.map((r) => [r.date, r.invoice, r.patient, r.motif, r.mode, r.amount])))
+      zip.file('2-depenses.csv', csv(['Date', 'Catégorie', 'Libellé', 'Montant (DH)', 'Justificatif'],
+        d.expenseRows.map((e) => [e.date, expenseCategoryLabel(e.category), e.label, Number(e.amount), e.receipt_path ? 'oui' : 'non'])))
+      zip.file('3-avoirs.csv', csv(['Date', 'N° avoir', 'Facture annulée', 'Patient', 'Motif', 'Montant (DH)'],
+        d.creditRows.map((c) => [c._date, c.credit_no || '', c.original_invoice_no, c.patient_name || '', c.reason || '', Number(c.amount)])))
+      zip.file('4-impayes.csv', csv(['Date', 'Patient', 'Téléphone', 'N° facture', 'Reste dû (DH)'],
+        d.unpaid.map((u) => [u.date, u.patient, u.phone, u.invoice, u.due])))
+      zip.file('5-recapitulatif.csv', csv(['Poste', 'Montant (DH)'], [
+        ['Recettes', d.recettes],
+        ['Dépenses', d.depenses],
+        ['Résultat net', d.recettes - d.depenses],
+        ...Array.from(d.byCategory.entries()).map(([c, t]) => [`Dépenses — ${c}`, t] as (string | number)[]),
+        ...(['especes', 'carte', 'cheque', 'virement', 'autre'] as const)
+          .filter((k) => d.caisse[k] > 0)
+          .map((k) => [`Encaissé — ${PM_LABELS[k] ?? k}`, d.caisse[k]] as (string | number)[]),
+        ['Impayés', d.unpaid.reduce((t, u) => t + u.due, 0)],
+      ]))
+
+      // Pièces justificatives, dans leur propre dossier
+      const withReceipt = d.expenseRows.filter((e) => e.receipt_path)
+      if (withReceipt.length > 0) {
+        const folder = zip.folder('justificatifs')!
+        for (const e of withReceipt) {
+          const { data: blob } = await supabase.storage.from(RECEIPT_BUCKET).download(e.receipt_path!)
+          if (!blob) continue
+          const ext = e.receipt_path!.split('.').pop() || 'bin'
+          const safe = e.label.replace(/[^a-zA-Z0-9._ -]/g, '').substring(0, 40).trim()
+          folder.file(`${e.date}-${safe || 'depense'}.${ext}`, blob)
+        }
+      }
+
+      const out = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(out)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `comptabilite-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('La génération du pack a échoué.')
+    } finally {
+      setPackBusy(false)
+    }
+  }
+
+  // Impayés (relances)
+  function exportImpayes(fmt: 'csv' | 'pdf') {
+    const rows: (string | number)[][] = d.unpaid.map((u) => [u.date, u.patient, u.phone, u.invoice, u.due])
+    emit(fmt, 'impayes', 'Impayés', ['Date', 'Patient', 'Téléphone', 'N° facture', 'Reste dû (DH)'], rows)
   }
 
   // Journal complet : recettes + avoirs + dépenses, triés par date (chronologique)
@@ -316,9 +462,13 @@ export default function StatistiquesPage() {
           </Select>
           {tab === 'compta' && (
             <>
+              <Button onClick={buildPack} disabled={packBusy} className="shrink-0">
+                <Download className="h-4 w-4 mr-1.5" /> {packBusy ? 'Préparation…' : 'Pack comptable'}
+              </Button>
               <ExportBtn label="Recettes" disabled={d.rows.length === 0} onPick={(f) => exportRecettes(f)} />
               <ExportBtn label="Dépenses" disabled={d.expenseRows.length === 0} onPick={(f) => exportDepenses(f)} />
               <ExportBtn label="Avoirs" disabled={d.creditRows.length === 0} onPick={(f) => exportAvoirs(f)} />
+              <ExportBtn label="Impayés" disabled={d.unpaid.length === 0} onPick={(f) => exportImpayes(f)} />
               <ExportBtn label="Journal" disabled={d.rows.length === 0 && d.expenseRows.length === 0} onPick={(f) => exportJournal(f)} />
             </>
           )}
@@ -380,14 +530,14 @@ export default function StatistiquesPage() {
       {/* Recettes / Dépenses / Net — période */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card><CardContent className="p-5">
-          <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><Wallet className="h-4 w-4" /> Recettes · {PERIOD_LABELS[period]}</div>
+          <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><Wallet className="h-4 w-4" /> Recettes · {PERIOD_LABELS[period]} <Delta pct={variation(d.recettes, d.prevRecettes)} /></div>
           <p className="text-3xl font-bold text-gray-900 mt-2">{d.recettes.toLocaleString('fr-FR')} <span className="text-base font-medium text-gray-400">DH</span></p>
           {d.avoirs > 0 && (
             <p className="text-xs text-red-500 mt-1">− {d.avoirs.toLocaleString('fr-FR')} DH d&apos;avoirs émis</p>
           )}
         </CardContent></Card>
         <Card><CardContent className="p-5">
-          <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><Receipt className="h-4 w-4" /> Dépenses</div>
+          <div className="flex items-center gap-2 text-gray-400 text-xs font-medium uppercase tracking-wide"><Receipt className="h-4 w-4" /> Dépenses <Delta pct={variation(d.depenses, d.prevDepenses)} goodWhenUp={false} /></div>
           <p className="text-3xl font-bold text-orange-600 mt-2">{d.depenses.toLocaleString('fr-FR')} <span className="text-base font-medium text-gray-400">DH</span></p>
         </CardContent></Card>
         <Card><CardContent className="p-5">
@@ -417,22 +567,66 @@ export default function StatistiquesPage() {
         </CardContent>
       </Card>
 
+      {/* Impayés — indépendant de la période : une dette reste due */}
+      {d.unpaid.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-red-500" /> Impayés
+              <span className="ml-1 text-sm font-bold text-red-600">
+                {d.unpaid.reduce((t, u) => t + u.due, 0).toLocaleString('fr-FR')} DH
+              </span>
+              <span className="text-xs font-normal text-gray-400">· {d.unpaid.length} consultation{d.unpaid.length > 1 ? 's' : ''}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            {d.unpaid.map((u) => (
+              <div key={u.id} className="flex items-center justify-between bg-red-50/60 rounded-lg px-3 py-2 text-sm gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-xs text-gray-400 w-20 shrink-0">{formatDateShort(u.date)}</span>
+                  <span className="text-gray-800 font-medium truncate">{u.patient}</span>
+                  {u.phone && <span className="text-xs text-gray-500 shrink-0 hidden sm:inline">{u.phone}</span>}
+                  {u.invoice && <span className="text-[11px] text-gray-400 shrink-0 hidden md:inline">{u.invoice}</span>}
+                </div>
+                <span className="font-bold text-red-600 shrink-0">{u.due.toLocaleString('fr-FR')} DH</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Dépenses */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2"><Receipt className="h-4 w-4 text-primary-500" /> Dépenses du cabinet</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <form onSubmit={addExpense} className="flex flex-col sm:flex-row gap-2">
-            <Input type="date" value={exp.date} onChange={(e) => setExp({ ...exp, date: e.target.value })} className="sm:w-40" />
-            <Input value={exp.label} onChange={(e) => setExp({ ...exp, label: e.target.value })} placeholder="Ex : Loyer, fournitures…" className="flex-1" />
-            <div className="relative sm:w-32">
-              <Input type="number" min="0" step="any" value={exp.amount} onChange={(e) => setExp({ ...exp, amount: e.target.value })} placeholder="Montant" className="pr-9" />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">DH</span>
+          <form onSubmit={addExpense} className="space-y-2">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input type="date" value={exp.date} onChange={(e) => setExp({ ...exp, date: e.target.value })} className="sm:w-40" />
+              <Input value={exp.label} onChange={(e) => setExp({ ...exp, label: e.target.value })} placeholder="Ex : Loyer, fournitures…" className="flex-1" />
+              <div className="relative sm:w-32">
+                <Input type="number" min="0" step="any" value={exp.amount} onChange={(e) => setExp({ ...exp, amount: e.target.value })} placeholder="Montant" className="pr-9" />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">DH</span>
+              </div>
             </div>
-            <Button type="submit" variant="outline" disabled={addingExp || !exp.label.trim() || !exp.amount} className="shrink-0">
-              <Plus className="h-4 w-4 mr-1" /> {addingExp ? 'Ajout…' : 'Ajouter'}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Select value={exp.category} onValueChange={(v) => setExp({ ...exp, category: v })}>
+                <SelectTrigger className="sm:w-56"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 cursor-pointer hover:border-gray-400">
+                <Paperclip className="h-4 w-4 shrink-0" />
+                <span className="truncate">{expFile ? expFile.name : 'Joindre le justificatif (facultatif)'}</span>
+                <input type="file" accept="image/*,application/pdf" className="hidden"
+                  onChange={(e) => setExpFile(e.target.files?.[0] ?? null)} />
+              </label>
+              <Button type="submit" variant="outline" disabled={addingExp || !exp.label.trim() || !exp.amount} className="shrink-0">
+                <Plus className="h-4 w-4 mr-1" /> {addingExp ? 'Ajout…' : 'Ajouter'}
+              </Button>
+            </div>
           </form>
           {d.expenseRows.length === 0 ? (
             <p className="text-sm text-gray-400">Aucune dépense sur la période.</p>
@@ -443,11 +637,28 @@ export default function StatistiquesPage() {
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-xs text-gray-400 w-20 shrink-0">{formatDateShort(e.date)}</span>
                     <span className="text-gray-700 truncate">{e.label}</span>
+                    <span className="text-[11px] font-medium text-gray-500 bg-white border border-gray-200 rounded-full px-2 py-0.5 shrink-0 hidden sm:inline">{expenseCategoryLabel(e.category)}</span>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
+                    {e.receipt_path && (
+                      <button onClick={() => openReceipt(e.receipt_path!)} className="text-gray-400 hover:text-primary-600" title="Voir le justificatif">
+                        <Paperclip className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <span className="font-semibold text-orange-600">{Number(e.amount).toLocaleString('fr-FR')} DH</span>
                     <button onClick={() => deleteExpense(e.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100" title="Supprimer"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {d.byCategory.size > 0 && (
+            <div className="pt-3 border-t border-gray-100 space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Répartition</p>
+              {Array.from(d.byCategory.entries()).sort((a, b) => b[1] - a[1]).map(([cat, tot]) => (
+                <div key={cat} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">{cat}</span>
+                  <span className="font-semibold text-gray-800">{tot.toLocaleString('fr-FR')} DH</span>
                 </div>
               ))}
             </div>
