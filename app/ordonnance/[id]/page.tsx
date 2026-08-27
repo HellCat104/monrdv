@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { OrdonnanceEditor } from './OrdonnanceEditor'
+import { canAccess } from '@/lib/plan'
 
 interface Props {
   params: { id: string }
@@ -20,11 +21,12 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites')
+    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites, plan')
     .eq('email', user.email)
     .single()
 
   if (!doctor) notFound()
+  if (!canAccess(doctor.plan, 'prescriptions')) notFound()
 
   // RDV + patient (revérifie l'appartenance au médecin)
   const { data: apt } = await supabase

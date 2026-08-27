@@ -2,7 +2,7 @@
 // GET : liste · POST : inviter/créer · PATCH : permissions/nom/statut · DELETE : retirer
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { sendStaffInviteEmail } from '@/lib/email'
+import { sendAccountActivationEmail, sendStaffInviteEmail } from '@/lib/email'
 import { DEFAULT_STAFF_PERMISSIONS, type StaffPermissions } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -61,16 +61,16 @@ export async function POST(req: NextRequest) {
   // Le compte auth de la secrétaire (créé si nouveau, sinon on réutilise l'existant).
   const admin = createAdminClient()
   let tempPassword: string | undefined = randomPassword()
-  const { error: createErr } = await admin.auth.admin.createUser({
+  const { data: createdAuth, error: createErr } = await admin.auth.admin.createUser({
     email,
     password: tempPassword,
-    email_confirm: true,
+    email_confirm: false,
     user_metadata: { role: 'staff', name },
   })
   if (createErr) {
     const msg = (createErr.message || '').toLowerCase()
     if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
-      tempPassword = undefined // compte déjà existant : il gardera son mot de passe
+      return NextResponse.json({ error: 'Cette adresse possède déjà un compte : utilisez un compte secrétaire dédié.' }, { status: 409 })
     } else {
       return NextResponse.json({ error: 'Création du compte impossible : ' + createErr.message }, { status: 400 })
     }
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   // Lien secrétaire ↔ médecin (RLS : le médecin ne peut créer que pour lui-même)
   const { data: row, error: insErr } = await supabase
     .from('cabinet_staff')
-    .insert({ doctor_id: doctor.id, email, name, permissions })
+    .insert({ doctor_id: doctor.id, email, name, permissions, auth_user_id: createdAuth?.user?.id })
     .select().single()
   if (insErr) {
     if ((insErr.code === '23505') || (insErr.message || '').includes('duplicate')) {
@@ -89,7 +89,11 @@ export async function POST(req: NextRequest) {
   }
 
   // Email d'invitation (non bloquant)
-  await sendStaffInviteEmail({ to: email, staffName: name, doctorName: doctor.name, tempPassword }).catch(() => {})
+  const { data: activation } = await admin.auth.admin.generateLink({ type: 'signup', email, password: tempPassword })
+  await Promise.allSettled([
+    sendStaffInviteEmail({ to: email, staffName: name, doctorName: doctor.name, tempPassword }),
+    ...(activation?.properties?.action_link ? [sendAccountActivationEmail(email, activation.properties.action_link)] : []),
+  ])
 
   return NextResponse.json({ staff: row, emailed: true })
 }

@@ -3,6 +3,41 @@ import { createServerClient } from '@supabase/ssr'
 
 const rateLimitStore = new Map<string, { count: number; start: number }>()
 
+/**
+ * Compteur atomique partagé entre les instances Edge via Upstash Redis.
+ * En production, l'absence de configuration refuse les routes sensibles : un
+ * Map en mémoire ne protège pas un déploiement serverless multi-instance.
+ */
+async function rateLimit(key: string, max: number, windowMs: number): Promise<'ok' | 'limited' | 'unconfigured'> {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (url && token) {
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    try {
+      // Pipeline unique : le TTL est renouvelé à chaque tentative (fenêtre
+      // glissante) et aucune clé ne peut rester sans expiration après un échec.
+      const response = await fetch(`${url}/pipeline`, {
+        method: 'POST', headers,
+        body: JSON.stringify([['INCR', key], ['PEXPIRE', key, windowMs]]),
+      })
+      if (!response.ok) throw new Error('Upstash pipeline failed')
+      const result = await response.json() as { result?: unknown }[]
+      const count = Number(result[0]?.result)
+      return count > max ? 'limited' : 'ok'
+    } catch {
+      // Ne jamais basculer silencieusement sur un Map local en production.
+      return process.env.NODE_ENV === 'production' ? 'unconfigured' : 'ok'
+    }
+  }
+
+  if (process.env.NODE_ENV === 'production') return 'unconfigured'
+  const now = Date.now()
+  const current = rateLimitStore.get(key)
+  const count = current && now - current.start < windowMs ? current.count + 1 : 1
+  rateLimitStore.set(key, { count, start: current && now - current.start < windowMs ? current.start : now })
+  return count > max ? 'limited' : 'ok'
+}
+
 /** Reporte sur `to` les cookies écrits sur `from` (jetons rafraîchis). */
 function withCookies(to: NextResponse, from: NextResponse): NextResponse {
   from.cookies.getAll().forEach((c) => to.cookies.set(c))
@@ -24,7 +59,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url, 301)
   }
 
-  // ── Rate limiting simple sur les routes sensibles ─────────────────────────
+  // ── Rate limiting distribué sur les routes sensibles ──────────────────────
   const ip = (req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip') ?? 'unknown').trim()
   const sensitiveRoutes = [
     '/api/doctors/register',
@@ -37,33 +72,20 @@ export async function middleware(req: NextRequest) {
   ]
   if (sensitiveRoutes.some((r) => pathname.startsWith(r))) {
     const key = `rl:${ip}:${pathname}`
-    const now = Date.now()
     const windowMs = 60_000 // 1 minute
     // Lecture de créneaux : quota large (un patient parcourt plusieurs dates,
     // et un cabinet entier peut partager la même IP). Écritures : quota strict.
     const maxRequests = (pathname.startsWith('/api/slots') || pathname.startsWith('/api/search')) ? 40 : 10
-    const current = rateLimitStore.get(key)
-
-    let count = 1
-    let windowStart = now
-
-    if (current && now - current.start < windowMs) {
-      count = current.count + 1
-      windowStart = current.start
+    const result = await rateLimit(key, maxRequests, windowMs)
+    if (result === 'unconfigured') {
+      return new NextResponse(JSON.stringify({ error: 'Service de protection temporairement indisponible' }), {
+        status: 503, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      })
     }
-
-    if (count > maxRequests) {
+    if (result === 'limited') {
       return new NextResponse(JSON.stringify({ error: 'Trop de requêtes, réessayez dans 1 minute' }), {
         status: 429,
         headers: { 'Content-Type': 'application/json' },
-      })
-    }
-
-    rateLimitStore.set(key, { count, start: windowStart })
-
-    if (rateLimitStore.size > 10_000) {
-      rateLimitStore.forEach((value, storedKey) => {
-        if (now - value.start >= windowMs) rateLimitStore.delete(storedKey)
       })
     }
   }

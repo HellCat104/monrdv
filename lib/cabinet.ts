@@ -19,15 +19,16 @@ export async function getStaffContext(): Promise<StaffContext | null> {
   if (!user?.email) return null
 
   const admin = createAdminClient()
-  const { data: staff } = await admin
+  const { data: staffRows } = await admin
     .from('cabinet_staff')
     .select('*')
-    .eq('email', user.email.toLowerCase())
+    .eq('auth_user_id', user.id)
     .eq('status', 'active')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-  if (!staff) return null
+    .limit(2)
+  // Un compte ne peut opérer qu'un seul cabinet à la fois : mieux vaut refuser
+  // un état ambigu que sélectionner silencieusement le premier cabinet.
+  if (!staffRows || staffRows.length !== 1) return null
+  const staff = staffRows[0]
 
   const { data: doctor } = await admin
     .from('doctors')

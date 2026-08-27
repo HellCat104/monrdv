@@ -101,7 +101,9 @@ export default function AppointmentsPage() {
       const { data } = await query
       // Résumé des RDV clôturés (note + ordonnances + certificats + constantes) :
       // helper partagé, pour être identique à l'agenda cabinet et au tableau de bord.
-      const list = await withConsultationSummary(supabase, (data ?? []) as Appointment[])
+      const list = doctor.plan === 'complet'
+        ? await withConsultationSummary(supabase, (data ?? []) as Appointment[])
+        : (data ?? []) as Appointment[]
 
       setAppointments(list)
     } finally {

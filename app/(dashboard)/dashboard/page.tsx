@@ -67,10 +67,12 @@ export default async function DashboardPage() {
 
 
   // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »)
-  const [todaySummarised, upcomingSummarised] = await Promise.all([
-    withConsultationSummary(supabase, todayAppointments ?? []),
-    withConsultationSummary(supabase, upcomingAppointments ?? []),
-  ])
+  const [todaySummarised, upcomingSummarised] = doctor.plan === 'complet'
+    ? await Promise.all([
+        withConsultationSummary(supabase, todayAppointments ?? []),
+        withConsultationSummary(supabase, upcomingAppointments ?? []),
+      ])
+    : [todayAppointments ?? [], upcomingAppointments ?? []]
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
 

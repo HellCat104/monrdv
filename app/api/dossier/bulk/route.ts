@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import JSZip from 'jszip'
 import { buildPatientDossierPDF } from '@/lib/dossier'
+import { canAccess } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -18,9 +19,10 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   const { data: doctor } = await supabase
-    .from('doctors').select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals')
+    .from('doctors').select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals, plan')
     .eq('email', user.email).single()
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
+  if (!canAccess(doctor.plan, 'records')) return NextResponse.json({ error: 'Fonction réservée au forfait Cabinet complet' }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const ids: string[] = Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'string') : []

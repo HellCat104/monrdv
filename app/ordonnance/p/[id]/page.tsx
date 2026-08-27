@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
+import { canAccess } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,10 +22,11 @@ export default async function OrdonnanceByIdPage({ params, searchParams }: { par
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites')
+    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites, plan')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
+  if (!canAccess(doctor.plan, 'prescriptions')) notFound()
 
   const { data: prescription } = await supabase
     .from('prescriptions')

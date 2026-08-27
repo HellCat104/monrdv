@@ -672,3 +672,16 @@ export async function sendStaffInviteEmail(params: {
     return false
   }
 }
+
+/** Confirmation explicite de possession d'une adresse avant toute connexion. */
+export async function sendAccountActivationEmail(to: string, activationUrl: string): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL, to, subject: 'Confirmez votre adresse e-mail MonRDV',
+      html: `<p>Confirmez votre adresse e-mail pour activer votre compte MonRDV.</p><p><a href="${h(activationUrl)}">Confirmer mon adresse</a></p><p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.</p>`,
+    })
+    return true
+  } catch (error) { console.error('[Email] activation:', error); return false }
+}

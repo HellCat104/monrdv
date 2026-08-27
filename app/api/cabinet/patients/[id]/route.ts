@@ -48,11 +48,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     patient: {
       id: patient.id, first_name: patient.first_name, last_name: patient.last_name,
       phone: patient.phone, age: patient.age, cin: patient.cin, mutuelle: patient.mutuelle,
-      birth_date: patient.birth_date,
+      // Date de naissance et contacts familiaux : visibles seulement si le
+      // médecin a accordé l'accès clinique (ou l'exige via mode confidentiel).
+      birth_date: ctx.permissions.patients_medical ? patient.birth_date : null,
       // Contacts des parents (pédiatrie) : la secrétaire appelle le parent, pas l'enfant
-      parent1_name: patient.parent1_name, parent1_phone: patient.parent1_phone,
-      parent2_name: patient.parent2_name, parent2_phone: patient.parent2_phone,
-      primary_contact: patient.primary_contact,
+      parent1_name: ctx.permissions.patients_medical ? patient.parent1_name : null,
+      parent1_phone: ctx.permissions.patients_medical ? patient.parent1_phone : null,
+      parent2_name: ctx.permissions.patients_medical ? patient.parent2_name : null,
+      parent2_phone: ctx.permissions.patients_medical ? patient.parent2_phone : null,
+      primary_contact: ctx.permissions.patients_medical ? patient.primary_contact : null,
     },
     medical,
     prescriptions,

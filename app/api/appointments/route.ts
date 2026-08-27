@@ -213,13 +213,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // RDV existants du jour (intervalles occupés, durées variables)
-  const { data: dayAppointments } = await db
-    .from('appointments')
-    .select('time, duration_minutes')
-    .eq('doctor_id', doctor_id)
-    .eq('date', date)
-    .neq('status', 'cancelled')
+  // RDV et blocages sont les mêmes intervalles pour le moteur de disponibilité.
+  // Ne jamais considérer un blocage horaire comme une journée entière.
+  const [{ data: dayAppointments }, { data: dayBlocks }] = await Promise.all([
+    db.from('appointments').select('time, duration_minutes')
+      .eq('doctor_id', doctor_id).eq('date', date).neq('status', 'cancelled'),
+    db.from('blocked_dates').select('start_time, end_time')
+      .eq('doctor_id', doctor_id).eq('date', date),
+  ])
 
   const occupied = (dayAppointments ?? []).map((a) => ({
     time: a.time.substring(0, 5),
@@ -238,13 +239,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ce jour n\'est pas ouvert à la réservation' }, { status: 400 })
     }
 
+    if ((dayBlocks ?? []).some((b) => !b.start_time && !b.end_time)) {
+      return NextResponse.json({ error: 'Cette date n\'est pas disponible' }, { status: 400 })
+    }
+    const blockedIntervals = (dayBlocks ?? []).filter((b) => b.start_time && b.end_time).map((b) => {
+      const start = String(b.start_time).substring(0, 5)
+      return { time: start, duration: Math.max(1, toMinutes(String(b.end_time).substring(0, 5)) - toMinutes(start)) }
+    })
     const slots = getSlotsForDuration(
       daySchedule.start,
       daySchedule.end,
       appointmentDuration,
       doctorCheck.appointment_duration,
       getDayBreaks(daySchedule),
-      occupied
+      [...occupied, ...blockedIntervals]
     )
 
     const slot = slots.find((s) => s.time === time)
@@ -255,16 +263,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ce créneau est déjà réservé' }, { status: 409 })
     }
 
-    const { data: blockedDate } = await db
-      .from('blocked_dates')
-      .select('id')
-      .eq('doctor_id', doctor_id)
-      .eq('date', date)
-      .maybeSingle()
-
-    if (blockedDate) {
-      return NextResponse.json({ error: 'Cette date n\'est pas disponible' }, { status: 400 })
-    }
   } else {
     // Médecin : pas de restriction d'horaires, mais on bloque quand même
     // le chevauchement avec un RDV existant (pas deux patients en même temps).

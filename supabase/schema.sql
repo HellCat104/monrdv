@@ -1,11 +1,21 @@
 -- ============================================================
--- MonRDV — Schéma Supabase / PostgreSQL (schéma "public")
+-- ARCHIVE HISTORIQUE — NE PAS EXÉCUTER.
+--
+-- Ce fichier ne représente plus la production après les migrations v2 à v42
+-- et contient des anciennes policies volontairement remplacées. Il est gardé
+-- uniquement pour l'historique du projet. Toute initialisation doit utiliser
+-- un dump obtenu depuis le projet Supabase de production, puis les migrations
+-- versionnées dans ce dossier, dans leur ordre de version.
+--
+-- Le garde-fou ci-dessous fait échouer explicitement une exécution accidentelle.
+DO $$ BEGIN
+  RAISE EXCEPTION 'supabase/schema.sql est obsolète : utilisez un dump Supabase actuel et les migrations versionnées';
+END $$;
+
+-- MonRDV — ancien schéma Supabase / PostgreSQL (schéma "public")
 -- Fuseau horaire applicatif : Africa/Casablanca (GMT+1)
 -- ============================================================
--- Ce fichier reflète FIDÈLEMENT la base de production (régénéré
--- depuis information_schema/pg_catalog le 2026-06-06).
--- Il sert d'archive : exécuté sur une base vide, il recrée la
--- structure complète de l'application.
+-- Il ne reflète PAS fidèlement la base de production.
 --
 -- Note : les règles ON DELETE (CASCADE / SET NULL) reflètent le
 -- design d'origine ; elles ne sont pas extractibles du dump JSON

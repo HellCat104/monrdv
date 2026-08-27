@@ -44,7 +44,11 @@ npm install
 ### 2. Configurer Supabase
 
 1. Créez un projet sur [supabase.com](https://supabase.com)
-2. Allez dans **SQL Editor** et exécutez le contenu de `supabase/schema.sql`
+2. **N'exécutez pas `supabase/schema.sql`** : c'est une archive obsolète, protégée
+   contre l'exécution. Initialisez la base depuis un dump SQL généré par Supabase
+   (Dashboard ou `supabase db dump`), puis appliquez les fichiers
+   `supabase/migration_v*.sql` par ordre numérique. Avant une nouvelle instance,
+   générez de préférence un dump à jour du projet de référence.
 3. Dans **Authentication > Users**, créez un compte pour chaque médecin
 4. Insérez le médecin dans la table `doctors` avec **le même email** :
 
@@ -124,7 +128,8 @@ monrdv/
 │   ├── stripe.ts              # Paiement (prêt à activer)
 │   └── utils.ts               # Utilitaires
 ├── types/index.ts             # Types TypeScript
-├── supabase/schema.sql        # Schéma base de données
+├── supabase/migration_v*.sql  # Migrations versionnées à appliquer dans l'ordre
+├── supabase/schema.sql        # Archive obsolète, volontairement inexécutable
 └── vercel.json                # Config Vercel + Cron
 ```
 
