@@ -69,7 +69,8 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── Protection des routes privées ────────────────────────────────────────
-  const protectedRoutes = ['/dashboard', '/appointments', '/patients', '/settings', '/abonnement', '/equipe', '/cabinet']
+  const protectedRoutes = ['/dashboard', '/appointments', '/patients', '/settings', '/abonnement',
+    '/equipe', '/cabinet', '/statistiques', '/factures', '/consultation']
   const adminRoutes = ['/admin']
   const isProtected = protectedRoutes.some((r) => pathname.startsWith(r))
   const isAdmin = adminRoutes.some((r) => pathname.startsWith(r))

@@ -116,15 +116,51 @@ export default function StatistiquesPage() {
   const supabase = createClient()
   const router = useRouter()
 
-  async function loadAll(docId: string) {
-    const [aptRes, expRes, creditRes] = await Promise.all([
-      supabase.from('appointments')
-        .select('id, date, time, status, attendance, amount_paid, amount_due, payment_method, invoice_no, paid_at, notes, patient:patients(first_name, last_name, phone), consultation_type:consultation_types(name)')
-        .eq('doctor_id', docId).neq('status', 'cancelled'),
-      supabase.from('expenses').select('*').eq('doctor_id', docId).order('date', { ascending: false }),
-      supabase.from('credit_notes').select('*').eq('doctor_id', docId).order('created_at', { ascending: false }),
+  const APT_FIELDS = 'id, date, time, status, attendance, amount_paid, amount_due, payment_method, invoice_no, paid_at, notes, patient:patients(first_name, last_name, phone), consultation_type:consultation_types(name)'
+
+  /**
+   * Ne charge que la fenêtre réellement affichée.
+   *
+   * Sans bornes, la page lisait tout l'historique du cabinet — or Supabase
+   * plafonne une réponse à 1000 lignes : au-delà, les totaux devenaient faux
+   * SANS aucun message d'erreur. La fenêtre couvre la période choisie, la
+   * période précédente (comparaison) et les six derniers mois (graphique).
+   * Les impayés font l'objet d'une requête à part : une dette ne dépend
+   * d'aucune période.
+   */
+  async function loadAll(docId: string, p: Period) {
+    const now = getNowInMaroc()
+    const today = format(now, 'yyyy-MM-dd')
+    const cur = periodRange(p, now)
+    const prev = previousPeriodRange(p, now)
+    const sixMonths = format(startOfMonth(subMonths(now, 5)), 'yyyy-MM-dd')
+
+    const start = [cur.start, prev?.start ?? cur.start, sixMonths].sort()[0]
+    const end = cur.end > today ? cur.end : today
+
+    const [aptRes, expRes, creditRes, unpaidRes] = await Promise.all([
+      supabase.from('appointments').select(APT_FIELDS)
+        .eq('doctor_id', docId).neq('status', 'cancelled')
+        .gte('date', start).lte('date', end)
+        .order('date', { ascending: false }).limit(2000),
+      supabase.from('expenses').select('*')
+        .eq('doctor_id', docId).gte('date', start).lte('date', end)
+        .order('date', { ascending: false }).limit(2000),
+      supabase.from('credit_notes').select('*')
+        .eq('doctor_id', docId).order('created_at', { ascending: false }).limit(500),
+      // Reste dû : seuls les RDV portant un montant attendu peuvent être
+      // impayés, ce qui restreint déjà fortement la recherche.
+      supabase.from('appointments').select(APT_FIELDS)
+        .eq('doctor_id', docId).neq('status', 'cancelled')
+        .gt('amount_due', 0).order('date', { ascending: false }).limit(500),
     ])
-    setAppts((aptRes.data ?? []) as unknown as Appointment[])
+
+    // Un RDV impayé hors fenêtre doit rester compté une seule fois.
+    const inWindow = (aptRes.data ?? []) as unknown as Appointment[]
+    const seen = new Set(inWindow.map((a) => a.id))
+    const extra = ((unpaidRes.data ?? []) as unknown as Appointment[]).filter((a) => !seen.has(a.id))
+
+    setAppts([...inWindow, ...extra])
     setExpenses((expRes.data ?? []) as Expense[])
     setCredits((creditRes.data ?? []) as CreditNote[])
   }
@@ -139,12 +175,22 @@ export default function StatistiquesPage() {
       if (!canAccess(doctor.plan, 'stats')) { router.replace('/dashboard'); return }
       setInvoicing(canAccess(doctor.plan, 'invoicing'))
       setDoctorId(doctor.id)
-      await loadAll(doctor.id)
+      await loadAll(doctor.id, period)
       setLoading(false)
     }
     init()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Changer de période change la fenêtre de données à charger.
+  useEffect(() => {
+    if (!doctorId) return
+    let annule = false
+    setLoading(true)
+    loadAll(doctorId, period).finally(() => { if (!annule) setLoading(false) })
+    return () => { annule = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, doctorId])
 
   const payDate = (a: Appointment) =>
     a.paid_at ? formatInTimeZone(parseISO(a.paid_at), MAROC_TZ, 'yyyy-MM-dd') : a.date
@@ -389,16 +435,25 @@ export default function StatistiquesPage() {
       const withReceipt = d.expenseRows.filter((e) => e.receipt_path)
       if (withReceipt.length > 0) {
         const folder = zip.folder('justificatifs')!
-        for (const e of withReceipt) {
-          const { data: blob } = await supabase.storage.from(RECEIPT_BUCKET).download(e.receipt_path!)
-          if (!blob) continue
-          const ext = e.receipt_path!.split('.').pop() || 'bin'
-          const safe = e.label.replace(/[^a-zA-Z0-9._ -]/g, '').substring(0, 40).trim()
-          folder.file(`${e.date}-${safe || 'depense'}.${ext}`, blob)
+        // Téléchargement par lots : en série, trente justificatifs faisaient
+        // trente aller-retours l'un après l'autre et l'onglet paraissait figé.
+        const BATCH = 5
+        for (let i = 0; i < withReceipt.length; i += BATCH) {
+          const slice = withReceipt.slice(i, i + BATCH)
+          const files = await Promise.all(
+            slice.map(async (e) => {
+              const { data: blob } = await supabase.storage.from(RECEIPT_BUCKET).download(e.receipt_path!)
+              if (!blob) return null
+              const ext = e.receipt_path!.split('.').pop() || 'bin'
+              const safe = e.label.replace(/[^a-zA-Z0-9._ -]/g, '').substring(0, 40).trim()
+              return { name: `${e.date}-${safe || 'depense'}.${ext}`, blob }
+            })
+          )
+          files.forEach((f) => { if (f) folder.file(f.name, f.blob) })
         }
       }
 
-      const out = await zip.generateAsync({ type: 'blob' })
+      const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' })
       const url = URL.createObjectURL(out)
       const a = document.createElement('a')
       a.href = url

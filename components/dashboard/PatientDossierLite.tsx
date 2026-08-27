@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getInitials, formatDateFr } from '@/lib/utils'
 import { STATUS_LABELS, type Patient, type AppointmentStatus } from '@/types'
-import { ArrowLeft, Phone, Save, Check, Calendar } from 'lucide-react'
+import { ArrowLeft, Phone, Save, Check, Calendar, Wallet } from 'lucide-react'
 
 interface LiteAppointment {
   id: string
@@ -20,6 +20,9 @@ interface LiteAppointment {
   time: string
   status: AppointmentStatus
   notes: string | null
+  amount_due: number | null
+  amount_paid: number | null
+  invoice_no: string | null
 }
 
 export default function PatientDossierLite({ initialPatient }: { initialPatient: Patient }) {
@@ -38,7 +41,7 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
   useEffect(() => {
     supabase
       .from('appointments')
-      .select('id, date, time, status, notes')
+      .select('id, date, time, status, notes, amount_due, amount_paid, invoice_no')
       .eq('patient_id', patient.id)
       .order('date', { ascending: false })
       .order('time', { ascending: false })
@@ -46,6 +49,12 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
       .then(({ data }) => setAppointments((data ?? []) as LiteAppointment[]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient.id])
+
+  // Ce que le patient doit encore, consultation par consultation.
+  const impayes = appointments
+    .map((a) => ({ ...a, reste: Number(a.amount_due ?? 0) - Number(a.amount_paid ?? 0) }))
+    .filter((a) => a.reste > 0)
+  const totalDu = impayes.reduce((s, a) => s + a.reste, 0)
 
   async function handleSave() {
     if (!editFirstName.trim() || !editLastName.trim() || !editPhone.trim()) return
@@ -127,6 +136,35 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
           </Button>
         </div>
       </div>
+
+      {/* Reste dû — visible dès l'ouverture de la fiche, sinon le praticien
+          ne découvre l'impayé qu'en fouillant l'historique. */}
+      {totalDu > 0 && (
+        <div className="bg-orange-50 rounded-2xl border-2 border-orange-200 p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <Wallet className="h-5 w-5 text-orange-600 shrink-0" />
+              <div>
+                <p className="font-bold text-orange-800">
+                  Reste à payer : {totalDu.toLocaleString('fr-FR')} DH
+                </p>
+                <p className="text-xs text-orange-700 mt-0.5">
+                  {impayes.length} consultation{impayes.length > 1 ? 's' : ''} non soldée{impayes.length > 1 ? 's' : ''}
+                </p>
+              </div>
+            </div>
+            <div className="text-xs text-orange-700 space-y-0.5 text-right">
+              {impayes.slice(0, 3).map((a) => (
+                <p key={a.id}>
+                  {formatDateFr(a.date)}
+                  {a.invoice_no ? ` · ${a.invoice_no}` : ''} — <b>{a.reste.toLocaleString('fr-FR')} DH</b>
+                </p>
+              ))}
+              {impayes.length > 3 && <p className="italic">+ {impayes.length - 3} autre{impayes.length - 3 > 1 ? 's' : ''}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Historique des rendez-vous (sans contenu médical) */}
       <div className="bg-white rounded-2xl border border-gray-200 p-6">
