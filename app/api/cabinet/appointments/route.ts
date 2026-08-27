@@ -55,16 +55,16 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ data: [] as unknown[] }),
   ])
 
-  // Le motif libre est une donnée de santé. Il ne sort jamais pour une
-  // secrétaire sans permission clinique, même hors mode confidentiel.
+  // Mode confidentiel : on retire le motif et le type de consultation
+  // (la secrétaire ne voit que nom, heure, tél. et ses actions).
   let appointments = aptRes.data ?? []
-  if (ctx.confidential || !ctx.permissions.patients_medical) {
+  if (ctx.confidential) {
     appointments = appointments.map((a) => ({ ...a, notes: null, consultation_type: [] }))
   }
 
   return NextResponse.json({
     appointments,
-    consultationTypes: (ctx.confidential || !ctx.permissions.patients_medical) ? [] : (typesRes.data ?? []),
+    consultationTypes: ctx.confidential ? [] : (typesRes.data ?? []),
     defaultDuration: docRes.data?.appointment_duration ?? 30,
     blocks: blocksRes.data ?? [],
     permissions: ctx.permissions,

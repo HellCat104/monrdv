@@ -1,7 +1,7 @@
 // API : inscription d'un nouveau médecin
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { sendAccountActivationEmail, sendAdminNotificationEmail, sendPendingEmail } from '@/lib/email'
+import { sendAdminNotificationEmail, sendPendingEmail } from '@/lib/email'
 import { sanitizeString, sanitizeEmail, sanitizeSlug, sanitizePhone, isValidEmail, isValidSlug } from '@/lib/sanitize'
 
 export async function POST(req: NextRequest) {
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
-    email_confirm: false,
+    email_confirm: true,
   })
 
   if (authError || !authData.user) {
@@ -126,18 +126,16 @@ export async function POST(req: NextRequest) {
     await supabase.auth.admin.deleteUser(authData.user.id)
     return NextResponse.json({ error: 'Erreur lors de la création du profil' }, { status: 500 })
   }
-  const { data: activation } = await supabase.auth.admin.generateLink({ type: 'signup', email, password })
 
   // Crée le compte de la secrétaire (identifiants distincts, lié au cabinet).
   // Non bloquant : si son e-mail est déjà pris, l'inscription du médecin reste
   // valide — il pourra la réinviter depuis « Mon équipe ».
   let secretaryWarning: string | null = null
-  let secretaryActivationUrl: string | null = null
   if (withSecretary) {
-    const { data: secAuth, error: secAuthErr } = await supabase.auth.admin.createUser({
+    const { error: secAuthErr } = await supabase.auth.admin.createUser({
       email: secEmail,
       password: secPassword,
-      email_confirm: false,
+      email_confirm: true,
       user_metadata: { role: 'staff', name: secName },
     })
     if (secAuthErr && !/already|registered|exists/i.test(secAuthErr.message || '')) {
@@ -146,22 +144,17 @@ export async function POST(req: NextRequest) {
       const { error: staffErr } = await supabase.from('cabinet_staff').insert({
         doctor_id: newDoctor.id,
         email: secEmail.toLowerCase(),
-        auth_user_id: secAuth?.user?.id ?? null,
         name: secName,
         // permissions par défaut : agenda + accueil (défini côté DB)
       })
       if (staffErr) {
         secretaryWarning = 'Le compte de la secrétaire n\'a pas pu être lié — vous pourrez l\'inviter depuis « Mon équipe ».'
       }
-      const { data: secActivation } = await supabase.auth.admin.generateLink({ type: 'signup', email: secEmail, password: secPassword })
-      secretaryActivationUrl = secActivation?.properties?.action_link ?? null
     }
   }
 
   // Emails — AWAIT obligatoire en serverless (sinon tués avant l'envoi)
   await Promise.allSettled([
-    ...(activation?.properties?.action_link ? [sendAccountActivationEmail(email, activation.properties.action_link)] : []),
-    ...(secretaryActivationUrl ? [sendAccountActivationEmail(secEmail, secretaryActivationUrl)] : []),
     // Notifie l'admin par email
     sendAdminNotificationEmail({ doctorName: name, doctorEmail: email, specialty })
       .catch((err) => console.error('[Email admin]', err)),

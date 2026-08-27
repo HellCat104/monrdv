@@ -3,8 +3,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor } from '@/lib/email'
-import { getNowInMaroc } from '@/lib/utils'
-import { format } from 'date-fns'
 
 // POST /api/cancel/[token] — annule le RDV (déclenché par un clic explicite sur la page /annuler)
 export async function POST(
@@ -13,20 +11,11 @@ export async function POST(
 ) {
   const supabase = createAdminClient()
 
-  // Un lien ne doit jamais altérer l'historique clinique ou comptable.
-  const { data: candidate } = await supabase.from('appointments')
-    .select('id, date, time, invoice_no, amount_paid, status')
-    .eq('cancel_token', params.token)
-    .maybeSingle()
-  const today = format(getNowInMaroc(), 'yyyy-MM-dd')
-  const nowTime = format(getNowInMaroc(), 'HH:mm')
-  if (!candidate || candidate.status === 'cancelled' || candidate.date < today || (candidate.date === today && candidate.time.slice(0, 5) <= nowTime) || candidate.invoice_no || candidate.amount_paid != null) {
-    return NextResponse.json({ error: 'Ce lien ne permet plus d\'annuler ce rendez-vous' }, { status: 400 })
-  }
-
   const { data: appointment, error } = await supabase
-    .from('appointments').update({ status: 'cancelled' })
-    .eq('id', candidate.id).eq('cancel_token', params.token).neq('status', 'cancelled')
+    .from('appointments')
+    .update({ status: 'cancelled' })
+    .eq('cancel_token', params.token)
+    .neq('status', 'cancelled')
     .select('date, time, patient:patients(first_name, last_name, phone, email), doctor:doctors(name, email, specialty)')
     .single()
 

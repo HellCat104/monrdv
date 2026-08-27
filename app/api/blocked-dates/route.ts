@@ -1,10 +1,11 @@
 // API : dates bloquées (congés) d'un médecin — pour la page de réservation publique
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { formatInTimeZone } from 'date-fns-tz'
 
 // GET /api/blocked-dates?doctor_id=...
-// Retourne uniquement les JOURS entièrement bloqués. Les blocages horaires sont
-// traités par /api/slots; aucun motif interne n'est exposé publiquement.
+// Retourne les dates bloquées (pour griser le calendrier) + les messages
+// publics laissés par le médecin pour ses congés à venir.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const doctorId = searchParams.get('doctor_id')
@@ -20,14 +21,25 @@ export async function GET(req: NextRequest) {
     .eq('status', 'approved')
     .single()
 
-  if (!doctor) return NextResponse.json({ blocked: [] })
+  if (!doctor) return NextResponse.json({ blocked: [], notices: [] })
 
   const { data } = await supabase
     .from('blocked_dates')
-    .select('date, start_time, end_time')
+    .select('date, reason')
     .eq('doctor_id', doctorId)
 
-  const rows = (data ?? []) as { date: string; start_time: string | null; end_time: string | null }[]
-  const blocked = rows.filter((d) => !d.start_time && !d.end_time).map((d) => d.date)
-  return NextResponse.json({ blocked })
+  const rows = (data ?? []) as { date: string; reason: string | null }[]
+  const blocked = rows.map((d) => d.date)
+
+  // Messages publics des congés à VENIR (aujourd'hui inclus), heure Maroc
+  const today = formatInTimeZone(new Date(), 'Africa/Casablanca', 'yyyy-MM-dd')
+  const notices = Array.from(
+    new Set(
+      rows
+        .filter((d) => d.date >= today && d.reason && d.reason.trim())
+        .map((d) => d.reason!.trim())
+    )
+  )
+
+  return NextResponse.json({ blocked, notices })
 }

@@ -4,7 +4,6 @@ import { displayName } from '@/lib/profession'
 import { notFound, redirect } from 'next/navigation'
 import { formatDateFr } from '@/lib/utils'
 import { PrintBar } from './PrintBar'
-import { canAccess } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,11 +14,10 @@ export default async function CertificatPage({ params }: { params: { id: string 
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, plan')
+    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
-  if (!canAccess(doctor.plan, 'prescriptions')) notFound()
 
   const { data: cert } = await supabase
     .from('certificates')

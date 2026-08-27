@@ -3,7 +3,7 @@
 // "source" vers la fiche "cible", complète les champs manquants de la cible,
 // puis supprime la source. Réservé au médecin propriétaire des deux fiches.
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -47,12 +47,37 @@ export async function POST(req: NextRequest) {
     }, { status: 409 })
   }
 
-  // La fonction PostgreSQL est transactionnelle : aucune table ne peut rester
-  // réassignée si une étape suivante échoue.
-  const { error: mergeError } = await supabase.rpc('merge_patients_atomic', {
-    p_doctor_id: doctor.id, p_keep_id: keepId, p_merge_id: mergeId, p_actor: user.id,
-  })
-  if (mergeError) return NextResponse.json({ error: 'Échec de la fusion : ' + mergeError.message }, { status: 409 })
+  const db = createAdminClient()
+
+  // 1. Réassigne tous les enregistrements liés vers la fiche conservée
+  // `certificates` et `recalls` sont liés au patient en CASCADE : sans réassignation,
+  // ils étaient supprimés silencieusement avec la fiche source.
+  for (const table of ['appointments', 'consultation_notes', 'prescriptions', 'vital_signs',
+    'patient_documents', 'certificates', 'recalls']) {
+    const { error } = await db.from(table).update({ patient_id: keepId }).eq('patient_id', mergeId)
+    if (error) {
+      return NextResponse.json({ error: `Échec de la fusion (${table})` }, { status: 500 })
+    }
+  }
+
+  // 2. Complète les champs vides de la cible avec ceux de la source (sans écraser)
+  const fill: Record<string, unknown> = {}
+  // `user_id` est transféré uniquement si la fiche conservée n'en a pas : c'est le
+  // cas légitime (même patient inscrit deux fois) — les cas ambigus ont été
+  // refusés plus haut.
+  for (const f of ['email', 'age', 'allergies', 'chronic_conditions', 'current_treatments', 'notes', 'user_id',
+    'birth_date', 'sex', 'cin', 'mutuelle', 'address', 'blood_group', 'surgeries', 'vaccinations',
+    'gestational_age_weeks', 'parent1_name', 'parent1_phone', 'parent2_name', 'parent2_phone',
+    'primary_contact', 'family_id', 'is_child'] as const) {
+    if ((keep[f] == null || keep[f] === '') && merge[f] != null && merge[f] !== '') fill[f] = merge[f]
+  }
+  if (Object.keys(fill).length > 0) {
+    await db.from('patients').update(fill).eq('id', keepId)
+  }
+
+  // 3. Supprime la fiche en double (désormais vidée de ses liens)
+  const { error: delErr } = await db.from('patients').delete().eq('id', mergeId)
+  if (delErr) return NextResponse.json({ error: 'Échec de la suppression du doublon' }, { status: 500 })
 
   return NextResponse.json({ success: true })
 }

@@ -355,9 +355,8 @@ export default function PatientDossier({
 
   async function deletePatient() {
     if (!confirm('Supprimer définitivement ce patient et tout son dossier ? Action irréversible.')) return
-    const res = await fetch(`/api/patients/${patient.id}`, { method: 'DELETE' })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) { alert(body.error || 'La suppression a échoué.'); return }
+    const { error } = await supabase.from('patients').delete().eq('id', patient.id)
+    if (error) { alert('La suppression a échoué.'); return }
     router.push('/patients')
   }
 

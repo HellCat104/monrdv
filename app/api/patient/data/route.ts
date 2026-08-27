@@ -115,10 +115,6 @@ export async function DELETE() {
     await adminDb.from('prescriptions').delete().in('patient_id', patientIds)
     await adminDb.from('vital_signs').delete().in('patient_id', patientIds)
     await adminDb.from('recalls').delete().in('patient_id', patientIds)
-    await adminDb.from('certificates').delete().in('patient_id', patientIds)
-    // Les motifs de RDV peuvent contenir des données de santé : une conservation
-    // comptable des RDV n'autorise pas à conserver ce texte identifiant.
-    await adminDb.from('appointments').update({ notes: null, doctor_notes: null }).in('patient_id', patientIds)
 
     // Documents : supprime les fichiers du stockage PUIS les lignes en base
     const { data: docs } = await adminDb

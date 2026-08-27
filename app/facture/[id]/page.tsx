@@ -5,7 +5,6 @@ import { displayName } from '@/lib/profession'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatTime } from '@/lib/utils'
 import { PrintButton } from './PrintButton'
-import { canAccess } from '@/lib/plan'
 
 interface Props {
   params: { id: string }
@@ -22,12 +21,11 @@ export default async function FacturePage({ params }: Props) {
   // Médecin connecté
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, email, ice, inpe, plan')
+    .select('id, name, specialty, address, city, phone, email, ice, inpe')
     .eq('email', user.email)
     .single()
 
   if (!doctor) notFound()
-  if (!canAccess(doctor.plan, 'invoicing')) notFound()
 
   // RDV (RLS garantit déjà que le médecin ne voit que les siens, on revérifie)
   const { data: apt } = await supabase

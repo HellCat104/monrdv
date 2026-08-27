@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
 import { PrintButton } from './PrintButton'
-import { canAccess } from '@/lib/plan'
 
 interface Props { params: { id: string } }
 export const dynamic = 'force-dynamic'
@@ -25,11 +24,10 @@ export default async function DossierPage({ params }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals, plan')
+    .select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
-  if (!canAccess(doctor.plan, 'records')) notFound()
 
   const { data: patient } = await supabase
     .from('patients')
