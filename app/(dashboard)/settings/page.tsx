@@ -34,6 +34,7 @@ export default function SettingsPage() {
     cnom_number: '',
     appointment_duration: 30,
     booking_lead_hours: 3,
+    show_prices: true,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
     has_secretary: false,
     confidential_mode: false,
@@ -94,6 +95,7 @@ export default function SettingsPage() {
           cnom_number: data.cnom_number ?? '',
           appointment_duration: data.appointment_duration,
           booking_lead_hours: data.booking_lead_hours ?? 3,
+          show_prices: data.show_prices ?? true,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
           has_secretary: !!data.has_secretary,
           confidential_mode: !!data.confidential_mode,
@@ -217,6 +219,7 @@ export default function SettingsPage() {
           custom_vitals: customVitals,
           appointment_duration: form.appointment_duration,
           booking_lead_hours: form.booking_lead_hours,
+          show_prices: form.show_prices,
           working_hours: form.working_hours,
           has_secretary: form.has_secretary,
           confidential_mode: form.confidential_mode,
@@ -773,6 +776,22 @@ export default function SettingsPage() {
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Afficher ou non les tarifs aux patients */}
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800">Afficher mes tarifs aux patients</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {form.show_prices
+                    ? 'Le tarif de chaque motif est visible sur votre page de réservation.'
+                    : 'Vos tarifs restent privés : les patients ne voient que la durée.'}
+                </p>
+              </div>
+              <Switch
+                checked={form.show_prices}
+                onCheckedChange={(v) => setForm({ ...form, show_prices: v })}
+              />
+            </div>
+
             {/* Liste des motifs */}
             {consultTypes.length > 0 && (
               <div className="space-y-2">

@@ -35,6 +35,8 @@ export interface Doctor {
   appointment_duration: number // en minutes : 15, 20 ou 30
   // Heures d'avance minimum pour réserver en ligne (0 = immédiat, 24 = dès demain)
   booking_lead_hours?: number
+  // Tarifs des motifs visibles des patients sur la page de réservation
+  show_prices?: boolean
   created_at: string
 }
 

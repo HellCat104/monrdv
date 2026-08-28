@@ -10,6 +10,8 @@ import { Printer, X } from 'lucide-react'
 export interface DaySheetItem {
   id: string
   time: string
+  /** Durée réelle du RDV : elle varie selon le motif choisi */
+  duration?: number | null
   name: string
   motif?: string | null
   phone?: string | null
@@ -112,7 +114,10 @@ export default function DaySheet({
             <tbody>
               {sorted.map((i) => (
                 <tr key={i.id} className="border-b border-gray-100 align-top">
-                  <td className="py-2 pr-2 font-semibold">{formatTime(i.time)}</td>
+                  <td className="py-2 pr-2 font-semibold whitespace-nowrap">
+                    {formatTime(i.time)}
+                    {i.duration ? <span className="font-normal text-gray-500"> · {i.duration} min</span> : null}
+                  </td>
                   <td className="py-2 pr-2">{i.name}</td>
                   <td className="py-2 pr-2 text-gray-600">{i.motif || '—'}</td>
                   {showPhone && <td className="py-2 pr-2 text-gray-600">{i.phone || '—'}</td>}

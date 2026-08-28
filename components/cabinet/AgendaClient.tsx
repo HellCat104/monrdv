@@ -675,6 +675,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
           items={active.map((a) => ({
             id: a.id,
             time: a.time,
+            duration: a.duration_minutes ?? null,
             name: a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient',
             motif: a.consultation_type?.name || a.notes || null,
             phone: permissions.patients_contact ? a.patient?.phone ?? null : null,
