@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import { AddAppointmentDialog } from '@/components/dashboard/AddAppointmentDialog'
+import { WeekGrid } from '@/components/dashboard/WeekGrid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -156,11 +157,24 @@ export default function AppointmentsPage() {
 
   // Blocages du jour affiché (vue Jour)
   const loadDayBlocks = useCallback(async () => {
-    if (!doctor || viewMode !== 'day') { setDayBlocks([]); return }
-    const dStr = format(currentDate, 'yyyy-MM-dd')
+    if (!doctor || viewMode === 'all') { setDayBlocks([]); return }
+    // La vue Semaine dessine les blocages dans sa grille : on charge donc la
+    // plage affichée, et plus seulement le jour courant.
+    const from = viewMode === 'week'
+      ? format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+      : viewMode === 'month'
+        ? format(startOfMonth(currentDate), 'yyyy-MM-dd')
+        : format(currentDate, 'yyyy-MM-dd')
+    const to = viewMode === 'week'
+      ? format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+      : viewMode === 'month'
+        ? format(endOfMonth(currentDate), 'yyyy-MM-dd')
+        : format(currentDate, 'yyyy-MM-dd')
     const { data } = await supabase.from('blocked_dates')
       .select('id, date, start_time, end_time, reason')
-      .eq('doctor_id', doctor.id).eq('date', dStr).order('start_time', { ascending: true })
+      .eq('doctor_id', doctor.id)
+      .gte('date', from).lte('date', to)
+      .order('date', { ascending: true }).order('start_time', { ascending: true })
     setDayBlocks((data ?? []) as Block[])
   }, [doctor, viewMode, currentDate, supabase])
 
@@ -334,7 +348,7 @@ export default function AppointmentsPage() {
       {/* Créneaux bloqués du jour (vue Jour) */}
       {viewMode === 'day' && dayBlocks.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {dayBlocks.map((b) => (
+          {dayBlocks.filter((b) => b.date === format(currentDate, 'yyyy-MM-dd')).map((b) => (
             <span key={b.id} className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-700 border border-red-100 rounded-full pl-3 pr-1.5 py-1">
               <Ban className="h-3 w-3" />
               {b.start_time ? `${b.start_time.slice(0, 5)}–${(b.end_time ?? '').slice(0, 5)}` : 'Journée bloquée'}{b.reason ? ` · ${b.reason}` : ''}
@@ -464,6 +478,19 @@ export default function AppointmentsPage() {
               </div>
               <p className="text-xs text-gray-400 mt-3 text-center">Cliquez sur un jour pour voir le détail</p>
             </div>
+          ) : viewMode === 'week' && doctor ? (
+            /* Grille horaire hebdomadaire */
+            <WeekGrid
+              weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
+              appointments={filtered}
+              blocks={dayBlocks}
+              workingHours={doctor.working_hours}
+              defaultDuration={doctor.appointment_duration}
+              onSelectDay={(day) => { setCurrentDate(day); setViewMode('day') }}
+              onSelectAppointment={(apt) => {
+                if (apt.patient_id) router.push(`/patients?patient=${apt.patient_id}`)
+              }}
+            />
           ) : (
             <AppointmentList
               appointments={filtered}
