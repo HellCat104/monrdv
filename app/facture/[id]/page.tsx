@@ -5,6 +5,7 @@ import { displayName } from '@/lib/profession'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatTime } from '@/lib/utils'
 import { PrintButton } from './PrintButton'
+import { canAccess } from '@/lib/plan'
 
 interface Props {
   params: { id: string }
@@ -21,11 +22,15 @@ export default async function FacturePage({ params }: Props) {
   // Médecin connecté
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, email, ice, inpe')
+    .select('id, name, specialty, address, city, phone, email, ice, inpe, plan')
     .eq('email', user.email)
     .single()
 
   if (!doctor) notFound()
+
+  // Le forfait se contrôle ici aussi : la page est atteignable par son URL,
+  // même quand l'interface n'affiche plus le lien qui y mène.
+  if (!canAccess(doctor.plan, 'invoicing')) redirect('/appointments')
 
   // RDV (RLS garantit déjà que le médecin ne voit que les siens, on revérifie)
   const { data: apt } = await supabase

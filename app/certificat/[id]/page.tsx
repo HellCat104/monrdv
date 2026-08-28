@@ -4,6 +4,7 @@ import { displayName } from '@/lib/profession'
 import { notFound, redirect } from 'next/navigation'
 import { formatDateFr } from '@/lib/utils'
 import { PrintBar } from './PrintBar'
+import { canAccess } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,10 +15,14 @@ export default async function CertificatPage({ params }: { params: { id: string 
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number')
+    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, plan')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
+
+  // Le forfait se contrôle ici aussi : la page est atteignable par son URL,
+  // même quand l'interface n'affiche plus le lien qui y mène.
+  if (!canAccess(doctor.plan, 'prescriptions')) redirect('/appointments')
 
   const { data: cert } = await supabase
     .from('certificates')

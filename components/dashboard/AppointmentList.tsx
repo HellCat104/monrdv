@@ -261,6 +261,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   <Clock className="h-3 w-3" /> {formatDateShort(apt.date)} à {formatTime(apt.time)}
                 </p>
 
+                {plan === 'complet' && (
                 <details className="mt-2 group">
                   <summary className="text-xs font-medium text-primary-600 cursor-pointer select-none list-none flex items-center gap-1">
                     <FileText className="h-3.5 w-3.5" /> Résumé de la consultation
@@ -303,6 +304,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     )}
                   </div>
                 </details>
+                )}
               </div>
 
               <div className="shrink-0">

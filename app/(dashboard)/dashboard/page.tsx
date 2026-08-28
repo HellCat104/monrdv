@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { withConsultationSummary } from '@/lib/consultation-summary'
+import { canAccess } from '@/lib/plan'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, Users, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
@@ -66,11 +67,15 @@ export default async function DashboardPage() {
   const absenceRate = monthTotal > 0 ? Math.round((monthAbsent / monthTotal) * 100) : 0
 
 
-  // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »)
-  const [todaySummarised, upcomingSummarised] = await Promise.all([
-    withConsultationSummary(supabase, todayAppointments ?? []),
-    withConsultationSummary(supabase, upcomingAppointments ?? []),
-  ])
+  // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »).
+  // Jamais en forfait Agenda : ces données de santé n'ont pas à quitter la base.
+  const acces = canAccess(doctor.plan, 'consultation')
+  const [todaySummarised, upcomingSummarised] = acces
+    ? await Promise.all([
+        withConsultationSummary(supabase, todayAppointments ?? []),
+        withConsultationSummary(supabase, upcomingAppointments ?? []),
+      ])
+    : [todayAppointments ?? [], upcomingAppointments ?? []]
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
 

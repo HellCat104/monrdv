@@ -2,10 +2,21 @@
 -- MonRDV — Schéma Supabase / PostgreSQL (schéma "public")
 -- Fuseau horaire applicatif : Africa/Casablanca (GMT+1)
 -- ============================================================
--- Ce fichier reflète FIDÈLEMENT la base de production (régénéré
--- depuis information_schema/pg_catalog le 2026-06-06).
--- Il sert d'archive : exécuté sur une base vide, il recrée la
--- structure complète de l'application.
+-- ⚠️  INSTANTANÉ DU 2026-06-06 — CE N'EST PLUS L'ÉTAT DE LA BASE.
+--
+-- Une cinquantaine de migrations ont été appliquées depuis, dont
+-- plusieurs corrigent des règles de sécurité présentes ci-dessous :
+--   • v15 et v37  restreignent la lecture publique de la table doctors
+--   • v43         impose qu'un patient appartienne bien au médecin
+--   • v45         encadre les blocages horaires
+--
+-- EXÉCUTER CE FICHIER SEUL SUR UNE BASE NEUVE RÉINTRODUIT DONC DES
+-- POLICIES OBSOLÈTES ET PERMISSIVES. Il doit impérativement être suivi
+-- de TOUTES les migrations supabase/migration_v*.sql, dans l'ordre
+-- numérique (voir supabase/ORDRE-DES-MIGRATIONS.md).
+--
+-- Pour disposer d'un état réellement à jour, générer un dump :
+--   pg_dump --schema-only --no-owner "$DATABASE_URL" > supabase/dump.sql
 --
 -- Note : les règles ON DELETE (CASCADE / SET NULL) reflètent le
 -- design d'origine ; elles ne sont pas extractibles du dump JSON

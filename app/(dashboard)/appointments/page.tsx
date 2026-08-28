@@ -103,7 +103,13 @@ export default function AppointmentsPage() {
       const { data } = await query
       // Résumé des RDV clôturés (note + ordonnances + certificats + constantes) :
       // helper partagé, pour être identique à l'agenda cabinet et au tableau de bord.
-      const list = await withConsultationSummary(supabase, (data ?? []) as Appointment[])
+      // Forfait Agenda : on ne charge même pas notes, ordonnances et constantes.
+      // Masquer l'affichage ne suffit pas — ces données transitent alors par le
+      // navigateur, ce qui contredit la promesse « aucune donnée de santé ».
+      const brut = (data ?? []) as Appointment[]
+      const list = doctor.plan === 'complet'
+        ? await withConsultationSummary(supabase, brut)
+        : brut
 
       setAppointments(list)
     } finally {
