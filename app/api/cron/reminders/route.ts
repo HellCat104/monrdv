@@ -115,7 +115,9 @@ export async function GET(req: NextRequest) {
         const doctor  = rec.doctor  as any
         if (!patient?.email || !doctor?.slug) {
           // Pas d'email : on marque quand même traité pour ne pas boucler
-          await supabase.from('recalls').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rec.id)
+          const { error: skipErr } = await supabase.from('recalls')
+            .update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rec.id)
+          if (skipErr) console.error(`[cron] rappel ${rec.id} non marqué :`, skipErr.message)
           recallSkipped++; return
         }
         try {
@@ -128,8 +130,17 @@ export async function GET(req: NextRequest) {
             bookingUrl: `${APP_URL}/dr-${doctor.slug}`,
           })
           if (ok) {
-            await supabase.from('recalls').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rec.id)
-            recallSent++
+            // Ce marqueur EST le mécanisme d'idempotence : s'il n'est pas
+            // écrit, le rappel repart au prochain passage et le patient reçoit
+            // le même message en boucle. Un échec ici doit donc se voir.
+            const { error: markErr } = await supabase.from('recalls')
+              .update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rec.id)
+            if (markErr) {
+              console.error(`[cron] rappel ${rec.id} envoyé mais NON marqué — risque de doublon :`, markErr.message)
+              recallFailed++
+            } else {
+              recallSent++
+            }
           } else { recallFailed++ }
         } catch { recallFailed++ }
       })

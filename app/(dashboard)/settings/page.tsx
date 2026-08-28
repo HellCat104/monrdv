@@ -150,7 +150,8 @@ export default function SettingsPage() {
 
   async function handleRemoveConsultType(id: string) {
     // Désactivation (pas de suppression) : les anciens RDV gardent leur motif
-    await supabase.from('consultation_types').update({ active: false }).eq('id', id)
+    const { error: descErr } = await supabase.from('consultation_types').update({ active: false }).eq('id', id)
+    if (descErr) { alert(descErr.message || 'La suppression du motif a échoué.'); return }
     setConsultTypes((prev) => prev.filter((t) => t.id !== id))
   }
 
@@ -296,7 +297,15 @@ export default function SettingsPage() {
   }
 
   async function handleRemoveBlockedDate(id: string) {
-    await supabase.from('blocked_dates').delete().eq('id', id)
+    // La ligne ne disparaît de l'écran qu'une fois la base confirmée. Sans ce
+    // contrôle, un échec laissait le médecin convaincu d'avoir rouvert sa
+    // journée alors qu'elle restait fermée aux patients.
+    const { error } = await supabase.from('blocked_dates').delete().eq('id', id)
+    if (error) {
+      setBlockDateError(error.message || "Le déblocage a échoué. Réessayez.")
+      return
+    }
+    setBlockDateError('')
     setBlockedDates((prev) => prev.filter((d) => d.id !== id))
   }
 

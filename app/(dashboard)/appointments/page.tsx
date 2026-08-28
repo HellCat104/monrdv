@@ -216,7 +216,8 @@ export default function AppointmentsPage() {
   }
 
   async function removeBlock(id: string) {
-    await supabase.from('blocked_dates').delete().eq('id', id)
+    const { error } = await supabase.from('blocked_dates').delete().eq('id', id)
+    if (error) { alert(error.message || 'Le déblocage a échoué. Réessayez.'); return }
     await loadDayBlocks()
   }
 
