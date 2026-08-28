@@ -227,6 +227,17 @@ export default function AppointmentsPage() {
     )
   })
 
+  // Compteurs : un rendez-vous annulé n'occupe plus l'agenda et n'est donc pas
+  // compté — 12 RDV dont 1 annulé s'annoncent « 11 ». Exception : quand le
+  // médecin demande explicitement les annulés dans le filtre, il veut les voir
+  // comptés, sinon l'écran afficherait « 0 rendez-vous » au-dessus d'une liste
+  // qui n'est pas vide.
+  const actifs = statusFilter === 'cancelled'
+    ? filtered
+    : filtered.filter((a) => a.status !== 'cancelled')
+  const nbAnnules = filtered.length - actifs.length
+
+
   async function handleStatusChange(id: string, status: AppointmentStatus) {
     await fetch(`/api/appointments/${id}`, {
       method: 'PATCH',
@@ -327,7 +338,7 @@ export default function AppointmentsPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Rendez-vous</h1>
-          <p className="text-sm text-gray-500 mt-1">{filtered.length} RDV affichés</p>
+          <p className="text-sm text-gray-500 mt-1">{actifs.length} RDV affichés</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" onClick={() => setSheetOpen(true)} disabled={!doctor}>
@@ -433,7 +444,16 @@ export default function AppointmentsPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Calendar className="h-4 w-4 text-primary-500" />
-            {loading ? 'Chargement…' : `${filtered.length} rendez-vous`}
+            {loading ? 'Chargement…' : (
+              <>
+                {actifs.length} rendez-vous
+                {nbAnnules > 0 && (
+                  <span className="font-normal text-gray-400">
+                    {' '}· {nbAnnules} annulé{nbAnnules > 1 ? 's' : ''}
+                  </span>
+                )}
+              </>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
