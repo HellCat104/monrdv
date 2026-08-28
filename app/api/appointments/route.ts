@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendAppointmentConfirmationToPatient } from '@/lib/email'
-import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks, toMinutes } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks, toMinutes, isFullDayBlocked, blockedIntervals } from '@/lib/utils'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { randomUUID } from 'crypto'
 
@@ -213,18 +213,24 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // RDV existants du jour (intervalles occupés, durées variables)
-  const { data: dayAppointments } = await db
-    .from('appointments')
-    .select('time, duration_minutes')
-    .eq('doctor_id', doctor_id)
-    .eq('date', date)
-    .neq('status', 'cancelled')
+  // RDV existants et blocages du jour, en une seule aller-retour
+  const [{ data: dayAppointments }, { data: dayBlocks }] = await Promise.all([
+    db.from('appointments')
+      .select('time, duration_minutes')
+      .eq('doctor_id', doctor_id)
+      .eq('date', date)
+      .neq('status', 'cancelled'),
+    db.from('blocked_dates')
+      .select('start_time, end_time')
+      .eq('doctor_id', doctor_id)
+      .eq('date', date),
+  ])
 
   const occupied = (dayAppointments ?? []).map((a) => ({
     time: a.time.substring(0, 5),
     duration: a.duration_minutes || doctorCheck.appointment_duration,
   }))
+  const blocks = dayBlocks ?? []
 
   // Restrictions de créneau — UNIQUEMENT pour les réservations publiques (patients).
   // Le médecin reste maître de son agenda : il peut réserver pendant sa pause,
@@ -238,13 +244,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ce jour n\'est pas ouvert à la réservation' }, { status: 400 })
     }
 
+    // Une plage bloquée occupe le créneau au même titre qu'un RDV.
     const slots = getSlotsForDuration(
       daySchedule.start,
       daySchedule.end,
       appointmentDuration,
       doctorCheck.appointment_duration,
       getDayBreaks(daySchedule),
-      occupied
+      [...occupied, ...blockedIntervals(blocks)]
     )
 
     const slot = slots.find((s) => s.time === time)
@@ -255,14 +262,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ce créneau est déjà réservé' }, { status: 409 })
     }
 
-    const { data: blockedDate } = await db
-      .from('blocked_dates')
-      .select('id')
-      .eq('doctor_id', doctor_id)
-      .eq('date', date)
-      .maybeSingle()
-
-    if (blockedDate) {
+    // Seul un congé (blocage sans horaire) ferme la journée entière. Un
+    // blocage d'une heure ne retire que son intervalle, déjà écarté ci-dessus.
+    if (isFullDayBlocked(blocks)) {
       return NextResponse.json({ error: 'Cette date n\'est pas disponible' }, { status: 400 })
     }
   } else {

@@ -118,6 +118,31 @@ export function toMinutes(t: string): number {
   return parseInt(h, 10) * 60 + parseInt(m, 10)
 }
 
+// ── Blocages du médecin ─────────────────────────────────────────────────────
+// Une ligne sans horaire ferme la journée entière (congé). Avec horaires, elle
+// ne ferme que l'intervalle [start_time, end_time) : le reste de la journée
+// doit rester réservable. Les deux lectures vivent ici pour que la page de
+// réservation, le calcul des créneaux et la création de RDV ne puissent plus
+// diverger.
+export interface BlockedRow {
+  start_time: string | null
+  end_time: string | null
+}
+
+export function isFullDayBlocked(blocks: BlockedRow[]): boolean {
+  return blocks.some((b) => !b.start_time)
+}
+
+export function blockedIntervals(blocks: BlockedRow[]): OccupiedInterval[] {
+  return blocks
+    .filter((b) => b.start_time && b.end_time)
+    .map((b) => {
+      const start = String(b.start_time).substring(0, 5)
+      const dur = Math.max(1, toMinutes(String(b.end_time).substring(0, 5)) - toMinutes(start))
+      return { time: start, duration: dur }
+    })
+}
+
 export function getSlotsForDuration(
   startTime: string,
   endTime: string,
