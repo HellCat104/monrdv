@@ -12,7 +12,14 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 export async function GET(req: NextRequest) {
   // Vérifie le secret Cron pour éviter les appels non autorisés
   const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Sans secret configuré, la comparaison portait sur « Bearer undefined » —
+  // la première valeur qu'un attaquant essaie. On refuse explicitement.
+  const secret = process.env.CRON_SECRET
+  if (!secret) {
+    console.error('[cron] CRON_SECRET absent : appel refusé')
+    return NextResponse.json({ error: 'Cron non configuré' }, { status: 500 })
+  }
+  if (authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   }
 

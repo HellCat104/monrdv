@@ -2,6 +2,17 @@
 // client admin APRÈS vérification de l'appartenance à cabinet_staff et des
 // permissions accordées par le médecin (getStaffContext).
 import { NextRequest, NextResponse } from 'next/server'
+
+// Projection unique pour tout ce que la secrétaire reçoit. Les écritures
+// répondaient en select('*'), donc renvoyaient `doctor_notes` — les notes
+// privées du médecin — et `cancel_token`, y compris en mode confidentiel où
+// ces informations lui sont explicitement refusées à la lecture.
+/** Le mode confidentiel masque le motif : il doit valoir aussi en écriture. */
+function filtreConfidentiel<T extends { notes?: unknown; consultation_type?: unknown }>(
+  ligne: T, confidentiel: boolean,
+): T {
+  return confidentiel ? { ...ligne, notes: null, consultation_type: [] } : ligne
+}
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
 import { sendAppointmentConfirmationToPatient, sendRescheduleEmailToPatient, sendWithTimeout } from '@/lib/email'
@@ -111,9 +122,9 @@ export async function POST(req: NextRequest) {
       status: 'confirmed', walk_in: true, queue_status: 'arrive', attendance: 'present',
       cancel_token: generateCancelToken(), specialty: specs0.length === 1 ? specs0[0] : null,
       duration_minutes: doc0?.appointment_duration ?? 30, consent_at: null,
-    }).select('*').single()
+    }).select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
     if (aErr || !appt0) return NextResponse.json({ error: 'Échec de l\'ajout à la file' }, { status: 500 })
-    return NextResponse.json({ appointment: appt0 }, { status: 201 })
+    return NextResponse.json({ appointment: filtreConfidentiel(appt0, ctx.confidential) }, { status: 201 })
   }
 
   const first = sanitize(String(body.first_name ?? '')).substring(0, 100)
@@ -244,7 +255,7 @@ export async function POST(req: NextRequest) {
         consent_at: null,
         recurrence_group_id: groupId,
       })
-      .select('*').single()
+      .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
     if (e || !appt) {
       // 23505 = même heure de départ ; 23P01 = chevauchement (contrainte d'exclusion)
       if (e?.code === '23505' || e?.code === '23P01') { skipped.push(ds); continue }
@@ -274,7 +285,7 @@ export async function POST(req: NextRequest) {
     }), 'confirmation patient (cabinet)')
   }
 
-  return NextResponse.json({ appointment: created[0], created: created.length, skipped }, { status: 201 })
+  return NextResponse.json({ appointment: filtreConfidentiel(created[0], ctx.confidential), created: created.length, skipped }, { status: 201 })
 }
 
 // PATCH — présence / paiement / annulation, selon les permissions
@@ -362,7 +373,7 @@ export async function PATCH(req: NextRequest) {
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Aucune modification' }, { status: 400 })
 
   const { data: updated, error } = await admin.from('appointments')
-    .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('*').single()
+    .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, cancel_token, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
   if (error) {
     if (error.code === '23505' || error.code === '23P01') {
       return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant.' }, { status: 409 })
@@ -389,5 +400,8 @@ export async function PATCH(req: NextRequest) {
     }), 'déplacement patient (cabinet)')
   }
 
-  return NextResponse.json(updated)
+  // Le jeton d'annulation sert à composer l'e-mail ci-dessus ; il n'a rien à
+  // faire dans la réponse — la route médecin prend le même soin.
+  const { cancel_token: _jeton, ...sansJeton } = updated
+  return NextResponse.json(filtreConfidentiel(sansJeton, ctx.confidential))
 }
