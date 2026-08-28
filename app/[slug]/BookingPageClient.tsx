@@ -306,7 +306,16 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
                         <span className={`text-sm font-medium ${selectedType?.id === t.id ? 'text-primary-700' : 'text-gray-700'}`}>
                           {t.name}
                         </span>
-                        <span className="text-xs text-gray-400 shrink-0 ml-3">{t.duration_minutes} min</span>
+                        <span className="flex items-center gap-2 shrink-0 ml-3">
+                          {/* Le tarif n'est affiché que si le médecin l'a renseigné :
+                              mieux vaut pas de prix qu'un « 0 DH » trompeur. */}
+                          {t.default_price != null && Number(t.default_price) > 0 && (
+                            <span className={`text-sm font-semibold ${selectedType?.id === t.id ? 'text-primary-700' : 'text-gray-700'}`}>
+                              {Number(t.default_price).toLocaleString('fr-FR')} DH
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">{t.duration_minutes} min</span>
+                        </span>
                       </button>
                     ))}
                   </div>

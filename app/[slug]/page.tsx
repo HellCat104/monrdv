@@ -74,7 +74,7 @@ export default async function BookingPage({ params }: Props) {
   const supabase = createClient()
   const { data: consultationTypes } = await supabase
     .from('consultation_types')
-    .select('id, doctor_id, name, duration_minutes, active, created_at')
+    .select('id, doctor_id, name, duration_minutes, default_price, active, created_at')
     .eq('doctor_id', doctor.id)
     .eq('active', true)
     .order('created_at', { ascending: true })
