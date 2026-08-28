@@ -20,6 +20,16 @@ export function getNowInMaroc(): Date {
 
 // Formate une date en français
 export function formatDateFr(date: Date | string): string {
+  // Une date seule ("2026-07-11") désigne un jour de calendrier, sans heure :
+  // la convertir d'un fuseau à l'autre n'a pas de sens et faisait reculer
+  // l'affichage d'un jour dès que le navigateur était en avance sur le Maroc
+  // — un Mac réglé sur Paris (UTC+2) affichait « vendredi 10 juillet » pour un
+  // rendez-vous du 11. On formate donc les composantes telles quelles.
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [y, m, d] = date.split('-').map(Number)
+    return format(new Date(y, m - 1, d), 'EEEE d MMMM yyyy', { locale: fr })
+  }
+  // Horodatage complet : l'instant est réel, on l'exprime en heure marocaine.
   const d = typeof date === 'string' ? parseISO(date) : date
   return formatInTimeZone(d, MAROC_TZ, 'EEEE d MMMM yyyy', { locale: fr })
 }
