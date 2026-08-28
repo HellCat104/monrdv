@@ -592,7 +592,10 @@ export default function PatientsPage() {
     setDeleting(true)
     const { error } = await supabase.from('patients').delete().eq('id', deleteConfirm.id)
     setDeleting(false)
-    if (error) { alert('La suppression du patient a échoué. Réessayez.'); return }
+    // Le message vient des triggers de la base — « Cet acte est déjà facturé
+    // (F-2026-0042) : émettez un avoir » — et explique au médecin quoi faire.
+    // Le texte générique le lui cachait, et il concluait à un bug.
+    if (error) { alert(error.message || 'La suppression du patient a échoué. Réessayez.'); return }
     setPatients((prev) => prev.filter((p) => p.id !== deleteConfirm.id))
     setDeleteConfirm(null)
     setSelectedPatient(null)

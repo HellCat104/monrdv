@@ -49,14 +49,30 @@ export async function POST(req: NextRequest) {
 
   const db = createAdminClient()
 
-  // 1. Réassigne tous les enregistrements liés vers la fiche conservée
-  // `certificates` et `recalls` sont liés au patient en CASCADE : sans réassignation,
-  // ils étaient supprimés silencieusement avec la fiche source.
+  // 1. Réassigne tous les enregistrements liés vers la fiche conservée.
+  // TOUTE table liée au patient en CASCADE doit figurer ici : ce qui manque à
+  // cette liste est détruit silencieusement à l'étape 3, sans erreur ni trace.
+  // `session_packages` (forfaits de séances payés d'avance) et `dental_charts`
+  // manquaient — soit de l'argent encaissé et l'odontogramme, perdus à chaque
+  // fusion. Vérifier cette liste à chaque nouvelle table portant patient_id.
   for (const table of ['appointments', 'consultation_notes', 'prescriptions', 'vital_signs',
-    'patient_documents', 'certificates', 'recalls']) {
+    'patient_documents', 'certificates', 'recalls', 'session_packages']) {
     const { error } = await db.from(table).update({ patient_id: keepId }).eq('patient_id', mergeId)
     if (error) {
       return NextResponse.json({ error: `Échec de la fusion (${table})` }, { status: 500 })
+    }
+  }
+
+  // `dental_charts` a patient_id pour clé primaire : une simple réassignation
+  // échouerait si les deux fiches ont un schéma. On conserve celui de la cible,
+  // et on ne récupère celui du doublon que si la cible n'en a pas.
+  const { data: chartKeep } = await db.from('dental_charts')
+    .select('patient_id').eq('patient_id', keepId).maybeSingle()
+  if (!chartKeep) {
+    const { error: chartErr } = await db.from('dental_charts')
+      .update({ patient_id: keepId }).eq('patient_id', mergeId)
+    if (chartErr) {
+      return NextResponse.json({ error: 'Échec de la fusion (schéma dentaire)' }, { status: 500 })
     }
   }
 

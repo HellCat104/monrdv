@@ -25,7 +25,14 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── Rate limiting simple sur les routes sensibles ─────────────────────────
-  const ip = (req.headers.get('x-forwarded-for')?.split(',')[0] ?? req.headers.get('x-real-ip') ?? 'unknown').trim()
+  // L'IP vient de la plateforme, pas d'un en-tête. `x-forwarded-for` est fourni
+  // par le client : il suffisait d'en envoyer un différent à chaque appel pour
+  // repartir d'un compteur neuf, ce qui rendait ce quota purement décoratif.
+  // On ne retombe sur l'en-tête qu'en développement local, où `req.ip` est vide.
+  const ip = (req.ip
+    ?? req.headers.get('x-real-ip')
+    ?? req.headers.get('x-forwarded-for')?.split(',')[0]
+    ?? 'unknown').trim()
   const sensitiveRoutes = [
     '/api/doctors/register',
     '/api/auth',
