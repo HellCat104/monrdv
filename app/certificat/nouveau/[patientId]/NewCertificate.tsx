@@ -20,29 +20,42 @@ export default function NewCertificate({ doctorId, doctorName, patient, appointm
   const supabase = createClient()
   const router = useRouter()
 
-  const build = (typeKey: string, extra: string) => {
+  const build = (typeKey: string, extra: string, extras: string[] = []) => {
     const tpl = CERT_TEMPLATES.find((t) => t.key === typeKey)
     if (!tpl) return ''
     return tpl.build(
       { first_name: patient.first_name, last_name: patient.last_name, age: patient.age, cin: patient.cin },
       { name: doctorName },
       extra,
+      extras,
     )
   }
 
   const [type, setType] = useState('repos')
   const [motif, setMotif] = useState('')
   const [extra, setExtra] = useState('')
+  // Valeurs des champs multiples, dans l'ordre de tpl.extraFields
+  const [extras, setExtras] = useState<string[]>([])
   const [content, setContent] = useState(() => build('repos', ''))
   const [saving, setSaving] = useState(false)
 
   const tpl = CERT_TEMPLATES.find((t) => t.key === type)
 
   function changeType(v: string) {
-    setType(v); setExtra(''); setContent(build(v, ''))
+    const t = CERT_TEMPLATES.find((x) => x.key === v)
+    // Une liste déroulante part sur sa première valeur : le document est ainsi
+    // déjà cohérent avant la moindre saisie.
+    const init = (t?.extraFields ?? []).map((f) =>
+      f.type === 'select' ? (f.options?.[0] ?? '') : '')
+    setType(v); setExtra(''); setExtras(init); setContent(build(v, '', init))
   }
   function changeExtra(v: string) {
-    setExtra(v); setContent(build(type, v))
+    setExtra(v); setContent(build(type, v, extras))
+  }
+  function changeExtraAt(i: number, v: string) {
+    const suivant = [...extras]
+    suivant[i] = v
+    setExtras(suivant); setContent(build(type, extra, suivant))
   }
 
   async function save(print: boolean) {
@@ -99,6 +112,28 @@ export default function NewCertificate({ doctorId, doctorName, patient, appointm
             />
           </div>
         )}
+
+        {tpl?.extraFields?.map((f, i) => (
+          <div key={f.key} className="space-y-1.5">
+            <Label htmlFor={`cert_${f.key}`}>{f.label}</Label>
+            {f.type === 'select' ? (
+              <Select value={extras[i] ?? ''} onValueChange={(v) => changeExtraAt(i, v)}>
+                <SelectTrigger id={`cert_${f.key}`}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {f.options?.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id={`cert_${f.key}`}
+                type={f.type === 'number' ? 'number' : 'text'}
+                value={extras[i] ?? ''}
+                onChange={(e) => changeExtraAt(i, e.target.value)}
+                placeholder={f.placeholder}
+              />
+            )}
+          </div>
+        ))}
 
         <div className="space-y-1.5">
           <Label htmlFor="cert_motif">Motif (visible dans le dossier)</Label>

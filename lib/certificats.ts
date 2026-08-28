@@ -5,13 +5,37 @@ import { formatDateFr } from '@/lib/utils'
 export interface CertPatient { first_name: string; last_name: string; age?: number | null; cin?: string | null }
 export interface CertDoctor { name: string }
 
+export interface CertField {
+  key: string
+  label: string
+  type: 'number' | 'text' | 'select'
+  placeholder?: string
+  options?: readonly string[]   // pour 'select'
+}
+
 export interface CertTemplate {
   key: string
   title: string
   // champ complémentaire demandé au médecin (en plus du motif, commun à tous)
-  extraField?: { key: string; label: string; type: 'number' | 'text'; placeholder?: string }
-  build: (p: CertPatient, d: CertDoctor, extra: string) => string
+  extraField?: CertField
+  // Certains documents en exigent plusieurs : une demande d'imagerie n'a aucun
+  // sens sans l'examen ET la région explorée. `extras` porte alors les valeurs
+  // dans l'ordre de `extraFields`.
+  extraFields?: readonly CertField[]
+  build: (p: CertPatient, d: CertDoctor, extra: string, extras?: string[]) => string
 }
+
+// Liste courte et fermée : le praticien choisit au lieu de taper, et le
+// radiologue reçoit un intitulé normalisé.
+export const EXAMENS_IMAGERIE = [
+  'Radiographie',
+  'Échographie',
+  'Échographie-Doppler',
+  'Scanner (TDM)',
+  'IRM',
+  'Mammographie',
+  'Ostéodensitométrie',
+] as const
 
 const identite = (p: CertPatient) =>
   `${p.first_name} ${p.last_name}${p.age != null ? `, âgé(e) de ${p.age} ans` : ''}${p.cin ? `, titulaire de la CIN n° ${p.cin}` : ''}`
@@ -75,6 +99,26 @@ export const CERT_TEMPLATES: CertTemplate[] = [
       `Demande d'examens biologiques pour :\n\n${identite(p)}\n\n` +
       `Examens demandés :\n\n\n` +
       `Dr. ${d.name} — le ${formatDateFr(new Date())}`,
+  },
+  {
+    key: 'imagerie',
+    title: 'Demande d’imagerie médicale',
+    extraFields: [
+      { key: 'examen', label: 'Examen demandé', type: 'select', options: EXAMENS_IMAGERIE },
+      { key: 'region', label: 'Région ou organe exploré', type: 'text', placeholder: 'abdomen, genou droit, thorax…' },
+    ],
+    build: (p, d, _extra, extras = []) => {
+      const [examen, region] = extras
+      const intitule = [examen || '…', region?.trim()].filter(Boolean).join(' — ')
+      return (
+        `Demande d'examen d'imagerie médicale pour :\n\n${identite(p)}\n\n` +
+        `Examen demandé : ${intitule}\n\n` +
+        // Le radiologue ne peut pas interpréter sans indication clinique : le
+        // champ est laissé ouvert, mais nommé, pour qu'on pense à le remplir.
+        `Renseignements cliniques :\n\n\n` +
+        `Confraternellement,\n\nDr. ${d.name} — le ${formatDateFr(new Date())}`
+      )
+    },
   },
   {
     key: 'libre',
