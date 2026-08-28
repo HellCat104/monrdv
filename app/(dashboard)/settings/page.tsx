@@ -31,6 +31,7 @@ export default function SettingsPage() {
     inpe: '',
     cnom_number: '',
     appointment_duration: 30,
+    booking_lead_hours: 3,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
     has_secretary: false,
     confidential_mode: false,
@@ -87,6 +88,7 @@ export default function SettingsPage() {
           inpe: data.inpe ?? '',
           cnom_number: data.cnom_number ?? '',
           appointment_duration: data.appointment_duration,
+          booking_lead_hours: data.booking_lead_hours ?? 3,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
           has_secretary: !!data.has_secretary,
           confidential_mode: !!data.confidential_mode,
@@ -209,6 +211,7 @@ export default function SettingsPage() {
           enabled_vitals: enabledVitals,
           custom_vitals: customVitals,
           appointment_duration: form.appointment_duration,
+          booking_lead_hours: form.booking_lead_hours,
           working_hours: form.working_hours,
           has_secretary: form.has_secretary,
           confidential_mode: form.confidential_mode,
@@ -701,6 +704,44 @@ export default function SettingsPage() {
                 </SelectContent>
               </Select>
               <p className="text-sm text-gray-500">par consultation</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Délai de prévenance — jusqu'à quand un patient peut réserver */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary-500" />
+              Réservation de dernière minute
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Select
+                value={String(form.booking_lead_hours)}
+                onValueChange={(v) => setForm({ ...form, booking_lead_hours: Number(v) })}
+              >
+                <SelectTrigger className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Sans délai</SelectItem>
+                  <SelectItem value="1">1 heure à l&apos;avance</SelectItem>
+                  <SelectItem value="2">2 heures à l&apos;avance</SelectItem>
+                  <SelectItem value="3">3 heures à l&apos;avance</SelectItem>
+                  <SelectItem value="6">6 heures à l&apos;avance</SelectItem>
+                  <SelectItem value="12">12 heures à l&apos;avance</SelectItem>
+                  <SelectItem value="24">Pas le jour même</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-gray-500 flex-1 min-w-[240px]">
+                {form.booking_lead_hours >= 24
+                  ? 'Vos patients ne peuvent réserver qu\u2019à partir de demain.'
+                  : form.booking_lead_hours === 0
+                    ? 'Vos patients peuvent réserver le prochain créneau libre, même dans quelques minutes.'
+                    : `Vos patients peuvent réserver aujourd\u2019hui, à condition qu\u2019il reste ${form.booking_lead_hours} h avant le rendez-vous.`}
+              </p>
             </div>
           </CardContent>
         </Card>

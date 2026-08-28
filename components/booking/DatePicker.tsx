@@ -7,12 +7,15 @@ import { addDays, getDay, format, parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import 'react-day-picker/dist/style.css'
 import type { WorkingHours } from '@/types'
+import { toMinutes, DEFAULT_LEAD_HOURS } from '@/lib/utils'
 
 interface DatePickerProps {
   workingHours: WorkingHours
   selectedDate: Date | undefined
   onSelect: (date: Date | undefined) => void
   disabledDates?: Date[]
+  /** Heures d'avance exigées pour réserver (0 = immédiat, 24 = dès demain) */
+  leadHours?: number
 }
 
 const DAY_MAP: Record<number, keyof WorkingHours> = {
@@ -20,7 +23,7 @@ const DAY_MAP: Record<number, keyof WorkingHours> = {
   4: 'thursday', 5: 'friday', 6: 'saturday',
 }
 
-export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates = [] }: DatePickerProps) {
+export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates = [], leadHours = DEFAULT_LEAD_HOURS }: DatePickerProps) {
   // Calculé en HEURE MAROC (pas l'heure du navigateur) pour rester cohérent
   // avec le serveur — un patient à l'étranger ne doit pas pouvoir choisir un
   // jour que le serveur refusera ensuite.
@@ -28,11 +31,22 @@ export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates
   const todayMaroc = formatInTimeZone(new Date(), MAROC_TZ, 'yyyy-MM-dd') // ex: "2026-06-04"
   const tomorrowMaroc = format(addDays(parseISO(todayMaroc), 1), 'yyyy-MM-dd')
 
-  // Désactive aujourd'hui, les jours passés et les jours de repos
+  // La journée en cours reste réservable tant qu'il subsiste un créneau après
+  // le délai de prévenance du médecin. Passé cette limite (ou si le jour est
+  // fermé), la réservation ne commence qu'au lendemain.
+  const nowMinutes = toMinutes(formatInTimeZone(new Date(), MAROC_TZ, 'HH:mm'))
+  const todayKey = DAY_MAP[getDay(parseISO(todayMaroc))]
+  const todaySchedule = workingHours[todayKey]
+  const todayStillOpen =
+    !!todaySchedule?.enabled &&
+    nowMinutes + leadHours * 60 < toMinutes(todaySchedule.end)
+  const earliestDate = todayStillOpen ? todayMaroc : tomorrowMaroc
+
+  // Désactive les jours passés, le jour même s'il est trop tard, et les repos
   // Comparaison par date calendaire (string) — immunisé contre les décalages de fuseau
   function isDisabled(date: Date): boolean {
     const dateStr = format(date, 'yyyy-MM-dd')
-    if (dateStr < tomorrowMaroc) return true
+    if (dateStr < earliestDate) return true
     const dayKey = DAY_MAP[getDay(date)]
     if (!workingHours[dayKey]?.enabled) return true
     return disabledDates.some(
@@ -48,7 +62,7 @@ export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates
         onSelect={onSelect}
         disabled={isDisabled}
         locale={fr}
-        fromDate={parseISO(tomorrowMaroc)}
+        fromDate={parseISO(earliestDate)}
         toDate={addDays(parseISO(todayMaroc), 60)} // 2 mois à l'avance max
         showOutsideDays={false}
         className="mx-auto"

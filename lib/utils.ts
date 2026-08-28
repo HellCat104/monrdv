@@ -118,6 +118,9 @@ export function toMinutes(t: string): number {
   return parseInt(h, 10) * 60 + parseInt(m, 10)
 }
 
+// Délai de prévenance par défaut si la colonne n'est pas encore renseignée.
+export const DEFAULT_LEAD_HOURS = 3
+
 // ── Blocages du médecin ─────────────────────────────────────────────────────
 // Une ligne sans horaire ferme la journée entière (congé). Avec horaires, elle
 // ne ferme que l'intervalle [start_time, end_time) : le reste de la journée

@@ -33,6 +33,8 @@ export interface Doctor {
   custom_vitals?: VitalDef[] | null
   working_hours: WorkingHours
   appointment_duration: number // en minutes : 15, 20 ou 30
+  // Heures d'avance minimum pour réserver en ligne (0 = immédiat, 24 = dès demain)
+  booking_lead_hours?: number
   created_at: string
 }
 

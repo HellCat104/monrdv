@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendAppointmentConfirmationToPatient } from '@/lib/email'
-import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks, toMinutes, isFullDayBlocked, blockedIntervals } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks, toMinutes, isFullDayBlocked, blockedIntervals, DEFAULT_LEAD_HOURS } from '@/lib/utils'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { randomUUID } from 'crypto'
 
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
   // Vérifie que le médecin existe, est approuvé et a un abonnement actif
   const { data: doctorCheck } = await db
     .from('doctors')
-    .select('id, status, subscription_status, working_hours, appointment_duration, specialty, specialties, plan')
+    .select('id, status, subscription_status, working_hours, appointment_duration, specialty, specialties, plan, booking_lead_hours')
     .eq('id', doctor_id)
     .single()
 
@@ -266,6 +266,21 @@ export async function POST(req: NextRequest) {
     // blocage d'une heure ne retire que son intervalle, déjà écarté ci-dessus.
     if (isFullDayBlocked(blocks)) {
       return NextResponse.json({ error: 'Cette date n\'est pas disponible' }, { status: 400 })
+    }
+
+    // Délai de prévenance : réserver le jour même est permis, mais pas dans
+    // l'immédiat. Contrôle refait ici — le calendrier n'est qu'une commodité.
+    const leadHours = doctorCheck.booking_lead_hours ?? DEFAULT_LEAD_HOURS
+    const nowMaroc = getNowInMaroc()
+    const todayMaroc = format(nowMaroc, 'yyyy-MM-dd')
+    if (date < todayMaroc) {
+      return NextResponse.json({ error: 'Cette date est passée' }, { status: 400 })
+    }
+    if (date === todayMaroc &&
+        toMinutes(time) < toMinutes(format(nowMaroc, 'HH:mm')) + leadHours * 60) {
+      return NextResponse.json(
+        { error: `Ce créneau est trop proche : réservez au moins ${leadHours} h à l'avance.` },
+        { status: 400 })
     }
   } else {
     // Médecin : pas de restriction d'horaires, mais on bloque quand même

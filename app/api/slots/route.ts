@@ -2,7 +2,7 @@
 // Supporte les motifs de consultation à durée variable (?type=<consultation_type_id>).
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { getSlotsForDuration, getDayKey, getDayBreaks, getNowInMaroc, toMinutes, isFullDayBlocked, blockedIntervals, type OccupiedInterval } from '@/lib/utils'
+import { getSlotsForDuration, getDayKey, getDayBreaks, getNowInMaroc, toMinutes, isFullDayBlocked, DEFAULT_LEAD_HOURS, blockedIntervals, type OccupiedInterval } from '@/lib/utils'
 import { parseISO, format } from 'date-fns'
 
 // GET /api/slots?doctor_id=...&date=YYYY-MM-DD[&type=<uuid>]
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   // Requête 1 : infos médecin (nécessaire avant les autres pour vérifier le jour)
   const { data: doctor, error: doctorError } = await supabase
     .from('doctors')
-    .select('working_hours, appointment_duration, status, subscription_status')
+    .select('working_hours, appointment_duration, status, subscription_status, booking_lead_hours')
     .eq('id', doctorId)
     .single()
 
@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
       headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' },
     })
   }
+
+  const leadHours = doctor.booking_lead_hours ?? DEFAULT_LEAD_HOURS
 
   // Vérifie si le jour est ouvert — court-circuit si fermé
   const parsedDate = parseISO(date)
@@ -102,9 +104,11 @@ export async function GET(req: NextRequest) {
   // Pour la journée en cours (heure marocaine), les heures déjà passées
   // ne sont plus proposées (utile au cabinet : RDV du jour même).
   const nowMaroc = getNowInMaroc()
+  // Le jour même, on ne propose que ce qui laisse au médecin son délai de
+  // prévenance : un patient ne doit pas pouvoir surgir dans dix minutes.
   if (date === format(nowMaroc, 'yyyy-MM-dd')) {
-    const nowTime = format(nowMaroc, 'HH:mm')
-    slots = slots.map((s) => (s.time <= nowTime ? { ...s, available: false } : s))
+    const cutoff = toMinutes(format(nowMaroc, 'HH:mm')) + leadHours * 60
+    slots = slots.map((s) => (toMinutes(s.time) < cutoff ? { ...s, available: false } : s))
   }
 
   return NextResponse.json({ slots }, {
