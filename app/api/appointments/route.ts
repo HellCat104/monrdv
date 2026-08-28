@@ -6,6 +6,9 @@ import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDu
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { randomUUID } from 'crypto'
 
+// Doit rester aligné sur `toDate` du calendrier (components/booking/DatePicker).
+const PUBLIC_BOOKING_HORIZON_DAYS = 60
+
 // GET /api/appointments?doctor_id=...&date=...
 export async function GET(req: NextRequest) {
   const supabase = createClient()
@@ -134,6 +137,14 @@ export async function POST(req: NextRequest) {
   }
   if (!isPublic && date === today && time <= format(nowMaroc, 'HH:mm')) {
     return NextResponse.json({ error: 'Ce créneau est déjà passé' }, { status: 400 })
+  }
+  // Horizon de réservation publique : le calendrier s'arrête à 60 jours, le
+  // serveur doit s'y tenir aussi. Sans cette borne, une requête directe pouvait
+  // poser un rendez-vous des années à l'avance, sur des horaires qui n'auront
+  // plus cours.
+  if (isPublic && date > format(addDays(nowMaroc, PUBLIC_BOOKING_HORIZON_DAYS), 'yyyy-MM-dd')) {
+    return NextResponse.json(
+      { error: 'Les réservations ne sont ouvertes que sur les deux prochains mois' }, { status: 400 })
   }
 
   // Pour les réservations du médecin, vérifie l'authentification
