@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
 import { PrintButton } from './PrintButton'
+import { canAccess } from '@/lib/plan'
 
 interface Props { params: { id: string } }
 export const dynamic = 'force-dynamic'
@@ -24,10 +25,14 @@ export default async function DossierPage({ params }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals')
+    .select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals, plan')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
+
+  // Même donnée que /api/dossier/[id], par une autre porte : la version
+  // imprimable était restée ouverte quand la route API a été fermée.
+  if (!canAccess(doctor.plan, 'records')) redirect('/appointments')
 
   const { data: patient } = await supabase
     .from('patients')

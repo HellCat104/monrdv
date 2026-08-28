@@ -49,6 +49,14 @@ export async function PATCH(
     return NextResponse.json({ error: 'Votre forfait ne permet pas l\'encaissement' }, { status: 403 })
   }
 
+  // `doctor_notes` est une note clinique libre : elle relève du dossier
+  // médical, pas de l'agenda. Le contrôle des montants ci-dessus ne la
+  // couvrait pas.
+  if (doctor_notes !== undefined && !canAccess(doctor.plan, 'records')) {
+    return NextResponse.json(
+      { error: 'Votre forfait ne permet pas les notes médicales' }, { status: 403 })
+  }
+
   const updates: Record<string, unknown> = {}
   if (status)              updates.status       = status
   if (date)                updates.date         = date
