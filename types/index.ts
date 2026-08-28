@@ -162,6 +162,25 @@ export interface Expense {
   category?: string | null
   receipt_path?: string | null   // pièce justificative (bucket expense-receipts)
   amount: number
+  // Échéance issue d'une charge fixe : modèle d'origine et mois couvert.
+  recurring_id?: string | null
+  period_month?: string | null   // 1er du mois, YYYY-MM-DD
+  created_at: string
+}
+
+// Charge fixe (loyer, salaires, eau…) : le modèle, dont chaque mois découle
+// une dépense ordinaire. Voir migration v48.
+export interface RecurringExpense {
+  id: string
+  doctor_id: string
+  label: string
+  amount: number
+  category?: string | null
+  day_of_month: number   // 1 à 28
+  start_month: string    // 1er du premier mois couvert
+  end_month?: string | null
+  active: boolean
+  last_generated_month?: string | null
   created_at: string
 }
 

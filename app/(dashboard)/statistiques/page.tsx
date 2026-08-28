@@ -13,15 +13,13 @@ import {
 import { getNowInMaroc, formatDateFr, formatDateShort, MAROC_TZ } from '@/lib/utils'
 import {
   format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter,
-  startOfYear, endOfYear, parseISO,
+  startOfYear, endOfYear, parseISO, addMonths, setDate,
 } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
-import {
-  BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt, FileText, Table2, Paperclip, ArrowUp, ArrowDown,
-} from 'lucide-react'
+import { BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt, FileText, Table2, Paperclip, ArrowUp, ArrowDown, Repeat } from 'lucide-react'
 import { EXPENSE_CATEGORIES, expenseCategoryLabel, variation } from '@/lib/compta'
-import type { Appointment, Expense, CreditNote } from '@/types'
+import type { Appointment, Expense, CreditNote, RecurringExpense } from '@/types'
 
 type Period = 'month' | 'lastmonth' | 'quarter' | 'year' | 'all'
 const PERIOD_LABELS: Record<Period, string> = {
@@ -109,12 +107,63 @@ export default function StatistiquesPage() {
   const [period, setPeriod] = useState<Period>('month')
   const [exp, setExp] = useState({ date: format(getNowInMaroc(), 'yyyy-MM-dd'), label: '', amount: '', category: EXPENSE_CATEGORIES[0] as string })
   const [expFile, setExpFile] = useState<File | null>(null)
+  const [charges, setCharges] = useState<RecurringExpense[]>([])
+  const [chargeForm, setChargeForm] = useState({ label: '', amount: '', category: EXPENSE_CATEGORIES[1] as string, day: '1' })
+  const [addingCharge, setAddingCharge] = useState(false)
   const [packBusy, setPackBusy] = useState(false)
   // Documents comptables : réservés au forfait Cabinet complet
   const [invoicing, setInvoicing] = useState(false)
   const [addingExp, setAddingExp] = useState(false)
   const supabase = createClient()
   const router = useRouter()
+
+  /**
+   * Crée les échéances manquantes des charges fixes, jusqu'au mois courant.
+   *
+   * La génération se fait ici, à l'ouverture, plutôt que par une tâche
+   * planifiée : si le médecin n'ouvre pas sa comptabilité pendant trois mois,
+   * les trois mois se créent d'un coup à sa visite suivante. Une tâche qui
+   * échoue une nuit laisserait au contraire un trou que personne ne verrait.
+   * L'index unique (recurring_id, period_month) rend l'opération sans risque,
+   * même si deux onglets s'ouvrent en même temps.
+   */
+  async function materialiserCharges(docId: string, modeles: RecurringExpense[]) {
+    const moisCourant = startOfMonth(getNowInMaroc())
+    const lignes: Record<string, unknown>[] = []
+
+    const generes: string[] = []
+    for (const m of modeles) {
+      if (!m.active) continue
+      const fin = m.end_month ? parseISO(m.end_month) : moisCourant
+      const limite = fin < moisCourant ? fin : moisCourant
+      // On repart du mois suivant le dernier généré : une échéance supprimée à
+      // la main ne doit pas réapparaître à la visite suivante.
+      const depart = m.last_generated_month
+        ? addMonths(parseISO(m.last_generated_month), 1)
+        : parseISO(m.start_month)
+      if (depart > limite) continue
+      generes.push(m.id)
+      for (let mois = depart; mois <= limite; mois = addMonths(mois, 1)) {
+        lignes.push({
+          doctor_id: docId,
+          date: format(setDate(mois, m.day_of_month), 'yyyy-MM-dd'),
+          label: m.label,
+          amount: m.amount,
+          category: m.category,
+          recurring_id: m.id,
+          period_month: format(mois, 'yyyy-MM-dd'),
+        })
+      }
+    }
+    if (lignes.length === 0) return
+    const { error } = await supabase.from('expenses')
+      .upsert(lignes, { onConflict: 'recurring_id,period_month', ignoreDuplicates: true })
+    if (error) { console.error('[Charges fixes]', error); return }
+    // Le repère n'avance que si les échéances ont bien été écrites.
+    await supabase.from('recurring_expenses')
+      .update({ last_generated_month: format(moisCourant, 'yyyy-MM-dd') })
+      .in('id', generes)
+  }
 
   const APT_FIELDS = 'id, date, time, status, attendance, amount_paid, amount_due, payment_method, invoice_no, paid_at, notes, patient:patients(first_name, last_name, phone), consultation_type:consultation_types(name)'
 
@@ -128,6 +177,14 @@ export default function StatistiquesPage() {
    * Les impayés font l'objet d'une requête à part : une dette ne dépend
    * d'aucune période.
    */
+  async function loadCharges(docId: string) {
+    const { data } = await supabase.from('recurring_expenses')
+      .select('*').eq('doctor_id', docId).order('created_at', { ascending: true })
+    const modeles = (data ?? []) as RecurringExpense[]
+    setCharges(modeles)
+    await materialiserCharges(docId, modeles)
+  }
+
   async function loadAll(docId: string, p: Period) {
     const now = getNowInMaroc()
     const today = format(now, 'yyyy-MM-dd')
@@ -175,6 +232,7 @@ export default function StatistiquesPage() {
       if (!canAccess(doctor.plan, 'stats')) { router.replace('/dashboard'); return }
       setInvoicing(canAccess(doctor.plan, 'invoicing'))
       setDoctorId(doctor.id)
+      await loadCharges(doctor.id)
       await loadAll(doctor.id, period)
       setLoading(false)
     }
@@ -290,6 +348,47 @@ export default function StatistiquesPage() {
     const { data, error } = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(path, 120)
     if (error || !data) { alert('Justificatif introuvable.'); return }
     window.open(data.signedUrl, '_blank', 'noopener')
+  }
+
+  async function addCharge(e: React.FormEvent) {
+    e.preventDefault()
+    if (!doctorId || !chargeForm.label.trim()) return
+    const montant = parseFloat(chargeForm.amount.replace(',', '.'))
+    if (isNaN(montant) || montant < 0) return
+    setAddingCharge(true)
+    const { error } = await supabase.from('recurring_expenses').insert({
+      doctor_id: doctorId,
+      label: chargeForm.label.trim().substring(0, 120),
+      amount: montant,
+      category: chargeForm.category,
+      day_of_month: Number(chargeForm.day),
+      // La charge court à partir du mois en cours : on ne recrée pas
+      // rétroactivement des dépenses que le médecin n'a pas saisies.
+      start_month: format(startOfMonth(getNowInMaroc()), 'yyyy-MM-dd'),
+    })
+    setAddingCharge(false)
+    if (error) { alert("La charge fixe n'a pas pu être enregistrée.") ; return }
+    setChargeForm({ label: '', amount: '', category: EXPENSE_CATEGORIES[1], day: '1' })
+    await loadCharges(doctorId)
+    await loadAll(doctorId, period)
+  }
+
+  /** Arrête une charge : les échéances déjà passées restent en comptabilité. */
+  async function stopCharge(id: string) {
+    if (!doctorId) return
+    const { error } = await supabase.from('recurring_expenses')
+      .update({ active: false, end_month: format(startOfMonth(getNowInMaroc()), 'yyyy-MM-dd') })
+      .eq('id', id).eq('doctor_id', doctorId)
+    if (error) { alert("L'arrêt n'a pas pu être enregistré.") ; return }
+    await loadCharges(doctorId)
+  }
+
+  async function deleteCharge(id: string) {
+    if (!doctorId) return
+    if (!confirm('Supprimer cette charge fixe ? Les dépenses déjà enregistrées sont conservées.')) return
+    const { error } = await supabase.from('recurring_expenses').delete().eq('id', id).eq('doctor_id', doctorId)
+    if (error) { alert("La suppression a échoué.") ; return }
+    await loadCharges(doctorId)
   }
 
   async function addExpense(e: React.FormEvent) {
@@ -654,6 +753,86 @@ export default function StatistiquesPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Charges fixes */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Repeat className="h-4 w-4 text-primary-500" /> Charges fixes
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-gray-500">
+            Loyer, salaires, eau, assurance… Saisie une fois, la dépense est créée
+            automatiquement chaque mois. Chaque échéance reste modifiable dans la liste
+            des dépenses ci-dessous.
+          </p>
+
+          <form onSubmit={addCharge} className="flex flex-col sm:flex-row gap-2">
+            <Input value={chargeForm.label} onChange={(e) => setChargeForm({ ...chargeForm, label: e.target.value })}
+              placeholder="Ex : Loyer du cabinet" className="flex-1" />
+            <div className="relative sm:w-32">
+              <Input type="number" min="0" step="any" value={chargeForm.amount}
+                onChange={(e) => setChargeForm({ ...chargeForm, amount: e.target.value })}
+                placeholder="Montant" className="pr-9" />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">DH</span>
+            </div>
+            <Select value={chargeForm.category} onValueChange={(v) => setChargeForm({ ...chargeForm, category: v })}>
+              <SelectTrigger className="sm:w-52"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={chargeForm.day} onValueChange={(v) => setChargeForm({ ...chargeForm, day: v })}>
+              <SelectTrigger className="sm:w-36"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {/* Jusqu'au 28 seulement : le 31 n'existe pas tous les mois. */}
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((j) => (
+                  <SelectItem key={j} value={String(j)}>le {j}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button type="submit" variant="outline" className="shrink-0"
+              disabled={addingCharge || !chargeForm.label.trim() || !chargeForm.amount}>
+              <Plus className="h-4 w-4 mr-1" /> {addingCharge ? 'Ajout…' : 'Ajouter'}
+            </Button>
+          </form>
+
+          {charges.length === 0 ? (
+            <p className="text-sm text-gray-400">Aucune charge fixe.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {charges.map((c) => (
+                <div key={c.id} className={`group flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+                  c.active ? 'bg-gray-50' : 'bg-gray-50/60 text-gray-400'}`}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={c.active ? 'text-gray-700 truncate' : 'truncate line-through'}>{c.label}</span>
+                    <span className="text-[11px] font-medium text-gray-500 bg-white border border-gray-200 rounded-full px-2 py-0.5 shrink-0 hidden sm:inline">
+                      {expenseCategoryLabel(c.category)}
+                    </span>
+                    <span className="text-xs text-gray-400 shrink-0">
+                      {c.active ? `le ${c.day_of_month} de chaque mois` : 'arrêtée'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`font-semibold ${c.active ? 'text-orange-600' : ''}`}>
+                      {Number(c.amount).toLocaleString('fr-FR')} DH
+                    </span>
+                    {c.active && (
+                      <button onClick={() => stopCharge(c.id)} className="text-xs text-gray-400 hover:text-gray-700 underline">
+                        Arrêter
+                      </button>
+                    )}
+                    <button onClick={() => deleteCharge(c.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100" title="Supprimer">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Dépenses */}
       <Card>
