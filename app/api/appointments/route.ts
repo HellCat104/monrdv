@@ -123,22 +123,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Format de date ou heure invalide' }, { status: 400 })
   }
 
-  // Jour même : interdit pour les réservations publiques (le médecin garde la
-  // maîtrise de sa journée), autorisé pour le médecin connecté (appel au cabinet)
-  // tant que l'heure n'est pas passée.
+  // Le passé est refusé pour tout le monde. Le jour même est autorisé : pour le
+  // patient sous réserve du délai de prévenance du médecin (vérifié plus bas,
+  // une fois le forfait horaire du médecin chargé), pour le médecin et sa
+  // secrétaire tant que l'heure n'est pas passée.
   const nowMaroc = getNowInMaroc()
   const today = format(nowMaroc, 'yyyy-MM-dd')
-  if (isPublic) {
-    if (date <= today) {
-      return NextResponse.json({ error: 'Les réservations le jour même ne sont pas acceptées' }, { status: 400 })
-    }
-  } else {
-    if (date < today) {
-      return NextResponse.json({ error: 'Impossible de créer un rendez-vous dans le passé' }, { status: 400 })
-    }
-    if (date === today && time <= format(nowMaroc, 'HH:mm')) {
-      return NextResponse.json({ error: 'Ce créneau est déjà passé' }, { status: 400 })
-    }
+  if (date < today) {
+    return NextResponse.json({ error: 'Impossible de créer un rendez-vous dans le passé' }, { status: 400 })
+  }
+  if (!isPublic && date === today && time <= format(nowMaroc, 'HH:mm')) {
+    return NextResponse.json({ error: 'Ce créneau est déjà passé' }, { status: 400 })
   }
 
   // Pour les réservations du médecin, vérifie l'authentification
@@ -271,12 +266,7 @@ export async function POST(req: NextRequest) {
     // Délai de prévenance : réserver le jour même est permis, mais pas dans
     // l'immédiat. Contrôle refait ici — le calendrier n'est qu'une commodité.
     const leadHours = doctorCheck.booking_lead_hours ?? DEFAULT_LEAD_HOURS
-    const nowMaroc = getNowInMaroc()
-    const todayMaroc = format(nowMaroc, 'yyyy-MM-dd')
-    if (date < todayMaroc) {
-      return NextResponse.json({ error: 'Cette date est passée' }, { status: 400 })
-    }
-    if (date === todayMaroc &&
+    if (date === today &&
         toMinutes(time) < toMinutes(format(nowMaroc, 'HH:mm')) + leadHours * 60) {
       return NextResponse.json(
         { error: `Ce créneau est trop proche : réservez au moins ${leadHours} h à l'avance.` },

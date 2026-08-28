@@ -16,6 +16,8 @@ interface DatePickerProps {
   disabledDates?: Date[]
   /** Heures d'avance exigées pour réserver (0 = immédiat, 24 = dès demain) */
   leadHours?: number
+  /** Durée d'un créneau : le dernier commence à `end - slotDuration` */
+  slotDuration?: number
 }
 
 const DAY_MAP: Record<number, keyof WorkingHours> = {
@@ -23,7 +25,7 @@ const DAY_MAP: Record<number, keyof WorkingHours> = {
   4: 'thursday', 5: 'friday', 6: 'saturday',
 }
 
-export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates = [], leadHours = DEFAULT_LEAD_HOURS }: DatePickerProps) {
+export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates = [], leadHours = DEFAULT_LEAD_HOURS, slotDuration = 30 }: DatePickerProps) {
   // Calculé en HEURE MAROC (pas l'heure du navigateur) pour rester cohérent
   // avec le serveur — un patient à l'étranger ne doit pas pouvoir choisir un
   // jour que le serveur refusera ensuite.
@@ -37,9 +39,12 @@ export function DatePicker({ workingHours, selectedDate, onSelect, disabledDates
   const nowMinutes = toMinutes(formatInTimeZone(new Date(), MAROC_TZ, 'HH:mm'))
   const todayKey = DAY_MAP[getDay(parseISO(todayMaroc))]
   const todaySchedule = workingHours[todayKey]
+  // Comparé au DÉBUT du dernier créneau, pas à l'heure de fermeture : sinon la
+  // journée reste proposée alors qu'aucun créneau n'est plus assez tardif, et
+  // le patient tombe sur « Aucun créneau disponible ».
   const todayStillOpen =
     !!todaySchedule?.enabled &&
-    nowMinutes + leadHours * 60 < toMinutes(todaySchedule.end)
+    nowMinutes + leadHours * 60 <= toMinutes(todaySchedule.end) - slotDuration
   const earliestDate = todayStillOpen ? todayMaroc : tomorrowMaroc
 
   // Désactive les jours passés, le jour même s'il est trop tard, et les repos

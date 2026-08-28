@@ -333,6 +333,7 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
                 onSelect={handleDateSelect}
                 disabledDates={blockedDates}
                 leadHours={doctor.booking_lead_hours}
+                slotDuration={selectedType?.duration_minutes ?? doctor.appointment_duration}
               />
                 </>
               )}
