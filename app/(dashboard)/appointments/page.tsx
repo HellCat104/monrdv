@@ -19,10 +19,7 @@ import { Plus, Search, Calendar, Ban, X, FileText } from 'lucide-react'
 import DaySheet from '@/components/shared/DaySheet'
 import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
 import { UserPlus } from 'lucide-react'
-import {
-  format, startOfWeek, endOfWeek, addDays, subDays,
-  startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay,
-} from 'date-fns'
+import { format, startOfWeek, endOfWeek, addDays, subDays, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { getNowInMaroc } from '@/lib/utils'
 
@@ -48,6 +45,9 @@ export default function AppointmentsPage() {
   const [blockEnd, setBlockEnd] = useState('14:00')
   const [blockReason, setBlockReason] = useState('')
   const [blockFullDay, setBlockFullDay] = useState(false)
+  // Date visée par le blocage. Elle suivait la date de navigation de l'agenda,
+  // qui en vue Semaine ou Mois n'est pas un jour choisi par le médecin.
+  const [blockDate, setBlockDate] = useState('')
   const [blocking, setBlocking] = useState(false)
   const [blockError, setBlockError] = useState('')
 
@@ -168,13 +168,14 @@ export default function AppointmentsPage() {
 
   async function addBlock() {
     if (!doctor) return
+    if (!blockDate) { setBlockError('Choisissez une date.'); return }
     if (!blockFullDay && (!blockStart || !blockEnd || blockEnd <= blockStart)) {
       setBlockError('L\'heure de fin doit être après l\'heure de début.'); return
     }
     setBlocking(true); setBlockError('')
     const { error } = await supabase.from('blocked_dates').insert({
       doctor_id: doctor.id,
-      date: format(currentDate, 'yyyy-MM-dd'),
+      date: blockDate,
       start_time: blockFullDay ? null : blockStart,
       end_time: blockFullDay ? null : blockEnd,
       reason: blockReason.trim() || null,
@@ -182,6 +183,13 @@ export default function AppointmentsPage() {
     setBlocking(false)
     if (error) { setBlockError('Échec du blocage. Réessayez.'); return }
     setBlockOpen(false); setBlockReason('')
+    // Le blocage peut viser un autre jour que celui affiché : on s'y rend,
+    // sinon le médecin ne verrait rien de ce qu'il vient de faire.
+    if (blockDate !== format(currentDate, 'yyyy-MM-dd')) {
+      setViewMode('day')
+      setCurrentDate(parseISO(blockDate))
+      return   // le changement de date relance les deux chargements
+    }
     await loadDayBlocks()
     await loadAppointments()
   }
@@ -313,7 +321,7 @@ export default function AppointmentsPage() {
           <Button variant="outline" onClick={() => setWalkInOpen(true)} disabled={!doctor}>
             <UserPlus className="h-4 w-4 mr-2" /> Sans RDV
           </Button>
-          <Button variant="outline" onClick={() => { setBlockError(''); setBlockFullDay(false); setBlockOpen(true) }} disabled={!doctor}>
+          <Button variant="outline" onClick={() => { setBlockError(''); setBlockFullDay(false); setBlockDate(format(currentDate, 'yyyy-MM-dd')); setBlockOpen(true) }} disabled={!doctor}>
             <Ban className="h-4 w-4 mr-2" /> Bloquer un créneau
           </Button>
           <Button onClick={() => setAddOpen(true)} disabled={!doctor}>
@@ -507,9 +515,18 @@ export default function AppointmentsPage() {
       {/* Dialog : bloquer un créneau */}
       <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Bloquer un créneau — {format(currentDate, 'EEEE d MMMM', { locale: fr })}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Bloquer un créneau</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p className="text-xs text-gray-500">Le créneau bloqué devient indisponible pour les patients (en ligne) et pour votre secrétaire.</p>
+            <div className="space-y-1.5">
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={blockDate}
+                min={format(getNowInMaroc(), 'yyyy-MM-dd')}
+                onChange={(e) => setBlockDate(e.target.value)}
+              />
+            </div>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={blockFullDay} onChange={(e) => setBlockFullDay(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary-500" />
               Bloquer toute la journée
