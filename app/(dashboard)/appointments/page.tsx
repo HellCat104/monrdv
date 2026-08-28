@@ -7,6 +7,7 @@ import { withConsultationSummary } from '@/lib/consultation-summary'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import { AddAppointmentDialog } from '@/components/dashboard/AddAppointmentDialog'
 import { WeekGrid } from '@/components/dashboard/WeekGrid'
+import { MonthGrid } from '@/components/dashboard/MonthGrid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -444,40 +445,16 @@ export default function AppointmentsPage() {
             </div>
           ) : viewMode === 'month' ? (
             /* Grille calendrier mensuelle */
-            <div>
-              <div className="grid grid-cols-7 gap-1 mb-1">
-                {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((d) => (
-                  <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">{d}</div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {buildMonthGrid().map((day) => {
-                  const dStr = format(day, 'yyyy-MM-dd')
-                  const count = countByDay.get(dStr) ?? 0
-                  const inMonth = isSameMonth(day, currentDate)
-                  const isToday = isSameDay(day, getNowInMaroc())
-                  return (
-                    <button
-                      key={dStr}
-                      onClick={() => { setCurrentDate(day); setViewMode('day') }}
-                      className={`aspect-square rounded-lg border p-1.5 flex flex-col items-start transition-colors ${
-                        inMonth ? 'bg-white hover:border-primary-300' : 'bg-gray-50 text-gray-300'
-                      } ${isToday ? 'border-primary-500 border-2' : 'border-gray-100'}`}
-                    >
-                      <span className={`text-xs font-medium ${isToday ? 'text-primary-600' : inMonth ? 'text-gray-700' : 'text-gray-300'}`}>
-                        {format(day, 'd')}
-                      </span>
-                      {count > 0 && inMonth && (
-                        <span className="mt-auto self-stretch text-[10px] font-semibold text-primary-700 bg-primary-50 rounded px-1 py-0.5 text-center">
-                          {count} RDV
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-              <p className="text-xs text-gray-400 mt-3 text-center">Cliquez sur un jour pour voir le détail</p>
-            </div>
+            <MonthGrid
+              days={buildMonthGrid()}
+              month={currentDate}
+              appointments={filtered}
+              blocks={dayBlocks}
+              onSelectDay={(day) => { setCurrentDate(day); setViewMode('day') }}
+              onSelectAppointment={(apt) => {
+                if (apt.patient_id) router.push(`/patients?patient=${apt.patient_id}`)
+              }}
+            />
           ) : viewMode === 'week' && doctor ? (
             /* Grille horaire hebdomadaire */
             <WeekGrid
