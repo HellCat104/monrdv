@@ -91,7 +91,24 @@ export async function middleware(req: NextRequest) {
       }
     )
 
-    const { data: { user } } = await supabase.auth.getUser()
+    // La validation de session est un appel réseau à Supabase Auth, sans limite
+    // de temps par défaut : un ralentissement de leur côté faisait expirer le
+    // middleware et Vercel renvoyait un 504 à la place de l'application
+    // (MIDDLEWARE_INVOCATION_TIMEOUT). On borne l'attente et, en cas de
+    // dépassement, on laisse passer : le layout et la page revérifient tous
+    // deux l'authentification côté serveur, le verrou reste donc en place.
+    const AUTH_TIMEOUT_MS = 5000
+    const authResult = await Promise.race([
+      supabase.auth.getUser(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), AUTH_TIMEOUT_MS)),
+    ]).catch(() => null)
+
+    if (authResult === null) {
+      console.error('[middleware] validation de session trop lente, on laisse passer')
+      return res
+    }
+
+    const user = authResult.data.user
 
     if (!user) {
       // Ces routes (dashboard, settings, appointments, patients, abonnement, admin)
