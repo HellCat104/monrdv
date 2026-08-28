@@ -2,7 +2,7 @@
 import { cache } from 'react'
 import { displayName } from '@/lib/profession'
 import { notFound } from 'next/navigation'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { BookingPageClient } from './BookingPageClient'
 import Link from 'next/link'
 import type { Metadata } from 'next'
@@ -70,14 +70,22 @@ export default async function BookingPage({ params }: Props) {
 
   if (!doctor) notFound()
 
-  // Motifs de consultation du médecin (RLS : lecture publique des motifs actifs)
-  const supabase = createClient()
-  const { data: consultationTypes } = await supabase
+  // Motifs de consultation du médecin.
+  //
+  // Client admin, comme pour la fiche médecin juste au-dessus : la policy
+  // publique de `consultation_types` dépend d'une sous-requête sur `doctors`,
+  // dont l'accès a été restreint par la v15 puis la v37 — les motifs ne
+  // remontaient plus, et la page n'affichait ni liste ni tarifs. Ces données
+  // sont publiques par nature (nom, durée, tarif d'un médecin déjà approuvé),
+  // et le filtrage sur ce médecin actif est fait ici.
+  const supabase = createAdminClient()
+  const { data: consultationTypes, error: typesError } = await supabase
     .from('consultation_types')
     .select('id, doctor_id, name, duration_minutes, default_price, active, created_at')
     .eq('doctor_id', doctor.id)
     .eq('active', true)
     .order('created_at', { ascending: true })
+  if (typesError) console.error('[Motifs de consultation]', typesError)
 
   // Médecin inactif → page d'erreur propre
   if (doctor.subscription_status !== 'actif') {
