@@ -313,7 +313,7 @@ export default function AppointmentsPage() {
           <Button variant="outline" onClick={() => setWalkInOpen(true)} disabled={!doctor}>
             <UserPlus className="h-4 w-4 mr-2" /> Sans RDV
           </Button>
-          <Button variant="outline" onClick={() => { setBlockError(''); setBlockOpen(true) }} disabled={!doctor}>
+          <Button variant="outline" onClick={() => { setBlockError(''); setBlockFullDay(false); setBlockOpen(true) }} disabled={!doctor}>
             <Ban className="h-4 w-4 mr-2" /> Bloquer un créneau
           </Button>
           <Button onClick={() => setAddOpen(true)} disabled={!doctor}>

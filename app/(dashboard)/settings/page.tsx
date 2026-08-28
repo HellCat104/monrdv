@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { format, addDays, parseISO } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +48,9 @@ export default function SettingsPage() {
   const [newBlockEndDate, setNewBlockEndDate] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
   const [blockLoading, setBlockLoading] = useState(false)
+  const [blockDateError, setBlockDateError] = useState('')
+  // Borne des champs date : heure Maroc, jamais l'heure du navigateur
+  const aujourdhuiMaroc = formatInTimeZone(new Date(), 'Africa/Casablanca', 'yyyy-MM-dd')
   // Motifs de consultation (durées variables)
   const [consultTypes, setConsultTypes] = useState<ConsultationType[]>([])
   const [newTypeName, setNewTypeName] = useState('')
@@ -243,25 +248,30 @@ export default function SettingsPage() {
 
     // Construit la liste des dates entre début et fin (incluses).
     // Si pas de date de fin, on bloque juste un seul jour.
+    //
+    // Arithmétique de calendrier pure : passer par un objet Date puis par
+    // toISOString() reculait la date d'un jour depuis tout navigateur à l'est
+    // de UTC — donc depuis tout le Maroc. Un congé posé pour le 29 était
+    // enregistré le 28.
     const start = newBlockDate
     const end = newBlockEndDate && newBlockEndDate >= newBlockDate ? newBlockEndDate : newBlockDate
     const dates: string[] = []
-    const cur = new Date(start + 'T00:00:00')
-    const last = new Date(end + 'T00:00:00')
-    while (cur <= last) {
-      dates.push(cur.toISOString().split('T')[0])
-      cur.setDate(cur.getDate() + 1)
+    for (let d = parseISO(start); d <= parseISO(end); d = addDays(d, 1)) {
+      dates.push(format(d, 'yyyy-MM-dd'))
     }
 
-    // Évite les doublons avec les dates déjà bloquées
-    const already = new Set(blockedDates.map((b) => b.date))
+    // Évite les doublons — uniquement avec les congés déjà posés. Un blocage
+    // partiel (10h-11h) ne doit pas empêcher de fermer la journée entière.
+    const already = new Set(blockedDates.filter((b) => !b.start_time).map((b) => b.date))
     const toInsert = dates
       .filter((d) => !already.has(d))
       .map((d) => ({ doctor_id: doctor.id, date: d, reason: newBlockReason || null }))
 
     if (toInsert.length === 0) {
       setBlockLoading(false)
-      setNewBlockDate(''); setNewBlockEndDate(''); setNewBlockReason('')
+      setBlockDateError(dates.length > 1
+        ? 'Ces journées sont déjà fermées.'
+        : 'Cette journée est déjà fermée.')
       return
     }
 
@@ -271,12 +281,15 @@ export default function SettingsPage() {
       .select()
 
     setBlockLoading(false)
-    if (!error && data) {
-      setBlockedDates((prev) => [...prev, ...data].sort((a, b) => a.date.localeCompare(b.date)))
-      setNewBlockDate('')
-      setNewBlockEndDate('')
-      setNewBlockReason('')
+    if (error || !data) {
+      setBlockDateError("La fermeture n'a pas pu être enregistrée. Réessayez.")
+      return
     }
+    setBlockedDates((prev) => [...prev, ...data].sort((a, b) => a.date.localeCompare(b.date)))
+    setBlockDateError('')
+    setNewBlockDate('')
+    setNewBlockEndDate('')
+    setNewBlockReason('')
   }
 
   async function handleRemoveBlockedDate(id: string) {
@@ -1050,8 +1063,12 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-gray-500">
-              Aucun créneau ne sera disponible pour les patients ces jours-là. Pour des vacances, indiquez une date de fin.
+              Ferme la journée <b>entière</b> : aucun créneau ne sera proposé aux patients. Pour des vacances,
+              indiquez une date de fin. Pour ne bloquer que quelques heures, passez par l&apos;agenda.
             </p>
+            {blockDateError && (
+              <p className="text-xs text-red-600">{blockDateError}</p>
+            )}
 
             {/* Ajouter une date ou une période */}
             <div className="flex gap-2 flex-wrap items-center">
@@ -1060,7 +1077,7 @@ export default function SettingsPage() {
                 type="date"
                 value={newBlockDate}
                 onChange={(e) => setNewBlockDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={aujourdhuiMaroc}
                 className="w-40"
               />
               <span className="text-xs text-gray-400">au (optionnel)</span>
@@ -1068,7 +1085,7 @@ export default function SettingsPage() {
                 type="date"
                 value={newBlockEndDate}
                 onChange={(e) => setNewBlockEndDate(e.target.value)}
-                min={newBlockDate || new Date().toISOString().split('T')[0]}
+                min={newBlockDate || aujourdhuiMaroc}
                 className="w-40"
               />
               <Input
@@ -1089,15 +1106,22 @@ export default function SettingsPage() {
             </div>
 
             {/* Liste des dates bloquées */}
-            {blockedDates.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">Aucune date bloquée</p>
+            {blockedDates.filter((b) => b.date >= aujourdhuiMaroc).length === 0 ? (
+              <p className="text-sm text-gray-400 italic">Aucune date bloquée à venir</p>
             ) : (
               <div className="space-y-2">
-                {blockedDates.map((bd) => (
+                {blockedDates.filter((b) => b.date >= aujourdhuiMaroc).map((bd) => (
                   <div key={bd.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                     <div>
                       <span className="text-sm font-medium text-gray-800">
                         {new Date(bd.date + 'T00:00:00').toLocaleDateString('fr-MA', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                      {/* Une plage horaire n'est PAS un congé : le dire, sinon
+                          l'écran laisse croire que la journée est fermée. */}
+                      <span className={`text-xs ml-2 px-1.5 py-0.5 rounded ${bd.start_time ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                        {bd.start_time
+                          ? `${bd.start_time.slice(0, 5)} – ${(bd.end_time ?? '').slice(0, 5)}`
+                          : 'journée entière'}
                       </span>
                       {bd.reason && (
                         <span className="text-xs text-gray-400 ml-2">— {bd.reason}</span>

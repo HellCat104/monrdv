@@ -42,6 +42,10 @@ export interface BlockedDate {
   id: string
   doctor_id: string
   date: string   // YYYY-MM-DD
+  // Horaires (v28) : les deux nuls = journée entière fermée (congé) ;
+  // renseignés = seule cette plage est bloquée.
+  start_time: string | null
+  end_time: string | null
   reason: string | null
   created_at: string
 }
