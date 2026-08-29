@@ -4,17 +4,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendStaffInviteEmail } from '@/lib/email'
 import { DEFAULT_STAFF_PERMISSIONS, type StaffPermissions } from '@/types'
+import { canAccess } from '@/lib/plan'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 // Nettoie l'objet permissions reçu : uniquement des booléens sur des clés connues.
-function sanitizePerms(input: unknown): StaffPermissions {
+function sanitizePerms(input: unknown, plan?: string | null): StaffPermissions {
   const src = (input ?? {}) as Record<string, unknown>
   const out = { ...DEFAULT_STAFF_PERMISSIONS }
   for (const k of Object.keys(DEFAULT_STAFF_PERMISSIONS) as (keyof StaffPermissions)[]) {
     if (k in src) out[k] = Boolean(src[k])
   }
+  // Une permission que le forfait ne couvre pas n'est pas enregistrée : elle
+  // resterait cochée en base et se réveillerait à la montée en gamme, sans
+  // décision consciente du praticien.
+  if (!canAccess(plan, 'records')) { out.patients_medical = false; out.vitals_entry = false }
+  if (!canAccess(plan, 'prescriptions')) out.prescriptions_view = false
+  if (!canAccess(plan, 'invoicing')) out.factures = false
   return out
 }
 
@@ -29,7 +36,7 @@ async function getDoctor(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.email) return null
   const { data: doctor } = await supabase
-    .from('doctors').select('id, name, email, status').eq('email', user.email).single()
+    .from('doctors').select('id, name, email, status, plan').eq('email', user.email).single()
   if (!doctor || doctor.status !== 'approved') return null
   return doctor
 }
@@ -52,7 +59,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const name = String(body.name ?? '').trim()
   const email = String(body.email ?? '').trim().toLowerCase()
-  const permissions = sanitizePerms(body.permissions)
+  const permissions = sanitizePerms(body.permissions, doctor.plan)
 
   if (!name) return NextResponse.json({ error: 'Nom requis' }, { status: 400 })
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return NextResponse.json({ error: 'E-mail invalide' }, { status: 400 })
@@ -105,7 +112,7 @@ export async function PATCH(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const patch: Record<string, any> = {}
-  if (body.permissions !== undefined) patch.permissions = sanitizePerms(body.permissions)
+  if (body.permissions !== undefined) patch.permissions = sanitizePerms(body.permissions, doctor.plan)
   if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim()
   if (body.status === 'active' || body.status === 'disabled') patch.status = body.status
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Rien à modifier' }, { status: 400 })

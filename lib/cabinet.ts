@@ -3,6 +3,7 @@
 // admin (service_role) après vérification de son appartenance à cabinet_staff.
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DEFAULT_STAFF_PERMISSIONS, type CabinetStaff, type StaffPermissions } from '@/types'
+import { canAccess } from '@/lib/plan'
 
 export interface StaffContext {
   email: string
@@ -31,7 +32,7 @@ export async function getStaffContext(): Promise<StaffContext | null> {
 
   const { data: doctor } = await admin
     .from('doctors')
-    .select('id, name, specialty, city, confidential_mode')
+    .select('id, name, specialty, city, confidential_mode, plan')
     .eq('id', staff.doctor_id)
     .single()
   if (!doctor) return null
@@ -43,6 +44,17 @@ export async function getStaffContext(): Promise<StaffContext | null> {
   // Mode confidentiel : quelles que soient les permissions accordées, on coupe
   // l'accès au clinique (antécédents + ordonnances). Le motif et le type de
   // consultation sont retirés côté route agenda.
+  // Forfait du praticien : une secrétaire n'hérite jamais de plus de droits que
+  // le cabinet n'en possède. Neutraliser ici plutôt que route par route garantit
+  // que TOUT chemin cabinet en hérite, y compris ceux écrits plus tard — c'est
+  // déjà le principe retenu pour le mode confidentiel juste en dessous.
+  if (!canAccess(doctor.plan, 'records')) {
+    permissions.patients_medical = false
+    permissions.vitals_entry = false
+  }
+  if (!canAccess(doctor.plan, 'prescriptions')) permissions.prescriptions_view = false
+  if (!canAccess(doctor.plan, 'invoicing')) permissions.factures = false
+
   const confidential = doctor.confidential_mode === true
   if (confidential) {
     // Mode confidentiel = la secrétaire ne voit RIEN de clinique. On coupe donc

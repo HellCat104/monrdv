@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { UserPlus, Trash2, Users2, Check, Mail, Loader2 } from 'lucide-react'
 import { DEFAULT_STAFF_PERMISSIONS, STAFF_PERMISSION_GROUPS, type CabinetStaff, type StaffPermissions } from '@/types'
+import { canAccess, type DoctorPlan } from '@/lib/plan'
 
 export default function EquipePage() {
   const [staff, setStaff] = useState<CabinetStaff[]>([])
@@ -17,6 +18,7 @@ export default function EquipePage() {
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
   const [hasSecretary, setHasSecretary] = useState<boolean | null>(null)
+  const [plan, setPlan] = useState<DoctorPlan>('complet')
   const supabase = createClient()
 
   // Formulaire d'invitation
@@ -27,8 +29,11 @@ export default function EquipePage() {
   async function load() {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data: doc } = await supabase.from('doctors').select('has_secretary').eq('email', user.email).single()
+      const { data: doc } = await supabase.from('doctors').select('has_secretary, plan').eq('email', user.email).single()
       setHasSecretary(!!doc?.has_secretary)
+      // Défaut 'complet' avant chargement : on n'affiche pas fugitivement des
+      // cases qui vont disparaître. C'est le forfait confirmé qui restreint.
+      setPlan(doc?.plan === 'agenda' ? 'agenda' : 'complet')
     }
     const res = await fetch('/api/staff')
     const d = await res.json().catch(() => ({}))
@@ -83,11 +88,28 @@ export default function EquipePage() {
   // Matrice groupée réutilisée (invitation + édition)
   const PermMatrix = ({ values, onToggle }: { values: StaffPermissions; onToggle: (k: keyof StaffPermissions) => void }) => (
     <div className="space-y-3">
-      {STAFF_PERMISSION_GROUPS.map((g) => (
+      {STAFF_PERMISSION_GROUPS.map((g) => {
+        const visibles = g.items.filter(({ requiert }) => !requiert || canAccess(plan, requiert))
+        if (visibles.length === 0) {
+          return (
+            <div key={g.title}>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{g.title}</p>
+              <p className="text-[13px] text-gray-500 rounded-lg border border-dashed border-gray-200 p-2.5">
+                Disponible avec le forfait <b>Cabinet complet</b>.
+              </p>
+            </div>
+          )
+        }
+        return (
         <div key={g.title}>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{g.title}</p>
           <div className="grid sm:grid-cols-2 gap-2">
-            {g.items.map(({ key, label, hint }) => (
+            {g.items
+              // Une permission dont le forfait ne couvre pas le droit n'est pas
+              // grisée mais retirée : une case cochable et sans effet finit en
+              // appel au support. Le bandeau ci-dessous dit ce qui manque.
+              .filter(({ requiert }) => !requiert || canAccess(plan, requiert))
+              .map(({ key, label, hint }) => (
               <label key={key} className="flex items-start gap-2 text-sm cursor-pointer rounded-lg border border-gray-100 p-2.5 hover:bg-gray-50">
                 <input type="checkbox" checked={!!values[key]} onChange={() => onToggle(key)}
                   className="h-4 w-4 mt-0.5 rounded border-gray-300 text-primary-500 focus:ring-primary-500" />
@@ -99,7 +121,8 @@ export default function EquipePage() {
             ))}
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 

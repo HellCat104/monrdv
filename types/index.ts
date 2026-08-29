@@ -562,7 +562,13 @@ export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
 }
 
 // Matrice de permissions groupée par bloc (page « Mon équipe »)
-export const STAFF_PERMISSION_GROUPS: { title: string; items: { key: keyof StaffPermissions; label: string; hint: string }[] }[] = [
+// `requiert` : droit de forfait sans lequel la permission n'a aucun sens. Une
+// secrétaire ne peut pas saisir de constantes dans un cabinet qui n'héberge
+// aucune donnée de santé. Absent = disponible dans les deux forfaits.
+export const STAFF_PERMISSION_GROUPS: {
+  title: string
+  items: { key: keyof StaffPermissions; label: string; hint: string; requiert?: 'records' | 'prescriptions' | 'invoicing' }[]
+}[] = [
   {
     title: 'Agenda & accueil',
     items: [
@@ -575,9 +581,9 @@ export const STAFF_PERMISSION_GROUPS: { title: string; items: { key: keyof Staff
   {
     title: 'Bloc médical',
     items: [
-      { key: 'patients_medical',    label: 'Afficher les antécédents médicaux', hint: 'Allergies, maladies chroniques, traitements' },
-      { key: 'prescriptions_view',  label: 'Afficher les ordonnances',          hint: 'Consultation des ordonnances émises' },
-      { key: 'vitals_entry',        label: 'Saisir les constantes',             hint: 'Poids, tension, température…' },
+      { key: 'patients_medical',    label: 'Afficher les antécédents médicaux', hint: 'Allergies, maladies chroniques, traitements', requiert: 'records' },
+      { key: 'prescriptions_view',  label: 'Afficher les ordonnances',          hint: 'Consultation des ordonnances émises', requiert: 'prescriptions' },
+      { key: 'vitals_entry',        label: 'Saisir les constantes',             hint: 'Poids, tension, température…', requiert: 'records' },
     ],
   },
   {
@@ -587,7 +593,7 @@ export const STAFF_PERMISSION_GROUPS: { title: string; items: { key: keyof Staff
       { key: 'edit_prices',   label: 'Modifier le prix des actes',  hint: 'Ajuster le montant dû lors de l’encaissement' },
       { key: 'caisse_day',    label: 'Journal de caisse du jour',   hint: 'Total encaissé aujourd’hui, par mode de règlement' },
       { key: 'view_revenue',  label: 'Chiffre d’affaires global',   hint: 'Totaux du mois et de l’année' },
-      { key: 'factures',      label: 'Factures',                    hint: 'Accès à la liste des factures' },
+      { key: 'factures',      label: 'Factures',                    hint: 'Accès à la liste des factures', requiert: 'invoicing' },
     ],
   },
   {
