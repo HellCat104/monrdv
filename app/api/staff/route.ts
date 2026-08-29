@@ -60,6 +60,13 @@ export async function POST(req: NextRequest) {
   const name = String(body.name ?? '').trim()
   const email = String(body.email ?? '').trim().toLowerCase()
   const permissions = sanitizePerms(body.permissions, doctor.plan)
+  // Le médecin peut fixer le mot de passe initial — c'est ce que faisait le
+  // formulaire d'inscription avant que la création de compte n'en soit retirée.
+  // À défaut, on en génère un et on le lui communique par e-mail.
+  const chosen = typeof body.password === 'string' ? body.password : ''
+  if (chosen && chosen.length < 8) {
+    return NextResponse.json({ error: 'Le mot de passe doit contenir au moins 8 caractères' }, { status: 400 })
+  }
 
   if (!name) return NextResponse.json({ error: 'Nom requis' }, { status: 400 })
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return NextResponse.json({ error: 'E-mail invalide' }, { status: 400 })
@@ -67,7 +74,7 @@ export async function POST(req: NextRequest) {
 
   // Le compte auth de la secrétaire (créé si nouveau, sinon on réutilise l'existant).
   const admin = createAdminClient()
-  let tempPassword: string | undefined = randomPassword()
+  let tempPassword: string | undefined = chosen || randomPassword()
   const { error: createErr } = await admin.auth.admin.createUser({
     email,
     password: tempPassword,

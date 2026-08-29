@@ -24,6 +24,7 @@ export default function EquipePage() {
   // Formulaire d'invitation
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [perms, setPerms] = useState<StaffPermissions>({ ...DEFAULT_STAFF_PERMISSIONS })
 
   async function load() {
@@ -53,17 +54,18 @@ export default function EquipePage() {
   async function invite() {
     setError(''); setOk('')
     if (!name.trim() || !email.trim()) { setError('Nom et e-mail requis.'); return }
+    if (password && password.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères.'); return }
     setAdding(true)
     const res = await fetch('/api/staff', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim(), email: email.trim(), permissions: perms }),
+      body: JSON.stringify({ name: name.trim(), email: email.trim(), password: password || undefined, permissions: perms }),
     })
     const d = await res.json().catch(() => ({}))
     setAdding(false)
     if (!res.ok) { setError(d.error || 'Échec de l’invitation.'); return }
     setOk(`Invitation envoyée à ${email.trim()}.`)
-    setName(''); setEmail(''); setPerms({ ...DEFAULT_STAFF_PERMISSIONS })
+    setName(''); setEmail(''); setPassword(''); setPerms({ ...DEFAULT_STAFF_PERMISSIONS })
     load()
   }
 
@@ -156,6 +158,19 @@ export default function EquipePage() {
           <div className="grid sm:grid-cols-2 gap-3">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la secrétaire" />
             <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Adresse e-mail" />
+          </div>
+
+          <div className="space-y-1">
+            <Input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              placeholder="Mot de passe (facultatif)"
+            />
+            <p className="text-[11px] text-gray-400">
+              Laissez vide pour qu&apos;un mot de passe soit généré et envoyé par e-mail.
+              Elle pourra le changer après sa première connexion.
+            </p>
           </div>
 
           <PermMatrix values={perms} onToggle={(key) => setPerms((p) => ({ ...p, [key]: !p[key] }))} />
