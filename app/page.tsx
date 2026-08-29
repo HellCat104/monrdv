@@ -1,6 +1,12 @@
 // Page d'accueil — server component pour permettre l'export de metadata SEO
 import type { Metadata } from 'next'
 import HomePageClient from './HomePageClient'
+import { MaillageSEO, FAQ, QUESTIONS_FREQUENTES } from '@/components/home/MaillageSEO'
+import { chargerLiensSEO } from '@/lib/seo-liens'
+
+// Régénérée au maximum une fois par heure : le maillage suit les médecins
+// inscrits sans recalculer la page à chaque visite.
+export const revalidate = 3600
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 
@@ -58,6 +64,18 @@ const jsonLd = {
       },
     },
     {
+      // Balisage des questions fréquentes : Google peut afficher ces réponses
+      // directement dans ses résultats, ce qui gagne de la place sur la page
+      // sans dépendre du classement.
+      '@type': 'FAQPage',
+      '@id': `${APP_URL}/#faq`,
+      mainEntity: QUESTIONS_FREQUENTES.map(({ q, r }) => ({
+        '@type': 'Question',
+        name: q,
+        acceptedAnswer: { '@type': 'Answer', text: r },
+      })),
+    },
+    {
       '@type': 'Organization',
       '@id': `${APP_URL}/#organization`,
       name: 'MonRDV',
@@ -72,14 +90,19 @@ const jsonLd = {
   ],
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { villes, specialites } = await chargerLiensSEO()
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
-      <HomePageClient />
+      <HomePageClient>
+        <MaillageSEO villes={villes} specialites={specialites} />
+        <FAQ />
+      </HomePageClient>
     </>
   )
 }

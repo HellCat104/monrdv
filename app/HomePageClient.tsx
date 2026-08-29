@@ -22,7 +22,9 @@ const SPECIALITES = [
   { label: 'Gastro-entérologue',   emoji: '🩻', color: 'bg-orange-50' },
 ]
 
-export default function HomePageClient() {
+// Le contenu de référencement est calculé côté serveur (il interroge la base) :
+// il est donc passé en enfant et rendu juste avant le pied de page.
+export default function HomePageClient({ children }: { children?: React.ReactNode }) {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [specialite, setSpecialite] = useState('')
@@ -319,6 +321,8 @@ export default function HomePageClient() {
           </div>
         </div>
       </section>
+
+      {children}
 
       {/* Footer */}
       <footer className="bg-gray-900 text-gray-400 py-8 px-4 text-center text-sm">
