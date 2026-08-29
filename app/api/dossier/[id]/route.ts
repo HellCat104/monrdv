@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import JSZip from 'jszip'
 import { buildPatientDossierPDF } from '@/lib/dossier'
 import { canAccess } from '@/lib/plan'
+import { logAccesDossier } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -28,6 +29,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json(
       { error: 'Votre forfait ne donne pas accès au dossier médical' }, { status: 403 })
   }
+
+  await logAccesDossier({
+    doctorId: doctor.id, actorUserId: user.id, actorRole: 'medecin',
+    actorEmail: user.email, action: 'dossier_exporte', patientId: params.id,
+  })
 
   const r = await buildPatientDossierPDF(supabase, doctor, params.id)
   if (!r.ok || !r.pdf) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
 import { allVitalDefs, resolveEnabledVitals, type VitalDef } from '@/types'
+import { logAccesDossier } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,18 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .select('id, first_name, last_name, phone, age, cin, mutuelle, birth_date, parent1_name, parent1_phone, parent2_name, parent2_phone, primary_contact, allergies, chronic_conditions, current_treatments')
     .eq('id', params.id).eq('doctor_id', ctx.doctor.id).maybeSingle()
   if (!patient) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
+
+  // C'est ici que le journal compte le plus : la secrétaire a le droit d'ouvrir
+  // un dossier, aucun contrôle ne peut deviner pourquoi elle le fait. On note
+  // ce qu'elle a réellement obtenu, pas seulement qu'elle a regardé.
+  await logAccesDossier({
+    doctorId: ctx.doctor.id, actorRole: 'secretaire', actorEmail: ctx.email,
+    action: 'dossier_consulte', patientId: patient.id,
+    extra: {
+      medical: ctx.permissions.patients_medical,
+      ordonnances: ctx.permissions.prescriptions_view,
+    },
+  })
 
   // Le médical n'est renvoyé QUE si la permission est accordée
   const medical = ctx.permissions.patients_medical

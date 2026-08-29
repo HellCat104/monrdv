@@ -7,6 +7,7 @@ import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
 import { PrintButton } from './PrintButton'
 import { canAccess } from '@/lib/plan'
+import { logAccesDossier } from '@/lib/audit'
 
 interface Props { params: { id: string } }
 export const dynamic = 'force-dynamic'
@@ -41,6 +42,11 @@ export default async function DossierPage({ params }: Props) {
     .eq('doctor_id', doctor.id)
     .single()
   if (!patient) notFound()
+
+  await logAccesDossier({
+    doctorId: doctor.id, actorUserId: user.id, actorRole: 'medecin',
+    actorEmail: user.email, action: 'dossier_imprime', patientId: patient.id,
+  })
 
   const [aptRes, notesRes, presRes, vitalsRes, docsRes] = await Promise.all([
     supabase.from('appointments').select('*, consultation_type:consultation_types(name)')

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import JSZip from 'jszip'
 import { buildPatientDossierPDF } from '@/lib/dossier'
 import { canAccess } from '@/lib/plan'
+import { logAccesDossier } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -33,6 +34,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const ids: string[] = Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === 'string') : []
   if (ids.length === 0) return NextResponse.json({ error: 'Aucun patient sélectionné' }, { status: 400 })
+  await logAccesDossier({
+    doctorId: doctor.id, actorUserId: user.id, actorRole: 'medecin',
+    actorEmail: user.email, action: 'patients_exportes',
+    extra: { nombre: ids.length, patients: ids.slice(0, 50) },
+  })
+
   if (ids.length > MAX_PATIENTS) {
     return NextResponse.json({ error: `Sélection trop grande (max ${MAX_PATIENTS} patients à la fois).` }, { status: 400 })
   }

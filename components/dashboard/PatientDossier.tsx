@@ -24,6 +24,9 @@ import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, P
 
 const DOC_BUCKET = 'patient-documents'
 
+// Le journal stocke des codes ; l'écran doit parler français.
+const ACTIONS_LISIBLES: Record<string, string> = {"dossier_consulte": "Dossier consulté", "dossier_imprime": "Version imprimable ouverte", "dossier_exporte": "Dossier exporté", "patients_exportes": "Export groupé", "patient_fusionne": "Fiche fusionnée"}
+
 export default function PatientDossier({
   doctorId, doctorName, doctorSlug, specialties, enabledVitals, vitalDefsAll, initialPatient,
 }: {
@@ -85,6 +88,11 @@ export default function PatientDossier({
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [vitals, setVitals] = useState<VitalSign[]>([])
   const [packages, setPackages] = useState<SessionPackage[]>([])
+  // Historique des accès : chargé seulement si le médecin l'ouvre. Il n'a pas
+  // sa place dans le chargement initial du dossier, qu'il ralentirait pour
+  // une information consultée une fois sur cent.
+  const [acces, setAcces] = useState<{ id: string; action: string; metadata: Record<string, unknown>; created_at: string }[] | null>(null)
+  const [accesCharge, setAccesCharge] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // Ajouts
@@ -164,6 +172,14 @@ export default function PatientDossier({
     }, 300)
     return () => clearTimeout(t)
   }, [mergeSearch, doctorId, patient.id, supabase])
+
+  async function chargerAcces() {
+    if (accesCharge) return
+    setAccesCharge(true)
+    const res = await fetch(`/api/audit/patient/${patient.id}`)
+    const d = await res.json().catch(() => ({}))
+    setAcces(d.acces ?? [])
+  }
 
   async function linkSibling(p: { id: string }) {
     const fid = familyId ?? crypto.randomUUID()
@@ -633,6 +649,51 @@ export default function PatientDossier({
                 {savingPkg ? '…' : 'Créer'}
               </Button>
             </div>
+          </div>
+
+          {/* Qui a consulté ce dossier */}
+          <div className={sec}>
+            <div className={secTitle}>
+              <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> Accès au dossier</span>
+              {!accesCharge && (
+                <button onClick={chargerAcces} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">
+                  Afficher
+                </button>
+              )}
+            </div>
+
+            {!accesCharge ? (
+              <p className="text-xs text-gray-400 italic">
+                Qui a ouvert ce dossier, et quand. Conservé pour vous permettre de répondre
+                si un patient s&apos;en inquiète.
+              </p>
+            ) : acces === null ? (
+              <p className="text-xs text-gray-400">Chargement…</p>
+            ) : acces.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">Aucun accès enregistré pour l&apos;instant.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {acces.map((a) => {
+                  const role = String((a.metadata as Record<string, unknown>)?.role ?? '')
+                  const email = String((a.metadata as Record<string, unknown>)?.email ?? '')
+                  return (
+                    <li key={a.id} className="flex items-start justify-between gap-3 text-xs">
+                      <span className="min-w-0">
+                        <span className="text-gray-700">{ACTIONS_LISIBLES[a.action] ?? a.action}</span>
+                        <span className="block text-gray-400 truncate">
+                          {role === 'secretaire' ? 'Secrétaire' : 'Vous'}{email ? ` · ${email}` : ''}
+                        </span>
+                      </span>
+                      <span className="text-gray-400 shrink-0 tabular-nums">
+                        {new Date(a.created_at).toLocaleString('fr-FR', {
+                          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </div>
 
           {/* Ordonnances — masquées pour les professions non prescriptrices */}
