@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="MonRDV">
+  <defs>
+    <!-- Lumière en haut à gauche, densité en bas à droite : c'est ce qui donne
+         du volume à une icône plate sans recourir à une ombre. -->
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#54B8EC"/>
+      <stop offset="1" stop-color="#0E86CE"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="100" height="100" rx="23" fill="url(#fond)"/>
+
+  <!-- Le M, tracé plutôt que composé : aucune dépendance à une police, donc un
+       rendu identique partout, y compris en favicon à 16 px. -->
+  <path fill="#fff"
+        d="M28 55V20h10.5l11.5 20.7L61.5 20H72v35h-8.2V33.2L52.8 52h-5.6L36.2 33.2V55z"/>
+
+  <!-- Le tracé cardiaque : ce qui fait la différence entre un monogramme
+       quelconque et une marque de santé. -->
+  <path d="M22 74h21l5.5-10 6 24 5-14h18"
+        fill="none" stroke="#fff" stroke-opacity=".95"
+        stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

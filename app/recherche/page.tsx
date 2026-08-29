@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { Search, MapPin, Clock, Stethoscope, ArrowLeft, Calendar } from 'lucide-react'
 import { Suspense } from 'react'
 import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
+import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
 interface Doctor {
   id: string
@@ -86,6 +87,7 @@ function RechercheContent() {
             <Link href="/" className="text-white/80 hover:text-white">
               <ArrowLeft className="h-5 w-5" />
             </Link>
+            <LogoMonRDV taille={30} avecTexte={false} />
             <span className="font-bold text-lg">MonRDV</span>
           </div>
           <form onSubmit={handleSearch} className="bg-white rounded-xl p-2 flex flex-col sm:flex-row gap-2">

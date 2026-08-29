@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Search, MapPin, User, Stethoscope, Clock, Shield, Star, Calendar, FolderHeart, Receipt, BellRing, Users2, FileText, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
+import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
 const SPECIALITES = [
   { label: 'Médecin généraliste', emoji: '🩺', color: 'bg-blue-50' },
@@ -69,10 +70,7 @@ export default function HomePageClient({ children }: { children?: React.ReactNod
       <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-9 h-9 bg-primary-500 rounded-xl flex items-center justify-center">
-              <Stethoscope className="h-5 w-5 text-white" />
-            </div>
-            <span className="font-bold text-gray-900 text-xl">MonRDV</span>
+            <LogoMonRDV taille={36} />
           </Link>
 
           <nav className="flex items-center gap-2 sm:gap-4">

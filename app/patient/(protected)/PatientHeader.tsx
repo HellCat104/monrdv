@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Stethoscope, LogOut, Search, Shield, FolderHeart } from 'lucide-react'
+import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
 interface PatientHeaderProps {
   userEmail: string
@@ -26,10 +27,7 @@ export default function PatientHeader({ userEmail, userName }: PatientHeaderProp
     <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center">
-            <Stethoscope className="h-4 w-4 text-white" />
-          </div>
-          <span className="font-bold text-gray-900">MonRDV</span>
+          <LogoMonRDV taille={32} />
         </Link>
 
         <nav className="flex items-center gap-2 sm:gap-4">

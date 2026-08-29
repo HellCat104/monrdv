@@ -10,6 +10,7 @@ import { Stethoscope, Mail, ChevronRight, ArrowLeft, Eye, EyeOff } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
 type Mode = 'home' | 'email-login' | 'email-signup' | 'forgot'
 
@@ -134,10 +135,7 @@ export default function PatientLoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2">
-            <div className="w-12 h-12 bg-primary-500 rounded-2xl flex items-center justify-center shadow-lg">
-              <Stethoscope className="h-6 w-6 text-white" />
-            </div>
-            <span className="text-2xl font-bold text-gray-900">MonRDV</span>
+            <LogoMonRDV taille={48} />
           </Link>
           <p className="text-gray-600 font-semibold mt-3">Espace patient</p>
           <p className="text-gray-400 text-sm">Connectez-vous pour gérer vos rendez-vous</p>

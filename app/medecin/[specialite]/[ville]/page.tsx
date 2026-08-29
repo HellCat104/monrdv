@@ -7,6 +7,7 @@ import { Metadata } from 'next'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getSpecialiteFromSlug, getVilleFromSlug, SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
 import { MapPin, Clock, Phone, Star } from 'lucide-react'
+import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
 interface Props {
   params: { specialite: string; ville: string }
@@ -70,7 +71,7 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
         {/* Header */}
         <header className="bg-white border-b border-gray-100">
           <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-2">
-            <Link href="/" className="font-bold text-primary-500 text-xl">MonRDV</Link>
+            <Link href="/"><LogoMonRDV taille={34} /></Link>
             <span className="text-gray-300">/</span>
             <Link href="/recherche" className="text-gray-500 text-sm hover:text-primary-500">Recherche</Link>
             <span className="text-gray-300">/</span>
