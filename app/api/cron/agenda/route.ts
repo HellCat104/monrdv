@@ -62,20 +62,19 @@ export async function GET(req: NextRequest) {
   // puis regroupement en mémoire par médecin — évite le N+1 qui faisait timeout.
   const { data: allApts } = await supabase
     .from('appointments')
-    .select('doctor_id, time, notes, patient:patients(first_name, last_name, phone)')
+    .select('doctor_id, time, patient:patients(first_name, last_name, phone)')
     .in('doctor_id', workingDoctors.map((d) => d.id))
     .eq('date', today)
     .neq('status', 'cancelled')
     .order('time', { ascending: true })
 
-  const aptsByDoctor = new Map<string, { time: string; patientName: string; phone: string; notes?: string | null }[]>()
+  const aptsByDoctor = new Map<string, { time: string; patientName: string; phone: string }[]>()
   for (const apt of allApts ?? []) {
     const list = aptsByDoctor.get(apt.doctor_id) ?? []
     list.push({
       time:        apt.time,
       patientName: `${(apt.patient as any)?.first_name ?? ''} ${(apt.patient as any)?.last_name ?? ''}`.trim(),
       phone:       (apt.patient as any)?.phone ?? '',
-      notes:       apt.notes,
     })
     aptsByDoctor.set(apt.doctor_id, list)
   }

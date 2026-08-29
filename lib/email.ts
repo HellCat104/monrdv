@@ -311,13 +311,20 @@ export async function sendDailyAgendaToDoctor(params: {
   doctorEmail: string
   doctorName: string
   date: string
-  appointments: { time: string; patientName: string; phone: string; notes?: string | null }[]
+  // `notes` (le motif saisi par le patient) est volontairement absent : voir
+  // le commentaire du tableau ci-dessous.
+  appointments: { time: string; patientName: string; phone: string }[]
 }): Promise<boolean> {
   const resend = getResend()
   if (!resend) return false
 
   const hasAppointments = params.appointments.length > 0
 
+  // Le motif de consultation est une donnée de santé. L'envoyer par e-mail,
+  // pour tous les patients du jour, à travers un prestataire tiers, et le
+  // laisser résider durablement dans la boîte du médecin, dépasse ce qu'exige
+  // un rappel d'agenda. Il reste consultable dans l'application, qui est le
+  // lieu prévu pour ça.
   const appointmentsHtml = hasAppointments
     ? `
       <table style="width:100%; border-collapse:collapse; margin:16px 0;">
@@ -326,7 +333,6 @@ export async function sendDailyAgendaToDoctor(params: {
             <th style="padding:10px 14px; text-align:left; color:#0369a1; font-size:13px;">Heure</th>
             <th style="padding:10px 14px; text-align:left; color:#0369a1; font-size:13px;">Patient</th>
             <th style="padding:10px 14px; text-align:left; color:#0369a1; font-size:13px;">Téléphone</th>
-            <th style="padding:10px 14px; text-align:left; color:#0369a1; font-size:13px;">Motif</th>
           </tr>
         </thead>
         <tbody>
@@ -335,7 +341,6 @@ export async function sendDailyAgendaToDoctor(params: {
               <td style="padding:10px 14px; font-weight:bold; color:#374151;">${h(apt.time)}</td>
               <td style="padding:10px 14px; color:#374151;">${h(apt.patientName)}</td>
               <td style="padding:10px 14px; color:#374151;">${h(apt.phone)}</td>
-              <td style="padding:10px 14px; color:#6b7280; font-size:13px;">${h(apt.notes) || '—'}</td>
             </tr>
           `).join('')}
         </tbody>
