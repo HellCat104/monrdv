@@ -8,16 +8,16 @@
     </linearGradient>
   </defs>
 
-  <rect width="100" height="100" rx="23" fill="url(#fond)"/>
+  <rect width="100" height="100" rx="22" fill="url(#fond)"/>
 
   <!-- Le M, tracé plutôt que composé : aucune dépendance à une police, donc un
        rendu identique partout, y compris en favicon à 16 px. -->
   <path fill="#fff"
-        d="M28 55V20h10.5l11.5 20.7L61.5 20H72v35h-8.2V33.2L52.8 52h-5.6L36.2 33.2V55z"/>
+        d="M33 55V20h8.1l8.9 20.7L58.9 20H67v35h-6.3V33.2L52.2 52h-4.4L39.3 33.2V55z"/>
 
   <!-- Le tracé cardiaque : ce qui fait la différence entre un monogramme
        quelconque et une marque de santé. -->
-  <path d="M22 74h21l5.5-10 6 24 5-14h18"
+  <path d="M28 74h17l4.5-7 5 16 4-9h13"
         fill="none" stroke="#fff" stroke-opacity=".95"
-        stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+        stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
