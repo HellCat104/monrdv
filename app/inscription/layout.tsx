@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Inscription médecin — MonRDV',
+  title: 'Inscription médecin',
   description:
     'Inscrivez-vous gratuitement sur MonRDV et commencez à recevoir des rendez-vous en ligne. Plateforme de gestion de rendez-vous médicaux au Maroc.',
   keywords: ['inscription médecin Maroc', 'logiciel rendez-vous médecin', 'agenda médical en ligne Maroc'],

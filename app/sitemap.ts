@@ -13,9 +13,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     { url: base, lastModified: now, changeFrequency: 'weekly', priority: 1.0 },
     { url: `${base}/inscription`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
-    // La recherche est la page qui répond le plus directement à l'intention
-    // « trouver un médecin » : elle manquait au sitemap.
-    { url: `${base}/recherche`, lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
+    // /recherche n'est PAS listée : la page se déclare en noindex (ses pages de
+    // résultats sont du contenu dupliqué). Une URL en noindex dans un sitemap
+    // est signalée comme une erreur par la Search Console.
     { url: `${base}/cgu`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
     { url: `${base}/politique-confidentialite`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
   ]

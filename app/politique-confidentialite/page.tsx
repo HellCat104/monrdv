@@ -4,7 +4,7 @@ import { Stethoscope, Shield } from 'lucide-react'
 import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
 export const metadata: Metadata = {
-  title: 'Politique de confidentialité — MonRDV',
+  title: 'Politique de confidentialité',
   description:
     'Politique de confidentialité de MonRDV — conformité loi marocaine 09-08 et CNDP. Données collectées, finalités, droits des utilisateurs, durée de conservation, sécurité.',
 }

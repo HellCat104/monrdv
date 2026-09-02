@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Rechercher un médecin au Maroc — MonRDV',
+  title: 'Rechercher un médecin au Maroc',
   description:
     'Recherchez un médecin par spécialité ou ville au Maroc. Trouvez un généraliste, cardiologue, dermatologue et prenez rendez-vous en ligne.',
   robots: {

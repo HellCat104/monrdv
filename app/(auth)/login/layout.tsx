@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Connexion médecin — MonRDV',
+  title: 'Connexion médecin',
   description: 'Connectez-vous à votre tableau de bord MonRDV pour gérer vos rendez-vous médicaux au Maroc.',
   robots: { index: false, follow: false },
 }

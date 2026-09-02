@@ -4,7 +4,7 @@ import { Suspense } from 'react'
 import { CancelResultContent } from './CancelResultContent'
 
 export const metadata: Metadata = {
-  title: 'Annulation de rendez-vous — MonRDV',
+  title: 'Annulation de rendez-vous',
   robots: { index: false, follow: false },
 }
 

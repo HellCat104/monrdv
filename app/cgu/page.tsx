@@ -4,7 +4,7 @@ import { Stethoscope } from 'lucide-react'
 import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
 export const metadata: Metadata = {
-  title: 'Conditions Générales d\'Utilisation — MonRDV',
+  title: 'Conditions Générales d\'Utilisation',
   description:
     'Conditions générales d\'utilisation de la plateforme MonRDV — prise de rendez-vous médicaux en ligne au Maroc. Droits et obligations des médecins et patients, abonnement, responsabilités.',
 }

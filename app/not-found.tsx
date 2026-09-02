@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Page introuvable — MonRDV',
+  title: 'Page introuvable',
   description: 'La page que vous cherchez n\'existe pas.',
   robots: { index: false, follow: true },
 }
