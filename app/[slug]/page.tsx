@@ -31,10 +31,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const slug = params.slug.replace(/^dr-/, '')
   const doctor = await getDoctor(slug)
 
-  if (!doctor) return { title: 'Médecin introuvable | MonRDV', robots: { index: false } }
+  if (!doctor) return { title: 'Médecin introuvable', robots: { index: false } }
 
   const cityPart = doctor.city ? ` à ${doctor.city}` : ''
-  const title = `${displayName(doctor.name, doctor.specialty)} — ${doctor.specialty}${cityPart} | MonRDV`
+  const title = `${displayName(doctor.name, doctor.specialty)} — ${doctor.specialty}${cityPart}`
   const description = doctor.bio
     ? `${doctor.bio.substring(0, 120)}… Prenez rendez-vous en ligne avec ${displayName(doctor.name, doctor.specialty)}${cityPart} sur MonRDV.`
     : `Prenez rendez-vous en ligne avec ${displayName(doctor.name, doctor.specialty)}, ${doctor.specialty}${cityPart}. Confirmation immédiate, disponible 24h/24 sur MonRDV.`

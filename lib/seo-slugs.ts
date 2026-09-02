@@ -74,6 +74,54 @@ export const VILLE_SLUGS: Record<string, string> = {
   'guelmim':       'Guelmim',
 }
 
+
+// Le mot que les gens tapent réellement, qui n'est pas toujours le nom de la
+// spécialité. On cherche « médecin esthétique », pas « médecine esthétique » ;
+// et la formule « un médecine esthétique à Casablanca » était du français
+// fautif servi à Google sur la page de liste.
+// Absent de cette table = le nom de la spécialité en minuscules convient.
+export const PRATICIEN: Record<string, string> = {
+  'medecine-esthetique': 'médecin esthétique',
+  'orl':                 'ORL',
+  'nutritionniste':      'nutritionniste',
+  'medecin-du-sport':    'médecin du sport',
+  'medecin-generaliste': 'médecin généraliste',
+}
+
+/** Nom du praticien tel qu'on le cherche : « médecin esthétique », « cardiologue ». */
+export function praticienDepuisSlug(slug: string): string {
+  return PRATICIEN[slug] ?? (SPECIALITE_SLUGS[slug] ?? '').toLowerCase()
+}
+
+// Variantes courantes renvoyées en 308 vers l'URL canonique. Sans elles,
+// /medecin/medecine-esthetique/casa renvoyait une 404 — or « casa » est la
+// façon dont on nomme Casablanca au quotidien.
+export const SPECIALITE_ALIAS: Record<string, string> = {
+  'medecin-esthetique':   'medecine-esthetique',
+  'esthetique':           'medecine-esthetique',
+  'generaliste':          'medecin-generaliste',
+  'medecin-general':      'medecin-generaliste',
+  'chirurgien-dentiste':  'dentiste',
+  'dermato':              'dermatologue',
+  'cardio':               'cardiologue',
+  'gyneco':               'gynecologue',
+  'ophtalmo':             'ophtalmologue',
+  'pediatrie':            'pediatre',
+  'kine':                 'kinesitherapeute',
+  'orthopedie':           'orthopediste',
+  'radiologie':           'radiologue',
+  'oto-rhino-laryngologiste': 'orl',
+}
+
+export const VILLE_ALIAS: Record<string, string> = {
+  'casa':      'casablanca',
+  'casablanca-maroc': 'casablanca',
+  'fez':       'fes',
+  'tangier':   'tanger',
+  'marrakesh': 'marrakech',
+  'agadir-maroc': 'agadir',
+}
+
 export function getSpecialiteFromSlug(slug: string): string | null {
   return SPECIALITE_SLUGS[slug] ?? null
 }
