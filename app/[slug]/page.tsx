@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { BookingPageClient } from './BookingPageClient'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 
@@ -120,6 +121,36 @@ export default async function BookingPage({ params }: Props) {
     )
   }
 
+  // La page de catégorie dont ce praticien relève — si elle existe. Le maillage
+  // n'allait que dans un sens : la liste pointait vers le médecin, jamais l'inverse.
+  const specVersSlug = new Map(Object.entries(SPECIALITE_SLUGS).map(([sl, nom]) => [nom, sl]))
+  const villeVersSlug = new Map(Object.entries(VILLE_SLUGS).map(([sl, nom]) => [nom, sl]))
+  const specSlug = doctor.specialty ? specVersSlug.get(doctor.specialty) : undefined
+  const villeSlug = doctor.city ? villeVersSlug.get(doctor.city) : undefined
+  const categorie = specSlug && villeSlug
+    ? {
+        href: `/medecin/${specSlug}/${villeSlug}`,
+        label: `${doctor.specialty} à ${doctor.city}`,
+      }
+    : undefined
+
+  // Horaires d'ouverture : c'est l'un des signaux les plus forts du référencement
+  // local, et la donnée était déjà chargée pour le calendrier sans jamais être
+  // déclarée à Google.
+  const JOURS_SCHEMA: Record<string, string> = {
+    monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday',
+    friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday',
+  }
+  const wh = (doctor.working_hours ?? {}) as Record<string, { enabled?: boolean; start?: string; end?: string }>
+  const horaires = Object.entries(wh)
+    .filter(([jour, v]) => JOURS_SCHEMA[jour] && v?.enabled && v.start && v.end)
+    .map(([jour, v]) => ({
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: `https://schema.org/${JOURS_SCHEMA[jour]}`,
+      opens: v.start,
+      closes: v.end,
+    }))
+
   // Données structurées JSON-LD — Physician schema pour Google
   const cityPart = doctor.city ? ` à ${doctor.city}` : ''
   const canonicalSlug = `dr-${slug}`
@@ -144,6 +175,8 @@ export default async function BookingPage({ params }: Props) {
       '@type': 'MedicalTherapy',
       name: 'Consultation médicale',
     },
+    ...(horaires.length > 0 && { openingHoursSpecification: horaires }),
+    ...(doctor.city && { areaServed: { '@type': 'City', name: doctor.city } }),
     potentialAction: {
       '@type': 'ReserveAction',
       target: {
@@ -158,13 +191,42 @@ export default async function BookingPage({ params }: Props) {
     },
   }
 
+  const filAriane = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'MonRDV', item: APP_URL },
+      ...(categorie
+        ? [{
+            '@type': 'ListItem', position: 2,
+            name: `${doctor.specialty} à ${doctor.city}`,
+            item: `${APP_URL}${categorie.href}`,
+          }]
+        : []),
+      {
+        '@type': 'ListItem',
+        position: categorie ? 3 : 2,
+        name: displayName(doctor.name, doctor.specialty),
+        item: `${APP_URL}/${canonicalSlug}`,
+      },
+    ],
+  }
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
-      <BookingPageClient doctor={doctor} consultationTypes={consultationTypes ?? []} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(filAriane).replace(/</g, '\\u003c') }}
+      />
+      <BookingPageClient
+        doctor={doctor}
+        consultationTypes={consultationTypes ?? []}
+        categorie={categorie}
+      />
     </>
   )
 }

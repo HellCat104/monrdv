@@ -39,12 +39,14 @@ type PublicDoctor = Omit<Doctor, 'email' | 'created_at'>
 interface Props {
   doctor: PublicDoctor
   consultationTypes?: ConsultationType[]
+  /** Page « spécialité à ville » dont ce praticien relève, si elle existe. */
+  categorie?: { href: string; label: string }
 }
 
 // Étapes de réservation
 type Step = 'datetime' | 'form' | 'success'
 
-export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
+export function BookingPageClient({ doctor, consultationTypes = [], categorie }: Props) {
   const [step, setStep] = useState<Step>('datetime')
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
@@ -133,7 +135,9 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
           <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <LogoMonRDV taille={38} avecTexte={false} />
             <div>
-              <h1 className="font-bold text-gray-900 text-sm leading-tight">MonRDV</h1>
+              {/* Le nom du site, pas le titre de la page : un <h1> ici rendait
+                  toutes les pages médecin identiques aux yeux de Google. */}
+              <span className="block font-bold text-gray-900 text-sm leading-tight">MonRDV</span>
               <p className="text-xs text-gray-400">Prise de rendez-vous en ligne</p>
             </div>
           </a>
@@ -162,7 +166,7 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
               </div>
             )}
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Dr. {doctor.name}</h2>
+              <h1 className="text-xl font-bold text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
               <p className="text-primary-600 font-medium text-sm mt-0.5">{specialties.join(' · ')}</p>
               <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 flex-wrap">
                 {doctor.address ? (
@@ -411,6 +415,15 @@ export function BookingPageClient({ doctor, consultationTypes = [] }: Props) {
             </div>
           )}
         </div>
+
+        {categorie && (
+          <p className="text-center text-xs text-gray-400">
+            Voir aussi&nbsp;:{' '}
+            <a href={categorie.href} className="hover:text-primary-500 underline underline-offset-2">
+              {categorie.label}
+            </a>
+          </p>
+        )}
 
         <p className="text-center text-xs text-gray-400">
           Propulsé par <span className="font-medium text-primary-500">MonRDV</span> 🇲🇦
