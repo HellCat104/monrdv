@@ -116,6 +116,42 @@ const combosPourvus = cache(async () => {
   return combos
 })
 
+// Les questions réellement posées avant de réserver. Elles ne parlent que de ce
+// que MonRDV sait vraiment — délais, gratuité, annulation, tarifs — et jamais de
+// médecine : une plateforme de rendez-vous n'a pas à donner d'avis clinique.
+//
+// Elles servent deux choses : donner à la page la matière qui lui manquait pour
+// être jugée pertinente sur une requête disputée, et rendre la page éligible au
+// balisage FAQPage.
+function questions(praticien: string, ville: string) {
+  return [
+    {
+      q: `Comment prendre rendez-vous avec un ${praticien} à ${ville} ?`,
+      r: `Choisissez un praticien dans la liste ci-dessus, consultez ses créneaux disponibles et sélectionnez celui qui vous convient. Vous renseignez ensuite votre nom et votre téléphone, et le rendez-vous est confirmé immédiatement. L’opération prend moins de deux minutes et ne nécessite aucun appel au cabinet.`,
+    },
+    {
+      q: `Faut-il payer pour réserver en ligne ?`,
+      r: `Non. La prise de rendez-vous sur MonRDV est entièrement gratuite pour les patients : recherche, réservation, modification et annulation ne coûtent rien. Seuls les cabinets médicaux souscrivent un abonnement. La consultation elle-même se règle au cabinet, selon les tarifs du praticien.`,
+    },
+    {
+      q: `Puis-je obtenir un rendez-vous le jour même à ${ville} ?`,
+      r: `Cela dépend du praticien. Chaque médecin fixe le délai minimum entre la réservation et la consultation. Lorsqu’il autorise le jour même, les créneaux encore libres apparaissent directement dans son agenda — s’ils s’affichent, ils sont réservables.`,
+    },
+    {
+      q: `Les tarifs sont-ils indiqués ?`,
+      r: `Lorsque le praticien choisit de les publier, le tarif de chaque motif de consultation apparaît au moment où vous le sélectionnez. Dans le cas contraire, contactez le cabinet : MonRDV n’affiche jamais un prix que le médecin n’a pas lui-même renseigné.`,
+    },
+    {
+      q: `Comment annuler ou déplacer mon rendez-vous ?`,
+      r: `Votre e-mail de confirmation contient un lien d’annulation. Un clic libère le créneau, et le cabinet en est averti automatiquement. Prévenir permet à un autre patient de prendre la place — c’est particulièrement utile chez les praticiens très demandés.`,
+    },
+    {
+      q: `Les créneaux affichés sont-ils à jour ?`,
+      r: `Oui. Chaque cabinet gère son propre agenda depuis MonRDV : congés, absences et rendez-vous pris par téléphone y figurent. Les disponibilités que vous voyez sont donc celles du praticien à l’instant où vous consultez la page.`,
+    },
+  ]
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const r = resoudre(params)
   if (!r) return { robots: { index: false } }
@@ -199,6 +235,17 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
     })),
   } : null
 
+  const faq = questions(praticien, ville)
+  const faqJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map(({ q, r }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: r },
+    })),
+  }
+
   const autresVilles = Object.entries(VILLE_SLUGS)
     .filter(([slug]) => slug !== r.ville && combos.has(`${r.specialite}/${slug}`))
     .slice(0, 10)
@@ -214,6 +261,8 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
         <script type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(listeJsonLd).replace(/</g, '\\u003c') }} />
       )}
+      <script type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd).replace(/</g, '\\u003c') }} />
 
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white border-b border-gray-100">
@@ -294,6 +343,23 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
               d&apos;annuler ou de libérer votre créneau en un clic.
             </p>
           </div>
+
+          <section className="mt-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Questions fréquentes</h2>
+            <div className="space-y-3">
+              {faq.map(({ q, r }) => (
+                // <details> plutôt qu'un accordéon en JavaScript : le texte est
+                // dans le HTML servi, donc lu par Google même replié.
+                <details key={q} className="bg-white rounded-2xl border border-gray-100 p-4 group">
+                  <summary className="font-medium text-gray-900 cursor-pointer list-none flex items-center justify-between gap-3">
+                    {q}
+                    <span className="text-primary-500 shrink-0 transition-transform group-open:rotate-45">+</span>
+                  </summary>
+                  <p className="text-sm text-gray-600 mt-3 leading-relaxed">{r}</p>
+                </details>
+              ))}
+            </div>
+          </section>
 
           {autresVilles.length > 0 && (
             <div className="mt-8">
