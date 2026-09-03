@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { UserPlus, Trash2, Users2, Check, Mail, Loader2 } from 'lucide-react'
+import { UserPlus, Trash2, Users2, Check, Mail, Loader2, ChevronDown } from 'lucide-react'
 import { DEFAULT_STAFF_PERMISSIONS, STAFF_PERMISSION_GROUPS, type CabinetStaff, type StaffPermissions } from '@/types'
 import { canAccess, type DoctorPlan } from '@/lib/plan'
 
@@ -45,6 +45,11 @@ export default function EquipePage() {
   // Le repli ne se décide qu'au premier chargement : sinon, cocher une case
   // rechargeait la liste et refermait le formulaire sous les doigts du médecin.
   const premierChargement = useRef(true)
+  // Une fiche dépliée à la fois n'est pas imposée : le médecin peut vouloir
+  // comparer deux secrétaires. C'est l'état replié qui est le défaut.
+  const [ouvert, setOuvert] = useState<Record<string, boolean>>({})
+  const [enregistre, setEnregistre] = useState<string | null>(null)
+  const [permErreur, setPermErreur] = useState('')
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -98,12 +103,25 @@ export default function EquipePage() {
     // Fusion avec les défauts : les anciennes invitations n'ont pas les nouvelles clés
     const merged = { ...DEFAULT_STAFF_PERMISSIONS, ...s.permissions }
     const next = { ...merged, [key]: !merged[key] }
+    const avant = s.permissions
     setStaff((prev) => prev.map((x) => x.id === s.id ? { ...x, permissions: next } : x))
-    await fetch('/api/staff', {
+    setPermErreur('')
+    const res = await fetch('/api/staff', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: s.id, permissions: next }),
-    })
+    }).catch(() => null)
+
+    // Sans ce retour en arrière, la case restait cochée à l'écran alors que
+    // rien n'avait été enregistré : le médecin croyait avoir retiré un droit
+    // qui restait actif.
+    if (!res || !res.ok) {
+      setStaff((prev) => prev.map((x) => x.id === s.id ? { ...x, permissions: avant } : x))
+      setPermErreur('Le changement n’a pas pu être enregistré. Vérifiez votre connexion et réessayez.')
+      return
+    }
+    setEnregistre(s.id)
+    setTimeout(() => setEnregistre((v) => (v === s.id ? null : v)), 2500)
   }
 
   async function remove(s: CabinetStaff) {
@@ -176,6 +194,12 @@ export default function EquipePage() {
         <p className="text-sm text-gray-500 mt-1">Donnez à votre secrétaire un accès limité au cabinet (agenda, patients…), sans le dossier médical si vous le souhaitez.</p>
       </div>
 
+      {permErreur && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+          {permErreur}
+        </p>
+      )}
+
       {/* Liste de l'équipe */}
       <div>
         <h2 className="text-base font-semibold text-gray-900 mb-2">Équipe ({staff.length})</h2>
@@ -187,98 +211,145 @@ export default function EquipePage() {
           </CardContent></Card>
         ) : (
           <div className="space-y-3">
-            {staff.map((s) => (
-              <Card key={s.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div>
-                      <p className="font-semibold text-gray-900">{s.name}</p>
-                      <p className="text-xs text-gray-500">{s.email}</p>
+            {staff.map((s) => {
+              const effectives = { ...DEFAULT_STAFF_PERMISSIONS, ...s.permissions }
+              const accordes = resumeDroits(effectives, plan)
+              const deplie = !!ouvert[s.id]
+              return (
+                <Card key={s.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-10 h-10 rounded-full bg-primary-100 text-primary-600 font-bold flex items-center justify-center shrink-0">
+                          {s.name.charAt(0).toUpperCase()}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{s.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{s.email}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => remove(s)} className="text-gray-300 hover:text-red-500 shrink-0" title="Retirer de l’équipe">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                    <button onClick={() => remove(s)} className="text-gray-300 hover:text-red-500 shrink-0" title="Retirer">
-                      <Trash2 className="h-4 w-4" />
+
+                    {/* Le résumé reste visible même replié : c'est lui qui répond
+                        à « qu'est-ce qu'elle a le droit de faire ? ». */}
+                    <div className="mt-3 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                        Ce que {s.name} peut faire
+                      </p>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        {accordes.length > 0 ? accordes.join(' · ') : 'Aucun droit accordé pour le moment.'}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setOuvert((o) => ({ ...o, [s.id]: !o[s.id] }))}
+                      aria-expanded={deplie}
+                      className="mt-3 w-full flex items-center justify-between gap-2 text-sm text-gray-700 border border-gray-200 rounded-xl px-3 py-2.5 hover:border-primary-300 hover:text-primary-600 transition-colors"
+                    >
+                      <span>{deplie ? 'Masquer ses accès' : 'Voir et modifier ses accès'}</span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${deplie ? 'rotate-180' : ''}`} />
                     </button>
-                  </div>
-                  {(() => {
-                    const effectives = { ...DEFAULT_STAFF_PERMISSIONS, ...s.permissions }
-                    const accordes = resumeDroits(effectives, plan)
-                    return (
-                      <>
-                        <div className="mb-3 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
-                          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                            Ce que {s.name} peut faire
+
+                    {deplie && (
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="text-xs text-gray-400">
+                            Cochez ou décochez : c’est enregistré aussitôt, il n’y a pas de bouton à valider.
                           </p>
-                          <p className="text-xs text-gray-600 leading-relaxed">
-                            {accordes.length > 0 ? accordes.join(' · ') : 'Aucun droit accordé pour le moment.'}
-                          </p>
+                          {enregistre === s.id && (
+                            <span className="text-xs text-green-600 flex items-center gap-1 shrink-0">
+                              <Check className="h-3.5 w-3.5" /> Enregistré
+                            </span>
+                          )}
                         </div>
                         <PermMatrix values={effectives} onToggle={(key) => togglePerm(s, key)} />
-                      </>
-                    )
-                  })()}
-                </CardContent>
-              </Card>
-            ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>
 
-      {/* Le formulaire d'invitation est replié par défaut dès qu'une secrétaire
-          existe. Déplié, il affichait une grille de permissions identique à
-          celle des membres de l'équipe : deux tableaux de cases à cocher se
-          suivaient, l'un hypothétique, l'autre réel. On pouvait lire les droits
-          par défaut d'une future secrétaire en croyant lire ceux de la sienne —
-          et conclure qu'elle ne peut pas encaisser alors qu'elle le peut. */}
       {ok && (
         <p className="text-sm text-green-600 flex items-center gap-1">
           <Check className="h-4 w-4 shrink-0" /> {ok}
         </p>
       )}
 
-      {!formOuvert ? (
-        <Button variant="outline" onClick={() => setFormOuvert(true)}>
-          <UserPlus className="h-4 w-4 mr-1.5" /> Inviter une secrétaire
-        </Button>
-      ) : (
-        <Card>
-          <CardContent className="p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary-500" /> Inviter une secrétaire</h2>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la secrétaire" />
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Adresse e-mail" />
-            </div>
+      {/* Même vocabulaire visuel que les fiches ci-dessus : un volet qu'on
+          ouvre. Déplié en permanence, son tableau de permissions par défaut se
+          confondait avec celui d'une secrétaire réelle. */}
+      <Card>
+        <button
+          onClick={() => setFormOuvert((v) => !v)}
+          aria-expanded={formOuvert}
+          className="w-full flex items-center justify-between gap-3 p-5 text-left"
+        >
+          <span className="flex items-center gap-3 min-w-0">
+            <span className="w-10 h-10 rounded-full bg-primary-50 text-primary-500 flex items-center justify-center shrink-0">
+              <UserPlus className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block font-semibold text-gray-900">Inviter une secrétaire</span>
+              <span className="block text-xs text-gray-500">
+                Créez son accès et choisissez ce qu&rsquo;elle pourra faire
+              </span>
+            </span>
+          </span>
+          <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${formOuvert ? 'rotate-180' : ''}`} />
+        </button>
 
-            <div className="space-y-1">
-              <Input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                type="password"
-                placeholder="Mot de passe (facultatif)"
-              />
-              <p className="text-[11px] text-gray-400">
-                Laissez vide pour qu&apos;un mot de passe soit généré et envoyé par e-mail.
-                Elle pourra le changer après sa première connexion.
-              </p>
-            </div>
+        {formOuvert && (
+          <CardContent className="px-5 pb-5 pt-0 space-y-4">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la secrétaire" />
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Adresse e-mail" />
+          </div>
 
+          <div className="space-y-1">
+            <Input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              placeholder="Mot de passe (facultatif)"
+            />
+            <p className="text-[11px] text-gray-400">
+              Laissez vide pour qu&apos;un mot de passe soit généré et envoyé par e-mail.
+              Elle pourra le changer après sa première connexion.
+            </p>
+          </div>
+
+          <div className="pt-1">
+            {/* Futur, pas réel : le libellé doit interdire de confondre cette
+                grille avec celle d'une secrétaire déjà en poste. */}
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+              Ce qu’elle pourra faire
+            </p>
             <PermMatrix values={perms} onToggle={(key) => setPerms((p) => ({ ...p, [key]: !p[key] }))} />
+          </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <div className="flex items-center gap-2">
-              <Button onClick={invite} disabled={adding}>
-                {adding ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Mail className="h-4 w-4 mr-1.5" />}
-                {adding ? 'Envoi…' : 'Envoyer l’invitation'}
+          <div className="flex items-center gap-2">
+            <Button onClick={invite} disabled={adding}>
+              {adding ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Mail className="h-4 w-4 mr-1.5" />}
+              {adding ? 'Envoi…' : 'Envoyer l’invitation'}
+            </Button>
+            {staff.length > 0 && (
+              <Button variant="ghost" onClick={() => { setFormOuvert(false); setError(''); setOk('') }}>
+                Annuler
               </Button>
-              {staff.length > 0 && (
-                <Button variant="ghost" onClick={() => { setFormOuvert(false); setError(''); setOk('') }}>
-                  Annuler
-                </Button>
-              )}
-            </div>
+            )}
+          </div>
           </CardContent>
-        </Card>
-      )}
+        )}
+      </Card>
     </div>
   )
 }
