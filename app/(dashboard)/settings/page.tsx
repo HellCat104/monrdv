@@ -15,7 +15,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals, type VitalDef } from '@/types'
-import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff } from 'lucide-react'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 
 // Intertitre de section.
@@ -87,6 +87,11 @@ export default function SettingsPage() {
   const [pwErreur, setPwErreur] = useState('')
   const [pwOk, setPwOk] = useState(false)
   const [pwLoading, setPwLoading] = useState(false)
+  // Empreinte des valeurs enregistrées. Tout écart signifie qu'il reste
+  // quelque chose à sauvegarder — et donc qu'il faut le dire au médecin
+  // avant qu'il ne quitte la page.
+  const [reference, setReference] = useState<string | null>(null)
+  const [saveErreur, setSaveErreur] = useState('')
   // Borne des champs date : heure Maroc, jamais l'heure du navigateur
   const aujourdhuiMaroc = formatInTimeZone(new Date(), 'Africa/Casablanca', 'yyyy-MM-dd')
   // Motifs de consultation (durées variables)
@@ -118,7 +123,7 @@ export default function SettingsPage() {
       if (data) {
         setDoctor(data)
         setPhotoUrl(data.photo_url ?? null)
-        setForm({
+        const formCharge = {
           name: data.name,
           phone: data.phone ?? '',
           whatsapp: data.whatsapp ?? '',
@@ -136,10 +141,15 @@ export default function SettingsPage() {
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
           has_secretary: !!data.has_secretary,
           confidential_mode: !!data.confidential_mode,
-        })
-        setEnabledVitals(resolveEnabledVitals(data.enabled_vitals, data.specialty))
-        setCustomVitals(((data.custom_vitals as VitalDef[] | null) ?? []))
-        setExtraSpecs(((data.specialties as string[] | null) ?? [data.specialty]).filter((s) => s && s !== data.specialty))
+        }
+        const vitalsCharges = resolveEnabledVitals(data.enabled_vitals, data.specialty)
+        const customCharges = ((data.custom_vitals as VitalDef[] | null) ?? [])
+        const extraCharges = ((data.specialties as string[] | null) ?? [data.specialty]).filter((s) => s && s !== data.specialty)
+        setForm(formCharge)
+        setEnabledVitals(vitalsCharges)
+        setCustomVitals(customCharges)
+        setExtraSpecs(extraCharges)
+        setReference(JSON.stringify({ f: formCharge, v: vitalsCharges, c: customCharges, e: extraCharges }))
 
         // Charge les dates bloquées
         const { data: blocked } = await supabase
@@ -235,6 +245,7 @@ export default function SettingsPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!doctor) return
+    setSaveErreur('')
     setLoading(true)
 
     try {
@@ -264,7 +275,13 @@ export default function SettingsPage() {
         })
         .eq('id', doctor.id)
 
-      if (!error) {
+      if (error) {
+        // Sans ce message, un échec laissait le médecin convaincu d'avoir
+        // enregistré : rien à l'écran ne distinguait le succès de l'échec.
+        setSaveErreur('L’enregistrement a échoué. Vérifiez votre connexion et réessayez.')
+      } else {
+        setSaveErreur('')
+        setReference(empreinte)
         setSaved(true)
         setTimeout(() => setSaved(false), 3000)
       }
@@ -399,6 +416,19 @@ export default function SettingsPage() {
     )
   }
 
+  const empreinte = JSON.stringify({ f: form, v: enabledVitals, c: customVitals, e: extraSpecs })
+  const modifie = reference !== null && empreinte !== reference
+
+  // Dernier filet : fermer l'onglet ou changer de page avec des modifications
+  // en attente déclenche l'avertissement natif du navigateur. C'est le seul
+  // moment où l'on peut encore rattraper un oubli.
+  useEffect(() => {
+    if (!modifie) return
+    const avertir = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', avertir)
+    return () => window.removeEventListener('beforeunload', avertir)
+  }, [modifie])
+
   const changerMotDePasse = async (e: React.FormEvent) => {
     e.preventDefault()
     setPwErreur('')
@@ -422,21 +452,44 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Paramètres</h1>
-          <p className="text-sm text-gray-500 mt-1">Configurez votre cabinet</p>
+      <div>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Paramètres</h1>
+            <p className="text-sm text-gray-500 mt-1">Configurez votre cabinet</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              type="submit"
+              form="settings-form"
+              disabled={loading}
+              className={modifie ? 'ring-2 ring-amber-400 ring-offset-2' : ''}
+            >
+              {loading ? 'Sauvegarde…' : '💾 Enregistrer'}
+            </Button>
+            {saved && (
+              <span className="text-sm text-green-600 flex items-center gap-1">
+                <Check className="h-4 w-4" /> Sauvegardé !
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button type="submit" form="settings-form" disabled={loading}>
-            {loading ? 'Sauvegarde…' : '💾 Enregistrer'}
-          </Button>
-          {saved && (
-            <span className="text-sm text-green-600 flex items-center gap-1">
-              <Check className="h-4 w-4" /> Sauvegardé !
+
+        {modifie && (
+          <p className="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+            <span>
+              <strong>Vous avez modifié quelque chose.</strong> Cliquez sur
+              «&nbsp;Enregistrer&nbsp;» en haut à droite, sinon rien ne sera conservé.
             </span>
-          )}
-        </div>
+          </p>
+        )}
+
+        {saveErreur && (
+          <p className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {saveErreur}
+          </p>
+        )}
       </div>
 
       {/* Sommaire : la page est longue. Savoir ce qu'elle contient et pouvoir y
