@@ -15,8 +15,37 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals, type VitalDef } from '@/types'
-import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X } from 'lucide-react'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff } from 'lucide-react'
 import type { BlockedDate } from '@/types'
+
+// Intertitre de section.
+//
+// La page empilait neuf réglages sans le moindre repère : le médecin ne savait
+// ni où il se trouvait, ni combien il lui restait à parcourir. Un numéro, un
+// titre et une phrase qui dit à quoi sert la section — c'est ce qui permet de
+// se situer quand on n'a pas l'habitude d'un écran.
+function Groupe({ id, numero, titre, sous }: { id: string; numero: number; titre: string; sous: string }) {
+  return (
+    <div id={id} className="scroll-mt-24 pt-4 first:pt-0">
+      <div className="flex items-center gap-3">
+        <span className="w-8 h-8 rounded-full bg-primary-500 text-white text-sm font-bold flex items-center justify-center shrink-0">
+          {numero}
+        </span>
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 leading-tight">{titre}</h2>
+          <p className="text-sm text-gray-500">{sous}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const SOMMAIRE = [
+  { id: 'cabinet', numero: 1, titre: 'Votre cabinet' },
+  { id: 'rdv',     numero: 2, titre: 'Vos rendez-vous' },
+  { id: 'medical', numero: 3, titre: 'Suivi médical' },
+  { id: 'compte',  numero: 4, titre: 'Votre compte' },
+]
 
 export default function SettingsPage() {
   const [doctor, setDoctor] = useState<Doctor | null>(null)
@@ -50,6 +79,14 @@ export default function SettingsPage() {
   const [newBlockReason, setNewBlockReason] = useState('')
   const [blockLoading, setBlockLoading] = useState(false)
   const [blockDateError, setBlockDateError] = useState('')
+  // Changement de mot de passe : le médecin est déjà connecté, il n'a aucune
+  // raison de passer par « mot de passe oublié » et de se déconnecter pour ça.
+  const [pw1, setPw1] = useState('')
+  const [pw2, setPw2] = useState('')
+  const [pwVisible, setPwVisible] = useState(false)
+  const [pwErreur, setPwErreur] = useState('')
+  const [pwOk, setPwOk] = useState(false)
+  const [pwLoading, setPwLoading] = useState(false)
   // Borne des champs date : heure Maroc, jamais l'heure du navigateur
   const aujourdhuiMaroc = formatInTimeZone(new Date(), 'Africa/Casablanca', 'yyyy-MM-dd')
   // Motifs de consultation (durées variables)
@@ -362,6 +399,27 @@ export default function SettingsPage() {
     )
   }
 
+  const changerMotDePasse = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPwErreur('')
+    setPwOk(false)
+    if (pw1.length < 8) { setPwErreur('Le mot de passe doit contenir au moins 8 caractères.'); return }
+    if (pw1 !== pw2) { setPwErreur('Les deux mots de passe saisis ne sont pas identiques.'); return }
+
+    setPwLoading(true)
+    const { error } = await supabase.auth.updateUser({ password: pw1 })
+    setPwLoading(false)
+    if (error) {
+      setPwErreur(error.message.toLowerCase().includes('different')
+        ? 'Le nouveau mot de passe doit être différent de l’ancien.'
+        : 'Le changement a échoué. Réessayez.')
+      return
+    }
+    setPw1('')
+    setPw2('')
+    setPwOk(true)
+  }
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -380,6 +438,23 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Sommaire : la page est longue. Savoir ce qu'elle contient et pouvoir y
+          sauter évite de la parcourir en entier pour trouver un réglage. */}
+      <nav className="flex flex-wrap gap-2" aria-label="Sections des paramètres">
+        {SOMMAIRE.map((s) => (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            className="text-sm bg-white border border-gray-200 text-gray-600 hover:border-primary-300 hover:text-primary-600 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+          >
+            <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center">
+              {s.numero}
+            </span>
+            {s.titre}
+          </a>
+        ))}
+      </nav>
 
       {/* Lien de réservation */}
       <Card className="border-primary-100 bg-primary-50">
@@ -409,7 +484,7 @@ export default function SettingsPage() {
       </Card>
 
       <form id="settings-form" onSubmit={handleSave} className="space-y-6">
-        {/* Informations du cabinet */}
+        <Groupe id="cabinet" numero={1} titre="Votre cabinet" sous="Ce que vos patients voient de vous" />
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -656,7 +731,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Photo de profil */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -702,7 +776,97 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Durée des RDV */}
+        <Groupe id="rdv" numero={2} titre="Vos rendez-vous" sous="Quand et comment vous recevez" />
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary-500" />
+              Horaires d&apos;ouverture
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {DAY_ORDER.map((day, idx) => {
+              const schedule = form.working_hours[day]
+              return (
+                <div key={day}>
+                  {idx > 0 && <Separator className="mb-3" />}
+                  <div className="flex items-start gap-4">
+                    {/* Activer/désactiver le jour */}
+                    <div className="flex items-center gap-2 w-32 shrink-0 pt-1.5">
+                      <Switch
+                        checked={schedule.enabled}
+                        onCheckedChange={(v) => updateDaySchedule(day, 'enabled', v)}
+                      />
+                      <span className={`text-sm font-medium ${schedule.enabled ? 'text-gray-800' : 'text-gray-400'}`}>
+                        {DAY_NAMES_FR[day]}
+                      </span>
+                    </div>
+
+                    {/* Horaires si activé */}
+                    {schedule.enabled ? (
+                      <div className="space-y-2">
+                        {/* Horaire d'ouverture */}
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="time"
+                            value={schedule.start}
+                            onChange={(e) => updateDaySchedule(day, 'start', e.target.value)}
+                            className="w-28 text-sm"
+                          />
+                          <span className="text-gray-400 text-sm">—</span>
+                          <Input
+                            type="time"
+                            value={schedule.end}
+                            onChange={(e) => updateDaySchedule(day, 'end', e.target.value)}
+                            className="w-28 text-sm"
+                          />
+                        </div>
+                        {/* Pauses (multiples) */}
+                        {getBreaks(day).map((br, i) => (
+                          <div key={i} className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-gray-400 w-16">Pause :</span>
+                            <Input
+                              type="time"
+                              value={br.start}
+                              onChange={(e) => updateBreak(day, i, 'start', e.target.value)}
+                              className="w-28 text-sm"
+                            />
+                            <span className="text-gray-400 text-sm">—</span>
+                            <Input
+                              type="time"
+                              value={br.end}
+                              onChange={(e) => updateBreak(day, i, 'end', e.target.value)}
+                              className="w-28 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeBreak(day, i)}
+                              className="text-gray-400 hover:text-red-500"
+                              aria-label="Retirer cette pause"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                        {/* Bouton ajouter une pause */}
+                        <button
+                          type="button"
+                          onClick={() => addBreak(day)}
+                          className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Ajouter une pause
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400 pt-1.5">Fermé</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -733,45 +897,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Délai de prévenance — jusqu'à quand un patient peut réserver */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary-500" />
-              Réservation de dernière minute
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4 flex-wrap">
-              <Select
-                value={String(form.booking_lead_hours)}
-                onValueChange={(v) => setForm({ ...form, booking_lead_hours: Number(v) })}
-              >
-                <SelectTrigger className="w-56">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">Sans délai</SelectItem>
-                  <SelectItem value="1">1 heure à l&apos;avance</SelectItem>
-                  <SelectItem value="2">2 heures à l&apos;avance</SelectItem>
-                  <SelectItem value="3">3 heures à l&apos;avance</SelectItem>
-                  <SelectItem value="6">6 heures à l&apos;avance</SelectItem>
-                  <SelectItem value="12">12 heures à l&apos;avance</SelectItem>
-                  <SelectItem value="24">Pas le jour même</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-gray-500 flex-1 min-w-[240px]">
-                {form.booking_lead_hours >= 24
-                  ? 'Vos patients ne peuvent réserver qu\u2019à partir de demain.'
-                  : form.booking_lead_hours === 0
-                    ? 'Vos patients peuvent réserver le prochain créneau libre, même dans quelques minutes.'
-                    : `Vos patients peuvent réserver aujourd\u2019hui, à condition qu\u2019il reste ${form.booking_lead_hours} h avant le rendez-vous.`}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Motifs de consultation (durées variables) */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -881,7 +1006,131 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Constantes vitales suivies */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary-500" />
+              Réservation de dernière minute
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Select
+                value={String(form.booking_lead_hours)}
+                onValueChange={(v) => setForm({ ...form, booking_lead_hours: Number(v) })}
+              >
+                <SelectTrigger className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Sans délai</SelectItem>
+                  <SelectItem value="1">1 heure à l&apos;avance</SelectItem>
+                  <SelectItem value="2">2 heures à l&apos;avance</SelectItem>
+                  <SelectItem value="3">3 heures à l&apos;avance</SelectItem>
+                  <SelectItem value="6">6 heures à l&apos;avance</SelectItem>
+                  <SelectItem value="12">12 heures à l&apos;avance</SelectItem>
+                  <SelectItem value="24">Pas le jour même</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-gray-500 flex-1 min-w-[240px]">
+                {form.booking_lead_hours >= 24
+                  ? 'Vos patients ne peuvent réserver qu\u2019à partir de demain.'
+                  : form.booking_lead_hours === 0
+                    ? 'Vos patients peuvent réserver le prochain créneau libre, même dans quelques minutes.'
+                    : `Vos patients peuvent réserver aujourd\u2019hui, à condition qu\u2019il reste ${form.booking_lead_hours} h avant le rendez-vous.`}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarOff className="h-4 w-4 text-primary-500" />
+              Dates bloquées (congés / absences)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Ferme la journée <b>entière</b> : aucun créneau ne sera proposé aux patients. Pour des vacances,
+              indiquez une date de fin. Pour ne bloquer que quelques heures, passez par l&apos;agenda.
+            </p>
+            {blockDateError && (
+              <p className="text-xs text-red-600">{blockDateError}</p>
+            )}
+
+            {/* Ajouter une date ou une période */}
+            <div className="flex gap-2 flex-wrap items-center">
+              <span className="text-xs text-gray-400">Du</span>
+              <Input
+                type="date"
+                value={newBlockDate}
+                onChange={(e) => setNewBlockDate(e.target.value)}
+                min={aujourdhuiMaroc}
+                className="w-40"
+              />
+              <span className="text-xs text-gray-400">au (optionnel)</span>
+              <Input
+                type="date"
+                value={newBlockEndDate}
+                onChange={(e) => setNewBlockEndDate(e.target.value)}
+                min={newBlockDate || aujourdhuiMaroc}
+                className="w-40"
+              />
+              <Input
+                value={newBlockReason}
+                onChange={(e) => setNewBlockReason(e.target.value)}
+                placeholder="Message affiché aux patients (ex : En congé, retour le 21 juin)"
+                className="flex-1 min-w-[140px]"
+              />
+              <Button
+                type="button"
+                onClick={handleAddBlockedDate}
+                disabled={!newBlockDate || blockLoading}
+                className="shrink-0"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                {blockLoading ? 'Enregistrement…' : 'Confirmer le congé'}
+              </Button>
+            </div>
+
+            {/* Liste des dates bloquées */}
+            {blockedDates.filter((b) => b.date >= aujourdhuiMaroc).length === 0 ? (
+              <p className="text-sm text-gray-400 italic">Aucune date bloquée à venir</p>
+            ) : (
+              <div className="space-y-2">
+                {blockedDates.filter((b) => b.date >= aujourdhuiMaroc).map((bd) => (
+                  <div key={bd.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <div>
+                      <span className="text-sm font-medium text-gray-800">
+                        {new Date(bd.date + 'T00:00:00').toLocaleDateString('fr-MA', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                      {/* Une plage horaire n'est PAS un congé : le dire, sinon
+                          l'écran laisse croire que la journée est fermée. */}
+                      <span className={`text-xs ml-2 px-1.5 py-0.5 rounded ${bd.start_time ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                        {bd.start_time
+                          ? `${bd.start_time.slice(0, 5)} – ${(bd.end_time ?? '').slice(0, 5)}`
+                          : 'journée entière'}
+                      </span>
+                      {bd.reason && (
+                        <span className="text-xs text-gray-400 ml-2">— {bd.reason}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBlockedDate(bd.id)}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Groupe id="medical" numero={3} titre="Suivi médical" sous="Ce que vous notez pendant la consultation" />
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -990,184 +1239,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Horaires d'ouverture */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary-500" />
-              Horaires d&apos;ouverture
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {DAY_ORDER.map((day, idx) => {
-              const schedule = form.working_hours[day]
-              return (
-                <div key={day}>
-                  {idx > 0 && <Separator className="mb-3" />}
-                  <div className="flex items-start gap-4">
-                    {/* Activer/désactiver le jour */}
-                    <div className="flex items-center gap-2 w-32 shrink-0 pt-1.5">
-                      <Switch
-                        checked={schedule.enabled}
-                        onCheckedChange={(v) => updateDaySchedule(day, 'enabled', v)}
-                      />
-                      <span className={`text-sm font-medium ${schedule.enabled ? 'text-gray-800' : 'text-gray-400'}`}>
-                        {DAY_NAMES_FR[day]}
-                      </span>
-                    </div>
-
-                    {/* Horaires si activé */}
-                    {schedule.enabled ? (
-                      <div className="space-y-2">
-                        {/* Horaire d'ouverture */}
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="time"
-                            value={schedule.start}
-                            onChange={(e) => updateDaySchedule(day, 'start', e.target.value)}
-                            className="w-28 text-sm"
-                          />
-                          <span className="text-gray-400 text-sm">—</span>
-                          <Input
-                            type="time"
-                            value={schedule.end}
-                            onChange={(e) => updateDaySchedule(day, 'end', e.target.value)}
-                            className="w-28 text-sm"
-                          />
-                        </div>
-                        {/* Pauses (multiples) */}
-                        {getBreaks(day).map((br, i) => (
-                          <div key={i} className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-gray-400 w-16">Pause :</span>
-                            <Input
-                              type="time"
-                              value={br.start}
-                              onChange={(e) => updateBreak(day, i, 'start', e.target.value)}
-                              className="w-28 text-sm"
-                            />
-                            <span className="text-gray-400 text-sm">—</span>
-                            <Input
-                              type="time"
-                              value={br.end}
-                              onChange={(e) => updateBreak(day, i, 'end', e.target.value)}
-                              className="w-28 text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => removeBreak(day, i)}
-                              className="text-gray-400 hover:text-red-500"
-                              aria-label="Retirer cette pause"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                        {/* Bouton ajouter une pause */}
-                        <button
-                          type="button"
-                          onClick={() => addBreak(day)}
-                          className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
-                        >
-                          <Plus className="h-3.5 w-3.5" /> Ajouter une pause
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400 pt-1.5">Fermé</span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-
-        {/* Dates bloquées */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <CalendarOff className="h-4 w-4 text-primary-500" />
-              Dates bloquées (congés / absences)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-xs text-gray-500">
-              Ferme la journée <b>entière</b> : aucun créneau ne sera proposé aux patients. Pour des vacances,
-              indiquez une date de fin. Pour ne bloquer que quelques heures, passez par l&apos;agenda.
-            </p>
-            {blockDateError && (
-              <p className="text-xs text-red-600">{blockDateError}</p>
-            )}
-
-            {/* Ajouter une date ou une période */}
-            <div className="flex gap-2 flex-wrap items-center">
-              <span className="text-xs text-gray-400">Du</span>
-              <Input
-                type="date"
-                value={newBlockDate}
-                onChange={(e) => setNewBlockDate(e.target.value)}
-                min={aujourdhuiMaroc}
-                className="w-40"
-              />
-              <span className="text-xs text-gray-400">au (optionnel)</span>
-              <Input
-                type="date"
-                value={newBlockEndDate}
-                onChange={(e) => setNewBlockEndDate(e.target.value)}
-                min={newBlockDate || aujourdhuiMaroc}
-                className="w-40"
-              />
-              <Input
-                value={newBlockReason}
-                onChange={(e) => setNewBlockReason(e.target.value)}
-                placeholder="Message affiché aux patients (ex : En congé, retour le 21 juin)"
-                className="flex-1 min-w-[140px]"
-              />
-              <Button
-                type="button"
-                onClick={handleAddBlockedDate}
-                disabled={!newBlockDate || blockLoading}
-                className="shrink-0"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                {blockLoading ? 'Enregistrement…' : 'Confirmer le congé'}
-              </Button>
-            </div>
-
-            {/* Liste des dates bloquées */}
-            {blockedDates.filter((b) => b.date >= aujourdhuiMaroc).length === 0 ? (
-              <p className="text-sm text-gray-400 italic">Aucune date bloquée à venir</p>
-            ) : (
-              <div className="space-y-2">
-                {blockedDates.filter((b) => b.date >= aujourdhuiMaroc).map((bd) => (
-                  <div key={bd.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                    <div>
-                      <span className="text-sm font-medium text-gray-800">
-                        {new Date(bd.date + 'T00:00:00').toLocaleDateString('fr-MA', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
-                      </span>
-                      {/* Une plage horaire n'est PAS un congé : le dire, sinon
-                          l'écran laisse croire que la journée est fermée. */}
-                      <span className={`text-xs ml-2 px-1.5 py-0.5 rounded ${bd.start_time ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                        {bd.start_time
-                          ? `${bd.start_time.slice(0, 5)} – ${(bd.end_time ?? '').slice(0, 5)}`
-                          : 'journée entière'}
-                      </span>
-                      {bd.reason && (
-                        <span className="text-xs text-gray-400 ml-2">— {bd.reason}</span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveBlockedDate(bd.id)}
-                      className="text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
         {/* Bouton sauvegarde */}
         <div className="flex items-center gap-3">
@@ -1181,6 +1252,80 @@ export default function SettingsPage() {
           )}
         </div>
       </form>
+
+      {/* Le mot de passe est hors du formulaire des paramètres : deux
+          enregistrements distincts ne doivent pas partager un bouton, et un
+          formulaire imbriqué dans un autre est du HTML invalide. */}
+      <Groupe id="compte" numero={4} titre="Votre compte" sous="Votre accès personnel à MonRDV" />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary-500" />
+            Changer mon mot de passe
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={changerMotDePasse} className="space-y-4">
+            <p className="text-sm text-gray-500">
+              Choisissez un nouveau mot de passe. Il remplacera l&apos;actuel immédiatement,
+              et vous resterez connecté.
+            </p>
+
+            <div className="space-y-2">
+              <Label htmlFor="pw1">Nouveau mot de passe</Label>
+              <div className="relative">
+                <Input
+                  id="pw1"
+                  type={pwVisible ? 'text' : 'password'}
+                  value={pw1}
+                  onChange={(e) => { setPw1(e.target.value); setPwErreur(''); setPwOk(false) }}
+                  autoComplete="new-password"
+                  placeholder="8 caractères minimum"
+                  className="pr-10"
+                />
+                {/* Voir ce qu'on tape : sans ça, une faute de frappe ne se
+                    découvre qu'à la prochaine connexion. */}
+                <button
+                  type="button"
+                  onClick={() => setPwVisible((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={pwVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
+                  {pwVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pw2">Retapez-le pour confirmer</Label>
+              <Input
+                id="pw2"
+                type={pwVisible ? 'text' : 'password'}
+                value={pw2}
+                onChange={(e) => { setPw2(e.target.value); setPwErreur(''); setPwOk(false) }}
+                autoComplete="new-password"
+              />
+            </div>
+
+            {pwErreur && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {pwErreur}
+              </p>
+            )}
+            {pwOk && (
+              <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                <Check className="h-4 w-4 shrink-0" />
+                Votre mot de passe a été changé. Utilisez le nouveau à votre prochaine connexion.
+              </p>
+            )}
+
+            <Button type="submit" disabled={pwLoading || !pw1 || !pw2}>
+              {pwLoading ? 'Modification…' : 'Changer mon mot de passe'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }
