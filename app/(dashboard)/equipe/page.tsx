@@ -2,7 +2,7 @@
 
 // « Mon équipe » — le médecin invite des secrétaires et règle leurs permissions.
 // Visible seulement si le médecin a déclaré avoir une secrétaire (Paramètres).
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,21 @@ import { Input } from '@/components/ui/input'
 import { UserPlus, Trash2, Users2, Check, Mail, Loader2 } from 'lucide-react'
 import { DEFAULT_STAFF_PERMISSIONS, STAFF_PERMISSION_GROUPS, type CabinetStaff, type StaffPermissions } from '@/types'
 import { canAccess, type DoctorPlan } from '@/lib/plan'
+
+// Ce qu'une personne peut réellement faire, en une ligne.
+//
+// Quatorze cases à cocher répondent mal à « est-ce qu'elle peut encaisser ? ».
+// Le résumé le dit sans qu'on ait à les parcourir.
+function resumeDroits(perms: StaffPermissions, plan: DoctorPlan): string[] {
+  const accordes: string[] = []
+  for (const groupe of STAFF_PERMISSION_GROUPS) {
+    for (const item of groupe.items) {
+      if (item.requiert && !canAccess(plan, item.requiert)) continue
+      if (perms[item.key]) accordes.push(item.label)
+    }
+  }
+  return accordes
+}
 
 export default function EquipePage() {
   const [staff, setStaff] = useState<CabinetStaff[]>([])
@@ -26,6 +41,10 @@ export default function EquipePage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [perms, setPerms] = useState<StaffPermissions>({ ...DEFAULT_STAFF_PERMISSIONS })
+  const [formOuvert, setFormOuvert] = useState(false)
+  // Le repli ne se décide qu'au premier chargement : sinon, cocher une case
+  // rechargeait la liste et refermait le formulaire sous les doigts du médecin.
+  const premierChargement = useRef(true)
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -39,6 +58,11 @@ export default function EquipePage() {
     const res = await fetch('/api/staff')
     const d = await res.json().catch(() => ({}))
     setStaff(d.staff ?? [])
+    if (premierChargement.current) {
+      // Personne dans l'équipe : rien à confondre, le formulaire s'ouvre seul.
+      setFormOuvert((d.staff ?? []).length === 0)
+      premierChargement.current = false
+    }
     setLoading(false)
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,6 +90,7 @@ export default function EquipePage() {
     if (!res.ok) { setError(d.error || 'Échec de l’invitation.'); return }
     setOk(`Invitation envoyée à ${email.trim()}.`)
     setName(''); setEmail(''); setPassword(''); setPerms({ ...DEFAULT_STAFF_PERMISSIONS })
+    setFormOuvert(false)
     load()
   }
 
@@ -151,40 +176,6 @@ export default function EquipePage() {
         <p className="text-sm text-gray-500 mt-1">Donnez à votre secrétaire un accès limité au cabinet (agenda, patients…), sans le dossier médical si vous le souhaitez.</p>
       </div>
 
-      {/* Inviter une secrétaire */}
-      <Card>
-        <CardContent className="p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary-500" /> Inviter une secrétaire</h2>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la secrétaire" />
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Adresse e-mail" />
-          </div>
-
-          <div className="space-y-1">
-            <Input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              placeholder="Mot de passe (facultatif)"
-            />
-            <p className="text-[11px] text-gray-400">
-              Laissez vide pour qu&apos;un mot de passe soit généré et envoyé par e-mail.
-              Elle pourra le changer après sa première connexion.
-            </p>
-          </div>
-
-          <PermMatrix values={perms} onToggle={(key) => setPerms((p) => ({ ...p, [key]: !p[key] }))} />
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {ok && <p className="text-sm text-green-600 flex items-center gap-1"><Check className="h-4 w-4" /> {ok}</p>}
-
-          <Button onClick={invite} disabled={adding}>
-            {adding ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Mail className="h-4 w-4 mr-1.5" />}
-            {adding ? 'Envoi…' : 'Envoyer l’invitation'}
-          </Button>
-        </CardContent>
-      </Card>
-
       {/* Liste de l'équipe */}
       <div>
         <h2 className="text-base font-semibold text-gray-900 mb-2">Équipe ({staff.length})</h2>
@@ -208,13 +199,86 @@ export default function EquipePage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  <PermMatrix values={{ ...DEFAULT_STAFF_PERMISSIONS, ...s.permissions }} onToggle={(key) => togglePerm(s, key)} />
+                  {(() => {
+                    const effectives = { ...DEFAULT_STAFF_PERMISSIONS, ...s.permissions }
+                    const accordes = resumeDroits(effectives, plan)
+                    return (
+                      <>
+                        <div className="mb-3 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                            Ce que {s.name} peut faire
+                          </p>
+                          <p className="text-xs text-gray-600 leading-relaxed">
+                            {accordes.length > 0 ? accordes.join(' · ') : 'Aucun droit accordé pour le moment.'}
+                          </p>
+                        </div>
+                        <PermMatrix values={effectives} onToggle={(key) => togglePerm(s, key)} />
+                      </>
+                    )
+                  })()}
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
       </div>
+
+      {/* Le formulaire d'invitation est replié par défaut dès qu'une secrétaire
+          existe. Déplié, il affichait une grille de permissions identique à
+          celle des membres de l'équipe : deux tableaux de cases à cocher se
+          suivaient, l'un hypothétique, l'autre réel. On pouvait lire les droits
+          par défaut d'une future secrétaire en croyant lire ceux de la sienne —
+          et conclure qu'elle ne peut pas encaisser alors qu'elle le peut. */}
+      {ok && (
+        <p className="text-sm text-green-600 flex items-center gap-1">
+          <Check className="h-4 w-4 shrink-0" /> {ok}
+        </p>
+      )}
+
+      {!formOuvert ? (
+        <Button variant="outline" onClick={() => setFormOuvert(true)}>
+          <UserPlus className="h-4 w-4 mr-1.5" /> Inviter une secrétaire
+        </Button>
+      ) : (
+        <Card>
+          <CardContent className="p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary-500" /> Inviter une secrétaire</h2>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la secrétaire" />
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Adresse e-mail" />
+            </div>
+
+            <div className="space-y-1">
+              <Input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                placeholder="Mot de passe (facultatif)"
+              />
+              <p className="text-[11px] text-gray-400">
+                Laissez vide pour qu&apos;un mot de passe soit généré et envoyé par e-mail.
+                Elle pourra le changer après sa première connexion.
+              </p>
+            </div>
+
+            <PermMatrix values={perms} onToggle={(key) => setPerms((p) => ({ ...p, [key]: !p[key] }))} />
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <div className="flex items-center gap-2">
+              <Button onClick={invite} disabled={adding}>
+                {adding ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Mail className="h-4 w-4 mr-1.5" />}
+                {adding ? 'Envoi…' : 'Envoyer l’invitation'}
+              </Button>
+              {staff.length > 0 && (
+                <Button variant="ghost" onClick={() => { setFormOuvert(false); setError(''); setOk('') }}>
+                  Annuler
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
