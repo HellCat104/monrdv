@@ -406,16 +406,9 @@ export default function SettingsPage() {
     }
   }
 
-  if (!doctor) {
-    return (
-      <div className="space-y-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-32 bg-gray-100 rounded-xl animate-pulse" />
-        ))}
-      </div>
-    )
-  }
-
+  // Ces deux valeurs et ce hook doivent rester AVANT le retour anticipé
+  // ci-dessous : un hook placé après ne serait pas exécuté au premier rendu,
+  // quand le médecin n'est pas encore chargé, et React fait tomber la page.
   const empreinte = JSON.stringify({ f: form, v: enabledVitals, c: customVitals, e: extraSpecs })
   const modifie = reference !== null && empreinte !== reference
 
@@ -428,6 +421,16 @@ export default function SettingsPage() {
     window.addEventListener('beforeunload', avertir)
     return () => window.removeEventListener('beforeunload', avertir)
   }, [modifie])
+
+  if (!doctor) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-32 bg-gray-100 rounded-xl animate-pulse" />
+        ))}
+      </div>
+    )
+  }
 
   const changerMotDePasse = async (e: React.FormEvent) => {
     e.preventDefault()
