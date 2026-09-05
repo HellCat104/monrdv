@@ -154,7 +154,9 @@ export default function AbonnementPage() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {(['agenda', 'complet'] as DoctorPlan[]).map((p) => {
-              const current = plan === p
+              // Tant que le médecin n'est pas chargé, `plan` vaut la valeur par
+              // défaut : la pastille se posait sur la mauvaise carte puis sautait.
+              const current = isLoaded && plan === p
               return (
                 <div
                   key={p}
@@ -169,12 +171,16 @@ export default function AbonnementPage() {
                     )}
                   </div>
 
-                  {!priceHidden && (
+                  {!isLoaded ? (
+                    // Réserve la place exacte du tarif : sans ce gabarit, la
+                    // liste des fonctionnalités remonterait puis redescendrait.
+                    <div className="mb-3 h-9 w-32 rounded-lg bg-gray-100 animate-pulse" />
+                  ) : !priceHidden ? (
                     <div className="flex items-baseline gap-1.5 mb-3">
                       <span className="text-3xl font-bold text-gray-900">{PLAN_PRICES_DHS[p]}</span>
                       <span className="text-sm text-gray-500">DHS / mois</span>
                     </div>
-                  )}
+                  ) : null}
 
                   <ul className="space-y-1.5">
                     {PLAN_FEATURES[p].map((f) => (
@@ -242,7 +248,10 @@ export default function AbonnementPage() {
             <div className="flex gap-3">
               <span className="w-6 h-6 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
               <p className="text-sm text-gray-700">
-                {priceHidden
+                {/* Pendant le chargement on s'en tient à la formule sans montant :
+                    afficher le tarif pour le retirer ensuite, c'est exactement
+                    le clignotement qu'on cherche à supprimer. */}
+                {!isLoaded || priceHidden
                   ? <>Effectuez votre virement bancaire sur le compte suivant :</>
                   : <>Effectuez un virement bancaire de <strong>{price} DHS</strong> sur le compte suivant :</>}
               </p>
