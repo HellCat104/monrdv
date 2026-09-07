@@ -539,7 +539,7 @@ export default function AdminPage() {
           <div className="space-y-3">
             <p className="text-sm text-gray-700">
               Passer ce compte en{' '}
-              <strong>{planDialog.target === 'complet' ? 'Cabinet complet (299 DHS)' : 'Agenda (149 DHS)'}</strong> ?
+              <strong>{planDialog.target === 'complet' ? 'Cabinet complet (249 DHS)' : 'Agenda (149 DHS)'}</strong> ?
             </p>
             {planDialog.target === 'agenda' ? (
               <p className="text-sm text-orange-600 bg-orange-50 rounded-lg p-3">

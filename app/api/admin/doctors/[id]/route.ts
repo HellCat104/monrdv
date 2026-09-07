@@ -26,7 +26,7 @@ export async function PATCH(
 
   const adminDb = createAdminClient()
 
-  // ── Changer le forfait (Agenda 149 / Cabinet complet 299) ────────────────
+  // ── Changer le forfait (Agenda 149 / Cabinet complet 249) ────────────────
   // Seule voie possible : la colonne `plan` est verrouillée pour le médecin
   // (trigger trg_protect_doctor_plan). Solde aussi la demande en attente.
   if (action === 'set_plan') {

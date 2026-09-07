@@ -1,6 +1,6 @@
 // Forfaits MonRDV — source de vérité unique des droits par plan.
 // 'agenda'  (149 DH) : prise de RDV seule — aucune donnée de santé (CNDP).
-// 'complet' (299 DH) : cabinet complet (dossiers, consultation, factures…).
+// 'complet' (249 DH) : cabinet complet (dossiers, consultation, factures…).
 //
 // Toute vérification d'accès liée au forfait passe par ce module (UI ET
 // serveur), comme lib/cabinet.ts le fait pour les permissions secrétaire.
@@ -29,7 +29,7 @@ export const PLAN_LABELS: Record<DoctorPlan, string> = {
 
 export const PLAN_PRICES_DHS: Record<DoctorPlan, number> = {
   agenda: 149,
-  complet: 299,
+  complet: 249,
 }
 
 const FEATURES: Record<DoctorPlan, PlanFeatures> = {

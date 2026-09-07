@@ -117,7 +117,7 @@ export default function CGUPage() {
           <h1 className="text-3xl font-bold text-gray-900 mb-1">
             Conditions Générales d&apos;Utilisation
           </h1>
-          <p className="text-sm text-gray-400 mb-2">Dernière mise à jour : août 2026 — Version 1.1</p>
+          <p className="text-sm text-gray-400 mb-2">Dernière mise à jour : septembre 2026 — Version 1.2</p>
           <div className="h-1 w-16 bg-primary-500 rounded-full mb-10" />
 
           <div className="space-y-10">
@@ -353,7 +353,7 @@ export default function CGUPage() {
                 <div className="bg-primary-50 border-2 border-primary-200 rounded-2xl p-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center shrink-0">
-                      <span className="text-white font-bold text-sm">299<br/>DH</span>
+                      <span className="text-white font-bold text-sm">249<br/>DH</span>
                     </div>
                     <div>
                       <p className="font-bold text-gray-900 text-lg">Cabinet complet</p>
@@ -405,7 +405,7 @@ export default function CGUPage() {
 
               <SubSection title="Facturation et paiement :">
                 <ul className="list-disc list-inside text-gray-600 space-y-1.5 ml-1">
-                  <li>Le montant de l&apos;abonnement est de <strong>149 DHS par mois</strong> pour le forfait Agenda et de <strong>299 DHS par mois</strong> pour le forfait Cabinet complet (dirhams marocains, toutes taxes comprises)</li>
+                  <li>Le montant de l&apos;abonnement est de <strong>149 DHS par mois</strong> pour le forfait Agenda et de <strong>249 DHS par mois</strong> pour le forfait Cabinet complet (dirhams marocains, toutes taxes comprises)</li>
                   <li>Le paiement s&apos;effectue par <strong>virement bancaire</strong> au début de chaque période mensuelle</li>
                   <li>Une facture est émise et envoyée par email à chaque règlement</li>
                   <li>L&apos;abonnement est renouvelé automatiquement chaque mois sauf résiliation explicite</li>
