@@ -3,7 +3,7 @@
 import PDFDocument from 'pdfkit'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
-import { summarizeTeeth, DENTAL_STATES, DENTAL_COLOR, DENTAL_LABEL, FDI_UPPER, FDI_LOWER, type DentalTeeth } from '@/lib/dental'
+import { summarizeTeeth, normalizeTeeth, stateColors, statesLabel, DENTAL_STATES, FDI_UPPER, FDI_LOWER, type DentalTeeth } from '@/lib/dental'
 
 const PAY: Record<string, string> = { especes: 'Espèces', carte: 'Carte', cheque: 'Chèque', virement: 'Virement' }
 const ATT: Record<string, string> = { present: 'Présent', absent: 'Absent', late: 'En retard' }
@@ -65,7 +65,9 @@ async function fetchDossierData(supabase: any, doctor: DossierDoctor & { id: str
   const certificates = certRes.data ?? []
   const vitals = vitalsRes.data ?? []
   const documents = docsRes.data ?? []
-  const dentalTeeth = (dentalRes.data?.teeth ?? {}) as DentalTeeth
+  // Le jsonb peut être à l'ancien format (un seul état, en chaîne) : on normalise
+  // une fois ici, tout le rendu en aval travaille sur des tableaux d'états.
+  const dentalTeeth = normalizeTeeth(dentalRes.data?.teeth)
   const dentalSummary = summarizeTeeth(dentalTeeth)
 
   const docFiles: { name: string; buf: Buffer }[] = []
@@ -264,21 +266,44 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer
     // ── Schéma dentaire (dentistes) — odontogramme dessiné ───────────────
     if (dentalSummary.length > 0) {
       section('Schéma dentaire')
-      const bw = 26, bh = 20, gap = 3, midGap = 10
-      // Dessine une arcade (16 dents) : côté droit / ligne médiane / côté gauche
+      // midGap large (et non un simple trait) : à l'impression, c'est le vide qui
+      // sépare les hémi-arcades d'un coup d'œil. bh laisse la place aux pastilles
+      // d'états multiples sous le numéro.
+      const bw = 26, bh = 24, gap = 3, midGap = 22
+      // Rappelle l'orientation : le PDF se lit comme le fauteuil, pas comme le patient.
+      doc.fillColor(C.faint).font('Helvetica').fontSize(7.5)
+        .text('Vue du praticien — côté droit du patient à gauche du schéma.', M, doc.y, { width: CONTENT_W })
+      doc.x = M
+      doc.moveDown(0.3)
+      // Dessine une arcade (16 dents) : côté droit / écart médian / côté gauche
       const drawArch = (ids: number[]) => {
-        ensure(bh + 6)
+        ensure(bh + 8)
         const y = doc.y
         let x = M
         ids.forEach((n, i) => {
-          if (i === 8) x += midGap
-          const info = dentalTeeth[String(n)]
-          const color = info ? DENTAL_COLOR[info.s] : null
+          if (i === 8) {
+            // Ligne médiane, discrète : c'est l'écart qui porte l'information.
+            doc.moveTo(x + midGap / 2, y - 2).lineTo(x + midGap / 2, y + bh + 2)
+              .lineWidth(0.5).strokeColor('#d1d5db').dash(2, { space: 2 }).stroke().undash()
+            x += midGap
+          }
+          const states = dentalTeeth[String(n)]?.s ?? []
+          const colors = stateColors(states)
+          const color = colors[0] ?? null
           doc.roundedRect(x, y, bw, bh, 3)
           if (color) doc.fillAndStroke(color, color)
           else doc.lineWidth(0.5).strokeColor('#d1d5db').stroke()
           doc.fillColor(color ? '#ffffff' : '#6b7280').font('Helvetica').fontSize(8)
             .text(String(n), x, y + 6, { width: bw, align: 'center', lineBreak: false })
+          // Plusieurs états : une pastille par état sur un liseré blanc, comme à
+          // l'écran. Un aplat dégradé serait illisible sur 26 points de large.
+          if (colors.length > 1) {
+            const mw = bw - 8, mh = 5, mx = x + 4, my = y + bh - mh - 2.5
+            doc.roundedRect(mx, my, mw, mh, 1).fill('#ffffff')
+            const seg = (mw - 2 - (colors.length - 1)) / colors.length
+            let sx = mx + 1
+            for (const c of colors) { doc.rect(sx, my + 1, seg, mh - 2).fill(c); sx += seg + 1 }
+          }
           x += bw + gap
         })
         doc.y = y + bh + 4
@@ -305,7 +330,7 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer
       const noted = Object.entries(dentalTeeth).filter(([, v]) => v?.n).sort((a, b) => Number(a[0]) - Number(b[0]))
       if (noted.length > 0) {
         doc.moveDown(0.2)
-        for (const [n, v] of noted) kv(`Dent ${n} :`, `${DENTAL_LABEL[v.s] || v.s} — ${v.n}`)
+        for (const [n, v] of noted) kv(`Dent ${n} :`, `${statesLabel(v.s)} — ${v.n}`)
       }
     }
 

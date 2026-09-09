@@ -22,6 +22,12 @@ export type AuditAction =
   | 'dossier_exporte'       // PDF ou ZIP téléchargé
   | 'patients_exportes'     // export groupé
   | 'patient_fusionne'
+  // Devis (v54, ouverts à la secrétaire en v55). `action` est une colonne texte
+  // libre (migration v44, aucune contrainte de valeur) : ajouter ces deux
+  // actions ne demande aucune migration.
+  | 'devis_consulte'        // lecture des devis d'un patient par la secrétaire
+  | 'devis_versement_saisi' // encaissement saisi par la secrétaire — la ligne
+                            // quote_payments ne porte que le cabinet, pas l'auteur
 
 export type AuditActor = 'medecin' | 'secretaire' | 'admin'
 

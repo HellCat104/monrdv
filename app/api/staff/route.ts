@@ -19,7 +19,14 @@ function sanitizePerms(input: unknown, plan?: string | null): StaffPermissions {
   // Une permission que le forfait ne couvre pas n'est pas enregistrée : elle
   // resterait cochée en base et se réveillerait à la montée en gamme, sans
   // décision consciente du praticien.
-  if (!canAccess(plan, 'records')) { out.patients_medical = false; out.vitals_entry = false }
+  // Devis (v54) : même famille que le dossier de soins, donc même plafond que
+  // `patients_medical` — pas de plan de traitement chiffré dans le forfait Agenda.
+  if (!canAccess(plan, 'records')) {
+    out.patients_medical = false
+    out.vitals_entry = false
+    out.quotes_view = false
+    out.quotes_payment = false
+  }
   if (!canAccess(plan, 'prescriptions')) out.prescriptions_view = false
   if (!canAccess(plan, 'invoicing')) out.factures = false
   return out

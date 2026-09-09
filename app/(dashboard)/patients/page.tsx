@@ -1382,8 +1382,12 @@ export default function PatientsPage() {
                 </div>
               )}
 
-              {/* Schéma dentaire — uniquement pour les dentistes */}
-              {selectedPatient && doctorId && isDentalDoctor(doctorSpecialties) && (
+              {/* Schéma dentaire — dentistes, forfait Cabinet complet.
+                  L'odontogramme est une donnée de santé : le forfait Agenda n'y
+                  a pas droit (CNDP), et la route qui l'enregistre le refuse
+                  désormais côté serveur (v55). Sans ce test, un praticien
+                  Agenda verrait un schéma qu'il ne pourrait plus enregistrer. */}
+              {selectedPatient && doctorId && doctorPlan === 'complet' && isDentalDoctor(doctorSpecialties) && (
                 <DentalChart key={selectedPatient.id} patientId={selectedPatient.id} doctorId={doctorId} />
               )}
 

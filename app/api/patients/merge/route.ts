@@ -76,6 +76,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // `tooth_history` (v55) : l'historique par dent suit le patient conservé.
+  // Sans cette reprise, fusionner deux fiches détruirait la seule trace datée
+  // de l'évolution des dents — précisément ce que la table existe pour garder.
+  // C'est la seule mutation qu'autorise son trigger append-only : rattacher une
+  // ligne à une autre fiche DU MÊME cabinet, sans toucher à son contenu.
+  // Une erreur ici n'interrompt pas la fusion : la table n'existe pas tant que
+  // la migration v55 n'a pas été passée à la main, et refuser toute fusion
+  // jusque-là serait une régression pour un cabinet non dentaire.
+  const { error: histErr } = await db.from('tooth_history')
+    .update({ patient_id: keepId }).eq('patient_id', mergeId)
+  if (histErr) console.error('[fusion] historique dentaire non repris :', histErr.message)
+
   // 2. Complète les champs vides de la cible avec ceux de la source (sans écraser)
   const fill: Record<string, unknown> = {}
   // `user_id` est transféré uniquement si la fiche conservée n'en a pas : c'est le

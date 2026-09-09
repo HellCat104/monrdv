@@ -424,8 +424,19 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 </span>
               ) : null}
 
+              {/* RDV rattaché à un devis : l'argent de cette séance se saisit sur
+                  le plan de traitement, par le médecin. Encaisser ici en plus
+                  compterait la même somme deux fois — le serveur le refuse, et
+                  on l'écrit ici pour que la secrétaire sache pourquoi le bouton
+                  d'encaissement a disparu. */}
+              {a.quote_id && (
+                <span className="text-[11px] whitespace-nowrap rounded-full px-2 py-0.5 bg-primary-50 text-primary-700 border border-primary-100">
+                  Réglé via le devis
+                </span>
+              )}
+
               {/* Paiement — total dû, reste à payer, paiement partiel (comme le médecin) */}
-              {permissions.payments && (
+              {permissions.payments && !a.quote_id && (
                 a.amount_paid != null ? (() => {
                   const reste = (a.amount_due ?? 0) - a.amount_paid
                   const partial = a.amount_due != null && reste > 0

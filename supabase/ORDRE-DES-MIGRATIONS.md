@@ -119,6 +119,24 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      Charges fixes : dépenses récurrentes (loyer, salaires, eau, assurances).
  49. `migration_v49_affichage_tarifs.sql`  
      Le médecin choisit si ses tarifs sont visibles des patients.
+ 50. `migration_v50_protege_certificats.sql`  
+     Un patient porteur de certificats ne peut plus être supprimé.
+ 51. `migration_v51_verrou_compte_medecin.sql`  
+     Un compte connecté ne peut plus s'attribuer le statut de médecin.
+ 52. `migration_v52_trigger_invoker.sql`  
+     La protection du compte médecin ne se déclenchait jamais (SECURITY DEFINER).
+ 53. `migration_v53_photos_medecins.sql`  
+     Chaque médecin ne peut écrire que SA photo.
+ 54. `migration_v54_devis.sql`  
+     Devis (plans de traitement chiffrés) et paiement échelonné : `quotes`,
+     `quote_items`, `quote_payments`, `quote_installments`. Les versements
+     puisent leur numéro dans le compteur `invoice_counters` existant, jamais
+     dans une seconde série.
+ 55. `migration_v55_historique_dents.sql`  
+     Historique par dent : `tooth_history`, journal append-only (RLS sans
+     policy + trigger) alimenté par `app/api/dental/[id]`. Retire au navigateur
+     le droit d'écrire `dental_charts` : **déployer le code AVANT** de lancer
+     cette migration.
 
 ## Obtenir un état réellement à jour
 

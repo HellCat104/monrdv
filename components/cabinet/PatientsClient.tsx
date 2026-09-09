@@ -1,7 +1,8 @@
 'use client'
 
 // Fiches patients côté secrétaire : liste, création (CIN + mutuelle), détail
-// (médical / ordonnances / constantes selon permissions), export et suppression.
+// (médical / ordonnances / constantes / devis selon permissions), export et
+// suppression.
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatDateFr, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { Users, UserPlus, Search, Download, Trash2, HeartPulse, Pill, Activity, Plus, CreditCard, ShieldPlus } from 'lucide-react'
 import { MUTUELLES_MAROC, type StaffPermissions, type VitalDef } from '@/types'
+// Le MÊME écran de devis que celui du médecin, en mode secrétaire : les calculs
+// de lib/devis.ts (total, versé, reste dû) doivent donner le même chiffre des
+// deux côtés du bureau — une copie finirait par en donner un autre.
+import QuotesCard from '@/components/dashboard/QuotesCard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
@@ -353,6 +358,23 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
                       </p>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Devis — permission « Afficher les devis ». Le bouton
+                  « Encaisser » n'apparaît qu'avec la permission d'encaissement,
+                  et l'écran n'est ici qu'un confort : /api/cabinet/quotes refuse
+                  la lecture sans la première, l'écriture sans la seconde, et
+                  n'offre aucun autre verbe. `dental={false}` : la saisie d'un
+                  acte (donc le champ « Dent ») n'existe pas en mode secrétaire. */}
+              {permissions.quotes_view && detail.patient?.id && (
+                <div className="border-t border-gray-100 pt-3">
+                  <QuotesCard
+                    patientId={detail.patient.id}
+                    dental={false}
+                    mode="secretaire"
+                    canPay={permissions.quotes_payment}
+                  />
                 </div>
               )}
 

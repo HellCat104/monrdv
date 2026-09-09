@@ -94,6 +94,19 @@ function ExportBtn({ label, disabled, onPick }: { label: string; disabled?: bool
 
 type Tab = 'activite' | 'compta'
 
+// Versement encaissé sur un devis. Volontairement typé à plat ici : la page ne
+// se sert que de ces champs, et la jointure Supabase ne rend pas exactement la
+// forme du type `QuotePayment` (patient et devis y sont imbriqués).
+interface DevisPaiement {
+  id: string
+  amount: number
+  payment_method: string | null
+  paid_at: string
+  invoice_no: string | null
+  patient: { first_name: string; last_name: string } | null
+  quote: { label: string | null } | null
+}
+
 export default function StatistiquesPage() {
   // Deux lectures distinctes : l'activité se consulte chaque semaine, la
   // comptabilité en fin de mois. Les mélanger obligeait à traverser l'une
@@ -101,6 +114,11 @@ export default function StatistiquesPage() {
   const [tab, setTab] = useState<Tab>('activite')
   const [doctorId, setDoctorId] = useState<string | null>(null)
   const [appts, setAppts] = useState<Appointment[]>([])
+  // Versements encaissés sur les devis (v54) : SECONDE porte d'entrée de
+  // l'argent du cabinet, à additionner aux encaissements de rendez-vous sans
+  // jamais compter deux fois la même somme (un RDV rattaché à un devis ne peut
+  // pas porter d'encaissement propre — verrou en base).
+  const [devisPaiements, setDevisPaiements] = useState<DevisPaiement[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [credits, setCredits] = useState<CreditNote[]>([])
   const [loading, setLoading] = useState(true)
@@ -195,11 +213,19 @@ export default function StatistiquesPage() {
     const start = [cur.start, prev?.start ?? cur.start, sixMonths].sort()[0]
     const end = cur.end > today ? cur.end : today
 
-    const [aptRes, expRes, creditRes, unpaidRes] = await Promise.all([
+    const [aptRes, devisRes, expRes, creditRes, unpaidRes] = await Promise.all([
       supabase.from('appointments').select(APT_FIELDS)
         .eq('doctor_id', docId).neq('status', 'cancelled')
         .gte('date', start).lte('date', end)
         .order('date', { ascending: false }).limit(2000),
+      // Versements de devis : même fenêtre que les RDV, mais bornée sur paid_at
+      // — un devis n'a pas de date d'agenda, sa seule date comptable est celle
+      // du règlement.
+      supabase.from('quote_payments')
+        .select('id, amount, payment_method, paid_at, invoice_no, patient:patients(first_name, last_name), quote:quotes(label)')
+        .eq('doctor_id', docId)
+        .gte('paid_at', `${start}T00:00:00`).lte('paid_at', `${end}T23:59:59`)
+        .order('paid_at', { ascending: false }).limit(2000),
       supabase.from('expenses').select('*')
         .eq('doctor_id', docId).gte('date', start).lte('date', end)
         .order('date', { ascending: false }).limit(2000),
@@ -218,6 +244,7 @@ export default function StatistiquesPage() {
     const extra = ((unpaidRes.data ?? []) as unknown as Appointment[]).filter((a) => !seen.has(a.id))
 
     setAppts([...inWindow, ...extra])
+    setDevisPaiements((devisRes.data ?? []) as unknown as DevisPaiement[])
     setExpenses((expRes.data ?? []) as Expense[])
     setCredits((creditRes.data ?? []) as CreditNote[])
   }
@@ -290,6 +317,32 @@ export default function StatistiquesPage() {
         else if (a.attendance === 'late') late++
       }
     }
+
+    // ── Seconde origine des recettes : les versements de devis (v54) ────────
+    // Ils s'ajoutent aux encaissements de rendez-vous, dans les mêmes totaux et
+    // le même journal. Aucun risque de double compte : un rendez-vous rattaché
+    // à un devis ne peut pas porter son propre amount_paid (verrou en base +
+    // routes API), il n'apparaît donc jamais dans la boucle ci-dessus.
+    // Un devis ACCEPTÉ, lui, n'entre nulle part ici : tant qu'il n'est pas
+    // payé, il ne vaut rien comptablement.
+    for (const p of devisPaiements) {
+      const pd = formatInTimeZone(parseISO(p.paid_at), MAROC_TZ, 'yyyy-MM-dd')
+      const amt = Number(p.amount ?? 0)
+      const mk = pd.slice(0, 7)
+      byMonth.set(mk, (byMonth.get(mk) ?? 0) + amt)
+      if (inRange(pd)) {
+        recettes += amt
+        caisse[p.payment_method && caisse[p.payment_method] !== undefined ? p.payment_method : 'autre'] += amt
+        rows.push({
+          date: pd, invoice: p.invoice_no || '',
+          patient: p.patient ? `${p.patient.first_name} ${p.patient.last_name}` : '',
+          motif: p.quote?.label ? `Devis — ${p.quote.label}` : 'Versement sur devis',
+          mode: p.payment_method ? (PM_LABELS[p.payment_method] || p.payment_method) : '',
+          amount: amt,
+        })
+      }
+    }
+
     rows.sort((x, y) => y.date.localeCompare(x.date))
 
     const expenseRows = expenses.filter((e) => inRange(e.date)).sort((a, b) => b.date.localeCompare(a.date))
@@ -298,6 +351,9 @@ export default function StatistiquesPage() {
     // Période précédente — sert uniquement aux écarts affichés
     let prevRecettes = 0
     for (const a of appts) if (a.amount_paid && inPrev(payDate(a))) prevRecettes += Number(a.amount_paid)
+    for (const p of devisPaiements) {
+      if (inPrev(formatInTimeZone(parseISO(p.paid_at), MAROC_TZ, 'yyyy-MM-dd'))) prevRecettes += Number(p.amount ?? 0)
+    }
     const prevDepenses = expenses.filter((e) => inPrev(e.date)).reduce((s, e) => s + Number(e.amount), 0)
 
     // Répartition des dépenses par poste
@@ -341,7 +397,7 @@ export default function StatistiquesPage() {
       prevRecettes, prevDepenses, byCategory, unpaid,
       revenueByMonth,
     }
-  }, [appts, expenses, credits, period])
+  }, [appts, devisPaiements, expenses, credits, period])
 
   // Le dépôt est privé : on génère un lien signé de courte durée.
   async function openReceipt(path: string) {

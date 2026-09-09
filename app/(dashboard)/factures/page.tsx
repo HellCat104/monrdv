@@ -31,12 +31,41 @@ interface FactureRow {
   amount_paid: number | null; amount_due: number | null; payment_method: string | null
   patient: { first_name: string; last_name: string } | null
 }
+// Versement encaissé sur un devis (v54). C'est une facture au même titre qu'un
+// rendez-vous encaissé : même série F-AAAA-NNNN, même compteur. La liste des
+// factures doit donc les afficher ensemble — un fiduciaire qui reçoit une série
+// trouée parce que la moitié des numéros vit sur un autre écran ne peut rien
+// en faire.
+interface DevisPaiementRow {
+  id: string; paid_at: string; invoice_no: string | null; amount: number
+  payment_method: string | null
+  patient: { first_name: string; last_name: string } | null
+  quote: { label: string | null } | null
+}
 interface AvoirRow {
   id: string; credit_no: string | null; original_invoice_no: string; patient_name: string | null; amount: number; created_at: string
 }
 
+/** Forme commune aux deux origines : c'est elle qu'affichent le tableau et
+ *  l'export, pour qu'aucun total ne dépende de la provenance de la ligne. */
+interface Ligne {
+  id: string
+  _date: string
+  _patient: string
+  invoice_no: string | null
+  amount: number
+  /** Total attendu — seulement pour un RDV : un devis se règle en plusieurs
+   *  versements, son « total » est celui du plan, pas celui de la facture. */
+  due: number | null
+  payment_method: string | null
+  /** Page imprimable correspondante */
+  href: string
+  devis: boolean
+}
+
 export default function FacturesPage() {
   const [factures, setFactures] = useState<FactureRow[]>([])
+  const [devisPaiements, setDevisPaiements] = useState<DevisPaiementRow[]>([])
   const [avoirs, setAvoirs] = useState<AvoirRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -54,13 +83,17 @@ export default function FacturesPage() {
       if (!doctor) return
       // Facturation réservée au forfait Cabinet complet
       if (!canAccess(doctor.plan, 'invoicing')) { router.replace('/dashboard'); return }
-      const [fRes, aRes] = await Promise.all([
+      const [fRes, dRes, aRes] = await Promise.all([
         supabase.from('appointments')
           .select('id, date, paid_at, invoice_no, amount_paid, amount_due, payment_method, patient:patients(first_name, last_name)')
           .eq('doctor_id', doctor.id).not('amount_paid', 'is', null),
+        supabase.from('quote_payments')
+          .select('id, paid_at, invoice_no, amount, payment_method, patient:patients(first_name, last_name), quote:quotes(label)')
+          .eq('doctor_id', doctor.id),
         supabase.from('credit_notes').select('id, credit_no, original_invoice_no, patient_name, amount, created_at').eq('doctor_id', doctor.id),
       ])
       setFactures((fRes.data ?? []) as unknown as FactureRow[])
+      setDevisPaiements((dRes.data ?? []) as unknown as DevisPaiementRow[])
       setAvoirs((aRes.data ?? []) as AvoirRow[])
       setLoading(false)
     }
@@ -70,18 +103,45 @@ export default function FacturesPage() {
 
   const fDate = (f: FactureRow) => f.paid_at ? formatInTimeZone(parseISO(f.paid_at), MAROC_TZ, 'yyyy-MM-dd') : f.date
 
-  const rows = useMemo(() => {
+  // Les deux origines sont ramenées à `Ligne` AVANT tout filtre ou total : c'est
+  // la seule façon d'être certain qu'aucun écran n'oublie l'une des deux, et
+  // que la même somme n'y figure jamais deux fois (un RDV rattaché à un devis
+  // ne peut pas porter d'encaissement propre — verrou posé en base, v54).
+  const rows = useMemo<Ligne[]>(() => {
     const { start, end } = periodRange(period, getNowInMaroc())
     const q = search.trim().toLowerCase()
-    return factures
-      .map((f) => ({ ...f, _date: fDate(f), _patient: f.patient ? `${f.patient.first_name} ${f.patient.last_name}` : '' }))
+    const toutes: Ligne[] = [
+      ...factures.map((f) => ({
+        id: f.id,
+        _date: fDate(f),
+        _patient: f.patient ? `${f.patient.first_name} ${f.patient.last_name}` : '',
+        invoice_no: f.invoice_no,
+        amount: f.amount_paid ?? 0,
+        due: f.amount_due,
+        payment_method: f.payment_method,
+        href: `/facture/${f.id}`,
+        devis: false,
+      })),
+      ...devisPaiements.map((p) => ({
+        id: p.id,
+        _date: formatInTimeZone(parseISO(p.paid_at), MAROC_TZ, 'yyyy-MM-dd'),
+        _patient: p.patient ? `${p.patient.first_name} ${p.patient.last_name}` : '',
+        invoice_no: p.invoice_no,
+        amount: Number(p.amount ?? 0),
+        due: null,
+        payment_method: p.payment_method,
+        href: `/facture/devis/${p.id}`,
+        devis: true,
+      })),
+    ]
+    return toutes
       .filter((f) => f._date >= start && f._date <= end)
       .filter((f) => !q || f._patient.toLowerCase().includes(q) || (f.invoice_no ?? '').toLowerCase().includes(q))
       .sort((a, b) => b._date.localeCompare(a._date))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [factures, period, search])
+  }, [factures, devisPaiements, period, search])
 
-  const total = rows.reduce((s, f) => s + (f.amount_paid ?? 0), 0)
+  const total = rows.reduce((s, f) => s + f.amount, 0)
 
   // Les avoirs suivent le même filtre de période que les factures (sinon « ce mois-ci »
   // affichait les avoirs de toutes les années).
@@ -124,10 +184,12 @@ export default function FacturesPage() {
       if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = `'${s}`
       return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
     }
-    const sum = list.reduce((s, f) => s + (f.amount_paid ?? 0), 0)
-    const headers = ['Date', 'N° facture', 'Patient', 'Montant payé (DH)', 'Total dû (DH)', 'Mode']
-    const data = list.map((f) => [f._date, f.invoice_no ?? '', f._patient, f.amount_paid ?? 0, f.amount_due ?? '', f.payment_method ? (PAYMENT_METHOD_LABELS[f.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? f.payment_method) : ''])
-    data.push(['', '', '', sum, '', 'TOTAL'])
+    const sum = list.reduce((s, f) => s + f.amount, 0)
+    // Colonne « Origine » : le fiduciaire doit pouvoir rattacher chaque numéro à
+    // sa pièce — un acte facturé ou un versement sur plan de traitement.
+    const headers = ['Date', 'N° facture', 'Patient', 'Origine', 'Montant payé (DH)', 'Total dû (DH)', 'Mode']
+    const data = list.map((f) => [f._date, f.invoice_no ?? '', f._patient, f.devis ? 'Devis' : 'Rendez-vous', f.amount, f.due ?? '', f.payment_method ? (PAYMENT_METHOD_LABELS[f.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? f.payment_method) : ''])
+    data.push(['', '', '', '', sum, '', 'TOTAL'])
     const csv = '﻿' + [headers, ...data].map((r) => r.map(esc).join(';')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a')
@@ -201,7 +263,8 @@ export default function FacturesPage() {
           ) : rows.length === 0 ? (
             <div className="p-10 text-center text-gray-400 text-sm">
               <Receipt className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              Aucune facture pour cette période. Les factures apparaissent dès qu&apos;un rendez-vous est encaissé.
+              Aucune facture pour cette période. Les factures apparaissent dès qu&apos;un rendez-vous est encaissé
+              ou qu&apos;un versement est reçu sur un devis.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -235,13 +298,16 @@ export default function FacturesPage() {
                       )}
                       <td className="py-2.5 px-4 text-gray-600 whitespace-nowrap">{formatDateShort(f._date)}</td>
                       <td className="py-2.5 px-4 font-medium text-gray-900 whitespace-nowrap">{f.invoice_no ?? '—'}</td>
-                      <td className="py-2.5 px-4 text-gray-700">{f._patient || '—'}</td>
+                      <td className="py-2.5 px-4 text-gray-700">
+                        {f._patient || '—'}
+                        {f.devis && <span className="ml-1.5 text-[10px] font-medium text-primary-600 bg-primary-50 rounded px-1.5 py-0.5">devis</span>}
+                      </td>
                       <td className="py-2.5 px-4 text-right whitespace-nowrap text-gray-900">
-                        {f.amount_paid} DH{f.amount_due && f.amount_due > (f.amount_paid ?? 0) ? <span className="text-orange-500 text-xs"> /{f.amount_due}</span> : ''}
+                        {f.amount} DH{f.due && f.due > f.amount ? <span className="text-orange-500 text-xs"> /{f.due}</span> : ''}
                       </td>
                       <td className="py-2.5 px-4 text-gray-500">{f.payment_method ? (PAYMENT_METHOD_LABELS[f.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? f.payment_method) : '—'}</td>
                       <td className="py-2.5 px-4 text-right">
-                        <a href={`/facture/${f.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline">
+                        <a href={f.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline">
                           <Printer className="h-3.5 w-3.5" /> Voir
                         </a>
                       </td>

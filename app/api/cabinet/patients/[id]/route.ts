@@ -29,6 +29,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     extra: {
       medical: ctx.permissions.patients_medical,
       ordonnances: ctx.permissions.prescriptions_view,
+      // Les devis ne passent pas par cette route (ils ont la leur, qui
+      // journalise sa propre lecture) : on note seulement si la fiche ouverte
+      // était en mesure de les afficher.
+      devis: ctx.permissions.quotes_view,
     },
   })
 

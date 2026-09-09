@@ -313,7 +313,10 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     plan === 'complet' && apt.patient_id ? { label: 'Reprendre la consultation', icon: Play, href: `/consultation/${apt.id}` } : null,
                     // Un RDV clôturé non encaissé sortait de la file sans aucun
                     // moyen d'encaisser : la recette se perdait en fin de journée.
-                    onPayment && paymentStatus(apt) !== 'paid' ? {
+                    // Sauf s'il est rattaché à un devis : son argent se saisit
+                    // sur le devis, et l'encaisser ici aussi doublerait le CA
+                    // (le serveur le refuse — autant ne pas proposer l'action).
+                    onPayment && !apt.quote_id && paymentStatus(apt) !== 'paid' ? {
                       label: paymentStatus(apt) === 'partial' ? 'Encaisser le reste' : 'Encaisser',
                       icon: Wallet,
                       onClick: () => openPayDialog(apt),
@@ -417,8 +420,18 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     </a>
                   )}
 
+                  {/* Rattaché à un devis : l'argent de cette séance est déjà
+                      suivi sur le plan de traitement. On l'écrit plutôt que de
+                      faire disparaître le bouton sans explication — le médecin
+                      chercherait où est passé l'encaissement. */}
+                  {apt.quote_id && (
+                    <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-primary-50 text-primary-700 border border-primary-100 font-medium">
+                      <Wallet className="h-3 w-3" /> Réglé via le devis
+                    </span>
+                  )}
+
                   {/* Encaissement : bouton tant que non payé, badge-état ensuite */}
-                  {onPayment && (
+                  {onPayment && !apt.quote_id && (
                     apt.amount_paid == null ? (
                       <button
                         onClick={() => openPayDialog(apt)}

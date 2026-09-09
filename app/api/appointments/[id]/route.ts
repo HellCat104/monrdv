@@ -91,6 +91,23 @@ export async function PATCH(
     updates.payment_method = payment_method && allowed.includes(payment_method) ? payment_method : null
   }
 
+  // ── Une seule source par encaissement (devis, migration v54) ──
+  // Un RDV rattaché à un devis est réglé SUR le devis. Lui laisser en plus son
+  // propre amount_paid ferait compter la même somme deux fois dans la caisse,
+  // dans les factures et dans le chiffre d'affaires. Le verrou existe aussi en
+  // base (trigger forbid_paid_amount_on_quoted_appointment) ; on l'intercepte
+  // ici pour renvoyer une phrase lisible plutôt qu'une erreur PostgreSQL.
+  if (updates.amount_paid != null) {
+    const { data: lien } = await supabase
+      .from('appointments').select('quote_id')
+      .eq('id', params.id).eq('doctor_id', doctor.id).maybeSingle()
+    if (lien?.quote_id) {
+      return NextResponse.json({
+        error: 'Ce rendez-vous est réglé via le devis : saisissez le versement sur le devis, dans le dossier du patient.',
+      }, { status: 409 })
+    }
+  }
+
   // Cohérence comptable : le montant payé ne peut pas dépasser le montant dû.
   if (updates.amount_paid != null) {
     let effectiveDue: number | null

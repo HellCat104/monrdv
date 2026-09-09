@@ -296,6 +296,9 @@ export interface Appointment {
   payment_method?: PaymentMethod | null
   invoice_no?: string | null    // n° de facture séquentiel (F-AAAA-NNNN)
   paid_at?: string | null
+  /** Devis dont ce RDV exécute les actes. Renseigné ⇒ l'argent se saisit sur le
+   *  devis, jamais ici : `amount_paid` doit rester vide (verrou en base, v54). */
+  quote_id?: string | null
   consent_at?: string | null
   walk_in?: boolean | null      // patient sans RDV ajouté à la file du jour
   queue_status?: string | null  // salle d'attente : arrive | en_consultation | parti
@@ -513,6 +516,89 @@ export interface SessionPackage {
   created_at: string
 }
 
+// ── Devis / plan de traitement chiffré (migration v54) ──────────────────────
+// Quatre types pour quatre notions qu'il ne faut jamais confondre : ce qui est
+// proposé (Quote + QuoteItem), ce qui est prévu (QuoteInstallment) et ce qui
+// est réellement encaissé (QuotePayment). Seul le dernier est du chiffre
+// d'affaires — voir l'en-tête de supabase/migration_v54_devis.sql.
+export type QuoteStatus = 'brouillon' | 'propose' | 'accepte' | 'refuse' | 'termine' | 'annule'
+
+export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+  brouillon: 'Brouillon',
+  propose:   'Proposé au patient',
+  accepte:   'Accepté',
+  refuse:    'Refusé',
+  termine:   'Terminé',
+  annule:    'Annulé',
+}
+
+export const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
+  brouillon: 'bg-gray-100 text-gray-600',
+  propose:   'bg-blue-100 text-blue-700',
+  accepte:   'bg-green-100 text-green-700',
+  refuse:    'bg-red-100 text-red-700',
+  termine:   'bg-primary-100 text-primary-700',
+  annule:    'bg-gray-100 text-gray-400',
+}
+
+export interface Quote {
+  id: string
+  doctor_id: string
+  patient_id: string
+  label: string | null
+  status: QuoteStatus
+  notes: string | null
+  proposed_at: string | null
+  accepted_at: string | null
+  created_at: string
+  updated_at: string
+  // Relations chargées par les routes /api/quotes
+  items?: QuoteItem[]
+  payments?: QuotePayment[]
+  installments?: QuoteInstallment[]
+}
+
+export interface QuoteItem {
+  id: string
+  quote_id: string
+  doctor_id: string
+  /** Numéro FDI (11-48) ou null : tous les actes ne visent pas une dent. */
+  tooth: string | null
+  label: string
+  unit_price: number
+  quantity: number
+  done: boolean
+  done_at: string | null
+  appointment_id: string | null
+  position: number
+  created_at: string
+}
+
+/** Argent RÉELLEMENT reçu. La seule des quatre tables qui fasse du CA. */
+export interface QuotePayment {
+  id: string
+  quote_id: string
+  doctor_id: string
+  patient_id: string
+  amount: number
+  payment_method: PaymentMethod | null
+  paid_at: string
+  invoice_no: string | null
+  note: string | null
+  created_at: string
+}
+
+/** Prévisionnel : ce que le patient doit payer et quand. Ne crée aucun revenu. */
+export interface QuoteInstallment {
+  id: string
+  quote_id: string
+  doctor_id: string
+  due_date: string
+  amount: number
+  label: string | null
+  created_at: string
+}
+
 export interface StaffPermissions {
   // Agenda & accueil
   agenda: boolean               // voir l'agenda
@@ -523,8 +609,16 @@ export interface StaffPermissions {
   patients_medical: boolean     // antécédents, allergies, traitements
   prescriptions_view: boolean   // afficher les ordonnances
   vitals_entry: boolean         // saisir les constantes (poids, tension…)
+  // Un devis nomme des ACTES et des DENTS avant d'énoncer des dirhams : sa
+  // consultation est rangée dans le bloc médical, pas dans les finances.
+  quotes_view: boolean          // consulter les devis d'un patient (actes, total, versé, reste dû)
   // Bloc finances
   payments: boolean             // saisir les encaissements (espèces, chèque…)
+  // Volontairement distinct de `payments`, qui ne règle QU'UN rendez-vous : un
+  // versement de devis s'impute sur un plan de traitement en cours, déclenche
+  // son propre numéro de facture et ne peut plus être défait ensuite. Le
+  // médecin doit pouvoir confier l'un sans confier l'autre.
+  quotes_payment: boolean       // saisir un versement sur un devis
   edit_prices: boolean          // modifier le prix d'un acte au moment de l'encaissement
   caisse_day: boolean           // voir le journal de caisse du jour
   view_revenue: boolean         // voir le chiffre d'affaires global (mois / année)
@@ -552,6 +646,10 @@ export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
   patients_medical: false,
   prescriptions_view: false,
   vitals_entry: false,
+  // Argent et clinique : refusés tant que le médecin ne les a pas cochés
+  // lui-même. Un devis cumule les deux.
+  quotes_view: false,
+  quotes_payment: false,
   payments: false,
   edit_prices: false,
   caisse_day: false,
@@ -584,6 +682,11 @@ export const STAFF_PERMISSION_GROUPS: {
       { key: 'patients_medical',    label: 'Afficher les antécédents médicaux', hint: 'Allergies, maladies chroniques, traitements', requiert: 'records' },
       { key: 'prescriptions_view',  label: 'Afficher les ordonnances',          hint: 'Consultation des ordonnances émises', requiert: 'prescriptions' },
       { key: 'vitals_entry',        label: 'Saisir les constantes',             hint: 'Poids, tension, température…', requiert: 'records' },
+      // `records` et non `invoicing` : le devis vit dans le dossier de soins
+      // (acte, dent, plan de traitement) et n'existe pas dans le forfait Agenda.
+      // La secrétaire ne peut que LIRE : créer un devis, en modifier une ligne,
+      // un prix ou un statut reste au médecin, sans case pour l'ouvrir.
+      { key: 'quotes_view',         label: 'Afficher les devis',                hint: 'Actes prévus, total, déjà versé, reste dû — sans pouvoir les modifier', requiert: 'records' },
     ],
   },
   {
@@ -591,6 +694,11 @@ export const STAFF_PERMISSION_GROUPS: {
     items: [
       { key: 'payments',      label: 'Saisir les encaissements',    hint: 'Espèces, carte, chèque, virement' },
       { key: 'edit_prices',   label: 'Modifier le prix des actes',  hint: 'Ajuster le montant dû lors de l’encaissement' },
+      // Encaisser suppose de lire le devis pour connaître le reste dû : cette
+      // case n'a d'effet que si « Afficher les devis » est cochée aussi, et le
+      // libellé le dit plutôt que de laisser le médecin découvrir un bouton
+      // absent. Encaisser, oui ; supprimer un versement ou faire un avoir, non.
+      { key: 'quotes_payment', label: 'Encaisser sur un devis',     hint: 'Saisir un versement reçu — nécessite « Afficher les devis ». Aucune suppression ni avoir.', requiert: 'records' },
       { key: 'caisse_day',    label: 'Journal de caisse du jour',   hint: 'Total encaissé aujourd’hui, par mode de règlement' },
       { key: 'view_revenue',  label: 'Chiffre d’affaires global',   hint: 'Totaux du mois et de l’année' },
       { key: 'factures',      label: 'Factures',                    hint: 'Accès à la liste des factures', requiert: 'invoicing' },

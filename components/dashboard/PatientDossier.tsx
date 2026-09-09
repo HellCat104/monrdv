@@ -9,6 +9,7 @@ import GrowthChart from '@/components/dashboard/GrowthChart'
 import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
+import QuotesCard from '@/components/dashboard/QuotesCard'
 import { isDentalDoctor } from '@/lib/dental'
 import { isNonPrescriber } from '@/lib/profession'
 import { Button } from '@/components/ui/button'
@@ -594,6 +595,13 @@ export default function PatientDossier({
               />
             )}
           </div>
+
+          {/* Devis / plan de traitement chiffré.
+              Affiché pour toutes les spécialités : chiffrer un plan et le faire
+              régler en plusieurs fois n'a rien de propre à la dentisterie.
+              Seule la colonne « dent » est réservée aux dentistes, sinon elle
+              n'aurait aucun sens pour un kinésithérapeute. */}
+          <QuotesCard key={`dev-${patient.id}`} patientId={patient.id} dental={isDentalDoctor(specialties)} />
 
           {/* Forfaits de séances prépayées */}
           <div className={sec}>

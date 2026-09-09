@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
   let aptQuery = admin.from('appointments')
-    .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
+    .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
     .eq('doctor_id', ctx.doctor.id)
   aptQuery = isRange
     ? aptQuery.gte('date', from!).lte('date', to!).order('date', { ascending: true }).order('time', { ascending: true })
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
       status: 'confirmed', walk_in: true, queue_status: 'arrive', attendance: 'present',
       cancel_token: generateCancelToken(), specialty: specs0.length === 1 ? specs0[0] : null,
       duration_minutes: doc0?.appointment_duration ?? 30, consent_at: null,
-    }).select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+    }).select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
     if (aErr || !appt0) return NextResponse.json({ error: 'Échec de l\'ajout à la file' }, { status: 500 })
     return NextResponse.json({ appointment: filtreConfidentiel(appt0, ctx.confidential) }, { status: 201 })
   }
@@ -255,7 +255,7 @@ export async function POST(req: NextRequest) {
         consent_at: null,
         recurrence_group_id: groupId,
       })
-      .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+      .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
     if (e || !appt) {
       // 23505 = même heure de départ ; 23P01 = chevauchement (contrainte d'exclusion)
       if (e?.code === '23505' || e?.code === '23P01') { skipped.push(ds); continue }
@@ -300,7 +300,7 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient()
   // Le RDV doit appartenir au cabinet de la secrétaire
   const { data: apt } = await admin.from('appointments')
-    .select('id, doctor_id, amount_due, invoice_no, consultation_type_id, date, time, cancel_token, patient:patients(first_name, last_name, email)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
+    .select('id, doctor_id, amount_due, invoice_no, quote_id, consultation_type_id, date, time, cancel_token, patient:patients(first_name, last_name, email)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
   if (!apt) return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
 
   const patch: Record<string, unknown> = {}
@@ -326,6 +326,19 @@ export async function PATCH(req: NextRequest) {
   // Encaissement
   if ('amount_paid' in body) {
     if (!ctx.permissions.payments) return NextResponse.json({ error: 'Permission manquante (encaissements)' }, { status: 403 })
+    // Une seule source par encaissement (devis, v54) : un RDV rattaché à un
+    // devis est réglé sur le devis. Encaisser ici en plus compterait la même
+    // somme deux fois. Depuis la v55 la secrétaire peut avoir le droit
+    // d'encaisser sur le devis : on l'y envoie plutôt que de la renvoyer au
+    // médecin, mais on ne lui indique cet écran que si elle peut vraiment
+    // l'ouvrir — un conseil qui mène à une porte fermée est pire que rien.
+    if (apt.quote_id) {
+      return NextResponse.json({
+        error: ctx.permissions.quotes_payment && ctx.permissions.quotes_view
+          ? 'Ce rendez-vous est réglé via le devis du patient : ouvrez sa fiche patient et saisissez le versement sur le devis.'
+          : 'Ce rendez-vous est réglé via le devis du patient : le versement se saisit sur le devis, par le médecin.',
+      }, { status: 409 })
+    }
     if (body.amount_paid === null) {
       patch.amount_paid = null; patch.amount_due = null; patch.payment_method = null; patch.paid_at = null
     } else {
@@ -373,7 +386,7 @@ export async function PATCH(req: NextRequest) {
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Aucune modification' }, { status: 400 })
 
   const { data: updated, error } = await admin.from('appointments')
-    .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, notes, duration_minutes, consultation_type_id, cancel_token, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+    .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, cancel_token, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
   if (error) {
     if (error.code === '23505' || error.code === '23P01') {
       return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant.' }, { status: 409 })
