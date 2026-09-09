@@ -365,13 +365,18 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
             <Input
               id="b_age"
               type="number"
-              min={1}
+              min={0}
               max={120}
               value={form.age}
               onChange={(e) => setForm({ ...form, age: e.target.value })}
               placeholder="35"
               required
             />
+            {/* Sans cette phrase, le parent d'un bébé de trois mois cherche une
+                valeur qui n'existe pas et finit par inscrire « 1 an ». */}
+            <p className="text-[11px] text-gray-400">
+              Pour un bébé de moins d&apos;un an, indiquez 0.
+            </p>
           </div>
         )}
 

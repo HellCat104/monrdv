@@ -12,7 +12,7 @@ export async function GET() {
 
   const { data: patients } = await adminDb
     .from('patients')
-    .select('id, first_name, last_name, phone, email, created_at')
+    .select('id, first_name, last_name, phone, email, is_child, created_at')
     .eq('user_id', user.id)
 
   const patientIds = (patients ?? []).map((p: any) => p.id)

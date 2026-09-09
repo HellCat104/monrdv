@@ -196,7 +196,10 @@ export async function POST(req: NextRequest) {
       if (isNaN(bd.getTime()) || ageYears < 0 || ageYears > 18) {
         return NextResponse.json({ error: 'Date de naissance de l\'enfant invalide (0-18 ans)' }, { status: 400 })
       }
-    } else if (!Number.isInteger(age) || age <= 0 || age > 120) {
+    } else if (!Number.isInteger(age) || age < 0 || age > 120) {
+      // 0 est un âge légitime : un nourrisson de trois mois a zéro an. La borne
+      // à 1 obligeait le parent d'un bébé à mentir — « 1 an » versé au dossier
+      // médical d'un pédiatre — ou à renoncer à réserver.
       return NextResponse.json({ error: 'Un âge valide est obligatoire' }, { status: 400 })
     }
   }

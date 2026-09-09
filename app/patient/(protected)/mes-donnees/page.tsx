@@ -18,13 +18,23 @@ export default function MesDonneesPage() {
   const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'deleting'>('idle')
   const [error, setError]         = useState('')
 
+  // La fiche du titulaire, pas la première venue : un parent qui a réservé pour
+  // son enfant possède plusieurs fiches, et `patients[0]` pouvait être celle de
+  // l'enfant. L'écran affichait alors ses coordonnées comme si c'étaient
+  // celles du titulaire du compte.
+  function fichePrincipale(d: { patients?: { phone?: string; email?: string; is_child?: boolean | null }[] } | null) {
+    const fiches = d?.patients ?? []
+    return fiches.find((p) => !p.is_child) ?? fiches[0] ?? null
+  }
+
   useEffect(() => {
     fetch('/api/patient/data')
       .then((r) => r.json())
       .then((d) => {
         setData(d)
-        setEditPhone(d.patients?.[0]?.phone ?? '')
-        setEditEmail(d.patients?.[0]?.email ?? '')
+        const moi = fichePrincipale(d)
+        setEditPhone(moi?.phone ?? '')
+        setEditEmail(moi?.email ?? '')
       })
       .finally(() => setLoading(false))
   }, [])
@@ -84,7 +94,7 @@ export default function MesDonneesPage() {
         </p>
         <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-600 mb-4 space-y-1">
           <p><strong>Email :</strong> {data?.account?.email ?? '—'}</p>
-          <p><strong>Téléphone :</strong> {data?.patients?.[0]?.phone ?? '—'}</p>
+          <p><strong>Téléphone :</strong> {fichePrincipale(data)?.phone ?? '—'}</p>
           <p><strong>Rendez-vous :</strong> {data?.appointments?.length ?? 0} au total</p>
           <p><strong>Compte créé le :</strong> {data?.account?.created_at ? new Date(data.account.created_at).toLocaleDateString('fr-FR') : '—'}</p>
         </div>

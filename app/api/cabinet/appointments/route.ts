@@ -15,7 +15,7 @@ function filtreConfidentiel<T extends { notes?: unknown; consultation_type?: unk
 }
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
-import { sendAppointmentConfirmationToPatient, sendRescheduleEmailToPatient, sendWithTimeout } from '@/lib/email'
+import { sendAppointmentConfirmationToPatient, sendRescheduleEmailToPatient, sendCancellationEmailToPatient, sendCancellationEmailToDoctor, sendWithTimeout } from '@/lib/email'
 import { displayName } from '@/lib/profession'
 import { formatDateShort } from '@/lib/utils'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey, ageFromBirthDate } from '@/lib/utils'
@@ -300,7 +300,7 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient()
   // Le RDV doit appartenir au cabinet de la secrétaire
   const { data: apt } = await admin.from('appointments')
-    .select('id, doctor_id, amount_due, invoice_no, quote_id, consultation_type_id, date, time, cancel_token, patient:patients(first_name, last_name, email)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
+    .select('id, doctor_id, amount_due, invoice_no, quote_id, consultation_type_id, date, time, cancel_token, patient:patients(first_name, last_name, email, phone)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
   if (!apt) return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
 
   const patch: Record<string, unknown> = {}
@@ -411,6 +411,44 @@ export async function PATCH(req: NextRequest) {
       newTime: String(updated.time),
       cancelToken: updated.cancel_token ?? undefined,
     }), 'déplacement patient (cabinet)')
+  }
+
+  // Annulation : prévenir le patient ET le médecin.
+  //
+  // Cette branche n'envoyait rien. Or dans un cabinet marocain, c'est la
+  // secrétaire qui annule : le patient gardait son e-mail de confirmation, ne
+  // recevait aucun rappel (le cron saute les annulés) et se présentait devant
+  // une porte close. Les deux autres chemins d'annulation — route médecin et
+  // lien reçu par e-mail — préviennent tous les deux depuis toujours.
+  if (body.status === 'cancelled' && updated.status === 'cancelled') {
+    const nomPatient = `${pat?.first_name ?? ''} ${pat?.last_name ?? ''}`.trim()
+    const { data: docInfo } = await admin
+      .from('doctors').select('name, email, specialty').eq('id', ctx.doctor.id).single()
+
+    const envois: Promise<unknown>[] = []
+    if (pat?.email) {
+      envois.push(sendWithTimeout(sendCancellationEmailToPatient({
+        patientEmail: pat.email,
+        patientName: nomPatient,
+        doctorName: displayName(docInfo?.name ?? '', docInfo?.specialty),
+        specialty: docInfo?.specialty ?? '',
+        date: String(apt.date),
+        time: String(apt.time),
+      }), 'annulation patient (cabinet)'))
+    }
+    // Le médecin est prévenu lui aussi : c'est son agenda qui change, et il
+    // n'est pas forcément derrière l'épaule de sa secrétaire.
+    if (docInfo?.email) {
+      envois.push(sendWithTimeout(sendCancellationEmailToDoctor({
+        doctorEmail: docInfo.email,
+        doctorName: docInfo.name ?? '',
+        patientName: nomPatient,
+        patientPhone: (pat as { phone?: string } | null)?.phone ?? '',
+        date: String(apt.date),
+        time: String(apt.time),
+      }), 'annulation médecin (cabinet)'))
+    }
+    await Promise.allSettled(envois)
   }
 
   // Le jeton d'annulation sert à composer l'e-mail ci-dessus ; il n'a rien à
