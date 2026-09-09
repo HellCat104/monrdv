@@ -1,10 +1,11 @@
 // Page de confirmation d'annulation (lecture seule — aucune mutation ici)
 // L'annulation réelle se fait via un POST déclenché par un clic explicite.
 import { createAdminClient } from '@/lib/supabase/server'
-import { formatDateShort, formatTime } from '@/lib/utils'
-import { XCircle } from 'lucide-react'
+import { formatDateShort, formatTime, getNowInMaroc } from '@/lib/utils'
+import { XCircle, CalendarClock } from 'lucide-react'
 import { CancelConfirm } from './CancelConfirm'
 import { displayName } from '@/lib/profession'
+import { format } from 'date-fns'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +14,7 @@ export default async function AnnulerPage({ params }: { params: { token: string 
 
   const { data: appointment } = await supabase
     .from('appointments')
-    .select('date, time, status, doctor:doctors(name, specialty)')
+    .select('date, time, status, doctor:doctors(name, specialty, slug)')
     .eq('cancel_token', params.token)
     .single()
 
@@ -35,6 +36,40 @@ export default async function AnnulerPage({ params }: { params: { token: string 
           >
             Retour à l&apos;accueil
           </a>
+        </div>
+      </div>
+    )
+  }
+
+  // Rendez-vous passé : la page proposait quand même la question et le bouton
+  // rouge, alors que l'API ne pouvait que refuser. Même comparaison date+heure
+  // et même fuseau que la route, pour que les deux ne divergent jamais.
+  const quand = `${appointment.date} ${String(appointment.time).substring(0, 5)}`
+  if (quand < format(getNowInMaroc(), 'yyyy-MM-dd HH:mm')) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-blue-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-sm border">
+          <CalendarClock className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+          <h1 className="text-xl font-bold text-gray-900">Ce rendez-vous est passé</h1>
+          <p className="text-gray-500 text-sm mt-2 mb-5">
+            Il ne peut plus être annulé en ligne. Vous pouvez en reprendre un
+            quand vous le souhaitez.
+          </p>
+          {doctor?.slug ? (
+            <a
+              href={`/dr-${doctor.slug}`}
+              className="inline-block bg-primary-500 hover:bg-primary-600 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors"
+            >
+              Reprendre rendez-vous
+            </a>
+          ) : (
+            <a
+              href="/"
+              className="inline-block border border-gray-200 hover:border-gray-300 text-gray-700 font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors"
+            >
+              Retour à l&apos;accueil
+            </a>
+          )}
         </div>
       </div>
     )

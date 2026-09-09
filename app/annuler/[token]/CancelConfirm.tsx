@@ -18,7 +18,17 @@ export function CancelConfirm({ token }: { token: string }) {
         if (data.time) params.set('time', data.time)
         window.location.href = `/cancel-result?${params.toString()}`
       } else {
-        setError("Ce rendez-vous a déjà été annulé ou le lien n'est plus valide.")
+        // L'API distingue trois refus — rendez-vous passé, acte déjà réglé,
+        // lien invalide — et le client les écrasait tous par le même message.
+        // Un patient à qui l'on répond « lien invalide » alors que son
+        // rendez-vous est simplement passé appelle le cabinet en croyant le
+        // site cassé, et celui qui a réglé ne reçoit jamais la seule
+        // instruction utile : contacter le cabinet.
+        const data = await res.json().catch(() => null)
+        setError(
+          (data && typeof data.error === 'string' && data.error) ||
+          "Ce rendez-vous a déjà été annulé ou le lien n'est plus valide."
+        )
         setLoading(false)
       }
     } catch {
