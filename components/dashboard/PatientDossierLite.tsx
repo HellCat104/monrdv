@@ -34,6 +34,11 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
   const [editLastName, setEditLastName] = useState(patient.last_name ?? '')
   const [editPhone, setEditPhone] = useState(patient.phone ?? '')
   const [editNotes, setEditNotes] = useState(patient.notes ?? '')
+  // L'e-mail manquait à cet écran. Ce n'est pas une donnée de santé — c'est une
+  // coordonnée, au même titre que le téléphone — et sans lui le rappel de suivi
+  // ci-dessous ne part jamais : la tâche planifiée marque la ligne « traitée »
+  // et passe au suivant, sans rien dire à personne.
+  const [editEmail, setEditEmail] = useState(patient.email ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [appointments, setAppointments] = useState<LiteAppointment[]>([])
@@ -83,6 +88,7 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
         first_name: editFirstName.trim(),
         last_name: editLastName.trim(),
         phone: editPhone.trim(),
+        email: editEmail.trim() || null,
         notes: editNotes.trim() || null,
       })
       .eq('id', patient.id)
@@ -162,6 +168,13 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
             <Label htmlFor="lite-phone">Téléphone *</Label>
             <Input id="lite-phone" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
           </div>
+
+          <div>
+            <Label htmlFor="lite-email">E-mail</Label>
+            <Input id="lite-email" type="email" value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              placeholder="Pour les confirmations et les rappels" />
+          </div>
           <div className="sm:col-span-2">
             <Label htmlFor="lite-notes">Notes</Label>
             <textarea
@@ -238,6 +251,13 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
               </li>
             ))}
           </ul>
+        )}
+
+        {!editEmail.trim() && (
+          <p className="mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Ce patient n&apos;a pas d&apos;e-mail : le rappel serait enregistré mais
+            <strong> aucun message ne partirait</strong>. Renseignez son adresse ci-dessus.
+          </p>
         )}
 
         <div className="flex flex-col sm:flex-row gap-2">
