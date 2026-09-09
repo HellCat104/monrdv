@@ -10,9 +10,9 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { getInitials, formatDateFr } from '@/lib/utils'
-import { STATUS_LABELS, type Patient, type AppointmentStatus } from '@/types'
-import { ArrowLeft, Phone, Save, Check, Calendar, Wallet } from 'lucide-react'
+import { getInitials, formatDateFr, formatDateShort, getNowInMaroc } from '@/lib/utils'
+import { STATUS_LABELS, type Patient, type AppointmentStatus, type Recall } from '@/types'
+import { ArrowLeft, Phone, Save, Check, Calendar, Wallet, BellRing, Plus, X } from 'lucide-react'
 
 interface LiteAppointment {
   id: string
@@ -38,6 +38,18 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
   const [saved, setSaved] = useState(false)
   const [appointments, setAppointments] = useState<LiteAppointment[]>([])
 
+  // Rappel de suivi : « revenez dans 6 mois ». Il manquait à cet écran alors
+  // que tout le mécanisme existe (table recalls, e-mail, tâche planifiée
+  // quotidienne) — un cabinet en forfait Agenda ne pouvait en programmer aucun.
+  // Ce n'est pas une donnée de santé : une date et un motif libre, au même
+  // titre que le champ Notes que ce forfait possède déjà.
+  const [recalls, setRecalls] = useState<Recall[]>([])
+  const [recallDate, setRecallDate] = useState('')
+  const [recallReason, setRecallReason] = useState('')
+  const [addingRecall, setAddingRecall] = useState(false)
+  const maintenant = getNowInMaroc()
+  const todayStr = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, '0')}-${String(maintenant.getDate()).padStart(2, '0')}`
+
   useEffect(() => {
     supabase
       .from('appointments')
@@ -47,6 +59,12 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
       .order('time', { ascending: false })
       .limit(50)
       .then(({ data }) => setAppointments((data ?? []) as LiteAppointment[]))
+    supabase
+      .from('recalls')
+      .select('*')
+      .eq('patient_id', patient.id)
+      .order('due_date', { ascending: true })
+      .then(({ data }) => setRecalls((data ?? []) as Recall[]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient.id])
 
@@ -74,6 +92,34 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
       setTimeout(() => setSaved(false), 2000)
       router.refresh()
     }
+  }
+
+  async function addRecall() {
+    if (!recallDate) return
+    setAddingRecall(true)
+    const { data, error } = await supabase
+      .from('recalls')
+      .insert({
+        doctor_id: patient.doctor_id,
+        patient_id: patient.id,
+        due_date: recallDate,
+        reason: recallReason.trim() || null,
+      })
+      .select()
+      .single()
+    setAddingRecall(false)
+    // Un échec silencieux laisserait croire le rappel programmé : on n'ajoute
+    // la ligne à l'écran que si la base l'a réellement acceptée.
+    if (error || !data) return
+    setRecalls((prev) => [...prev, data as Recall].sort((a, b) => a.due_date.localeCompare(b.due_date)))
+    setRecallDate('')
+    setRecallReason('')
+  }
+
+  async function cancelRecall(id: string) {
+    const { error } = await supabase.from('recalls').delete().eq('id', id)
+    if (error) return
+    setRecalls((prev) => prev.filter((r) => r.id !== id))
   }
 
   return (
@@ -165,6 +211,46 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
           </div>
         </div>
       )}
+
+      {/* Rappel de suivi — avant l'historique : il regarde vers l'avant,
+          les rendez-vous passés regardent en arrière. */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-1">
+          <BellRing className="h-4 w-4 text-primary-600" /> Rappel de suivi
+        </h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Un e-mail « il est temps de reprendre rendez-vous » part automatiquement à la date choisie.
+        </p>
+
+        {recalls.filter((r) => r.status !== 'cancelled').length > 0 && (
+          <ul className="mb-4 space-y-1.5">
+            {recalls.filter((r) => r.status !== 'cancelled').map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                <span className="text-sm text-gray-700">
+                  {formatDateShort(r.due_date)}{r.reason ? ` — ${r.reason}` : ''}
+                  {r.status === 'sent' && <span className="text-xs text-green-600 ml-2">envoyé</span>}
+                </span>
+                {r.status === 'pending' && (
+                  <button onClick={() => cancelRecall(r.id)} className="text-gray-300 hover:text-red-500 shrink-0" title="Annuler ce rappel">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Input type="date" value={recallDate} min={todayStr}
+            onChange={(e) => setRecallDate(e.target.value)} className="sm:w-44" />
+          <Input value={recallReason} onChange={(e) => setRecallReason(e.target.value)}
+            placeholder="Motif (facultatif) — ex. contrôle annuel" className="flex-1" />
+          <Button type="button" variant="outline" onClick={addRecall}
+            disabled={!recallDate || addingRecall} className="shrink-0">
+            <Plus className="h-4 w-4 mr-1.5" /> Programmer
+          </Button>
+        </div>
+      </div>
 
       {/* Historique des rendez-vous (sans contenu médical) */}
       <div className="bg-white rounded-2xl border border-gray-200 p-6">
