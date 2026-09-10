@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
 import { summarizeTeeth, normalizeTeeth, stateColors, statesLabel, DENTAL_STATES, FDI_UPPER, FDI_LOWER, type DentalTeeth } from '@/lib/dental'
+import { loadCabinetLogoForPdf } from '@/lib/cabinet-logo-server'
 
 const PAY: Record<string, string> = { especes: 'Espèces', carte: 'Carte', cheque: 'Chèque', virement: 'Virement' }
 const ATT: Record<string, string> = { present: 'Présent', absent: 'Absent', late: 'En retard' }
@@ -100,8 +101,12 @@ const M = 40 // marge
 const PAGE_RIGHT = 555 // 595 (A4) - 40
 const CONTENT_W = PAGE_RIGHT - M // 515
 const BOTTOM = 792 // hauteur A4 en points
+// Boîte du logo du cabinet dans l'en-tête (points ; 1 pt ≈ 0,35 mm) : environ
+// 32 × 16 mm. La hauteur est celle que l'en-tête réserve de toute façon.
+const LOGO_BOX_W = 90
+const LOGO_BOX_H = 46
 
-function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer> {
+function renderDossierPDF(doctor: DossierDoctor, d: DossierData, logo: Buffer | null): Promise<Buffer> {
   const { patient, appointments, notes, prescriptions, certificates, vitals, documents, aptLabel, totalPaid, vitalDefs, dentalSummary, dentalTeeth } = d
   const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
@@ -163,18 +168,51 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer
 
     // ── En-tête ──────────────────────────────────────────────────────────
     const top = doc.y
-    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(17).text(`Dr. ${doctor.name}`, M, top, { width: 340 })
+    const edite = `Édité le ${formatDateFr(new Date())}`
+    // Colonnes de l'en-tête. Sans logo : les positions d'origine, à l'identique.
+    let idX = M, idW = 340, titreX = 360
+    if (logo) {
+      // Logo du cabinet (v57), dans une boîte de LOGO_BOX_H de haut : la
+      // hauteur minimale que l'en-tête réservait déjà (top + 46 ci-dessous).
+      // Le filet bleu ne descend donc pas et le contenu n'est pas repoussé.
+      // `fit` garde les proportions ; un logo large s'étale en largeur, un
+      // logo carré reste dans la hauteur.
+      //
+      // Pour ne pas trop rétrécir la colonne d'identité (et faire passer le
+      // nom du médecin sur deux lignes), la colonne du titre se resserre à la
+      // largeur réelle de son texte au lieu de ses 195 points habituels.
+      try {
+        doc.image(logo, M, top, { fit: [LOGO_BOX_W, LOGO_BOX_H], valign: 'center' })
+        doc.font('Helvetica-Bold').fontSize(12)
+        const wTitre = doc.widthOfString('DOSSIER PATIENT')
+        doc.font('Helvetica').fontSize(9)
+        const wDate = doc.widthOfString(edite)
+        titreX = PAGE_RIGHT - Math.ceil(Math.max(wTitre, wDate)) - 2
+        idX = M + LOGO_BOX_W + 12
+        idW = titreX - 12 - idX
+      } catch (e) {
+        // Le fichier a été examiné avant d'arriver ici (loadCabinetLogoForPdf) ;
+        // si pdfkit le refuse malgré tout, le dossier sort sans logo plutôt
+        // que pas du tout.
+        console.error('[Logo cabinet] intégration au PDF impossible :', e)
+      }
+    }
+    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(17).text(`Dr. ${doctor.name}`, idX, top, { width: idW })
     doc.fillColor(C.muted).font('Helvetica').fontSize(10).text(
-      [doctor.specialty, doctor.city, doctor.phone].filter(Boolean).join(' · '), M, doc.y + 1, { width: 340 })
+      [doctor.specialty, doctor.city, doctor.phone].filter(Boolean).join(' · '), idX, doc.y + 1, { width: idW })
     if (doctor.inpe || doctor.ice) {
       doc.fillColor(C.faint).fontSize(8.5).text(
         [doctor.inpe ? `INPE : ${doctor.inpe}` : '', doctor.ice ? `ICE : ${doctor.ice}` : ''].filter(Boolean).join(' · '),
-        M, doc.y + 1, { width: 340 })
+        idX, doc.y + 1, { width: idW })
     }
+    // Bas du bloc d'identité, mémorisé AVANT de dessiner le titre à droite, qui
+    // repart de `top`. Sans cela, un nom sur deux lignes passait sous le filet :
+    // seule la hauteur de la colonne de droite était prise en compte.
+    const idBas = doc.y
     // titre à droite
-    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(12).text('DOSSIER PATIENT', 360, top, { width: PAGE_RIGHT - 360, align: 'right' })
-    doc.fillColor(C.muted).font('Helvetica').fontSize(9).text(`Édité le ${formatDateFr(new Date())}`, 360, doc.y + 1, { width: PAGE_RIGHT - 360, align: 'right' })
-    const barY = Math.max(doc.y, top + 46) + 6
+    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(12).text('DOSSIER PATIENT', titreX, top, { width: PAGE_RIGHT - titreX, align: 'right' })
+    doc.fillColor(C.muted).font('Helvetica').fontSize(9).text(edite, titreX, doc.y + 1, { width: PAGE_RIGHT - titreX, align: 'right' })
+    const barY = Math.max(doc.y, idBas, top + LOGO_BOX_H) + 6
     doc.moveTo(M, barY).lineTo(PAGE_RIGHT, barY).lineWidth(2).strokeColor(C.bar).stroke()
     doc.y = barY + 6
     doc.x = M
@@ -368,11 +406,17 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData): Promise<Buffer
 }
 
 // Dossier complet en PDF (+ fichiers d'origine renvoyés à part par l'appelant).
+//
+// `logo` : octets du logo du cabinet déjà chargés (export groupé : une seule
+// lecture pour 40 dossiers), `null` pour un dossier sans logo. Omis, il est
+// chargé ici — un appelant qui l'oublie obtient donc quand même le logo, au
+// lieu d'un dossier qui en serait privé sans que personne ne le remarque.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function buildPatientDossierPDF(supabase: any, doctor: DossierDoctor & { id: string }, patientId: string): Promise<DossierResult> {
+export async function buildPatientDossierPDF(supabase: any, doctor: DossierDoctor & { id: string }, patientId: string, logo?: Buffer | null): Promise<DossierResult> {
   const d = await fetchDossierData(supabase, doctor, patientId)
   if (!d) return { ok: false }
-  const pdf = await renderDossierPDF(doctor, d)
+  const logoCabinet = logo === undefined ? await loadCabinetLogoForPdf(supabase, doctor.id) : logo
+  const pdf = await renderDossierPDF(doctor, d, logoCabinet)
   return {
     ok: true,
     patientName: `${d.patient.first_name} ${d.patient.last_name}`,

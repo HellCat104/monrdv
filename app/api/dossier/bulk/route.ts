@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import JSZip from 'jszip'
 import { buildPatientDossierPDF } from '@/lib/dossier'
+import { loadCabinetLogoForPdf } from '@/lib/cabinet-logo-server'
 import { canAccess } from '@/lib/plan'
 import { logAccesDossier } from '@/lib/audit'
 
@@ -48,8 +49,12 @@ export async function POST(req: NextRequest) {
   const usedNames = new Set<string>()
   let count = 0
 
+  // Logo du cabinet (v57) chargé et examiné UNE fois pour toute la sélection,
+  // plutôt qu'une fois par patient : jusqu'à 40 téléchargements évités.
+  const logo = await loadCabinetLogoForPdf(supabase, doctor.id)
+
   for (const id of ids) {
-    const r = await buildPatientDossierPDF(supabase, doctor, id)
+    const r = await buildPatientDossierPDF(supabase, doctor, id, logo)
     if (!r.ok || !r.pdf) continue // ignore silencieusement un id qui n'appartient pas au médecin
     // évite les collisions de noms de dossier (homonymes)
     let folderName = r.slug || 'patient'

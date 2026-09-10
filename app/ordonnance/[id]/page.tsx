@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { OrdonnanceEditor } from './OrdonnanceEditor'
 import { canAccess } from '@/lib/plan'
+import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 
 interface Props {
   params: { id: string }
@@ -58,7 +59,12 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
         .maybeSingle()
 
   const favorites = ((doctor.prescription_favorites as string[] | null) ?? []).filter((f) => typeof f === 'string')
-  const recentLines = await getRecentPrescriptionLines(supabase, doctor.id, favorites)
+  // Logo lu à part de la fiche (voir lib/cabinet-logo-server.ts) : si la
+  // migration v57 manque, l'ordonnance s'affiche sans logo au lieu de tomber.
+  const [recentLines, logoUrl] = await Promise.all([
+    getRecentPrescriptionLines(supabase, doctor.id, favorites),
+    getCabinetLogoUrl(supabase, doctor.id),
+  ])
 
   return (
     <OrdonnanceEditor
@@ -71,6 +77,7 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
       favorites={favorites}
       recentLines={recentLines}
       backHref={safeBack(searchParams.back)}
+      logoUrl={logoUrl}
     />
   )
 }

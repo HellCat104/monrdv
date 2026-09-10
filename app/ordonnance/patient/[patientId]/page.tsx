@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
 import { getRecentPrescriptionLines } from '@/lib/ordonnance'
+import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
 import { format } from 'date-fns'
 
@@ -45,7 +46,11 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
   if (!patient) notFound()
 
   const favorites = ((doctor.prescription_favorites as string[] | null) ?? []).filter((f) => typeof f === 'string')
-  const recentLines = await getRecentPrescriptionLines(supabase, doctor.id, favorites)
+  // Logo lu à part de la fiche : sans la migration v57, pas de logo, pas de 404.
+  const [recentLines, logoUrl] = await Promise.all([
+    getRecentPrescriptionLines(supabase, doctor.id, favorites),
+    getCabinetLogoUrl(supabase, doctor.id),
+  ])
 
   return (
     <OrdonnanceEditor
@@ -58,6 +63,7 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
       favorites={favorites}
       recentLines={recentLines}
       backHref={safeBack(searchParams.back)}
+      logoUrl={logoUrl}
     />
   )
 }

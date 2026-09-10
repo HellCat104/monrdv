@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { formatDateFr } from '@/lib/utils'
 import { Printer, Save, Check, AlertTriangle, Star, Plus, X, History } from 'lucide-react'
+import { LogoEnTete } from '@/components/shared/LogoEnTete'
 
 interface DoctorInfo {
   id: string
@@ -36,12 +37,21 @@ interface Props {
   favorites: string[]            // lignes favorites du médecin
   recentLines: string[]          // lignes récemment prescrites (suggestions)
   backHref?: string
+  /** Logo du cabinet (v57), adresse publique — null ou absent : en-tête
+   *  d'origine, inchangé. Lu par getCabinetLogoUrl dans chacune des trois
+   *  pages qui montent cet éditeur. */
+  logoUrl?: string | null
 }
 
 export function OrdonnanceEditor({
   doctor, patient, appointmentId, appointmentDate, existingId, existingContent,
-  favorites: initialFavorites, recentLines, backHref = '/appointments',
+  favorites: initialFavorites, recentLines, backHref = '/appointments', logoUrl = null,
 }: Props) {
+  // Image introuvable (fichier retiré entre-temps, réseau coupé) : on revient
+  // à l'en-tête sans logo plutôt que d'imprimer l'icône d'image cassée en tête
+  // d'un document médical.
+  const [logoEchec, setLogoEchec] = useState(false)
+  const avecLogo = !!logoUrl && !logoEchec
   const [content, setContent] = useState(existingContent)
   const [prescriptionId, setPrescriptionId] = useState<string | null>(existingId)
   const [favorites, setFavorites] = useState<string[]>(initialFavorites)
@@ -92,6 +102,24 @@ export function OrdonnanceEditor({
     setNewFav('')
   }
 
+  // Bloc d'identité du médecin, rendu tel quel dans l'en-tête — enveloppé
+  // dans une colonne centrée seulement quand un logo l'accompagne.
+  const identite = (
+    <>
+      <h1 className="text-lg font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
+      {doctor.specialty && <p className="text-[13px] text-gray-600 mt-0.5">{doctor.specialty}</p>}
+      <p className="text-xs text-gray-500 mt-2">
+        {[doctor.address, doctor.city].filter(Boolean).join(', ')}
+        {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
+      </p>
+      {(doctor.cnom_number || doctor.ice || doctor.inpe) && (
+        <p className="text-xs text-gray-400 mt-0.5">
+          {[doctor.cnom_number && `Ordre : ${doctor.cnom_number}`, doctor.inpe && `INPE : ${doctor.inpe}`, doctor.ice && `ICE : ${doctor.ice}`].filter(Boolean).join(' · ')}
+        </p>
+      )}
+    </>
+  )
+
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
       {/* Barre d'actions — masquée à l'impression */}
@@ -117,19 +145,29 @@ export function OrdonnanceEditor({
       <div className="max-w-5xl mx-auto flex gap-4 items-start print:block">
         {/* Feuille A4 */}
         <div className="flex-1 bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none print:px-0 print:py-0">
-          {/* En-tête médecin — centré */}
-          <header className="text-center border-b-2 border-gray-800 pb-4 mb-8">
-            <h1 className="text-lg font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
-            {doctor.specialty && <p className="text-[13px] text-gray-600 mt-0.5">{doctor.specialty}</p>}
-            <p className="text-xs text-gray-500 mt-2">
-              {[doctor.address, doctor.city].filter(Boolean).join(', ')}
-              {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
-            </p>
-            {(doctor.cnom_number || doctor.ice || doctor.inpe) && (
-              <p className="text-xs text-gray-400 mt-0.5">
-                {[doctor.cnom_number && `Ordre : ${doctor.cnom_number}`, doctor.inpe && `INPE : ${doctor.inpe}`, doctor.ice && `ICE : ${doctor.ice}`].filter(Boolean).join(' · ')}
-              </p>
+          {/* En-tête médecin — centré.
+              Avec logo : trois colonnes — logo | identité | vide de même
+              largeur. La colonne vide garde l'identité au centre de la page,
+              là où elle est sans logo. Le logo est plafonné en hauteur (14 ≈
+              15 mm imprimés) sous la hauteur habituelle du bloc d'identité :
+              il ne rehausse pas l'en-tête et ne repousse pas l'ordonnance.
+              object-contain garde ses proportions, quel que soit son format.
+              Sans logo : le balisage d'origine, à l'identique. */}
+          <header className={avecLogo
+            ? 'flex items-center gap-4 border-b-2 border-gray-800 pb-4 mb-8'
+            : 'text-center border-b-2 border-gray-800 pb-4 mb-8'}>
+            {avecLogo && (
+              <div className="w-28 shrink-0 flex items-center">
+                <LogoEnTete
+                  src={logoUrl!}
+                  alt={`Logo du cabinet du Dr ${doctor.name}`}
+                  className="max-h-14 max-w-full w-auto h-auto object-contain"
+                  onEchec={() => setLogoEchec(true)}
+                />
+              </div>
             )}
+            {avecLogo ? <div className="flex-1 min-w-0 text-center">{identite}</div> : identite}
+            {avecLogo && <div className="w-28 shrink-0" aria-hidden />}
           </header>
 
           {/* Titre du document — centré avec filet */}
