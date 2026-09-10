@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { TimeSlots } from '@/components/booking/TimeSlots'
-import { BookingForm } from '@/components/booking/BookingForm'
+import { BookingForm, MessageListeAttente, type ResultatReservation } from '@/components/booking/BookingForm'
 import { Stethoscope, MapPin, Clock, ClipboardList, Phone, Mail } from 'lucide-react'
 
 // Convertit un numéro marocain en format international pour wa.me (ex. 0612… → 212612…)
@@ -41,13 +41,19 @@ interface Props {
   consultationTypes?: ConsultationType[]
   /** Page « spécialité à ville » dont ce praticien relève, si elle existe. */
   categorie?: { href: string; label: string }
+  /** Liste d'attente proposée par ce médecin (v56). Lu à part dans page.tsx. */
+  waitlistEnabled?: boolean
 }
 
 // Étapes de réservation
 type Step = 'datetime' | 'form' | 'success'
 
-export function BookingPageClient({ doctor, consultationTypes = [], categorie }: Props) {
+export function BookingPageClient({ doctor, consultationTypes = [], categorie, waitlistEnabled = false }: Props) {
   const [step, setStep] = useState<Step>('datetime')
+  // Résultat de l'inscription en liste d'attente, relayé par le formulaire :
+  // l'écran de succès ci-dessous REMPLACE celui du formulaire, il doit donc
+  // pouvoir le dire lui aussi.
+  const [resultatListe, setResultatListe] = useState<ResultatReservation['waitlist'] | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [slots, setSlots] = useState<TimeSlot[]>([])
@@ -384,8 +390,9 @@ export function BookingPageClient({ doctor, consultationTypes = [], categorie }:
               selectedTime={selectedTime}
               consultationType={selectedType}
               specialty={selectedSpecialty}
+              waitlistEnabled={waitlistEnabled}
               onBack={() => setStep('datetime')}
-              onSuccess={() => setStep('success')}
+              onSuccess={(r) => { setResultatListe(r.waitlist ?? null); setStep('success') }}
               onSlotTaken={handleSlotTaken}
             />
           )}
@@ -398,9 +405,12 @@ export function BookingPageClient({ doctor, consultationTypes = [], categorie }:
                 Votre RDV avec <strong>Dr. {doctor.name}</strong> a bien été enregistré.
                 Un email de confirmation vous a été envoyé.
               </p>
+              <div className="max-w-md mx-auto text-left">
+                <MessageListeAttente resultat={resultatListe} />
+              </div>
               <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
                 <button
-                  onClick={() => { setStep('datetime'); setSelectedDate(undefined); setSelectedTime(null) }}
+                  onClick={() => { setStep('datetime'); setSelectedDate(undefined); setSelectedTime(null); setResultatListe(null) }}
                   className="border border-gray-200 hover:border-gray-300 text-gray-700 font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors"
                 >
                   Prendre un autre rendez-vous

@@ -5,6 +5,8 @@ import { Calendar, Clock, Search, CheckCircle2, XCircle, AlertCircle } from 'luc
 import { formatDateShort, formatTime, getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
 import { CancelButton } from './CancelButton'
+import { WaitlistToggle } from './WaitlistToggle'
+import { rdvInscrits } from '@/lib/waitlist'
 import { displayName } from '@/lib/profession'
 
 interface AppointmentRow {
@@ -46,6 +48,11 @@ export default async function PatientDashboardPage() {
 
   let upcoming: AppointmentRow[] = []
   let past: AppointmentRow[] = []
+  // Liste d'attente (v56) : médecins qui la proposent, et rendez-vous déjà
+  // inscrits. `null` = illisible (migration pas encore passée) → aucun
+  // interrupteur affiché, plutôt qu'un état faux.
+  let medecinsListe: Set<string> | null = null
+  let inscrits: Set<string> | null = null
 
   if (patientIds.length > 0) {
     // Date + heure actuelles au Maroc (format comparable : yyyy-MM-ddTHH:mm:ss)
@@ -63,6 +70,23 @@ export default async function PatientDashboardPage() {
     const dt = (a: AppointmentRow) => `${a.date}T${a.time}`
     upcoming = apts.filter((a) => dt(a) >= nowStr && a.status !== 'cancelled').reverse()
     past     = apts.filter((a) => dt(a) <  nowStr || a.status === 'cancelled')
+
+    // Lu à part, et non dans la jointure `doctor:doctors(...)` ci-dessus : une
+    // colonne absente ferait échouer toute la requête — et le patient verrait
+    // « aucun rendez-vous ».
+    const doctorIds = Array.from(new Set(upcoming.map((a) => a.doctor?.id).filter(Boolean))) as string[]
+    if (doctorIds.length > 0) {
+      const { data: reglages, error: errReglages } = await adminDb
+        .from('doctors').select('id, waitlist_enabled').in('id', doctorIds)
+      if (errReglages) {
+        console.error('[Liste d\'attente] réglages illisibles :', errReglages.message)
+      } else {
+        medecinsListe = new Set((reglages ?? [])
+          .filter((d: { waitlist_enabled?: boolean }) => d.waitlist_enabled === true)
+          .map((d: { id: string }) => d.id))
+        inscrits = await rdvInscrits(upcoming.map((a) => a.id))
+      }
+    }
   }
 
   return (
@@ -108,7 +132,12 @@ export default async function PatientDashboardPage() {
           <div className="space-y-3">
             {upcoming.map((apt) => {
               const f = apt.patient_id ? fichesById.get(apt.patient_id) : undefined
-              return <AppointmentCard key={apt.id} apt={apt} childName={f?.is_child ? f.first_name : null} />
+              // Interrupteur seulement si le médecin propose la liste d'attente
+              // ET que l'état des inscriptions a pu être lu.
+              const listeAttente = inscrits && medecinsListe && apt.doctor?.id && medecinsListe.has(apt.doctor.id)
+                ? { inscrit: inscrits.has(apt.id) }
+                : null
+              return <AppointmentCard key={apt.id} apt={apt} childName={f?.is_child ? f.first_name : null} listeAttente={listeAttente} />
             })}
           </div>
         </section>
@@ -133,7 +162,11 @@ export default async function PatientDashboardPage() {
   )
 }
 
-function AppointmentCard({ apt, isPast = false, childName = null }: { apt: AppointmentRow; isPast?: boolean; childName?: string | null }) {
+function AppointmentCard({ apt, isPast = false, childName = null, listeAttente = null }: {
+  apt: AppointmentRow; isPast?: boolean; childName?: string | null
+  /** null = pas d'interrupteur (médecin sans liste d'attente, ou état illisible). */
+  listeAttente?: { inscrit: boolean } | null
+}) {
   const status = STATUS_UI[apt.status]
   const StatusIcon = status.Icon
 
@@ -189,6 +222,9 @@ function AppointmentCard({ apt, isPast = false, childName = null }: { apt: Appoi
                 <CancelButton appointmentId={apt.id} />
               )}
             </div>
+          )}
+          {!isPast && apt.status !== 'cancelled' && listeAttente && (
+            <WaitlistToggle appointmentId={apt.id} inscritInitial={listeAttente.inscrit} />
           )}
         </div>
       </div>

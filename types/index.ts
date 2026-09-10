@@ -37,6 +37,8 @@ export interface Doctor {
   booking_lead_hours?: number
   // Tarifs des motifs visibles des patients sur la page de réservation
   show_prices?: boolean
+  // Liste d'attente (v56) : prévenir par e-mail quand un créneau se libère plus tôt
+  waitlist_enabled?: boolean
   created_at: string
 }
 

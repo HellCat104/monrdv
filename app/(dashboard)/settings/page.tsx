@@ -17,6 +17,7 @@ import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/type
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals, type VitalDef } from '@/types'
 import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import type { BlockedDate } from '@/types'
+import { LogoCabinet } from '@/components/dashboard/LogoCabinet'
 
 // Intertitre de section.
 //
@@ -64,10 +65,17 @@ export default function SettingsPage() {
     appointment_duration: 30,
     booking_lead_hours: 3,
     show_prices: true,
+    // Liste d'attente (v56) : activée par défaut, comme en base.
+    waitlist_enabled: true,
     working_hours: DEFAULT_WORKING_HOURS as WorkingHours,
     has_secretary: false,
     confidential_mode: false,
   })
+  // La colonne `waitlist_enabled` existe-t-elle ? Tant que la migration v56
+  // n'est pas passée, `select('*')` ne la renvoie pas : on cache alors
+  // l'interrupteur ET on ne l'envoie pas à l'enregistrement — une colonne
+  // inconnue dans l'UPDATE ferait échouer TOUTE la sauvegarde des Paramètres.
+  const [listeAttenteDispo, setListeAttenteDispo] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -138,6 +146,7 @@ export default function SettingsPage() {
           appointment_duration: data.appointment_duration,
           booking_lead_hours: data.booking_lead_hours ?? 3,
           show_prices: data.show_prices ?? true,
+          waitlist_enabled: data.waitlist_enabled ?? true,
           working_hours: data.working_hours ?? DEFAULT_WORKING_HOURS,
           has_secretary: !!data.has_secretary,
           confidential_mode: !!data.confidential_mode,
@@ -146,6 +155,7 @@ export default function SettingsPage() {
         const customCharges = ((data.custom_vitals as VitalDef[] | null) ?? [])
         const extraCharges = ((data.specialties as string[] | null) ?? [data.specialty]).filter((s) => s && s !== data.specialty)
         setForm(formCharge)
+        setListeAttenteDispo(Object.prototype.hasOwnProperty.call(data, 'waitlist_enabled'))
         setEnabledVitals(vitalsCharges)
         setCustomVitals(customCharges)
         setExtraSpecs(extraCharges)
@@ -269,6 +279,7 @@ export default function SettingsPage() {
           appointment_duration: form.appointment_duration,
           booking_lead_hours: form.booking_lead_hours,
           show_prices: form.show_prices,
+          ...(listeAttenteDispo ? { waitlist_enabled: form.waitlist_enabled } : {}),
           working_hours: form.working_hours,
           has_secretary: form.has_secretary,
           confidential_mode: form.confidential_mode,
@@ -832,6 +843,13 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Logo imprimé sur les ordonnances. Composant autonome : il charge et
+            enregistre lui-même, gère le forfait (réservé au Cabinet complet)
+            et l'absence de migration. Il n'a donc besoin d'aucune prop, et ne
+            dépend en rien du bouton « Enregistrer » de cette page — un logo
+            s'enregistre dès qu'il est envoyé. */}
+        <LogoCabinet />
+
         <Groupe id="rdv" numero={2} titre="Vos rendez-vous" sous="Quand et comment vous recevez" />
         <Card>
           <CardHeader className="pb-3">
@@ -1098,6 +1116,42 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Liste d'attente (v56). Enregistrée avec le reste de la page, par le
+            bouton « Enregistrer » : même comportement que les autres réglages,
+            et le médecin est averti s'il quitte la page sans sauvegarder. */}
+        {listeAttenteDispo && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-primary-500" />
+                Liste d&apos;attente
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800">Remplir automatiquement les créneaux libérés</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {form.waitlist_enabled
+                      ? 'Quand un rendez-vous est annulé, les patients qui ont demandé à venir plus tôt sont prévenus par e-mail. Le premier qui accepte prend la place ; personne n\u2019est déplacé sans son accord.'
+                      : 'Désactivée : un créneau libéré reste libre, aucun patient n\u2019est prévenu.'}
+                  </p>
+                  {form.waitlist_enabled && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Le délai de réservation de dernière minute ne s&apos;applique pas ici : une place annulée ce soir pour demain matin est proposée tout de suite.
+                      Si vous annulez un rendez-vous parce que VOUS serez absent, bloquez d&apos;abord le créneau (Dates bloquées) : il ne sera alors proposé à personne.
+                    </p>
+                  )}
+                </div>
+                <Switch
+                  checked={form.waitlist_enabled}
+                  onCheckedChange={(v) => setForm({ ...form, waitlist_enabled: v })}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="pb-3">

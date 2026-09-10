@@ -14,6 +14,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor } from '@/lib/email'
 import { getNowInMaroc } from '@/lib/utils'
 import { displayName } from '@/lib/profession'
+import { proposerCreneauLibere, creneauDuRdv } from '@/lib/waitlist'
 import { format } from 'date-fns'
 
 export async function POST(
@@ -40,7 +41,7 @@ export async function POST(
   // Vérifie que le RDV appartient bien au patient et n'est pas déjà annulé
   const { data: appointment } = await adminDb
     .from('appointments')
-    .select('id, status, date, time, invoice_no, amount_paid, patient:patients(first_name, last_name, phone, email), doctor:doctors(name, email, specialty)')
+    .select('id, doctor_id, status, date, time, duration_minutes, walk_in, invoice_no, amount_paid, patient:patients(first_name, last_name, phone, email), doctor:doctors(name, email, specialty)')
     .eq('id', params.id)
     .in('patient_id', patientIds)
     .single()
@@ -70,16 +71,24 @@ export async function POST(
       { status: 409 })
   }
 
-  const { error: majErr } = await adminDb
+  const { data: annules, error: majErr } = await adminDb
     .from('appointments')
     .update({ status: 'cancelled' })
     .eq('id', params.id)
     .neq('status', 'cancelled')
+    .select('id')
 
   // Un échec ignoré affichait « annulé » au patient sur un créneau toujours
   // réservé : il ne se serait pas présenté, et la place serait restée bloquée.
   if (majErr) {
     return NextResponse.json({ error: 'L’annulation n’a pas pu être enregistrée. Réessayez.' }, { status: 500 })
+  }
+  // Zéro ligne sans erreur : le rendez-vous a été annulé par quelqu'un d'autre
+  // entre la lecture et l'écriture (le cabinet, ou un double clic). Pour le
+  // patient le résultat est le même — mais ce n'est pas CETTE requête qui a
+  // libéré la place : ni e-mail en double, ni offre de liste d'attente en double.
+  if (!annules || annules.length === 0) {
+    return NextResponse.json({ success: true })
   }
 
   const patient = appointment.patient as { first_name?: string; last_name?: string; phone?: string; email?: string } | null
@@ -115,6 +124,11 @@ export async function POST(
       }).catch((err) => console.error('[Email] annulation médecin (espace patient):', err))
     )
   }
+
+  // LISTE D'ATTENTE — le patient libère sa place depuis son espace. Atteint
+  // uniquement si l'UPDATE ci-dessus a renvoyé une ligne. `appointment` a été
+  // lu AVANT l'écriture : c'est l'ancien créneau.
+  envois.push(proposerCreneauLibere(creneauDuRdv('annulation', appointment)))
 
   await Promise.allSettled(envois)
 

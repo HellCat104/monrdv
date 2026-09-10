@@ -88,6 +88,15 @@ export default async function BookingPage({ params }: Props) {
     .order('created_at', { ascending: true })
   if (typesError) console.error('[Motifs de consultation]', typesError)
 
+  // Liste d'attente (v56) : lue À PART de la fiche. Ajoutée à la projection de
+  // getDoctor, une colonne absente (migration pas encore passée) ferait
+  // échouer toute la requête — et la page de réservation tomberait en 404
+  // pour tous les médecins. Ici, une erreur cache simplement la case.
+  const { data: reglageListe, error: listeError } = await supabase
+    .from('doctors').select('waitlist_enabled').eq('id', doctor.id).maybeSingle()
+  if (listeError) console.error('[Liste d\'attente] réglage illisible :', listeError.message)
+  const waitlistEnabled = !listeError && reglageListe?.waitlist_enabled === true
+
   // Médecin inactif → page d'erreur propre
   if (doctor.subscription_status !== 'actif') {
     return (
@@ -226,6 +235,7 @@ export default async function BookingPage({ params }: Props) {
         doctor={doctor}
         consultationTypes={consultationTypes ?? []}
         categorie={categorie}
+        waitlistEnabled={waitlistEnabled}
       />
     </>
   )

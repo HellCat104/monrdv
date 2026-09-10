@@ -26,6 +26,8 @@ export default function robots(): MetadataRoute.Robots {
           '/reset-password',
           '/forgot-password',
           '/cancel-result',
+          // Offres de liste d'attente : pages à jeton, personnelles par nature.
+          '/creneau',
         ],
       },
     ],

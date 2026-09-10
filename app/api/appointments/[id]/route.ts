@@ -5,6 +5,7 @@ import { canAccess } from '@/lib/plan'
 import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor, sendRescheduleEmailToPatient, sendWithTimeout } from '@/lib/email'
 import { displayName } from '@/lib/profession'
 import { formatDateShort } from '@/lib/utils'
+import { proposerCreneauLibere, creneauDuRdv } from '@/lib/waitlist'
 
 // PATCH /api/appointments/[id] — modifie le statut (confirm/cancel)
 export async function PATCH(
@@ -124,13 +125,23 @@ export async function PATCH(
     }
   }
 
+  // Liste d'attente : le créneau AVANT l'écriture est relu par la lecture des
+  // verrous comptables ci-dessous. Si l'annulation passe, c'est lui qui se
+  // libère et qu'on proposera aux patients inscrits (lib/waitlist.ts). `status`
+  // sert à ne pas relancer d'offre sur un rendez-vous déjà annulé.
+  let avantAnnulation: {
+    id: string; doctor_id: string; date: string; time: string; status: string
+    duration_minutes: number | null; walk_in: boolean | null
+  } | null = null
+
   // ── Verrous comptables (mêmes règles que la route secrétaire) ──
   // Un acte facturé ne peut plus être annulé ni « dépayé » : la piste comptable
   // doit rester intacte, la correction passe par un avoir.
   if (status === 'cancelled' || updates.amount_paid === null) {
     const { data: cur } = await supabase
-      .from('appointments').select('invoice_no')
+      .from('appointments').select('id, doctor_id, invoice_no, status, date, time, duration_minutes, walk_in')
       .eq('id', params.id).eq('doctor_id', doctor.id).single()
+    if (status === 'cancelled') avantAnnulation = cur ?? null
     if (cur?.invoice_no) {
       return NextResponse.json({
         error: status === 'cancelled'
@@ -143,10 +154,13 @@ export async function PATCH(
   // Déplacement : on relit l'ancien créneau avant l'écriture, pour pouvoir le
   // rappeler au patient (« ancien » barré / « nouveau » mis en avant).
   const isReschedule = (date !== undefined || time !== undefined) && status !== 'cancelled'
-  let previous: { date: string; time: string } | null = null
+  let previous: {
+    id: string; doctor_id: string; date: string; time: string
+    duration_minutes: number | null; walk_in: boolean | null
+  } | null = null
   if (isReschedule) {
     const { data: prev } = await supabase.from('appointments')
-      .select('date, time').eq('id', params.id).eq('doctor_id', doctor.id).maybeSingle()
+      .select('id, doctor_id, date, time, duration_minutes, walk_in').eq('id', params.id).eq('doctor_id', doctor.id).maybeSingle()
     previous = prev ?? null
   }
 
@@ -183,6 +197,26 @@ export async function PATCH(
       cancelToken: appointment.cancel_token ?? undefined,
     }), 'déplacement patient')
   }
+
+  // LISTE D'ATTENTE — déplacement. L'ancien créneau est libre : c'est une place
+  // comme une autre pour les patients qui attendent. Si le nouveau créneau
+  // chevauche l'ancien (10 h → 10 h 15), le contrôle de disponibilité de
+  // proposerCreneauLibere le voit occupé et ne propose rien.
+  if (isReschedule && previous
+      && (previous.date !== appointment.date || String(previous.time).substring(0, 5) !== String(appointment.time).substring(0, 5))) {
+    await proposerCreneauLibere(creneauDuRdv('deplacement', previous))
+  }
+
+  // LISTE D'ATTENTE — annulation par le médecin. Seulement APRÈS l'écriture
+  // vérifiée (`appointment` non nul, statut relu en base) et seulement si le
+  // rendez-vous n'était pas déjà annulé : sinon la place était libre avant
+  // cette requête et son offre est déjà partie. Lancée tout de suite, attendue
+  // plus bas : elle court en même temps que les e-mails d'annulation.
+  const offreListeAttente =
+    status === 'cancelled' && appointment.status === 'cancelled'
+      && avantAnnulation && avantAnnulation.status !== 'cancelled'
+      ? proposerCreneauLibere(creneauDuRdv('annulation', avantAnnulation))
+      : null
 
   // Emails d'annulation si le statut devient "cancelled"
   if (status === 'cancelled' && appointment.patient) {
@@ -221,6 +255,11 @@ export async function PATCH(
     await Promise.allSettled(emailTasks)
   }
 
+  // L'offre de liste d'attente, lancée plus haut en parallèle des e-mails.
+  // proposerCreneauLibere ne lève jamais : l'annulation, déjà enregistrée, ne
+  // peut pas être rapportée en échec à cause d'elle.
+  if (offreListeAttente) await offreListeAttente
+
   return NextResponse.json(appointment)
 }
 
@@ -241,11 +280,14 @@ export async function DELETE(
 
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
 
-  const { error } = await supabase
+  // `.select()` renvoie la ligne supprimée : c'est à la fois la preuve que la
+  // suppression a touché quelque chose et le créneau qui vient de se libérer.
+  const { data: supprimes, error } = await supabase
     .from('appointments')
     .delete()
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
+    .select('id, doctor_id, date, time, status, duration_minutes, walk_in')
 
   if (error) {
     // Le trigger protect_invoiced_appointments bloque la suppression d'un acte
@@ -254,6 +296,18 @@ export async function DELETE(
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
     return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
+  }
+  if (!supprimes || supprimes.length === 0) {
+    return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
+  }
+
+  // LISTE D'ATTENTE — suppression. Aucun écran n'appelle cette méthode
+  // aujourd'hui ; si l'un s'y branche demain, la place libérée ne sera pas
+  // perdue pour autant. L'inscription du rendez-vous est partie avec lui
+  // (ON DELETE CASCADE).
+  const supprime = supprimes[0]
+  if (supprime.status !== 'cancelled') {
+    await proposerCreneauLibere(creneauDuRdv('suppression', supprime))
   }
 
   return NextResponse.json({ success: true })

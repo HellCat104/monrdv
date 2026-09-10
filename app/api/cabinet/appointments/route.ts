@@ -20,6 +20,7 @@ import { displayName } from '@/lib/profession'
 import { formatDateShort } from '@/lib/utils'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey, ageFromBirthDate } from '@/lib/utils'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
+import { proposerCreneauLibere, creneauDuRdv } from '@/lib/waitlist'
 import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -300,7 +301,7 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient()
   // Le RDV doit appartenir au cabinet de la secrétaire
   const { data: apt } = await admin.from('appointments')
-    .select('id, doctor_id, amount_due, invoice_no, quote_id, consultation_type_id, date, time, cancel_token, patient:patients(first_name, last_name, email, phone)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
+    .select('id, doctor_id, amount_due, invoice_no, quote_id, consultation_type_id, date, time, status, duration_minutes, walk_in, cancel_token, patient:patients(first_name, last_name, email, phone)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
   if (!apt) return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
 
   const patch: Record<string, unknown> = {}
@@ -413,6 +414,14 @@ export async function PATCH(req: NextRequest) {
     }), 'déplacement patient (cabinet)')
   }
 
+  // LISTE D'ATTENTE — déplacement par la secrétaire. `apt` a été lu AVANT
+  // l'écriture : c'est l'ancien créneau, celui qui se libère. Même règle que
+  // la route médecin (voir app/api/appointments/[id]).
+  if (moved && updated.status !== 'cancelled'
+      && (apt.date !== updated.date || String(apt.time).substring(0, 5) !== String(updated.time).substring(0, 5))) {
+    await proposerCreneauLibere(creneauDuRdv('deplacement', apt))
+  }
+
   // Annulation : prévenir le patient ET le médecin.
   //
   // Cette branche n'envoyait rien. Or dans un cabinet marocain, c'est la
@@ -447,6 +456,13 @@ export async function PATCH(req: NextRequest) {
         date: String(apt.date),
         time: String(apt.time),
       }), 'annulation médecin (cabinet)'))
+    }
+    // LISTE D'ATTENTE — annulation par la secrétaire : c'est le cas le plus
+    // courant au Maroc (le patient appelle le cabinet). Uniquement si le
+    // rendez-vous n'était pas déjà annulé avant cette requête, et après
+    // l'écriture vérifiée (`updated.status === 'cancelled'` ci-dessus).
+    if (apt.status !== 'cancelled') {
+      envois.push(proposerCreneauLibere(creneauDuRdv('annulation', apt)))
     }
     await Promise.allSettled(envois)
   }

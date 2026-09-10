@@ -16,9 +16,18 @@ interface BookingFormProps {
   selectedTime: string  // HH:mm
   consultationType?: ConsultationType | null
   specialty?: string | null
+  /** Le médecin propose la liste d'attente (doctors.waitlist_enabled, v56).
+   *  Faux ou absent : la case n'est pas affichée, rien n'est envoyé. */
+  waitlistEnabled?: boolean
   onBack: () => void
-  onSuccess: () => void
+  onSuccess: (resultat: ResultatReservation) => void
   onSlotTaken: () => void
+}
+
+/** Ce que la page de confirmation doit pouvoir dire au patient. */
+export interface ResultatReservation {
+  /** Absent si le patient n'a pas coché la case. */
+  waitlist?: { inscrit: boolean; message?: string }
 }
 
 interface MyProfile {
@@ -29,9 +38,14 @@ interface MyProfile {
   age: number | null
 }
 
-export function BookingForm({ doctor, selectedDate, selectedTime, consultationType, specialty, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
+export function BookingForm({ doctor, selectedDate, selectedTime, consultationType, specialty, waitlistEnabled = false, onBack, onSuccess, onSlotTaken }: BookingFormProps) {
   const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '', age: '', notes: '' })
   const [consent, setConsent] = useState(false)
+  // Liste d'attente : décochée par défaut. Recevoir des offres par e-mail est un
+  // choix du patient ; le cocher à sa place serait lui envoyer des messages
+  // qu'il n'a pas demandés.
+  const [listeAttente, setListeAttente] = useState(false)
+  const [resultatListe, setResultatListe] = useState<ResultatReservation['waitlist'] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [confirmed, setConfirmed] = useState(false)
@@ -124,6 +138,9 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
           for_child: bookingFor === 'child' ? true : undefined,
           child_birth_date: bookingFor === 'child' ? childBirth : undefined,
           child_sex: bookingFor === 'child' && childSex ? childSex : undefined,
+          // Lu par app/api/appointments (POST) → inscrireEnListeAttente.
+          // N'est envoyé que si la case était visible ET cochée.
+          waitlist: waitlistEnabled && listeAttente ? true : undefined,
         }),
       })
 
@@ -138,8 +155,15 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
         throw new Error(data.error || 'La réservation n\'a pas pu aboutir. Réessayez dans un instant.')
       }
 
+      // La réponse dit si l'inscription en liste d'attente a réellement été
+      // enregistrée : on le relaie tel quel, sans supposer.
+      const data = await res.json().catch(() => ({}))
+      const waitlist = data && typeof data.waitlist === 'object' && data.waitlist
+        ? { inscrit: data.waitlist.inscrit === true, message: typeof data.waitlist.message === 'string' ? data.waitlist.message : undefined }
+        : undefined
+      setResultatListe(waitlist ?? null)
       setConfirmed(true)
-      onSuccess()
+      onSuccess({ waitlist })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {
@@ -164,6 +188,7 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
             Un email de confirmation a été envoyé à <strong>{form.email}</strong>.
           </p>
         )}
+        <MessageListeAttente resultat={resultatListe} />
         {/* CTA créer un compte */}
         <div className="mt-4 bg-primary-50 border border-primary-100 rounded-xl p-4 text-left space-y-2">
           <p className="text-sm font-semibold text-primary-800">Retrouvez vos RDV facilement</p>
@@ -393,6 +418,23 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
           />
         </div>
 
+        {/* Liste d'attente (v56) — uniquement si le médecin la propose. */}
+        {waitlistEnabled && (
+          <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-gray-200 p-4">
+            <input
+              type="checkbox"
+              checked={listeAttente}
+              onChange={(e) => setListeAttente(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 shrink-0"
+            />
+            <span className="text-xs text-gray-600 leading-relaxed">
+              <strong className="text-gray-800">Prévenez-moi si un créneau se libère plus tôt.</strong>{' '}
+              Vous recevrez un e-mail si une place se libère avant ce rendez-vous. Rien ne change sans votre accord :
+              votre rendez-vous n&apos;est déplacé que si vous acceptez la nouvelle place.
+            </span>
+          </label>
+        )}
+
         {/* Consentement données de santé — OBLIGATOIRE (loi 09-08) */}
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
           <label className="flex items-start gap-3 cursor-pointer">
@@ -426,5 +468,20 @@ export function BookingForm({ doctor, selectedDate, selectedTime, consultationTy
         </div>
       </form>
     </div>
+  )
+}
+
+/** Ce que l'inscription en liste d'attente a donné — dit franchement, succès ou non. */
+export function MessageListeAttente({ resultat }: { resultat: ResultatReservation['waitlist'] | null | undefined }) {
+  if (!resultat) return null
+  return resultat.inscrit ? (
+    <p className="text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+      Vous êtes inscrit(e) en liste d&apos;attente : nous vous écrirons si une place se libère plus tôt.
+    </p>
+  ) : (
+    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+      Votre rendez-vous est bien confirmé, mais l&apos;inscription en liste d&apos;attente n&apos;a pas pu être enregistrée
+      {resultat.message ? ` : ${resultat.message}` : '.'}
+    </p>
   )
 }

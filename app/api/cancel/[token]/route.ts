@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
 import { sendCancellationEmailToPatient, sendCancellationEmailToDoctor } from '@/lib/email'
+import { proposerCreneauLibere, creneauDuRdv } from '@/lib/waitlist'
 
 // POST /api/cancel/[token] — annule le RDV (déclenché par un clic explicite sur la page /annuler)
 export async function POST(
@@ -17,7 +18,7 @@ export async function POST(
   // donc réécrire l'historique — annuler un rendez-vous passé, ou déjà facturé.
   const { data: existant } = await supabase
     .from('appointments')
-    .select('id, date, time, status, invoice_no, amount_paid')
+    .select('id, doctor_id, date, time, status, invoice_no, amount_paid, duration_minutes, walk_in')
     .eq('cancel_token', params.token)
     .maybeSingle()
 
@@ -85,6 +86,13 @@ export async function POST(
       }).catch((err) => console.error('[Email] annulation médecin:', err))
     )
   }
+
+  // LISTE D'ATTENTE — le patient libère sa place depuis l'e-mail. On n'arrive
+  // ici qu'après l'UPDATE conditionnel (.neq('status','cancelled')) qui a
+  // renvoyé une ligne : la place vient réellement de se libérer, et c'est
+  // cette requête-là qui l'a libérée (deux clics concurrents : un seul passe).
+  // `existant` a été lu avant l'écriture : c'est bien l'ancien créneau.
+  emailTasks.push(proposerCreneauLibere(creneauDuRdv('annulation', existant)))
 
   await Promise.allSettled(emailTasks)
 

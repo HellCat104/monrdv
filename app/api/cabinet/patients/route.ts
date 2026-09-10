@@ -3,7 +3,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getStaffContext } from '@/lib/cabinet'
-import { formatPhoneMaroc, isValidPhoneMaroc, ageFromBirthDate } from '@/lib/utils'
+import { formatPhoneMaroc, isValidPhoneMaroc, ageFromBirthDate, getNowInMaroc } from '@/lib/utils'
+import { proposerCreneauLibere, creneauDuRdv } from '@/lib/waitlist'
+import { format } from 'date-fns'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,7 +87,24 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Ce patient a des factures : suppression réservée au médecin.' }, { status: 409 })
   }
 
-  const { error } = await admin.from('patients').delete().eq('id', id).eq('doctor_id', ctx.doctor.id)
+  // Supprimer la fiche emporte ses rendez-vous (ON DELETE CASCADE) : ceux qui
+  // sont à venir libèrent autant de places, sans passer par aucune route
+  // d'annulation. On les relit AVANT, puisque après il n'en reste rien.
+  const { data: aVenir, error: errAVenir } = await admin.from('appointments')
+    .select('id, doctor_id, date, time, duration_minutes, walk_in')
+    .eq('patient_id', id).eq('doctor_id', ctx.doctor.id)
+    .gte('date', format(getNowInMaroc(), 'yyyy-MM-dd'))
+    .neq('status', 'cancelled')
+  if (errAVenir) console.error('[patients] lecture des RDV à venir avant suppression :', errAVenir.message)
+
+  const { data: supprimes, error } = await admin.from('patients')
+    .delete().eq('id', id).eq('doctor_id', ctx.doctor.id).select('id')
   if (error) return NextResponse.json({ error: 'Échec de la suppression' }, { status: 500 })
+  if (!supprimes || supprimes.length === 0) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
+
+  // LISTE D'ATTENTE — seulement une fois la suppression confirmée (ligne
+  // renvoyée). proposerCreneauLibere écarte les créneaux passés et ne lève jamais.
+  await Promise.allSettled((aVenir ?? []).map((r) => proposerCreneauLibere(creneauDuRdv('suppression', r))))
+
   return NextResponse.json({ success: true })
 }

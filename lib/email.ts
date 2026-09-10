@@ -1,5 +1,6 @@
 // Service d'envoi d'emails via Resend
 import { Resend } from 'resend'
+import { formatDateFr, formatTime } from '@/lib/utils'
 
 function getResend() {
   const apiKey = process.env.RESEND_API_KEY
@@ -676,4 +677,215 @@ export async function sendStaffInviteEmail(params: {
     console.error('[Email] Erreur invitation secrétaire:', error)
     return false
   }
+}
+
+// ── Liste d'attente (v56) ────────────────────────────────────────────────────
+//
+// Trois différences volontaires avec les e-mails ci-dessus :
+//
+//  1. Les dates sont formatées ICI (« jeudi 10 septembre 2026 à 10:00 »), avec
+//     les formateurs de lib/utils. Les e-mails plus anciens affichent la date
+//     brute de la base (« 2026-09-10 ») : un patient qui lit ça sur son
+//     téléphone doit la décoder, et c'est précisément le message où une
+//     confusion de jour coûte un rendez-vous.
+//  2. `doctorName` arrive DÉJÀ préfixé (displayName) : « Dr. » n'est pas écrit
+//     en dur, un kinésithérapeute ou un psychologue n'est pas docteur.
+//  3. Le retour de Resend est VÉRIFIÉ. Depuis sa v2 le SDK ne lève pas
+//     d'exception sur un refus de l'API : il renvoie `{ error }`. Les fonctions
+//     plus anciennes répondent donc `true` sur un e-mail jamais parti. Ici, un
+//     refus est journalisé et remonte `false` — la liste d'attente compte les
+//     offres réellement envoyées, pas celles qu'on a cru envoyer.
+
+/** « jeudi 10 septembre 2026 à 10:00 » — date de calendrier + heure, jamais de fuseau. */
+function quandLisible(date: string, time: string): string {
+  return `${formatDateFr(date)} à ${formatTime(String(time))}`
+}
+
+async function envoyerVerifie(
+  label: string,
+  message: { to: string; subject: string; html: string },
+): Promise<boolean> {
+  const resend = getResend()
+  if (!resend) return false
+  try {
+    const { error } = await resend.emails.send({ from: FROM_EMAIL, ...message })
+    if (error) {
+      console.error(`[Email] ${label} refusé par Resend :`, error.message ?? error)
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error(`[Email] ${label} :`, error)
+    return false
+  }
+}
+
+// Offre : « une place s'est libérée plus tôt ». Envoyée à tous les candidats
+// éligibles en même temps ; le premier qui clique l'obtient.
+export async function sendWaitlistOfferEmail(params: {
+  patientEmail: string
+  patientName: string
+  doctorName: string          // déjà préfixé « Dr. » si la profession le justifie
+  specialty: string
+  offeredDate: string         // YYYY-MM-DD
+  offeredTime: string
+  currentDate: string         // le rendez-vous qu'il a déjà
+  currentTime: string
+  offerToken: string
+}): Promise<boolean> {
+  const url = `${APP_URL}/creneau/${encodeURIComponent(params.offerToken)}`
+  const propose = quandLisible(params.offeredDate, params.offeredTime)
+  const actuel = quandLisible(params.currentDate, params.currentTime)
+
+  return envoyerVerifie('offre liste d\'attente', {
+    to: params.patientEmail,
+    subject: `🕐 Une place plus tôt chez ${params.doctorName} : ${propose}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 22px;">Une place s'est libérée plus tôt 🕐</h1>
+        </div>
+        <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+          <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
+          <p style="color: #374151;">Vous avez demandé à être prévenu(e) si un créneau se libérait plus tôt chez ${h(params.doctorName)}${params.specialty ? ` — ${h(params.specialty)}` : ''}. C'est le cas :</p>
+
+          <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 16px 20px; margin: 18px 0; border-radius: 0 8px 8px 0;">
+            <p style="margin: 2px 0; color: #047857; font-size: 13px; font-weight: bold;">CRÉNEAU DISPONIBLE</p>
+            <p style="margin: 4px 0; color: #065f46; font-size: 18px; font-weight: bold;">${h(propose)}</p>
+          </div>
+
+          <div style="background: #f9fafb; border-left: 4px solid #d1d5db; padding: 12px 20px; margin: 18px 0; border-radius: 0 8px 8px 0;">
+            <p style="margin: 2px 0; color: #9ca3af; font-size: 13px;">Votre rendez-vous actuel</p>
+            <p style="margin: 2px 0; color: #6b7280;">${h(actuel)}</p>
+          </div>
+
+          <p style="color: #374151; font-size: 14px;">Cette place a été proposée à plusieurs patients : <strong>le premier qui la réserve l'obtient</strong>.</p>
+
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${url}" style="background: #0EA5E9; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; display: inline-block;">
+              Avancer mon rendez-vous
+            </a>
+          </div>
+
+          <p style="color: #6b7280; font-size: 13px;">Si vous réservez cette place, votre rendez-vous actuel sera annulé automatiquement, une fois la nouvelle place confirmée. <strong>Si vous ne faites rien, votre rendez-vous du ${h(actuel)} est maintenu</strong> : rien ne change.</p>
+          <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-top: 24px;">Vous ne souhaitez plus recevoir ces propositions ? Le lien ci-dessus permet aussi de vous désinscrire.</p>
+          <p style="color: #9ca3af; font-size: 12px; text-align: center;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+        </div>
+      </div>
+    `,
+  })
+}
+
+// Confirmation au patient qui a pris la place. Reprend la présentation de
+// l'e-mail de déplacement (ancien barré / nouveau en avant), mais avec des
+// mots à lui : c'est LUI qui a avancé son rendez-vous, personne ne l'a déplacé.
+export async function sendWaitlistBookedEmailToPatient(params: {
+  patientEmail: string
+  patientName: string
+  doctorName: string          // déjà préfixé
+  specialty: string
+  oldDate: string
+  oldTime: string
+  newDate: string
+  newTime: string
+  newCancelToken: string
+  /** false = l'ancien rendez-vous n'a PAS pu être annulé : le patient en a deux. */
+  ancienAnnule: boolean
+  oldCancelToken?: string | null
+}): Promise<boolean> {
+  const nouveau = quandLisible(params.newDate, params.newTime)
+  const ancien = quandLisible(params.oldDate, params.oldTime)
+
+  // Le cas dégradé est dit franchement : un patient qui croit son ancien
+  // rendez-vous annulé alors qu'il tient toujours bloque une place, et le
+  // cabinet l'attendra peut-être vendredi.
+  const blocAncien = params.ancienAnnule
+    ? `<div style="background: #f9fafb; border-left: 4px solid #d1d5db; padding: 12px 20px; margin: 18px 0; border-radius: 0 8px 8px 0;">
+         <p style="margin: 2px 0; color: #9ca3af; font-size: 13px;">Ancien rendez-vous — annulé</p>
+         <p style="margin: 2px 0; color: #6b7280; text-decoration: line-through;">${h(ancien)}</p>
+       </div>`
+    : `<div style="background: #fef9c3; border-left: 4px solid #eab308; padding: 12px 20px; margin: 18px 0; border-radius: 0 8px 8px 0;">
+         <p style="margin: 2px 0; color: #92400e; font-size: 14px;">Votre ancien rendez-vous du <strong>${h(ancien)}</strong> n'a pas pu être annulé automatiquement. Le cabinet a été prévenu.${params.oldCancelToken
+           ? ` Vous pouvez aussi <a href="${APP_URL}/annuler/${encodeURIComponent(params.oldCancelToken)}" style="color: #92400e;">l'annuler vous-même</a>.`
+           : ''}</p>
+       </div>`
+
+  return envoyerVerifie('confirmation liste d\'attente (patient)', {
+    to: params.patientEmail,
+    subject: `✅ Rendez-vous avancé : ${nouveau}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 22px;">Rendez-vous avancé ✅</h1>
+        </div>
+        <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+          <p style="color: #374151;">Bonjour ${h(params.patientName)},</p>
+          <p style="color: #374151;">C'est confirmé : votre rendez-vous avec ${h(params.doctorName)}${params.specialty ? ` — ${h(params.specialty)}` : ''} est avancé.</p>
+
+          <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 16px 20px; margin: 18px 0; border-radius: 0 8px 8px 0;">
+            <p style="margin: 2px 0; color: #047857; font-size: 13px; font-weight: bold;">NOUVEAU RENDEZ-VOUS</p>
+            <p style="margin: 4px 0; color: #065f46; font-size: 18px; font-weight: bold;">${h(nouveau)}</p>
+          </div>
+
+          ${blocAncien}
+
+          <p style="color: #6b7280; font-size: 14px;">Un rappel vous sera envoyé la veille.</p>
+          <p style="text-align: center; margin: 28px 0;">
+            <a href="${APP_URL}/annuler/${encodeURIComponent(params.newCancelToken)}" style="color: #ef4444; font-size: 13px;">Annuler ce rendez-vous</a>
+          </p>
+          <p style="color: #9ca3af; font-size: 12px; text-align: center;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+        </div>
+      </div>
+    `,
+  })
+}
+
+// Le médecin est prévenu : son agenda vient de changer sans que personne au
+// cabinet n'y touche. Il a reçu l'e-mail d'annulation du créneau ; sans
+// celui-ci, il ne saurait pas que la place a été reprise, ni qu'une autre
+// s'est libérée plus loin dans la semaine.
+export async function sendWaitlistBookedEmailToDoctor(params: {
+  doctorEmail: string
+  doctorName: string          // déjà préfixé
+  patientName: string
+  patientPhone: string
+  oldDate: string
+  oldTime: string
+  newDate: string
+  newTime: string
+  ancienAnnule: boolean
+}): Promise<boolean> {
+  const nouveau = quandLisible(params.newDate, params.newTime)
+  const ancien = quandLisible(params.oldDate, params.oldTime)
+
+  return envoyerVerifie('confirmation liste d\'attente (médecin)', {
+    to: params.doctorEmail,
+    subject: `🕐 Liste d'attente — ${params.patientName} a pris la place du ${nouveau}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 22px;">Un créneau libéré a été repris 🕐</h1>
+        </div>
+        <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+          <p style="color: #374151;">Bonjour ${h(params.doctorName)},</p>
+          <p style="color: #374151;">Un patient inscrit en liste d'attente a avancé son rendez-vous sur une place qui venait de se libérer :</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1;">Patient</td><td style="padding: 10px 14px;">${h(params.patientName)}</td></tr>
+            <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Téléphone</td><td style="padding: 10px 14px;">${h(params.patientPhone)}</td></tr>
+            <tr style="background: #f0f9ff;"><td style="padding: 10px 14px; font-weight: bold; color: #0369a1;">Nouveau rendez-vous</td><td style="padding: 10px 14px;">${h(nouveau)}</td></tr>
+            <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Ancien rendez-vous</td><td style="padding: 10px 14px;">${h(ancien)} — ${params.ancienAnnule
+              ? 'libéré (les patients en attente ont été prévenus)'
+              : '<strong style="color: #dc2626;">PAS annulé automatiquement : annulez-le dans votre agenda</strong>'}</td></tr>
+          </table>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${APP_URL}/appointments" style="background: #0EA5E9; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+              Voir mon agenda
+            </a>
+          </div>
+          <p style="color: #9ca3af; font-size: 12px; text-align: center;">Vous pouvez désactiver la liste d'attente dans vos Paramètres.</p>
+          <p style="color: #9ca3af; font-size: 12px; text-align: center;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+        </div>
+      </div>
+    `,
+  })
 }

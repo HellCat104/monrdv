@@ -41,6 +41,7 @@ export async function middleware(req: NextRequest) {
     '/api/slots',         // consultation des créneaux
     '/api/search',        // recherche de médecins
     '/api/cancel',        // annulation de RDV
+    '/api/waitlist',      // réservation / désinscription par lien de liste d'attente
   ]
   if (sensitiveRoutes.some((r) => pathname.startsWith(r))) {
     const key = `rl:${ip}:${pathname}`

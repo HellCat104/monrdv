@@ -1,6 +1,11 @@
 // API droits patients (loi 09-08) : accès, rectification, effacement
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getNowInMaroc } from '@/lib/utils'
+import { format } from 'date-fns'
+import {
+  proposerCreneauLibere, creneauDuRdv, effacerInscriptionsDesPatients, type CreneauLibere,
+} from '@/lib/waitlist'
 
 // GET — Droit d'accès : retourne toutes les données du patient
 //
@@ -153,15 +158,40 @@ export async function DELETE() {
 
   const patientIds = (patients ?? []).map((p: any) => p.id)
 
+  // Créneaux libérés par l'effacement, proposés à la liste d'attente en fin de
+  // requête (voir plus bas).
+  const liberes: CreneauLibere[] = []
+
   // Annule les RDV futurs
   if (patientIds.length > 0) {
-    const today = new Date().toISOString().split('T')[0]
-    await adminDb
+    // Jour calendaire MAROCAIN : `new Date().toISOString()` donnait le jour UTC,
+    // décalé d'un jour entre minuit et 1 h du matin à Casablanca.
+    const today = format(getNowInMaroc(), 'yyyy-MM-dd')
+    // `.select()` : les lignes réellement annulées — preuve que l'écriture a
+    // porté, et liste exacte des créneaux libérés. Cette annulation est la
+    // PREMIÈRE écriture de l'effacement : si elle échoue, on s'arrête ici, rien
+    // n'est encore détruit et le patient peut réessayer. Continuer aurait laissé
+    // des rendez-vous futurs réservés au nom d'un « Supprimé », places bloquées.
+    const { data: annules, error: errAnnulation } = await adminDb
       .from('appointments')
       .update({ status: 'cancelled' })
       .in('patient_id', patientIds)
       .gte('date', today)
       .neq('status', 'cancelled')
+      .select('id, doctor_id, date, time, duration_minutes, walk_in')
+    if (errAnnulation) {
+      console.error('[effacement] annulation des rendez-vous futurs :', errAnnulation.message)
+      return NextResponse.json({ error: 'La suppression n\'a pas pu aboutir. Réessayez.' }, { status: 500 })
+    }
+    for (const r of annules ?? []) liberes.push(creneauDuRdv('annulation', r))
+
+    // Liste d'attente : les inscriptions (et leurs offres, par cascade) sont
+    // SUPPRIMÉES, pas seulement fermées — une ligne fermée dirait encore
+    // « cette personne attendait une place chez ce médecin ». Un échec est
+    // journalisé par la fonction ; il ne bloque pas l'effacement : l'adresse
+    // e-mail est retirée de la fiche juste en dessous, aucune offre ne pourrait
+    // donc plus partir vers cette personne.
+    await effacerInscriptionsDesPatients(patientIds)
 
     // Anonymise les données patient (ne supprime pas les RDV passés pour le médecin).
     // Efface aussi tout le dossier médical enrichi (loi 09-08 : suppression réelle
@@ -195,6 +225,12 @@ export async function DELETE() {
 
   // Supprime le compte auth
   await adminDb.auth.admin.deleteUser(user.id)
+
+  // LISTE D'ATTENTE — chaque rendez-vous futur annulé ci-dessus libère une
+  // place. Proposées en dernier : le compte est déjà effacé, et un incident ici
+  // ne peut plus rien empêcher. proposerCreneauLibere écarte d'elle-même les
+  // créneaux déjà passés (rendez-vous de ce matin) et ne lève jamais.
+  await Promise.allSettled(liberes.map((c) => proposerCreneauLibere(c)))
 
   return NextResponse.json({ success: true })
 }

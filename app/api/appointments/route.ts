@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendAppointmentConfirmationToPatient } from '@/lib/email'
+import { inscrireEnListeAttente } from '@/lib/waitlist'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getSlotsForDuration, getDayKey, getNowInMaroc, getDayBreaks, toMinutes, isFullDayBlocked, blockedIntervals, DEFAULT_LEAD_HOURS } from '@/lib/utils'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { randomUUID } from 'crypto'
@@ -493,10 +494,24 @@ export async function POST(req: NextRequest) {
 
   await Promise.allSettled(emailTasks)
 
+  // ── Liste d'attente : « prévenez-moi si un créneau se libère plus tôt » ──
+  // Case du formulaire public (components/booking/BookingForm.tsx, champ
+  // `waitlist`). Réservé à la réservation publique : c'est le patient qui
+  // consent à recevoir des offres, pas le cabinet qui l'inscrit à sa place.
+  // Le rendez-vous vient d'être créé par CETTE requête : sa propriété est
+  // établie. inscrireEnListeAttente vérifie le reste (réglage du médecin,
+  // e-mail, créneau futur) et renvoie une phrase si elle refuse — le patient
+  // doit savoir s'il sera prévenu ou non, jamais le croire à tort.
+  let waitlist: { inscrit: boolean; message?: string } | undefined
+  if (isPublic && body.waitlist === true) {
+    const r = await inscrireEnListeAttente(appointment.id)
+    waitlist = r.ok ? { inscrit: true } : { inscrit: false, message: r.raison }
+  }
+
   // Réponse minimale : ne jamais renvoyer cancel_token ni les champs internes
   // au navigateur (le token ne circule que par email).
   return NextResponse.json(
-    { id: appointment.id, date: appointment.date, time: appointment.time },
+    { id: appointment.id, date: appointment.date, time: appointment.time, ...(waitlist ? { waitlist } : {}) },
     { status: 201 }
   )
 }

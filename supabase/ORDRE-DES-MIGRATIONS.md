@@ -137,6 +137,19 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      policy + trigger) alimenté par `app/api/dental/[id]`. Retire au navigateur
      le droit d'écrire `dental_charts` : **déployer le code AVANT** de lancer
      cette migration.
+ 56. `migration_v56_liste_attente.sql`  
+     Liste d'attente : `doctors.waitlist_enabled` (défaut activé), tables
+     `waitlist_entries` (une inscription = un rendez-vous existant) et
+     `waitlist_offers` (un e-mail = un jeton = un créneau), trigger qui ferme
+     l'inscription d'un rendez-vous annulé. Ordre de déploiement indifférent :
+     le code tolère l'absence de la migration.
+ 57. `migration_v57_logo_cabinet.sql`  
+     Logo du cabinet sur les ordonnances : colonne `doctors.logo_path` (un
+     chemin, pas une URL, forcé à commencer par l'identifiant du médecin),
+     bucket dédié `cabinet-logos` en lecture publique, écriture interdite
+     depuis tout navigateur par des politiques restrictives — seule la route
+     `app/api/doctors/logo` écrit, après examen des octets du fichier. Ordre de
+     déploiement indifférent : sans migration, l'ordonnance s'affiche sans logo.
 
 ## Obtenir un état réellement à jour
 
