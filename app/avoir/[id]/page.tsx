@@ -1,10 +1,12 @@
 // Facture d'avoir imprimable. Accessible uniquement par le médecin propriétaire.
 import { notFound, redirect } from 'next/navigation'
-import { displayName } from '@/lib/profession'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr } from '@/lib/utils'
 import { PrintButton } from '../../facture/[id]/PrintButton'
 import { canAccess } from '@/lib/plan'
+import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
+import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
+import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
 
 interface Props {
   params: { id: string }
@@ -20,7 +22,7 @@ export default async function AvoirPage({ params }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, email, ice, inpe, plan')
+    .select(`id, plan, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -38,6 +40,10 @@ export default async function AvoirPage({ params }: Props) {
     .single()
   if (!credit) notFound()
 
+  // Logo du cabinet (v57), lu à part de la fiche : sans la migration, la
+  // page s'affiche sans logo au lieu de tomber (lib/cabinet-logo-server.ts).
+  const logoUrl = await getCabinetLogoUrl(supabase, doctor.id)
+
   const numero = credit.credit_no || `AV-${credit.id.slice(0, 8).toUpperCase()}`
 
   return (
@@ -48,29 +54,15 @@ export default async function AvoirPage({ params }: Props) {
       </div>
 
       <div className="max-w-2xl mx-auto bg-white shadow-sm rounded-lg p-10 print:shadow-none print:rounded-none print:p-0">
-        {/* En-tête médecin */}
-        <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
-            <p className="text-sm text-gray-500">{doctor.specialty}</p>
-            {doctor.address && <p className="text-sm text-gray-500 mt-1">{doctor.address}</p>}
-            {doctor.city && <p className="text-sm text-gray-500">{doctor.city}</p>}
-            {doctor.phone && <p className="text-sm text-gray-500 mt-1">Tél : {doctor.phone}</p>}
-            {(doctor.ice || doctor.inpe) && (
-              <p className="text-xs text-gray-400 mt-1">
-                {doctor.ice && <span>ICE : {doctor.ice}</span>}
-                {doctor.ice && doctor.inpe && <span> · </span>}
-                {doctor.inpe && <span>INPE : {doctor.inpe}</span>}
-              </p>
-            )}
-          </div>
-          <div className="text-right">
-            <h2 className="text-lg font-bold text-red-700">FACTURE D&apos;AVOIR</h2>
-            <p className="text-sm text-gray-500 mt-1">N° {numero}</p>
-            <p className="text-sm text-gray-500">{formatDateFr(credit.created_at)}</p>
-            <p className="text-xs text-gray-400 mt-1">Annule la facture {credit.original_invoice_no}</p>
-          </div>
-        </div>
+        {/* En-tête commun (components/shared/EnTeteDocument.tsx) ; le
+            cartouche de droite — titre, numéro, date, facture annulée —
+            reste propre à l'avoir. */}
+        <EnTeteDocument lignes={lignesEnTete(doctor)} logoUrl={logoUrl} disposition="laterale">
+          <h2 className="text-lg font-bold text-red-700">FACTURE D&apos;AVOIR</h2>
+          <p className="text-sm text-gray-500 mt-1">N° {numero}</p>
+          <p className="text-sm text-gray-500">{formatDateFr(credit.created_at)}</p>
+          <p className="text-xs text-gray-400 mt-1">Annule la facture {credit.original_invoice_no}</p>
+        </EnTeteDocument>
 
         {/* Patient */}
         <div className="mb-6">

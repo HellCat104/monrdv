@@ -19,6 +19,7 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
 import { BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt, FileText, Table2, Paperclip, ArrowUp, ArrowDown, Repeat } from 'lucide-react'
 import { EXPENSE_CATEGORIES, expenseCategoryLabel, variation } from '@/lib/compta'
+import { COLONNES_EN_TETE, lignesEnTete, enTeteHtml, type LignesEnTete } from '@/lib/document-entete'
 import type { Appointment, Expense, CreditNote, RecurringExpense } from '@/types'
 
 type Period = 'month' | 'lastmonth' | 'quarter' | 'year' | 'all'
@@ -132,6 +133,10 @@ export default function StatistiquesPage() {
   // Documents comptables : réservés au forfait Cabinet complet
   const [invoicing, setInvoicing] = useState(false)
   const [addingExp, setAddingExp] = useState(false)
+  // En-tête commun des documents (lib/document-entete.ts), pour les exports
+  // PDF : le fiduciaire doit lire QUI a encaissé ces recettes, ICE compris.
+  const [enTete, setEnTete] = useState<LignesEnTete | null>(null)
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const supabase = createClient()
   const router = useRouter()
 
@@ -253,10 +258,18 @@ export default function StatistiquesPage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: doctor } = await supabase.from('doctors').select('id, plan').eq('email', user.email).single()
+      const { data: doctor } = await supabase.from('doctors').select(`id, plan, ${COLONNES_EN_TETE}`).eq('email', user.email).single()
       if (!doctor) return
       // Statistiques réservées au forfait Cabinet complet
       if (!canAccess(doctor.plan, 'stats')) { router.replace('/dashboard'); return }
+      setEnTete(lignesEnTete(doctor))
+      // Logo lu par la route des Paramètres, seule à connaître la règle
+      // (migration v57 absente, chemin invalide). Une lecture qui échoue
+      // retire le logo des exports, rien de plus — elle n'écrit rien.
+      fetch('/api/doctors/logo')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { logoUrl?: string | null } | null) => setLogoUrl(d?.logoUrl ?? null))
+        .catch((e) => console.error('[Statistiques] logo du cabinet illisible :', e))
       setInvoicing(canAccess(doctor.plan, 'invoicing'))
       setDoctorId(doctor.id)
       await loadCharges(doctor.id)
@@ -518,8 +531,9 @@ export default function StatistiquesPage() {
       tr.tot td{font-weight:700;border-top:2px solid #0f2230;background:#f8fafc}
       @media print{body{margin:0}}
     </style></head><body>
+      ${enTete ? enTeteHtml(enTete, logoUrl) : ''}
       <h1>${esc(title)}</h1>
-      <p class="sub">Cabinet MonRDV · Généré le ${formatDateFr(getNowInMaroc())}</p>
+      <p class="sub">Généré le ${formatDateFr(getNowInMaroc())} via MonRDV</p>
       <table><thead>${thead}</thead><tbody>${tbody}</tbody></table>
       <script>window.onload=function(){setTimeout(function(){window.print()},250)}</script>
     </body></html>`

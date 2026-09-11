@@ -6,6 +6,7 @@ import { getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
 import { canAccess } from '@/lib/plan'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
+import { COLONNES_EN_TETE } from '@/lib/document-entete'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ export default async function OrdonnanceByIdPage({ params, searchParams }: { par
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites, plan')
+    .select(`id, prescription_favorites, plan, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()

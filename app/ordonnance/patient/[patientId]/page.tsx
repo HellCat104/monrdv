@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
 import { getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
+import { COLONNES_EN_TETE } from '@/lib/document-entete'
 import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
 import { format } from 'date-fns'
 
@@ -29,7 +30,7 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, prescription_favorites, plan')
+    .select(`id, prescription_favorites, plan, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()

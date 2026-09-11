@@ -8,11 +8,13 @@
 // traitement complet en pied de page — pour que le patient s'y retrouve — mais
 // ne facture que la somme réellement reçue ce jour-là.
 import { notFound, redirect } from 'next/navigation'
-import { displayName } from '@/lib/profession'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr } from '@/lib/utils'
 import { PrintButton } from '../../[id]/PrintButton'
 import { canAccess } from '@/lib/plan'
+import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
+import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
+import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
 import { quoteTotal, quotePaid, round2 } from '@/lib/devis'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/types'
 
@@ -28,7 +30,7 @@ export default async function FactureDevisPage({ params }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, email, ice, inpe, plan')
+    .select(`id, plan, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -50,13 +52,16 @@ export default async function FactureDevisPage({ params }: Props) {
   // Le plan de traitement complet et l'ensemble des versements : ils servent
   // au récapitulatif de bas de page (« où en est le patient »), jamais au
   // montant facturé, qui reste celui de CE versement.
-  const [{ data: items }, { data: payments }, { data: avoir }] = await Promise.all([
+  const [{ data: items }, { data: payments }, { data: avoir }, logoUrl] = await Promise.all([
     supabase.from('quote_items').select('tooth, label, unit_price, quantity')
       .eq('quote_id', payment.quote_id).order('position', { ascending: true }),
     supabase.from('quote_payments').select('amount').eq('quote_id', payment.quote_id),
     supabase.from('credit_notes').select('credit_no, amount, reason')
       .eq('quote_payment_id', payment.id).eq('doctor_id', doctor.id)
       .order('created_at', { ascending: false }).maybeSingle(),
+    // Logo du cabinet (v57), lu à part de la fiche : sans la migration, la
+    // facture s'affiche sans logo au lieu de tomber.
+    getCabinetLogoUrl(supabase, doctor.id),
   ])
 
   const total = quoteTotal(items ?? [])
@@ -76,33 +81,19 @@ export default async function FactureDevisPage({ params }: Props) {
       </div>
 
       <div className="max-w-2xl mx-auto bg-white shadow-sm rounded-lg p-10 print:shadow-none print:rounded-none print:p-0">
-        {/* En-tête praticien */}
-        <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
-            <p className="text-sm text-gray-500">{doctor.specialty}</p>
-            {doctor.address && <p className="text-sm text-gray-500 mt-1">{doctor.address}</p>}
-            {doctor.city && <p className="text-sm text-gray-500">{doctor.city}</p>}
-            {doctor.phone && <p className="text-sm text-gray-500 mt-1">Tél : {doctor.phone}</p>}
-            {(doctor.ice || doctor.inpe) && (
-              <p className="text-xs text-gray-400 mt-1">
-                {doctor.ice && <span>ICE : {doctor.ice}</span>}
-                {doctor.ice && doctor.inpe && <span> · </span>}
-                {doctor.inpe && <span>INPE : {doctor.inpe}</span>}
-              </p>
-            )}
-          </div>
-          <div className="text-right">
-            <h2 className="text-lg font-bold text-gray-800">{docTitle}</h2>
-            <p className="text-sm text-gray-500 mt-1">N° {numero}</p>
-            <p className="text-sm text-gray-500">{formatDateFr(payment.paid_at)}</p>
-            {avoir && (
-              <p className="mt-1 inline-block text-xs font-semibold text-red-600 border border-red-200 bg-red-50 rounded px-2 py-0.5">
-                Annulée par l&apos;avoir {avoir.credit_no}
-              </p>
-            )}
-          </div>
-        </div>
+        {/* En-tête commun (components/shared/EnTeteDocument.tsx) ; le
+            cartouche de droite — titre, numéro, date, avoir — reste propre
+            à la facture du versement. */}
+        <EnTeteDocument lignes={lignesEnTete(doctor)} logoUrl={logoUrl} disposition="laterale">
+          <h2 className="text-lg font-bold text-gray-800">{docTitle}</h2>
+          <p className="text-sm text-gray-500 mt-1">N° {numero}</p>
+          <p className="text-sm text-gray-500">{formatDateFr(payment.paid_at)}</p>
+          {avoir && (
+            <p className="mt-1 inline-block text-xs font-semibold text-red-600 border border-red-200 bg-red-50 rounded px-2 py-0.5">
+              Annulée par l&apos;avoir {avoir.credit_no}
+            </p>
+          )}
+        </EnTeteDocument>
 
         {/* Patient */}
         <div className="mb-6">

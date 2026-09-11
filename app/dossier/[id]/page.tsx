@@ -1,7 +1,6 @@
 // Dossier patient complet, imprimable (continuité + conservation légale).
 // Accessible uniquement par le médecin propriétaire du patient.
 import { notFound, redirect } from 'next/navigation'
-import { displayName } from '@/lib/profession'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
@@ -9,7 +8,8 @@ import { PrintButton } from './PrintButton'
 import { canAccess } from '@/lib/plan'
 import { logAccesDossier } from '@/lib/audit'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
-import { LogoEnTete } from '@/components/shared/LogoEnTete'
+import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
+import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
 
 interface Props { params: { id: string } }
 export const dynamic = 'force-dynamic'
@@ -28,7 +28,7 @@ export default async function DossierPage({ params }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals, plan')
+    .select(`id, custom_vitals, plan, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -90,20 +90,6 @@ export default async function DossierPage({ params }: Props) {
   // ordonnances, il porte donc le même en-tête que l'export PDF (lib/dossier.ts).
   const logoUrl = await getCabinetLogoUrl(supabase, doctor.id)
 
-  const identite = (
-    <div>
-      <h1 className="text-lg font-bold text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
-      <p className="text-sm text-gray-500">{doctor.specialty}</p>
-      {doctor.address && <p className="text-xs text-gray-500 mt-1">{doctor.address}{doctor.city ? `, ${doctor.city}` : ''}</p>}
-      {doctor.phone && <p className="text-xs text-gray-500">Tél : {doctor.phone}</p>}
-      {(doctor.ice || doctor.inpe) && (
-        <p className="text-[11px] text-gray-400 mt-1">
-          {doctor.inpe && <span>INPE : {doctor.inpe}</span>}{doctor.ice && doctor.inpe && <span> · </span>}{doctor.ice && <span>ICE : {doctor.ice}</span>}
-        </p>
-      )}
-    </div>
-  )
-
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
       <div className="max-w-3xl mx-auto mb-4 flex items-center justify-between print:hidden">
@@ -117,27 +103,14 @@ export default async function DossierPage({ params }: Props) {
       </div>
 
       <div className="max-w-3xl mx-auto bg-white shadow-sm rounded-lg p-10 print:shadow-none print:rounded-none print:p-0 text-gray-800">
-        {/* En-tête médecin.
-            Avec logo (v57) : le logo à gauche du bloc d'identité, plafonné à la
-            même hauteur que sur l'ordonnance (≈ 15 mm imprimés) — sous la
-            hauteur du bloc d'identité, donc sans rehausser l'en-tête. Sans
-            logo : le balisage d'origine, à l'identique. */}
-        <div className="flex justify-between items-start border-b border-gray-200 pb-5 mb-6">
-          {logoUrl ? (
-            <div className="flex items-start gap-4 min-w-0">
-              <LogoEnTete
-                src={logoUrl}
-                alt={`Logo du cabinet — ${displayName(doctor.name, doctor.specialty)}`}
-                className="max-h-14 max-w-[7rem] w-auto h-auto object-contain shrink-0"
-              />
-              {identite}
-            </div>
-          ) : identite}
-          <div className="text-right">
-            <h2 className="text-base font-bold text-gray-800">DOSSIER PATIENT</h2>
-            <p className="text-xs text-gray-500 mt-1">Édité le {formatDateFr(new Date())}</p>
-          </div>
-        </div>
+        {/* En-tête commun (components/shared/EnTeteDocument.tsx), celui de
+            toutes les pièces imprimables — ce dossier reproduit les
+            ordonnances, il porte donc le même en-tête qu'elles et que l'export
+            PDF (lib/dossier.ts), qui lit les mêmes lignes. */}
+        <EnTeteDocument lignes={lignesEnTete(doctor)} logoUrl={logoUrl} disposition="laterale">
+          <h2 className="text-base font-bold text-gray-800">DOSSIER PATIENT</h2>
+          <p className="text-xs text-gray-500 mt-1">Édité le {formatDateFr(new Date())}</p>
+        </EnTeteDocument>
 
         {/* Identité + dossier médical */}
         <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-2">Patient</h3>

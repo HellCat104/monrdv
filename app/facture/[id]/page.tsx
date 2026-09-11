@@ -1,11 +1,13 @@
 // Facture / reçu imprimable d'un rendez-vous payé.
 // Accessible uniquement par le médecin propriétaire du RDV.
 import { notFound, redirect } from 'next/navigation'
-import { displayName } from '@/lib/profession'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateFr, formatTime } from '@/lib/utils'
 import { PrintButton } from './PrintButton'
 import { canAccess } from '@/lib/plan'
+import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
+import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
+import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
 
 interface Props {
   params: { id: string }
@@ -22,7 +24,7 @@ export default async function FacturePage({ params }: Props) {
   // Médecin connecté
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, email, ice, inpe, plan')
+    .select(`id, plan, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
 
@@ -54,6 +56,10 @@ export default async function FacturePage({ params }: Props) {
         .order('created_at', { ascending: false }).maybeSingle()
     : { data: null }
 
+  // Logo du cabinet (v57), lu à part de la fiche : sans la migration, la
+  // page s'affiche sans logo au lieu de tomber (lib/cabinet-logo-server.ts).
+  const logoUrl = await getCabinetLogoUrl(supabase, doctor.id)
+
   const numero = apt.invoice_no || `F-${apt.id.slice(0, 8).toUpperCase()}`
   // Sans numéro officiel, ce n'est pas une facture au sens fiscal : on parle de « reçu ».
   const docTitle = apt.invoice_no ? 'FACTURE' : 'REÇU'
@@ -74,35 +80,21 @@ export default async function FacturePage({ params }: Props) {
 
       {/* Feuille A4 */}
       <div className="max-w-2xl mx-auto bg-white shadow-sm rounded-lg p-10 print:shadow-none print:rounded-none print:p-0">
-        {/* En-tête médecin */}
-        <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
-            <p className="text-sm text-gray-500">{doctor.specialty}</p>
-            {doctor.address && <p className="text-sm text-gray-500 mt-1">{doctor.address}</p>}
-            {doctor.city && <p className="text-sm text-gray-500">{doctor.city}</p>}
-            {doctor.phone && <p className="text-sm text-gray-500 mt-1">Tél : {doctor.phone}</p>}
-            {(doctor.ice || doctor.inpe) && (
-              <p className="text-xs text-gray-400 mt-1">
-                {doctor.ice && <span>ICE : {doctor.ice}</span>}
-                {doctor.ice && doctor.inpe && <span> · </span>}
-                {doctor.inpe && <span>INPE : {doctor.inpe}</span>}
-              </p>
-            )}
-          </div>
-          <div className="text-right">
-            <h2 className="text-lg font-bold text-gray-800">{docTitle}</h2>
-            <p className="text-sm text-gray-500 mt-1">N° {numero}</p>
-            <p className="text-sm text-gray-500">
-              {apt.paid_at ? formatDateFr(apt.paid_at) : formatDateFr(apt.date)}
+        {/* En-tête commun (components/shared/EnTeteDocument.tsx) ; le
+            cartouche de droite — titre, numéro, date, avoir — reste propre
+            à la facture. */}
+        <EnTeteDocument lignes={lignesEnTete(doctor)} logoUrl={logoUrl} disposition="laterale">
+          <h2 className="text-lg font-bold text-gray-800">{docTitle}</h2>
+          <p className="text-sm text-gray-500 mt-1">N° {numero}</p>
+          <p className="text-sm text-gray-500">
+            {apt.paid_at ? formatDateFr(apt.paid_at) : formatDateFr(apt.date)}
+          </p>
+          {avoir && (
+            <p className="mt-1 inline-block text-xs font-semibold text-red-600 border border-red-200 bg-red-50 rounded px-2 py-0.5">
+              Annulée par l&apos;avoir {avoir.credit_no}
             </p>
-            {avoir && (
-              <p className="mt-1 inline-block text-xs font-semibold text-red-600 border border-red-200 bg-red-50 rounded px-2 py-0.5">
-                Annulée par l&apos;avoir {avoir.credit_no}
-              </p>
-            )}
-          </div>
-        </div>
+          )}
+        </EnTeteDocument>
 
         {/* Patient */}
         <div className="mb-6">

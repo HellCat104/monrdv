@@ -21,6 +21,12 @@ import { createClient } from '@/lib/supabase/server'
 import { canAccess, type PlanFeatures } from '@/lib/plan'
 import { quoteTotal, quotePaid, round2 } from '@/lib/devis'
 
+/** Fonctionnalité du forfait qui ouvre les devis. Exportée pour que le devis
+ *  imprimable (app/devis/[id]/page.tsx), qui ne passe pas par une route API,
+ *  applique la même règle que requireQuoteDoctor au lieu d'en recopier le
+ *  choix. */
+export const DEVIS_FONCTION: keyof PlanFeatures = 'records'
+
 export interface QuoteContext {
   supabase: ReturnType<typeof createClient>
   doctor: { id: string; plan: string | null }
@@ -29,7 +35,7 @@ export interface QuoteContext {
 /** Médecin connecté + contrôle de forfait. Renvoie une réponse d'erreur prête
  *  à retourner, ou le contexte. */
 export async function requireQuoteDoctor(
-  feature: keyof PlanFeatures = 'records',
+  feature: keyof PlanFeatures = DEVIS_FONCTION,
 ): Promise<{ error: NextResponse } | { ctx: QuoteContext }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -55,8 +61,29 @@ export async function loadOwnedQuote(ctx: QuoteContext, quoteId: string) {
   const { data } = await ctx.supabase
     .from('quotes').select('*')
     .eq('id', quoteId).eq('doctor_id', ctx.doctor.id).maybeSingle()
-  return data as { id: string; patient_id: string; status: string } | null
+  // `select('*')` charge tout le devis ; le type l'expose désormais, les dates
+  // d'étape comprises — la route de statut en a besoin pour ne pas les réécrire.
+  return data as {
+    id: string; patient_id: string; status: string
+    proposed_at: string | null; accepted_at: string | null
+  } | null
 }
+
+/**
+ * La colonne `quotes.validity_text` manque-t-elle (migration v58 pas encore
+ * passée) ? PostgreSQL répond 42703 (colonne inconnue), PostgREST PGRST204
+ * (colonne absente de son cache de schéma) — selon que l'erreur vient de la
+ * base ou de l'API, on reçoit l'un ou l'autre.
+ */
+export function colonneValiditeAbsente(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false
+  return (error.code === '42703' || error.code === 'PGRST204') && /validity_text/.test(error.message ?? '')
+}
+
+/** Message rendu au médecin qui saisit une validité avant la migration v58 :
+ *  il dit quoi faire tout de suite, plutôt qu'« erreur serveur ». */
+export const VALIDITE_NON_ACTIVEE =
+  'La mention de validité n\'est pas encore activée sur votre compte (mise à jour v58 de la base à appliquer). Videz le champ « Valable » pour enregistrer le devis sans elle, puis réessayez plus tard.'
 
 /** Une fonction, pas une constante : un objet NextResponse partagé entre deux
  *  requêtes verrait son corps déjà consommé à la seconde. */

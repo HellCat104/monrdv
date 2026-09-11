@@ -5,18 +5,13 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { formatDateFr } from '@/lib/utils'
 import { Printer, Save, Check, AlertTriangle, Star, Plus, X, History } from 'lucide-react'
-import { LogoEnTete } from '@/components/shared/LogoEnTete'
+import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
+import { lignesEnTete, type PraticienEnTete } from '@/lib/document-entete'
 
-interface DoctorInfo {
+/** Champs de l'en-tête commun (COLONNES_EN_TETE), plus l'identifiant pour
+ *  l'enregistrement. `city` sert aussi à la ligne « Ville, le … ». */
+interface DoctorInfo extends PraticienEnTete {
   id: string
-  name: string
-  specialty: string
-  address?: string | null
-  city?: string | null
-  phone?: string | null
-  ice?: string | null
-  inpe?: string | null
-  cnom_number?: string | null
 }
 
 interface PatientInfo {
@@ -43,31 +38,53 @@ interface Props {
   logoUrl?: string | null
 }
 
+// Message affiché tant que l'échec n'est pas réparé. Il dit ce qui est perdu
+// ET ce qui ne l'est pas : le texte est toujours dans la page, le médecin ne
+// doit ni fermer l'onglet ni tout retaper.
+const ECHEC_ENREGISTREMENT =
+  'L’ordonnance n’a PAS été enregistrée. Votre texte est toujours ici : vérifiez votre connexion, puis cliquez à nouveau sur « Enregistrer ». Si le problème persiste, reconnectez-vous dans un autre onglet sans fermer celui-ci.'
+
 export function OrdonnanceEditor({
   doctor, patient, appointmentId, appointmentDate, existingId, existingContent,
   favorites: initialFavorites, recentLines, backHref = '/appointments', logoUrl = null,
 }: Props) {
-  // Image introuvable (fichier retiré entre-temps, réseau coupé) : on revient
-  // à l'en-tête sans logo plutôt que d'imprimer l'icône d'image cassée en tête
-  // d'un document médical.
-  const [logoEchec, setLogoEchec] = useState(false)
-  const avecLogo = !!logoUrl && !logoEchec
   const [content, setContent] = useState(existingContent)
   const [prescriptionId, setPrescriptionId] = useState<string | null>(existingId)
   const [favorites, setFavorites] = useState<string[]>(initialFavorites)
   const [newFav, setNewFav] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [favError, setFavError] = useState<string | null>(null)
   const supabase = createClient()
 
+  // ── Enregistrement ────────────────────────────────────────────────────────
+  //
+  // Avant, le résultat de l'écriture n'était pas lu : « Enregistrée » s'affichait
+  // quoi qu'il arrive. Or supabase-js ne LÈVE pas d'exception sur un refus : il
+  // renvoie { error }. Et un UPDATE que la RLS filtre (session expirée, compte
+  // basculé dans un autre onglet) ne renvoie même pas d'erreur — seulement zéro
+  // ligne modifiée. Un médecin pouvait donc imprimer, signer et remettre une
+  // ordonnance que le dossier du patient ne contiendrait jamais.
+  //
+  // D'où les trois contrôles : l'erreur renvoyée, la ligne effectivement
+  // relue (`.select('id')`), et l'exception réseau (fetch qui échoue).
   async function handleSave() {
     if (!content.trim()) return
     setSaving(true)
+    setSaved(false)
+    setSaveError(null)
     try {
       if (prescriptionId) {
-        await supabase.from('prescriptions').update({ content }).eq('id', prescriptionId)
+        const { data, error } = await supabase
+          .from('prescriptions').update({ content }).eq('id', prescriptionId).select('id')
+        if (error || !data || data.length !== 1) {
+          console.error('[Ordonnance] mise à jour non enregistrée :', error?.message ?? `${data?.length ?? 0} ligne modifiée`)
+          setSaveError(ECHEC_ENREGISTREMENT)
+          return
+        }
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('prescriptions')
           .insert({
             doctor_id: doctor.id,
@@ -77,10 +94,18 @@ export function OrdonnanceEditor({
           })
           .select('id')
           .single()
-        if (data) setPrescriptionId(data.id)
+        if (error || !data) {
+          console.error('[Ordonnance] création non enregistrée :', error?.message ?? 'aucune ligne renvoyée')
+          setSaveError(ECHEC_ENREGISTREMENT)
+          return
+        }
+        setPrescriptionId(data.id)
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
+    } catch (e) {
+      console.error('[Ordonnance] enregistrement impossible :', e)
+      setSaveError(ECHEC_ENREGISTREMENT)
     } finally {
       setSaving(false)
     }
@@ -91,9 +116,23 @@ export function OrdonnanceEditor({
     setContent((prev) => (prev.trim() ? prev.replace(/\s+$/, '') + '\n- ' + line : '- ' + line))
   }
 
+  // Même défaut que l'enregistrement, en moins grave : un favori ajouté ou
+  // retiré s'affichait comme fait, puis réapparaissait (ou disparaissait) à la
+  // visite suivante. On relit la ligne écrite ; en cas d'échec, la liste
+  // revient à son état précédent et le médecin en est averti.
   async function saveFavorites(next: string[]) {
+    const previous = favorites
     setFavorites(next)
-    await supabase.from('doctors').update({ prescription_favorites: next }).eq('id', doctor.id)
+    setFavError(null)
+    try {
+      const { data, error } = await supabase
+        .from('doctors').update({ prescription_favorites: next }).eq('id', doctor.id).select('id')
+      if (error || !data || data.length !== 1) throw new Error(error?.message ?? 'aucune ligne modifiée')
+    } catch (e) {
+      console.error('[Ordonnance] favoris non enregistrés :', e)
+      setFavorites(previous)
+      setFavError('Vos favoris n’ont pas pu être enregistrés. Réessayez dans un instant.')
+    }
   }
   function addFavorite(line: string) {
     const clean = line.trim().replace(/^[-•*]\s*/, '')
@@ -101,24 +140,6 @@ export function OrdonnanceEditor({
     saveFavorites([...favorites, clean])
     setNewFav('')
   }
-
-  // Bloc d'identité du médecin, rendu tel quel dans l'en-tête — enveloppé
-  // dans une colonne centrée seulement quand un logo l'accompagne.
-  const identite = (
-    <>
-      <h1 className="text-lg font-bold tracking-tight text-gray-900">Dr. {doctor.name}</h1>
-      {doctor.specialty && <p className="text-[13px] text-gray-600 mt-0.5">{doctor.specialty}</p>}
-      <p className="text-xs text-gray-500 mt-2">
-        {[doctor.address, doctor.city].filter(Boolean).join(', ')}
-        {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
-      </p>
-      {(doctor.cnom_number || doctor.ice || doctor.inpe) && (
-        <p className="text-xs text-gray-400 mt-0.5">
-          {[doctor.cnom_number && `Ordre : ${doctor.cnom_number}`, doctor.inpe && `INPE : ${doctor.inpe}`, doctor.ice && `ICE : ${doctor.ice}`].filter(Boolean).join(' · ')}
-        </p>
-      )}
-    </>
-  )
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
@@ -142,33 +163,24 @@ export function OrdonnanceEditor({
         </div>
       </div>
 
+      {/* Échec d'enregistrement — reste affiché jusqu'au prochain essai
+          réussi (pas de disparition automatique : un message d'échec qui
+          s'efface tout seul est un échec silencieux différé). role="alert"
+          le fait annoncer par les lecteurs d'écran. Jamais imprimé. */}
+      {saveError && (
+        <div role="alert" className="max-w-5xl mx-auto mb-4 flex items-start gap-2 bg-red-50 border border-red-200 text-red-800 rounded-lg px-4 py-3 text-sm print:hidden">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>{saveError}</span>
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto flex gap-4 items-start print:block">
         {/* Feuille A4 */}
         <div className="flex-1 bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none print:px-0 print:py-0">
-          {/* En-tête médecin — centré.
-              Avec logo : trois colonnes — logo | identité | vide de même
-              largeur. La colonne vide garde l'identité au centre de la page,
-              là où elle est sans logo. Le logo est plafonné en hauteur (14 ≈
-              15 mm imprimés) sous la hauteur habituelle du bloc d'identité :
-              il ne rehausse pas l'en-tête et ne repousse pas l'ordonnance.
-              object-contain garde ses proportions, quel que soit son format.
-              Sans logo : le balisage d'origine, à l'identique. */}
-          <header className={avecLogo
-            ? 'flex items-center gap-4 border-b-2 border-gray-800 pb-4 mb-8'
-            : 'text-center border-b-2 border-gray-800 pb-4 mb-8'}>
-            {avecLogo && (
-              <div className="w-28 shrink-0 flex items-center">
-                <LogoEnTete
-                  src={logoUrl!}
-                  alt={`Logo du cabinet du Dr ${doctor.name}`}
-                  className="max-h-14 max-w-full w-auto h-auto object-contain"
-                  onEchec={() => setLogoEchec(true)}
-                />
-              </div>
-            )}
-            {avecLogo ? <div className="flex-1 min-w-0 text-center">{identite}</div> : identite}
-            {avecLogo && <div className="w-28 shrink-0" aria-hidden />}
-          </header>
+          {/* En-tête commun à tous les documents (components/shared/
+              EnTeteDocument.tsx), disposition centrée : c'est le balisage
+              d'origine de l'ordonnance, déplacé tel quel. */}
+          <EnTeteDocument lignes={lignesEnTete(doctor)} logoUrl={logoUrl} disposition="centree" />
 
           {/* Titre du document — centré avec filet */}
           <div className="text-center mb-6">
@@ -224,6 +236,9 @@ export function OrdonnanceEditor({
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-2">
               <Star className="h-4 w-4 text-amber-400" /> Mes favoris
             </h3>
+            {favError && (
+              <p role="alert" className="text-xs text-red-600 mb-2">{favError}</p>
+            )}
             {favorites.length === 0 && (
               <p className="text-xs text-gray-400 mb-2">Enregistrez vos lignes habituelles : un clic les ajoutera à l&apos;ordonnance.</p>
             )}

@@ -53,6 +53,72 @@ export function installmentsTotal(list: Pick<QuoteInstallment, 'amount'>[]): num
   return round2(list.reduce((s, e) => s + Number(e.amount ?? 0), 0))
 }
 
+// ── Validité du devis (migration v58) ───────────────────────────────────────
+//
+// Décision de la propriétaire, appliquée à la lettre : un TEXTE LIBRE, saisi
+// par le médecin devis par devis, VIDE par défaut. Sur le document, la ligne
+// s'imprime « Valable » + ce texte (« 3 mois » → « Valable 3 mois ») ; texte
+// vide → aucune ligne. Pas de liste de durées, pas de date calculée, pas de
+// valeur proposée : la durée pendant laquelle un praticien s'engage sur un
+// prix est son choix, et une valeur par défaut finirait imprimée sans avoir
+// été lue.
+//
+// Le texte vit SUR LE DEVIS (quotes.validity_text), pas dans les Paramètres du
+// médecin : ce qui a été écrit sur le papier remis au patient ne doit pas
+// changer le jour où le médecin modifie une préférence générale.
+//
+// La normalisation est ici, et non dans chaque route, parce que trois
+// endroits l'appliquent : la création (POST /api/quotes), la modification
+// (PATCH /api/quotes/[id]) et le formulaire, qui s'en sert pour savoir si la
+// saisie diffère de ce qui est enregistré. La contrainte
+// `quotes_validity_text_check` (v58) tient les mêmes règles en base.
+
+/** Longueur maximale, espaces normalisés. Doit rester égale au plafond de la
+ *  contrainte `quotes_validity_text_check` (v58). 120 caractères couvrent
+ *  largement « 6 mois à compter de la date d'émission, sous réserve de
+ *  l'examen clinique » ; au-delà, ce n'est plus une mention de validité. */
+export const VALIDITE_MAX = 120
+
+export type ValiditeNormalisee = { ok: true; value: string | null } | { ok: false; error: string }
+
+/**
+ * Nettoie la saisie de validité : `null` si elle est vide, sinon un texte sur
+ * une ligne, sans espaces superflus ni caractères de contrôle.
+ *
+ * Un « Valable » tapé en tête par le médecin est retiré : le formulaire
+ * affiche déjà ce mot devant le champ et le document l'imprime, un médecin
+ * qui le recopie obtiendrait « Valable Valable 3 mois » sur la page remise au
+ * patient. Seul ce mot en tête est concerné ; le reste du texte est gardé tel
+ * qu'il a été écrit.
+ */
+export function normaliserValidite(saisie: unknown): ValiditeNormalisee {
+  if (saisie === null || saisie === undefined) return { ok: true, value: null }
+  if (typeof saisie !== 'string') return { ok: false, error: 'La validité doit être un texte.' }
+  const texte = saisie
+    // Caractères de contrôle autres que les blancs (C0 et C1) : invisibles à
+    // l'écran, refusés par la contrainte v58. On les retire plutôt que de
+    // refuser une saisie dont le médecin ne verrait pas le défaut.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000E-\u001F\u007F-\u009F]/g, '')
+    // Retours à la ligne, tabulations, espaces insécables : une seule espace.
+    // La mention tient sur une ligne du document.
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^valable\b[\s:.,-]*/i, '')
+  if (texte === '') return { ok: true, value: null }
+  if (texte.length > VALIDITE_MAX) {
+    return { ok: false, error: `La validité ne peut pas dépasser ${VALIDITE_MAX} caractères (${texte.length} saisis).` }
+  }
+  return { ok: true, value: texte }
+}
+
+/** La ligne imprimée sur le devis, ou null s'il n'y en a pas. Le seul endroit
+ *  où « Valable » est accolé au texte du médecin. */
+export function ligneValidite(validite: string | null | undefined): string | null {
+  const v = (validite ?? '').trim()
+  return v ? `Valable ${v}` : null
+}
+
 /**
  * Répartit `total` en `count` échéances mensuelles à partir de `firstDate`.
  *

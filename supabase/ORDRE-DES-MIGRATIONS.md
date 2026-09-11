@@ -150,6 +150,13 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      depuis tout navigateur par des politiques restrictives — seule la route
      `app/api/doctors/logo` écrit, après examen des octets du fichier. Ordre de
      déploiement indifférent : sans migration, l'ordonnance s'affiche sans logo.
+ 58. `migration_v58_validite_devis.sql`  
+     Validité d'un devis : colonne `quotes.validity_text` (texte libre du
+     médecin, NULL par défaut, imprimé « Valable » + texte sur le devis),
+     contrainte `quotes_validity_text_check` (1 à 120 caractères, sans espaces
+     aux extrémités ni retour à la ligne). Aucune policy modifiée. Ordre de
+     déploiement indifférent : sans migration, le devis s'imprime sans ligne de
+     validité et la saisie d'une validité est refusée avec un message explicite.
 
 ## Obtenir un état réellement à jour
 

@@ -5,15 +5,18 @@ import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
 import { summarizeTeeth, normalizeTeeth, stateColors, statesLabel, DENTAL_STATES, FDI_UPPER, FDI_LOWER, type DentalTeeth } from '@/lib/dental'
 import { loadCabinetLogoForPdf } from '@/lib/cabinet-logo-server'
+import { lignesEnTete, ligneCoordonnees, type PraticienEnTete } from '@/lib/document-entete'
 
 const PAY: Record<string, string> = { especes: 'Espèces', carte: 'Carte', cheque: 'Chèque', virement: 'Virement' }
 const ATT: Record<string, string> = { present: 'Présent', absent: 'Absent', late: 'En retard' }
 const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 export const dossierSlug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase()
 
-export interface DossierDoctor {
-  name: string; specialty: string; address?: string | null; city?: string | null
-  phone?: string | null; ice?: string | null; inpe?: string | null; custom_vitals?: VitalDef[] | null
+/** Fiche praticien : les champs de l'en-tête commun (lib/document-entete.ts —
+ *  les routes les lisent avec COLONNES_EN_TETE) et les constantes
+ *  personnalisées. */
+export interface DossierDoctor extends PraticienEnTete {
+  custom_vitals?: VitalDef[] | null
 }
 export interface DossierResult {
   ok: boolean
@@ -197,13 +200,21 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData, logo: Buffer | 
         console.error('[Logo cabinet] intégration au PDF impossible :', e)
       }
     }
-    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(17).text(`Dr. ${doctor.name}`, idX, top, { width: idW })
-    doc.fillColor(C.muted).font('Helvetica').fontSize(10).text(
-      [doctor.specialty, doctor.city, doctor.phone].filter(Boolean).join(' · '), idX, doc.y + 1, { width: idW })
-    if (doctor.inpe || doctor.ice) {
-      doc.fillColor(C.faint).fontSize(8.5).text(
-        [doctor.inpe ? `INPE : ${doctor.inpe}` : '', doctor.ice ? `ICE : ${doctor.ice}` : ''].filter(Boolean).join(' · '),
-        idX, doc.y + 1, { width: idW })
+    // Texte de l'en-tête commun à tous les documents (lib/document-entete.ts),
+    // mis en page pour pdfkit. Avant, ce bloc avait sa propre copie : « Dr. »
+    // en dur (un psychologue devenait docteur sur son PDF), pas d'adresse, pas
+    // de numéro d'Ordre — autant d'écarts avec l'écran que personne ne voyait.
+    const en = lignesEnTete(doctor)
+    const coordonnees = ligneCoordonnees(en)
+    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(17).text(en.nom, idX, top, { width: idW })
+    if (en.specialite) {
+      doc.fillColor(C.muted).font('Helvetica').fontSize(10).text(en.specialite, idX, doc.y + 1, { width: idW })
+    }
+    if (coordonnees) {
+      doc.fillColor(C.muted).font('Helvetica').fontSize(9).text(coordonnees, idX, doc.y + 1, { width: idW })
+    }
+    if (en.mentions) {
+      doc.fillColor(C.faint).font('Helvetica').fontSize(8.5).text(en.mentions, idX, doc.y + 1, { width: idW })
     }
     // Bas du bloc d'identité, mémorisé AVANT de dessiner le titre à droite, qui
     // repart de `top`. Sans cela, un nom sur deux lignes passait sous le filet :
@@ -436,6 +447,11 @@ export async function buildPatientDossier(supabase: any, doctor: DossierDoctor &
   const { patient, appointments, notes, prescriptions, certificates, vitals, documents, imgEmbeds, aptLabel, totalPaid, vitalDefs, dentalSummary } = d
   const vLabel = (k: string) => vitalDefs.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefs.find((v) => v.key === k)?.unit || ''
+  // Même en-tête que partout ailleurs (lib/document-entete.ts), sans logo :
+  // ce rendu HTML n'est plus appelé, mais s'il revient, il ne doit pas
+  // ressusciter l'ancienne copie de l'en-tête.
+  const en = lignesEnTete(doctor)
+  const coordonnees = ligneCoordonnees(en)
 
   const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Dossier — ${esc(patient.first_name)} ${esc(patient.last_name)}</title>
 <style>body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;max-width:800px;margin:24px auto;padding:0 20px;line-height:1.5}
@@ -446,7 +462,7 @@ th,td{text-align:left;padding:6px 4px;border-bottom:1px solid #eee}th{color:#9ca
 .block{font-size:13px;margin:8px 0}.tag{font-size:11px;color:#6b7280}
 img{max-width:100%;border:1px solid #e5e7eb;border-radius:6px;margin:6px 0}
 .total{display:flex;justify-content:space-between;border-top:2px solid #111;padding-top:8px;margin-top:24px;font-weight:bold}</style></head><body>
-<div class="head"><div><h1>Dr. ${esc(doctor.name)}</h1><div class="muted">${esc(doctor.specialty)}${doctor.city ? ' · ' + esc(doctor.city) : ''}${doctor.phone ? ' · ' + esc(doctor.phone) : ''}</div>${(doctor.ice || doctor.inpe) ? `<div class="tag">${doctor.inpe ? 'INPE : ' + esc(doctor.inpe) : ''}${doctor.ice && doctor.inpe ? ' · ' : ''}${doctor.ice ? 'ICE : ' + esc(doctor.ice) : ''}</div>` : ''}</div>
+<div class="head"><div><h1>${esc(en.nom)}</h1>${en.specialite ? `<div class="muted">${esc(en.specialite)}</div>` : ''}${coordonnees ? `<div class="muted">${esc(coordonnees)}</div>` : ''}${en.mentions ? `<div class="tag">${esc(en.mentions)}</div>` : ''}</div>
 <div style="text-align:right"><strong>DOSSIER PATIENT</strong><div class="muted">Édité le ${esc(formatDateFr(new Date()))}</div></div></div>
 
 <h2>Patient</h2>

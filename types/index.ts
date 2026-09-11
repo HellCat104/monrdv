@@ -550,6 +550,10 @@ export interface Quote {
   label: string | null
   status: QuoteStatus
   notes: string | null
+  /** Validité, texte libre du médecin imprimé après « Valable » (v58). NULL :
+   *  aucune ligne sur le devis. Facultatif dans le type : absent tant que la
+   *  migration v58 n'est pas passée. */
+  validity_text?: string | null
   proposed_at: string | null
   accepted_at: string | null
   created_at: string

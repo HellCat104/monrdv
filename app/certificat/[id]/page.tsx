@@ -1,10 +1,12 @@
 // Certificat médical imprimable — réservé au médecin propriétaire.
 import { createClient } from '@/lib/supabase/server'
-import { displayName } from '@/lib/profession'
 import { notFound, redirect } from 'next/navigation'
 import { formatDateFr } from '@/lib/utils'
 import { PrintBar } from './PrintBar'
 import { canAccess } from '@/lib/plan'
+import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
+import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
+import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +17,7 @@ export default async function CertificatPage({ params }: { params: { id: string 
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, specialty, address, city, phone, ice, inpe, cnom_number, plan')
+    .select(`id, plan, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -32,26 +34,20 @@ export default async function CertificatPage({ params }: { params: { id: string 
     .single()
   if (!cert) notFound()
 
+  // Logo lu à part de la fiche (voir lib/cabinet-logo-server.ts) : sans la
+  // migration v57, le certificat s'imprime sans logo au lieu de tomber.
+  const logoUrl = await getCabinetLogoUrl(supabase, doctor.id)
+
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
       <PrintBar />
 
       {/* Feuille A4 */}
       <div className="max-w-2xl mx-auto bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none print:px-0 print:py-0">
-        {/* En-tête médecin — centré */}
-        <header className="text-center border-b-2 border-gray-800 pb-4 mb-8">
-          <h1 className="text-lg font-bold tracking-tight text-gray-900">{displayName(doctor.name, doctor.specialty)}</h1>
-          {doctor.specialty && <p className="text-[13px] text-gray-600 mt-0.5">{doctor.specialty}</p>}
-          <p className="text-xs text-gray-500 mt-2">
-            {[doctor.address, doctor.city].filter(Boolean).join(', ')}
-            {doctor.phone && `${(doctor.address || doctor.city) ? ' · ' : ''}Tél : ${doctor.phone}`}
-          </p>
-          {(doctor.cnom_number || doctor.ice || doctor.inpe) && (
-            <p className="text-xs text-gray-400 mt-0.5">
-              {[doctor.cnom_number && `Ordre : ${doctor.cnom_number}`, doctor.inpe && `INPE : ${doctor.inpe}`, doctor.ice && `ICE : ${doctor.ice}`].filter(Boolean).join(' · ')}
-            </p>
-          )}
-        </header>
+        {/* En-tête commun (components/shared/EnTeteDocument.tsx), disposition
+            centrée : la même que l'ordonnance, dont ce certificat recopiait
+            déjà le balisage à la main. */}
+        <EnTeteDocument lignes={lignesEnTete(doctor)} logoUrl={logoUrl} disposition="centree" />
 
         {/* Titre du document — centré avec filet */}
         <div className="text-center mb-6">

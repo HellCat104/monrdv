@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import JSZip from 'jszip'
 import { buildPatientDossierPDF } from '@/lib/dossier'
+import { COLONNES_EN_TETE } from '@/lib/document-entete'
 import { canAccess } from '@/lib/plan'
 import { logAccesDossier } from '@/lib/audit'
 
@@ -19,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
   const { data: doctor } = await supabase
-    .from('doctors').select('id, name, specialty, address, city, phone, ice, inpe, custom_vitals, plan')
+    .from('doctors').select(`id, custom_vitals, plan, ${COLONNES_EN_TETE}`)
     .eq('email', user.email).single()
   if (!doctor) return NextResponse.json({ error: 'Médecin introuvable' }, { status: 404 })
 
