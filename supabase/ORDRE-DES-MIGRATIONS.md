@@ -157,6 +157,16 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      aux extrémités ni retour à la ligne). Aucune policy modifiée. Ordre de
      déploiement indifférent : sans migration, le devis s'imprime sans ligne de
      validité et la saisie d'une validité est refusée avec un message explicite.
+ 59. `migration_v59_rebonds_email.sql`  
+     Rebonds d'e-mail rapportés par le webhook Resend (`app/api/webhooks/resend`) :
+     journal `email_events` (RLS sans policy, `svix_id` unique = idempotence),
+     colonnes `email_bounced_at` / `email_bounce_reason` sur `patients` et
+     `cabinet_staff`, fonction `enregistrer_evenement_email` (journal + fiches
+     en une seule transaction, exécutable par le seul service_role), trigger
+     `email_rebond_suit_adresse` (SECURITY INVOKER) qui efface le drapeau dès
+     que l'adresse change et interdit au navigateur de le poser ou de l'effacer
+     à la main. Ordre de déploiement indifférent ; la lancer AVANT d'activer le
+     webhook dans Resend évite une journée de nouvelles tentatives en erreur.
 
 ## Obtenir un état réellement à jour
 

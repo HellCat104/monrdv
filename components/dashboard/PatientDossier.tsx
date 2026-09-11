@@ -10,6 +10,7 @@ import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
 import QuotesCard from '@/components/dashboard/QuotesCard'
+import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
 import { isNonPrescriber } from '@/lib/profession'
 import { Button } from '@/components/ui/button'
@@ -68,6 +69,12 @@ export default function PatientDossier({
   const [editBloodGroup, setEditBloodGroup] = useState(patient.blood_group ?? '')
   const [editCin, setEditCin] = useState(patient.cin ?? '')
   const [editEmail, setEditEmail] = useState(patient.email ?? '')
+  // Rebond connu (webhook Resend, v59) sur l'adresse ENREGISTRÉE. La base
+  // efface le drapeau dès que l'adresse change ; l'écran fait de même après
+  // un enregistrement réussi, sans attendre un rechargement.
+  const [rebond, setRebond] = useState(patient.email_bounce_reason
+    ? { raison: patient.email_bounce_reason, depuis: patient.email_bounced_at ?? null, adresse: patient.email ?? '' }
+    : null)
   const [editAddress, setEditAddress] = useState(patient.address ?? '')
   const [editMutuelle, setEditMutuelle] = useState(patient.mutuelle ?? '')
   const [mutuelleOther, setMutuelleOther] = useState(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
@@ -221,6 +228,8 @@ export default function PatientDossier({
     const { error } = await supabase.from('patients').update(updates).eq('id', patient.id)
     setSaving(false)
     if (error) { alert('L\'enregistrement a échoué. Réessayez.'); return }
+    // Même règle que le trigger v59 : une autre adresse n'a pas rebondi.
+    if (rebond && !memeAdresse(updates.email, rebond.adresse)) setRebond(null)
     setSaved(true); setTimeout(() => setSaved(false), 3000)
   }
 
@@ -469,7 +478,14 @@ export default function PatientDossier({
                   ))}
                 </>
               )}
-              <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</Label><Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="patient@email.com" className="h-9" /></div>
+              <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</Label><Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="patient@email.com" className={`h-9 ${rebond && memeAdresse(editEmail, rebond.adresse) ? 'border-red-300' : ''}`} />
+                {/* Tant que le champ contient l'adresse qui a rebondi, on le
+                    dit ; dès qu'il en contient une autre, on rappelle qu'elle
+                    n'est prise en compte qu'une fois la fiche enregistrée. */}
+                {rebond && (memeAdresse(editEmail, rebond.adresse)
+                  ? <AlerteAdresseEmail raison={rebond.raison} depuis={rebond.depuis} cible="patient" compact />
+                  : <p className="text-[11px] text-amber-700">Nouvelle adresse : cliquez sur « Enregistrer la fiche » pour qu&apos;elle remplace l&apos;ancienne.</p>)}
+              </div>
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><MapPin className="h-3 w-3" /> Adresse</Label><Input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} placeholder="Quartier, ville" className="h-9" /></div>
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><CreditCard className="h-3 w-3" /> CIN</Label><Input value={editCin} onChange={(e) => setEditCin(e.target.value.toUpperCase())} placeholder="AB123456" className="h-9" /></div>
               <div className="space-y-1">

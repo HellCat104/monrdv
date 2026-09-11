@@ -1,5 +1,6 @@
 // Gestion de l'équipe (secrétaires) par le médecin propriétaire.
-// GET : liste · POST : inviter/créer · PATCH : permissions/nom/statut · DELETE : retirer
+// GET : liste · POST : inviter/créer · PATCH : permissions/nom/statut, ou
+// adresse e-mail (seule) · DELETE : retirer
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendStaffInviteEmail } from '@/lib/email'
@@ -109,10 +110,126 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: insErr.message }, { status: 400 })
   }
 
-  // Email d'invitation (non bloquant)
-  await sendStaffInviteEmail({ to: email, staffName: name, doctorName: doctor.name, tempPassword }).catch(() => {})
+  // L'invitation ne bloque pas l'ajout (la fiche existe, le médecin pourra
+  // corriger l'adresse), mais son résultat est RENDU : la page affichait
+  // « Invitation envoyée » même quand Resend avait refusé le message.
+  const emailed = await sendStaffInviteEmail({ to: email, staffName: name, doctorName: doctor.name, tempPassword })
 
-  return NextResponse.json({ staff: row, emailed: true })
+  return NextResponse.json({ staff: row, emailed })
+}
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+// ── Changer l'adresse d'une secrétaire ─────────────────────────────────────
+//
+// Cas d'origine : une faute de frappe à l'invitation (« nadia@icoud.com »).
+// Jusqu'ici il fallait retirer la secrétaire et la réinviter, en perdant ses
+// permissions réglées case par case.
+//
+// Ce qu'on change, et ce qu'on ne change PAS :
+//  · On garde la FICHE (identifiant, permissions, statut, date d'arrivée) et
+//    on change QUELLE ADRESSE ouvre l'accès au cabinet. Le compte de connexion
+//    n'est relié à la fiche que par l'adresse (lib/cabinet.ts :
+//    getStaffContext cherche `cabinet_staff.email = user.email`, de même que
+//    les deux layouts et la policy « Secrétaire : lire sa fiche »). Changer
+//    la colonne suffit donc : dès la requête suivante, l'ancienne adresse ne
+//    trouve plus de fiche et perd l'accès, la nouvelle le gagne.
+//  · On ne modifie JAMAIS un compte de connexion existant (aucun
+//    updateUserById sur l'adresse). La même adresse peut être le compte
+//    patient de quelqu'un, ou la secrétaire d'un autre cabinet : renommer ce
+//    compte déplacerait la connexion d'une autre personne. L'ancien compte
+//    reste tel quel ; il perd seulement CE cabinet.
+//  · Pour la nouvelle adresse, on crée ou on réutilise un compte exactement
+//    comme l'invitation (POST ci-dessus), puis on envoie une invitation.
+async function changerAdresse(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  doctor: { id: string; name: string; email: string },
+  id: string,
+  brute: string,
+) {
+  const email = brute.trim().toLowerCase()
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    return NextResponse.json({ error: 'Cette adresse e-mail n’est pas valide. Vérifiez-la (exemple : nom@gmail.com).' }, { status: 400 })
+  }
+  if (email === doctor.email.toLowerCase()) {
+    return NextResponse.json({ error: 'C’est votre propre adresse : votre secrétaire doit avoir la sienne.' }, { status: 400 })
+  }
+
+  // La fiche doit appartenir au médecin connecté. La RLS le garantit déjà ;
+  // le filtre doctor_id le dit explicitement et donne un 404 lisible.
+  const { data: fiche, error: ficheErr } = await supabase
+    .from('cabinet_staff').select('id, name, email').eq('id', id).eq('doctor_id', doctor.id).maybeSingle()
+  if (ficheErr) return NextResponse.json({ error: 'Lecture de la fiche impossible. Réessayez.' }, { status: 500 })
+  if (!fiche) return NextResponse.json({ error: 'Secrétaire introuvable dans votre équipe.' }, { status: 404 })
+  if (String(fiche.email).toLowerCase() === email) {
+    return NextResponse.json({ error: 'C’est déjà son adresse actuelle.' }, { status: 400 })
+  }
+
+  // Refus AVANT de créer un compte de connexion : sinon on fabriquerait un
+  // compte pour rien. L'index unique (doctor_id, lower(email)) reste le
+  // dernier mot en cas de course (voir le 23505 plus bas).
+  const { data: doublon, error: doublonErr } = await supabase
+    .from('cabinet_staff').select('id, name').eq('doctor_id', doctor.id).eq('email', email).neq('id', id).limit(1).maybeSingle()
+  if (doublonErr) return NextResponse.json({ error: 'Vérification impossible. Réessayez.' }, { status: 500 })
+  if (doublon) {
+    return NextResponse.json({ error: `Cette adresse est déjà celle de ${doublon.name} dans votre équipe.` }, { status: 409 })
+  }
+
+  // Compte de connexion : même règle que l'invitation. Créé s'il n'existe
+  // pas ; réutilisé tel quel s'il existe (mot de passe inchangé, adresse
+  // inchangée — on n'y touche pas).
+  const admin = createAdminClient()
+  let tempPassword: string | undefined = randomPassword()
+  let compteCreeId: string | null = null
+  const { data: cree, error: createErr } = await admin.auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true,
+    user_metadata: { role: 'staff', name: fiche.name },
+  })
+  if (createErr) {
+    const msg = (createErr.message || '').toLowerCase()
+    if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
+      tempPassword = undefined // compte existant : il garde son mot de passe
+    } else {
+      return NextResponse.json({ error: 'Création de l’accès impossible : ' + createErr.message }, { status: 400 })
+    }
+  } else {
+    compteCreeId = cree?.user?.id ?? null
+  }
+
+  // `auth_user_id` (v44) désignait l'ANCIEN compte. Aucun code ne le lit
+  // aujourd'hui, mais le laisser pointer vers l'ancienne adresse serait une
+  // porte dérobée pour le jour où quelqu'un s'en servira : on l'efface, comme
+  // il l'est pour toute secrétaire invitée par l'application.
+  // Le drapeau de rebond, lui, est effacé par la base (trigger v59) : la
+  // nouvelle adresse n'a pas rebondi.
+  const { data: maj, error: majErr } = await supabase
+    .from('cabinet_staff')
+    .update({ email, auth_user_id: null })
+    .eq('id', id).eq('doctor_id', doctor.id)
+    .select().maybeSingle()
+
+  if (majErr || !maj) {
+    // Le compte fabriqué à l'instant ne sert plus à rien : un compte orphelin
+    // au mot de passe inconnu piégerait une invitation future à cette adresse
+    // (« connectez-vous avec votre mot de passe habituel » — elle n'en a
+    // jamais eu). On ne supprime QUE le compte créé par CETTE requête, jamais
+    // un compte préexistant.
+    if (compteCreeId) {
+      const { error: delErr } = await admin.auth.admin.deleteUser(compteCreeId)
+      if (delErr) console.error('[staff] compte créé pour rien, suppression impossible :', delErr.message)
+    }
+    if (majErr && (majErr.code === '23505' || (majErr.message || '').includes('duplicate'))) {
+      return NextResponse.json({ error: 'Cette adresse est déjà utilisée dans votre équipe.' }, { status: 409 })
+    }
+    if (majErr) console.error('[staff] changement d’adresse refusé :', majErr.message)
+    return NextResponse.json({ error: 'L’adresse n’a pas pu être modifiée. Réessayez.' }, { status: 500 })
+  }
+
+  const emailed = await sendStaffInviteEmail({ to: email, staffName: fiche.name, doctorName: doctor.name, tempPassword })
+  return NextResponse.json({ staff: maj, emailed })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -123,6 +240,18 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
+
+  // Changer l'adresse est une opération à part (compte de connexion,
+  // invitation, perte d'accès de l'ancienne adresse) : elle ne se mélange pas
+  // à un réglage de permissions. Plutôt que d'ignorer en silence les autres
+  // champs, on refuse la combinaison.
+  if (body.email !== undefined) {
+    if (typeof body.email !== 'string') return NextResponse.json({ error: 'Adresse e-mail invalide' }, { status: 400 })
+    if (body.permissions !== undefined || body.name !== undefined || body.status !== undefined) {
+      return NextResponse.json({ error: 'Modifiez l’adresse séparément des autres réglages.' }, { status: 400 })
+    }
+    return changerAdresse(supabase, doctor, id, body.email)
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const patch: Record<string, any> = {}

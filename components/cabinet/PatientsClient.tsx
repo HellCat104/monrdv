@@ -10,8 +10,9 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDateFr, ageFromBirthDate, formatAge } from '@/lib/utils'
-import { Users, UserPlus, Search, Download, Trash2, HeartPulse, Pill, Activity, Plus, CreditCard, ShieldPlus } from 'lucide-react'
+import { Users, UserPlus, Search, Download, Trash2, HeartPulse, Pill, Activity, Plus, CreditCard, ShieldPlus, Mail, AlertTriangle } from 'lucide-react'
 import { MUTUELLES_MAROC, type StaffPermissions, type VitalDef } from '@/types'
+import AlerteAdresseEmail from '@/components/shared/AlerteAdresseEmail'
 // Le MÊME écran de devis que celui du médecin, en mode secrétaire : les calculs
 // de lib/devis.ts (total, versé, reste dû) doivent donner le même chiffre des
 // deux côtés du bureau — une copie finirait par en donner un autre.
@@ -37,12 +38,24 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
   const [detailLoading, setDetailLoading] = useState(false)
   const [vitalInput, setVitalInput] = useState<Record<string, string>>({})
   const [savingVital, setSavingVital] = useState(false)
+  const [detailErreur, setDetailErreur] = useState('')
+  const [listeErreur, setListeErreur] = useState('')
+
+  // Correction de l'adresse e-mail depuis la fiche. null = pas en cours
+  // d'édition ; une chaîne (même vide) = champ ouvert.
+  const [emailEdition, setEmailEdition] = useState<string | null>(null)
+  const [emailErreur, setEmailErreur] = useState('')
+  const [emailEnCours, setEmailEnCours] = useState(false)
 
   async function load() {
-    const res = await fetch('/api/cabinet/patients')
-    if (res.ok) {
+    const res = await fetch('/api/cabinet/patients').catch(() => null)
+    if (res?.ok) {
       const d = await res.json()
       setPatients(d.patients ?? [])
+      setListeErreur('')
+    } else {
+      // Sans ce message, une erreur de chargement s'affichait « Aucun patient ».
+      setListeErreur('La liste des patients n’a pas pu être chargée. Rechargez la page.')
     }
     setLoading(false)
   }
@@ -111,10 +124,35 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
   async function openDetail(p: Row) {
     setDetail({ patient: p })
     setDetailLoading(true)
+    setDetailErreur('')
     setVitalInput({})
-    const res = await fetch(`/api/cabinet/patients/${p.id}`)
-    if (res.ok) setDetail(await res.json())
+    setEmailEdition(null)
+    setEmailErreur('')
+    const res = await fetch(`/api/cabinet/patients/${p.id}`).catch(() => null)
+    if (res?.ok) setDetail(await res.json())
+    else setDetailErreur('La fiche n’a pas pu être chargée entièrement. Fermez-la et rouvrez-la.')
     setDetailLoading(false)
+  }
+
+  async function enregistrerEmail() {
+    const id = detail?.patient?.id
+    if (!id || emailEdition === null) return
+    setEmailErreur('')
+    setEmailEnCours(true)
+    const res = await fetch(`/api/cabinet/patients/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailEdition }),
+    }).catch(() => null)
+    const d = res ? await res.json().catch(() => ({})) : {}
+    setEmailEnCours(false)
+    if (!res) { setEmailErreur('Pas de connexion. Vérifiez internet et réessayez.'); return }
+    if (!res.ok || !d.patient) { setEmailErreur(d.error || 'L’adresse n’a pas pu être enregistrée. Réessayez.'); return }
+    // La réponse du serveur fait foi : si l'adresse a changé, la base a
+    // effacé le drapeau de rebond, et la liste perd son indicateur.
+    setDetail((prev) => prev ? { ...prev, patient: { ...prev.patient, ...d.patient } } : prev)
+    setPatients((prev) => prev.map((x) => x.id === id ? { ...x, email_bounce_reason: d.patient.email_bounce_reason } : x))
+    setEmailEdition(null)
   }
 
   async function addVital() {
@@ -163,6 +201,10 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nom, téléphone ou CIN…" className="pl-9" />
       </div>
 
+      {listeErreur && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{listeErreur}</p>
+      )}
+
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}</div>
       ) : filtered.length === 0 ? (
@@ -179,6 +221,13 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
                 <p className="text-xs text-gray-500 truncate">
                   {p.phone}{p.cin ? ` · CIN ${p.cin}` : ''}{p.mutuelle ? ` · ${p.mutuelle}` : ''}
                 </p>
+                {/* Signalé dès la liste : la secrétaire qui a le patient au
+                    téléphone doit pouvoir le voir sans ouvrir chaque fiche. */}
+                {p.email_bounce_reason && (
+                  <p className="text-xs text-red-600 flex items-center gap-1 mt-0.5">
+                    <AlertTriangle className="h-3 w-3 shrink-0" /> E-mail qui ne fonctionne pas — à corriger
+                  </p>
+                )}
               </div>
             </button>
           ))}
@@ -276,7 +325,49 @@ export default function PatientsClient({ permissions }: { permissions: StaffPerm
                 <p className="text-gray-700">📞 {detail.patient.phone}{detail.patient.age != null ? ` · ${detail.patient.age} ans` : ''}</p>
                 {detail.patient.cin && <p className="text-gray-600 flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5" /> CIN : {detail.patient.cin}</p>}
                 {detail.patient.mutuelle && <p className="text-gray-600 flex items-center gap-1.5"><ShieldPlus className="h-3.5 w-3.5" /> Mutuelle : {detail.patient.mutuelle}</p>}
+
+                {/* E-mail : absent de la fiche tant que le détail n'est pas
+                    chargé (la liste ne le lit pas) — on n'affiche donc rien
+                    plutôt qu'un « pas d'e-mail » faux. */}
+                {detail.patient.email !== undefined && (emailEdition === null ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-gray-600 flex items-center gap-1.5 min-w-0">
+                      <Mail className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{detail.patient.email || <span className="text-gray-400">Pas d’e-mail</span>}</span>
+                    </p>
+                    <button type="button" onClick={() => { setEmailEdition(detail.patient.email ?? ''); setEmailErreur('') }}
+                      className="text-xs font-medium text-primary-600 hover:underline shrink-0">
+                      {detail.patient.email ? 'Modifier' : 'Ajouter'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 pt-1">
+                    <Label htmlFor="p_email_edit">Adresse e-mail</Label>
+                    <Input id="p_email_edit" type="email" autoFocus value={emailEdition}
+                      onChange={(e) => setEmailEdition(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') enregistrerEmail() }}
+                      placeholder="exemple : nom@gmail.com" />
+                    <p className="text-[11px] text-gray-400">Pour les confirmations et les rappels. Laissez vide si le patient n’a pas d’e-mail.</p>
+                    {emailErreur && <p className="text-xs text-red-600">{emailErreur}</p>}
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" onClick={enregistrerEmail} disabled={emailEnCours}>
+                        {emailEnCours ? 'Enregistrement…' : 'Enregistrer'}
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" disabled={emailEnCours} onClick={() => { setEmailEdition(null); setEmailErreur('') }}>
+                        Annuler
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {detail.patient.email_bounce_reason && emailEdition === null && (
+                  <AlerteAdresseEmail raison={detail.patient.email_bounce_reason} depuis={detail.patient.email_bounced_at} cible="patient" compact>
+                    <Button type="button" size="sm" onClick={() => { setEmailEdition(detail.patient.email ?? ''); setEmailErreur('') }}>
+                      Corriger l’adresse
+                    </Button>
+                  </AlerteAdresseEmail>
+                )}
               </div>
+              {detailErreur && <p className="text-xs text-red-600">{detailErreur}</p>}
 
               {/* Parents / tuteurs (pédiatrie) — c'est le parent qu'on appelle, pas l'enfant */}
               {(detail.patient.parent1_name || detail.patient.parent2_name) && (

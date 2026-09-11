@@ -20,13 +20,30 @@ export async function GET() {
   if (!ctx.permissions.patients_contact) return NextResponse.json({ error: 'Permission manquante' }, { status: 403 })
 
   const admin = createAdminClient()
-  const { data } = await admin
-    .from('patients')
-    .select('id, first_name, last_name, phone, age, cin, mutuelle, created_at')
-    .eq('doctor_id', ctx.doctor.id)
-    .order('created_at', { ascending: false })
+  const colonnes = 'id, first_name, last_name, phone, age, cin, mutuelle, created_at'
+  const lire = (select: string) => admin
+    .from('patients').select(select).eq('doctor_id', ctx.doctor.id).order('created_at', { ascending: false })
 
-  return NextResponse.json({ patients: data ?? [], permissions: ctx.permissions })
+  // `email_bounce_reason` (v59) : la liste signale d'un mot les fiches dont
+  // l'adresse ne reçoit rien, pour que la secrétaire n'ait pas à ouvrir chaque
+  // fiche pour le découvrir. L'adresse elle-même n'est lue que dans le détail.
+  let res = await lire(`${colonnes}, email_bounce_reason`)
+  // Colonne absente (code déployé avant la migration v59) : la liste d'avant,
+  // sans l'indicateur, plutôt qu'aucune liste du tout.
+  if (res.error && colonneAbsente(res.error)) res = await lire(colonnes)
+  // Une erreur de lecture ressemblait à « aucun patient » : l'écran de la
+  // secrétaire affichait une patientèle vide sans rien dire.
+  if (res.error) {
+    console.error('[cabinet/patients] lecture de la liste impossible :', res.error.message)
+    return NextResponse.json({ error: 'Lecture des patients impossible' }, { status: 500 })
+  }
+
+  return NextResponse.json({ patients: res.data ?? [], permissions: ctx.permissions })
+}
+
+/** 42703 = colonne inconnue (PostgreSQL) ; PGRST204 = colonne absente du cache PostgREST. */
+function colonneAbsente(e: { code?: string }): boolean {
+  return e.code === '42703' || e.code === 'PGRST204'
 }
 
 // POST — créer une fiche patient (accueil)

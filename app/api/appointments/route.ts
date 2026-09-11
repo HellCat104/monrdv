@@ -370,6 +370,25 @@ export async function POST(req: NextRequest) {
       if (Object.keys(updates).length > 0) {
         await db.from('patients').update(updates).eq('id', patientId)
       }
+      // Adresse CONNUE COMME REBONDIE (webhook Resend, v59) : la nouvelle
+      // saisie la remplace. Sans cela, le patient qui corrigeait sa faute de
+      // frappe en réservant de nouveau recevait sa confirmation à la bonne
+      // adresse — elle part de `safeEmail` — mais ses rappels continuaient de
+      // partir vers l'ancienne, lue sur la fiche, et l'alerte restait affichée.
+      //
+      // Deux garde-fous : on reste dans la branche `alreadyMine` (fiche déjà
+      // possédée par ce compte — le contrôle anti-appropriation ci-dessus reste
+      // entier), et on n'écrase qu'une adresse qui ne fonctionne pas. Une
+      // adresse valide n'est jamais remplacée par une réservation.
+      //
+      // Écriture séparée et non bloquante : la colonne n'existe qu'après la v59.
+      // Sans elle, PostgreSQL refuse la requête ; la réservation, elle, doit
+      // aboutir quoi qu'il arrive.
+      if (safeEmail && existingPatient.email && existingPatient.email.toLowerCase() !== safeEmail.toLowerCase()) {
+        const { error: corrErr } = await db.from('patients')
+          .update({ email: safeEmail }).eq('id', patientId).not('email_bounced_at', 'is', null)
+        if (corrErr) console.error('[réservation] correction de l\'adresse rebondie impossible :', corrErr.message)
+      }
     }
   } else {
     const { data: newPatient, error: patientError } = await db

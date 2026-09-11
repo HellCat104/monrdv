@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { getInitials, formatDateFr, formatDateShort, getNowInMaroc } from '@/lib/utils'
 import { STATUS_LABELS, type Patient, type AppointmentStatus, type Recall } from '@/types'
 import { ArrowLeft, Phone, Save, Check, Calendar, Wallet, BellRing, Plus, X } from 'lucide-react'
+import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 
 interface LiteAppointment {
   id: string
@@ -39,6 +40,13 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
   // ci-dessous ne part jamais : la tâche planifiée marque la ligne « traitée »
   // et passe au suivant, sans rien dire à personne.
   const [editEmail, setEditEmail] = useState(patient.email ?? '')
+  // Rebond connu (webhook Resend, v59) sur l'adresse ENREGISTRÉE — même règle
+  // que le dossier complet (PatientDossier.tsx) : effacé dès qu'une autre
+  // adresse est enregistrée, comme le fait la base.
+  const [rebond, setRebond] = useState(patient.email_bounce_reason
+    ? { raison: patient.email_bounce_reason, depuis: patient.email_bounced_at ?? null, adresse: patient.email ?? '' }
+    : null)
+  const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [appointments, setAppointments] = useState<LiteAppointment[]>([])
@@ -82,22 +90,30 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
   async function handleSave() {
     if (!editFirstName.trim() || !editLastName.trim() || !editPhone.trim()) return
     setSaving(true)
+    setSaveError('')
+    const email = editEmail.trim() || null
     const { error } = await supabase
       .from('patients')
       .update({
         first_name: editFirstName.trim(),
         last_name: editLastName.trim(),
         phone: editPhone.trim(),
-        email: editEmail.trim() || null,
+        email,
         notes: editNotes.trim() || null,
       })
       .eq('id', patient.id)
     setSaving(false)
-    if (!error) {
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-      router.refresh()
+    // Un échec était muet : le bouton revenait à « Enregistrer » et le
+    // praticien croyait l'adresse corrigée alors que l'ancienne — celle qui
+    // rebondit — restait en base.
+    if (error) {
+      setSaveError('L’enregistrement a échoué. Vérifiez votre connexion et réessayez.')
+      return
     }
+    if (rebond && !memeAdresse(email, rebond.adresse)) setRebond(null)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+    router.refresh()
   }
 
   async function addRecall() {
@@ -169,11 +185,15 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
             <Input id="lite-phone" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
           </div>
 
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="lite-email">E-mail</Label>
             <Input id="lite-email" type="email" value={editEmail}
               onChange={(e) => setEditEmail(e.target.value)}
-              placeholder="Pour les confirmations et les rappels" />
+              placeholder="Pour les confirmations et les rappels"
+              className={rebond && memeAdresse(editEmail, rebond.adresse) ? 'border-red-300' : ''} />
+            {rebond && (memeAdresse(editEmail, rebond.adresse)
+              ? <AlerteAdresseEmail raison={rebond.raison} depuis={rebond.depuis} cible="patient" />
+              : <p className="text-xs text-amber-700">Nouvelle adresse : cliquez sur « Enregistrer » pour qu&apos;elle remplace l&apos;ancienne.</p>)}
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="lite-notes">Notes</Label>
@@ -188,7 +208,8 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex items-center justify-end gap-3">
+          {saveError && <p className="text-sm text-red-600">{saveError}</p>}
           <Button onClick={handleSave} disabled={saving}>
             {saved ? <Check className="h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}
             {saved ? 'Enregistré' : saving ? 'Enregistrement…' : 'Enregistrer'}
@@ -257,6 +278,15 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
           <p className="mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             Ce patient n&apos;a pas d&apos;e-mail : le rappel serait enregistré mais
             <strong> aucun message ne partirait</strong>. Renseignez son adresse ci-dessus.
+          </p>
+        )}
+        {/* Même avertissement, pour l'adresse qui existe mais ne reçoit rien :
+            sans lui, ce bloc prévenait du cas « pas d'e-mail » et se taisait
+            sur le cas « e-mail qui rebondit », qui a le même effet. */}
+        {editEmail.trim() && rebond && memeAdresse(editEmail, rebond.adresse) && (
+          <p className="mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            L&apos;adresse e-mail de ce patient ne fonctionne pas : le rappel
+            <strong> ne lui parviendrait pas</strong>. Corrigez-la ci-dessus.
           </p>
         )}
 

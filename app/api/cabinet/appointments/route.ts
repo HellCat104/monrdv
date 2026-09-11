@@ -205,6 +205,14 @@ export async function POST(req: NextRequest) {
       // Complète les champs que la fiche n'avait pas encore
       if (birthDate) await admin.from('patients').update({ birth_date: birthDate, age: ageFromBirthDate(birthDate) }).eq('id', patientId).is('birth_date', null)
       if (email) await admin.from('patients').update({ email }).eq('id', patientId).is('email', null)
+      // Une adresse connue comme rebondie (v59) est remplacée par la nouvelle
+      // saisie ; une adresse valide ne l'est jamais. Non bloquant : sans la
+      // migration, la colonne n'existe pas et la prise de rendez-vous continue.
+      if (email) {
+        const { error: corrErr } = await admin.from('patients')
+          .update({ email }).eq('id', patientId).not('email_bounced_at', 'is', null)
+        if (corrErr) console.error('[cabinet] correction de l\'adresse rebondie impossible :', corrErr.message)
+      }
     } else {
       const { data: created, error: pErr } = await admin.from('patients')
         .insert({ doctor_id: doctorId, first_name: first, last_name: last, phone: formattedPhone, email, birth_date: birthDate, age: ageFromBirthDate(birthDate) })

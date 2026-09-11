@@ -1,11 +1,30 @@
 // Service d'envoi d'emails via Resend
+//
+// ── UN ENVOI N'EST RÉUSSI QUE SI RESEND L'A ACCEPTÉ ─────────────────────────
+//
+// Depuis sa v2, le SDK Resend ne lève PAS d'exception quand l'API refuse un
+// message (clé invalide, domaine non vérifié, adresse mal formée, quota
+// dépassé) : il renvoie `{ data: null, error }`. Les fonctions de ce fichier
+// faisaient `await resend.emails.send(...)` puis `return true` : elles se
+// déclaraient réussies sur un e-mail jamais parti, et les écrans affichaient
+// « envoyé ». Toutes passent désormais par envoyerVerifie(), qui lit `error`,
+// le journalise et renvoie false. Le type de retour n'a pas changé
+// (Promise<boolean>) et aucune de ces fonctions ne lève : un appelant qui
+// ignore le résultat ne casse pas, il continue simplement de l'ignorer.
+//
+// « Accepté » ne veut toujours pas dire « remis ». Un rebond (adresse
+// inexistante chez le destinataire) survient APRÈS l'acceptation ; seul le
+// webhook app/api/webhooks/resend peut le rapporter (migration v59).
 import { Resend } from 'resend'
 import { formatDateFr, formatTime } from '@/lib/utils'
 
-function getResend() {
+function getResend(label: string): Resend | null {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
-    console.warn('[Email] RESEND_API_KEY manquant — emails désactivés')
+    // Une erreur, pas un avertissement : sans clé, AUCUN e-mail ne part —
+    // confirmations, rappels, invitations. Ça doit ressortir dans les journaux
+    // à chaque tentative, avec le nom de ce qui n'est pas parti.
+    console.error(`[Email] RESEND_API_KEY absente : « ${label} » non envoyé`)
     return null
   }
   return new Resend(apiKey)
@@ -13,6 +32,42 @@ function getResend() {
 
 const FROM_EMAIL = process.env.EMAIL_FROM || 'MonRDV <noreply@monrdv.co.ma>'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+// Le journal serveur n'a pas à devenir un annuaire de patients : on garde de
+// quoi reconnaître le cas (« n…@icloud.com ») sans recopier l'adresse.
+function masquerAdresse(to: string): string {
+  const [local, domaine] = String(to).split('@')
+  if (!local || !domaine) return '(adresse mal formée)'
+  return `${local.slice(0, 1)}…@${domaine}`
+}
+
+/**
+ * Le SEUL point de sortie vers Resend. `true` = Resend a accepté le message ;
+ * `false` = il n'est pas parti (clé absente, refus de l'API, réseau), et la
+ * raison est dans le journal serveur.
+ *
+ * On ne journalise que `name` et `message` de l'erreur Resend, jamais l'objet
+ * entier ni la requête : la clé d'API voyage dans les en-têtes, pas dans ces
+ * deux champs.
+ */
+async function envoyerVerifie(
+  label: string,
+  message: { to: string; subject: string; html: string },
+): Promise<boolean> {
+  const resend = getResend(label)
+  if (!resend) return false
+  try {
+    const { error } = await resend.emails.send({ from: FROM_EMAIL, ...message })
+    if (error) {
+      console.error(`[Email] ${label} refusé par Resend (${masquerAdresse(message.to)}) :`, error.name, '—', error.message)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error(`[Email] ${label} : appel à Resend impossible (${masquerAdresse(message.to)}) :`, e instanceof Error ? e.message : String(e))
+    return false
+  }
+}
 
 // Échappe les caractères HTML pour éviter les XSS dans les emails
 function h(s: string | undefined | null): string {
@@ -45,15 +100,10 @@ export async function sendPendingEmail(params: {
   to: string
   doctorName: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.to,
-      subject: '⏳ Votre compte MonRDV a bien été créé',
-      html: `
+  return envoyerVerifie('compte créé, en attente (médecin)', {
+    to: params.to,
+    subject: '⏳ Votre compte MonRDV a bien été créé',
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 24px;">MonRDV 🇲🇦</h1>
@@ -77,12 +127,7 @@ export async function sendPendingEmail(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur email pending:', error)
-    return false
-  }
+  })
 }
 
 // Email envoyé au médecin quand son compte est approuvé
@@ -90,15 +135,10 @@ export async function sendApprovalEmail(params: {
   to: string
   doctorName: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.to,
-      subject: '✅ Votre compte MonRDV a été approuvé',
-      html: `
+  return envoyerVerifie('compte approuvé (médecin)', {
+    to: params.to,
+    subject: '✅ Votre compte MonRDV a été approuvé',
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 24px;">MonRDV 🇲🇦</h1>
@@ -119,12 +159,7 @@ export async function sendApprovalEmail(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur approbation:', error)
-    return false
-  }
+  })
 }
 
 // Email envoyé au médecin quand son compte est refusé
@@ -133,15 +168,10 @@ export async function sendRejectionEmail(params: {
   doctorName: string
   reason?: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.to,
-      subject: 'Votre demande d\'inscription MonRDV',
-      html: `
+  return envoyerVerifie('inscription refusée (médecin)', {
+    to: params.to,
+    subject: 'Votre demande d\'inscription MonRDV',
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 24px;">MonRDV 🇲🇦</h1>
@@ -160,12 +190,7 @@ export async function sendRejectionEmail(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur refus:', error)
-    return false
-  }
+  })
 }
 
 // Email de confirmation envoyé au patient après réservation
@@ -178,17 +203,12 @@ export async function sendAppointmentConfirmationToPatient(params: {
   time: string
   cancelToken: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
   const cancelUrl = `${APP_URL}/annuler/${encodeURIComponent(params.cancelToken)}`
 
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.patientEmail,
-      subject: `✅ Votre RDV avec Dr. ${params.doctorName} est confirmé`,
-      html: `
+  return envoyerVerifie('confirmation de rendez-vous (patient)', {
+    to: params.patientEmail,
+    subject: `✅ Votre RDV avec Dr. ${params.doctorName} est confirmé`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 22px;">Rendez-vous confirmé ✅</h1>
@@ -209,12 +229,7 @@ export async function sendAppointmentConfirmationToPatient(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur confirmation patient:', error)
-    return false
-  }
+  })
 }
 
 // Email de rappel envoyé au patient la veille du RDV
@@ -227,17 +242,12 @@ export async function sendReminderEmailToPatient(params: {
   time: string
   cancelToken: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
   const cancelUrl = `${APP_URL}/annuler/${encodeURIComponent(params.cancelToken)}`
 
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.patientEmail,
-      subject: `⏰ Rappel — Votre RDV demain avec Dr. ${params.doctorName}`,
-      html: `
+  return envoyerVerifie('rappel de la veille (patient)', {
+    to: params.patientEmail,
+    subject: `⏰ Rappel — Votre RDV demain avec Dr. ${params.doctorName}`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 22px;">Rappel de rendez-vous ⏰</h1>
@@ -258,12 +268,7 @@ export async function sendReminderEmailToPatient(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur rappel patient:', error)
-    return false
-  }
+  })
 }
 
 // Email de rappel de suivi ("il est temps de reprendre rendez-vous")
@@ -275,15 +280,10 @@ export async function sendRecallEmailToPatient(params: {
   reason?: string | null
   bookingUrl: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.patientEmail,
-      subject: `Suivi médical — Reprenez rendez-vous avec Dr. ${params.doctorName}`,
-      html: `
+  return envoyerVerifie('rappel de suivi (patient)', {
+    to: params.patientEmail,
+    subject: `Suivi médical — Reprenez rendez-vous avec Dr. ${params.doctorName}`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 22px;">Il est temps de votre suivi</h1>
@@ -299,12 +299,7 @@ export async function sendRecallEmailToPatient(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur rappel de suivi:', error)
-    return false
-  }
+  })
 }
 
 // Email récapitulatif du jour envoyé au médecin chaque matin
@@ -316,9 +311,6 @@ export async function sendDailyAgendaToDoctor(params: {
   // le commentaire du tableau ci-dessous.
   appointments: { time: string; patientName: string; phone: string }[]
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
   const hasAppointments = params.appointments.length > 0
 
   // Le motif de consultation est une donnée de santé. L'envoyer par e-mail,
@@ -351,14 +343,12 @@ export async function sendDailyAgendaToDoctor(params: {
         Aucun rendez-vous prévu aujourd'hui.
        </div>`
 
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.doctorEmail,
-      subject: hasAppointments
-        ? `📅 Votre agenda du ${params.date} — ${params.appointments.length} RDV`
-        : `📅 Votre agenda du ${params.date} — Pas de RDV`,
-      html: `
+  return envoyerVerifie('agenda du jour (médecin)', {
+    to: params.doctorEmail,
+    subject: hasAppointments
+      ? `📅 Votre agenda du ${params.date} — ${params.appointments.length} RDV`
+      : `📅 Votre agenda du ${params.date} — Pas de RDV`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 20px;">Agenda du jour 📅</h1>
@@ -377,12 +367,7 @@ export async function sendDailyAgendaToDoctor(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur agenda quotidien:', error)
-    return false
-  }
+  })
 }
 
 // Email envoyé au patient quand son RDV est annulé
@@ -394,15 +379,10 @@ export async function sendCancellationEmailToPatient(params: {
   date: string
   time: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.patientEmail,
-      subject: `❌ Votre RDV avec Dr. ${params.doctorName} a été annulé`,
-      html: `
+  return envoyerVerifie('annulation (patient)', {
+    to: params.patientEmail,
+    subject: `❌ Votre RDV avec Dr. ${params.doctorName} a été annulé`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #ef4444; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 22px;">Rendez-vous annulé ❌</h1>
@@ -425,12 +405,7 @@ export async function sendCancellationEmailToPatient(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur annulation patient:', error)
-    return false
-  }
+  })
 }
 
 // Email envoyé au patient quand son RDV est déplacé (par le médecin ou la
@@ -448,9 +423,6 @@ export async function sendRescheduleEmailToPatient(params: {
   newTime: string
   cancelToken?: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
   const cancelBlock = params.cancelToken
     ? `<p style="color: #6b7280; font-size: 13px; text-align: center; margin-top: 18px;">
          Ce créneau ne vous convient pas ?
@@ -458,12 +430,10 @@ export async function sendRescheduleEmailToPatient(params: {
        </p>`
     : ''
 
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.patientEmail,
-      subject: `🗓️ Votre RDV a été déplacé au ${params.newDate} à ${params.newTime}`,
-      html: `
+  return envoyerVerifie('déplacement de rendez-vous (patient)', {
+    to: params.patientEmail,
+    subject: `🗓️ Votre RDV a été déplacé au ${params.newDate} à ${params.newTime}`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 22px;">Rendez-vous déplacé 🗓️</h1>
@@ -488,12 +458,7 @@ export async function sendRescheduleEmailToPatient(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur déplacement patient:', error)
-    return false
-  }
+  })
 }
 
 // Email envoyé au médecin quand un patient annule son RDV
@@ -505,15 +470,10 @@ export async function sendCancellationEmailToDoctor(params: {
   date: string
   time: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.doctorEmail,
-      subject: `❌ Annulation RDV — ${params.patientName} le ${params.date} à ${params.time}`,
-      html: `
+  return envoyerVerifie('annulation (médecin)', {
+    to: params.doctorEmail,
+    subject: `❌ Annulation RDV — ${params.patientName} le ${params.date} à ${params.time}`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #ef4444; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 22px;">Annulation de rendez-vous ❌</h1>
@@ -536,12 +496,7 @@ export async function sendCancellationEmailToDoctor(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur annulation médecin:', error)
-    return false
-  }
+  })
 }
 
 // Email de notification à l'admin quand un nouveau médecin s'inscrit
@@ -550,16 +505,16 @@ export async function sendAdminNotificationEmail(params: {
   doctorEmail: string
   specialty: string
 }): Promise<boolean> {
-  const resend = getResend()
   const adminEmail = process.env.ADMIN_EMAIL
-  if (!resend || !adminEmail) return false
+  if (!adminEmail) {
+    console.error('[Email] ADMIN_EMAIL absente : « nouvelle inscription (admin) » non envoyé')
+    return false
+  }
 
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: adminEmail,
-      subject: `🔔 Nouvelle inscription médecin : Dr. ${params.doctorName}`,
-      html: `
+  return envoyerVerifie('nouvelle inscription (admin)', {
+    to: adminEmail,
+    subject: `🔔 Nouvelle inscription médecin : Dr. ${params.doctorName}`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0;">Nouvelle inscription</h1>
@@ -577,12 +532,7 @@ export async function sendAdminNotificationEmail(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur notification admin:', error)
-    return false
-  }
+  })
 }
 
 // Email de réinitialisation de mot de passe (envoyé via Resend, pas via Supabase SMTP)
@@ -590,15 +540,10 @@ export async function sendPasswordResetEmail(params: {
   to: string
   resetUrl: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.to,
-      subject: '🔑 Réinitialisation de votre mot de passe MonRDV',
-      html: `
+  return envoyerVerifie('réinitialisation du mot de passe', {
+    to: params.to,
+    subject: '🔑 Réinitialisation de votre mot de passe MonRDV',
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 22px;">Réinitialisation du mot de passe 🔑</h1>
@@ -617,12 +562,7 @@ export async function sendPasswordResetEmail(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur reset mot de passe:', error)
-    return false
-  }
+  })
 }
 
 // Email d'invitation d'une secrétaire (personnel du cabinet).
@@ -633,15 +573,10 @@ export async function sendStaffInviteEmail(params: {
   doctorName: string
   tempPassword?: string
 }): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-
-  try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: params.to,
-      subject: `Vous avez été ajouté(e) à l'équipe du Dr. ${params.doctorName} sur MonRDV`,
-      html: `
+  return envoyerVerifie('invitation secrétaire', {
+    to: params.to,
+    subject: `Vous avez été ajouté(e) à l'équipe du Dr. ${params.doctorName} sur MonRDV`,
+    html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #0EA5E9; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 24px;">MonRDV 🇲🇦</h1>
@@ -671,17 +606,12 @@ export async function sendStaffInviteEmail(params: {
           </div>
         </div>
       `,
-    })
-    return true
-  } catch (error) {
-    console.error('[Email] Erreur invitation secrétaire:', error)
-    return false
-  }
+  })
 }
 
 // ── Liste d'attente (v56) ────────────────────────────────────────────────────
 //
-// Trois différences volontaires avec les e-mails ci-dessus :
+// Deux différences volontaires avec les e-mails ci-dessus :
 //
 //  1. Les dates sont formatées ICI (« jeudi 10 septembre 2026 à 10:00 »), avec
 //     les formateurs de lib/utils. Les e-mails plus anciens affichent la date
@@ -690,34 +620,13 @@ export async function sendStaffInviteEmail(params: {
 //     confusion de jour coûte un rendez-vous.
 //  2. `doctorName` arrive DÉJÀ préfixé (displayName) : « Dr. » n'est pas écrit
 //     en dur, un kinésithérapeute ou un psychologue n'est pas docteur.
-//  3. Le retour de Resend est VÉRIFIÉ. Depuis sa v2 le SDK ne lève pas
-//     d'exception sur un refus de l'API : il renvoie `{ error }`. Les fonctions
-//     plus anciennes répondent donc `true` sur un e-mail jamais parti. Ici, un
-//     refus est journalisé et remonte `false` — la liste d'attente compte les
-//     offres réellement envoyées, pas celles qu'on a cru envoyer.
+//
+// (La vérification du retour de Resend, née ici en v56, est désormais celle de
+// TOUS les envois : voir envoyerVerifie() en tête de fichier.)
 
 /** « jeudi 10 septembre 2026 à 10:00 » — date de calendrier + heure, jamais de fuseau. */
 function quandLisible(date: string, time: string): string {
   return `${formatDateFr(date)} à ${formatTime(String(time))}`
-}
-
-async function envoyerVerifie(
-  label: string,
-  message: { to: string; subject: string; html: string },
-): Promise<boolean> {
-  const resend = getResend()
-  if (!resend) return false
-  try {
-    const { error } = await resend.emails.send({ from: FROM_EMAIL, ...message })
-    if (error) {
-      console.error(`[Email] ${label} refusé par Resend :`, error.message ?? error)
-      return false
-    }
-    return true
-  } catch (error) {
-    console.error(`[Email] ${label} :`, error)
-    return false
-  }
 }
 
 // Offre : « une place s'est libérée plus tôt ». Envoyée à tous les candidats

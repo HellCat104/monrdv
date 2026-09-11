@@ -7,9 +7,10 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { UserPlus, Trash2, Users2, Check, Mail, Loader2, ChevronDown } from 'lucide-react'
+import { UserPlus, Trash2, Users2, Check, Mail, Loader2, ChevronDown, Pencil, AlertTriangle } from 'lucide-react'
 import { DEFAULT_STAFF_PERMISSIONS, STAFF_PERMISSION_GROUPS, type CabinetStaff, type StaffPermissions } from '@/types'
 import { canAccess, type DoctorPlan } from '@/lib/plan'
+import AlerteAdresseEmail from '@/components/shared/AlerteAdresseEmail'
 
 // Ce qu'une personne peut réellement faire, en une ligne.
 //
@@ -50,6 +51,18 @@ export default function EquipePage() {
   const [ouvert, setOuvert] = useState<Record<string, boolean>>({})
   const [enregistre, setEnregistre] = useState<string | null>(null)
   const [permErreur, setPermErreur] = useState('')
+  // Invitation acceptée par la base mais e-mail non parti : ce n'est ni un
+  // succès franc ni un échec, et le médecin doit le lire autrement que « ✓ ».
+  const [avertissement, setAvertissement] = useState('')
+
+  // Correction de l'adresse d'une secrétaire. Une fiche à la fois : c'est un
+  // geste ponctuel, et deux champs ouverts se confondraient.
+  const [edition, setEdition] = useState<{ id: string; valeur: string } | null>(null)
+  const [editionErreur, setEditionErreur] = useState('')
+  const [editionEnCours, setEditionEnCours] = useState(false)
+  // Résultat affiché SUR la fiche concernée, pas en bas de page : le médecin
+  // regarde la carte qu'il vient de modifier.
+  const [messageFiche, setMessageFiche] = useState<{ id: string; texte: string; alerte: boolean } | null>(null)
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -81,7 +94,7 @@ export default function EquipePage() {
   }
 
   async function invite() {
-    setError(''); setOk('')
+    setError(''); setOk(''); setAvertissement('')
     if (!name.trim() || !email.trim()) { setError('Nom et e-mail requis.'); return }
     if (password && password.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères.'); return }
     setAdding(true)
@@ -89,14 +102,54 @@ export default function EquipePage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: name.trim(), email: email.trim(), password: password || undefined, permissions: perms }),
-    })
-    const d = await res.json().catch(() => ({}))
+    }).catch(() => null)
+    const d = res ? await res.json().catch(() => ({})) : {}
     setAdding(false)
+    if (!res) { setError('Pas de connexion. Vérifiez internet et réessayez.'); return }
     if (!res.ok) { setError(d.error || 'Échec de l’invitation.'); return }
-    setOk(`Invitation envoyée à ${email.trim()}.`)
+    // « Envoyée » seulement si Resend a accepté le message. Et même alors, une
+    // adresse fausse n'est découverte qu'une minute plus tard (rebond) : on le
+    // dit, pour que le médecin sache où regarder.
+    if (d.emailed === false) {
+      setAvertissement(`${name.trim()} a été ajoutée à votre équipe, mais l’e-mail d’invitation n’a pas pu partir. Vérifiez son adresse sur sa fiche ci-dessus. Pour se connecter, elle pourra aussi utiliser « Mot de passe oublié » sur la page de connexion.`)
+    } else {
+      setOk(`Invitation envoyée à ${email.trim()}. Si l’adresse est fausse, un avertissement apparaîtra sur sa fiche d’ici quelques minutes (rouvrez cette page pour le voir).`)
+    }
     setName(''); setEmail(''); setPassword(''); setPerms({ ...DEFAULT_STAFF_PERMISSIONS })
     setFormOuvert(false)
     load()
+  }
+
+  function ouvrirEdition(s: CabinetStaff) {
+    setEdition({ id: s.id, valeur: s.email })
+    setEditionErreur('')
+    setMessageFiche(null)
+  }
+
+  async function enregistrerAdresse(s: CabinetStaff) {
+    if (!edition || edition.id !== s.id) return
+    const nouvelle = edition.valeur.trim()
+    setEditionErreur('')
+    if (!nouvelle) { setEditionErreur('Indiquez la nouvelle adresse e-mail.'); return }
+    if (nouvelle.toLowerCase() === s.email.toLowerCase()) { setEditionErreur('C’est déjà son adresse actuelle.'); return }
+    setEditionEnCours(true)
+    const res = await fetch('/api/staff', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: s.id, email: nouvelle }),
+    }).catch(() => null)
+    const d = res ? await res.json().catch(() => ({})) : {}
+    setEditionEnCours(false)
+    if (!res) { setEditionErreur('Pas de connexion. Vérifiez internet et réessayez.'); return }
+    if (!res.ok || !d.staff) { setEditionErreur(d.error || 'L’adresse n’a pas pu être modifiée. Réessayez.'); return }
+
+    // La ligne renvoyée par le serveur fait foi : nouvelle adresse, et drapeau
+    // de rebond effacé par la base (la nouvelle adresse n'a pas rebondi).
+    setStaff((prev) => prev.map((x) => (x.id === s.id ? { ...x, ...d.staff } : x)))
+    setEdition(null)
+    setMessageFiche(d.emailed === false
+      ? { id: s.id, alerte: true, texte: `Adresse modifiée, mais l’invitation n’a pas pu partir vers ${d.staff.email}. Vérifiez l’adresse et réessayez.` }
+      : { id: s.id, alerte: false, texte: `Adresse modifiée. Une nouvelle invitation est partie vers ${d.staff.email}. L’ancienne adresse n’a plus accès au cabinet.` })
   }
 
   async function togglePerm(s: CabinetStaff, key: keyof StaffPermissions) {
@@ -127,7 +180,15 @@ export default function EquipePage() {
   async function remove(s: CabinetStaff) {
     if (!confirm(`Retirer ${s.name} de votre équipe ? Cette personne perdra l’accès au cabinet.`)) return
     setStaff((prev) => prev.filter((x) => x.id !== s.id))
-    await fetch(`/api/staff?id=${s.id}`, { method: 'DELETE' })
+    setPermErreur('')
+    const res = await fetch(`/api/staff?id=${s.id}`, { method: 'DELETE' }).catch(() => null)
+    // La carte disparaissait même si le serveur avait refusé : le médecin
+    // croyait l'accès retiré alors que la secrétaire pouvait toujours entrer.
+    if (!res || !res.ok) {
+      setStaff((prev) => (prev.some((x) => x.id === s.id) ? prev : [...prev, s]
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))))
+      setPermErreur(`${s.name} n’a pas pu être retirée de l’équipe : elle a toujours accès au cabinet. Vérifiez votre connexion et réessayez.`)
+    }
   }
 
   // Matrice groupée réutilisée (invitation + édition)
@@ -233,6 +294,66 @@ export default function EquipePage() {
                       </button>
                     </div>
 
+                    {/* Rebond (webhook Resend, v59) : l'invitation n'est jamais
+                        arrivée. Juste sous l'adresse fautive, avec le bouton
+                        qui mène à la correction — pas dans une page à part. */}
+                    {s.email_bounce_reason && edition?.id !== s.id && (
+                      <div className="mt-3">
+                        <AlerteAdresseEmail raison={s.email_bounce_reason} depuis={s.email_bounced_at} cible="secretaire">
+                          <Button size="sm" onClick={() => ouvrirEdition(s)}>
+                            <Pencil className="h-4 w-4 mr-1.5" /> Corriger l’adresse
+                          </Button>
+                        </AlerteAdresseEmail>
+                      </div>
+                    )}
+
+                    {/* Un vrai bouton, avec des mots : un crayon seul ne se
+                        devine pas, et le médecin qui a fait une faute de frappe
+                        doit trouver la correction sans chercher. */}
+                    {edition?.id === s.id ? (
+                      <div className="mt-3 rounded-xl border border-primary-200 bg-primary-50/40 p-3 space-y-2">
+                        <label htmlFor={`adresse-${s.id}`} className="block text-sm font-medium text-gray-800">
+                          Nouvelle adresse e-mail de {s.name}
+                        </label>
+                        <Input
+                          id={`adresse-${s.id}`}
+                          type="email"
+                          autoFocus
+                          value={edition.valeur}
+                          onChange={(e) => setEdition({ id: s.id, valeur: e.target.value })}
+                          onKeyDown={(e) => { if (e.key === 'Enter') enregistrerAdresse(s) }}
+                          placeholder="exemple : nadia@gmail.com"
+                        />
+                        <p className="text-xs text-gray-500">
+                          Ses accès restent les mêmes. Une nouvelle invitation part vers cette adresse,
+                          et l’ancienne ne pourra plus ouvrir le cabinet.
+                        </p>
+                        {editionErreur && <p className="text-sm text-red-600">{editionErreur}</p>}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button onClick={() => enregistrerAdresse(s)} disabled={editionEnCours}>
+                            {editionEnCours ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Mail className="h-4 w-4 mr-1.5" />}
+                            {editionEnCours ? 'Enregistrement…' : 'Enregistrer et renvoyer l’invitation'}
+                          </Button>
+                          <Button variant="ghost" disabled={editionEnCours} onClick={() => { setEdition(null); setEditionErreur('') }}>
+                            Annuler
+                          </Button>
+                        </div>
+                      </div>
+                    ) : !s.email_bounce_reason && (
+                      <Button variant="outline" size="sm" className="mt-3" onClick={() => ouvrirEdition(s)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1.5" /> Modifier l’adresse e-mail
+                      </Button>
+                    )}
+
+                    {messageFiche?.id === s.id && (
+                      <p className={`mt-2 text-sm flex items-start gap-1.5 ${messageFiche.alerte ? 'text-amber-800' : 'text-green-700'}`}>
+                        {messageFiche.alerte
+                          ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                          : <Check className="h-4 w-4 shrink-0 mt-0.5" />}
+                        {messageFiche.texte}
+                      </p>
+                    )}
+
                     {/* Le résumé reste visible même replié : c'est lui qui répond
                         à « qu'est-ce qu'elle a le droit de faire ? ». */}
                     <div className="mt-3 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
@@ -279,6 +400,11 @@ export default function EquipePage() {
       {ok && (
         <p className="text-sm text-green-600 flex items-center gap-1">
           <Check className="h-4 w-4 shrink-0" /> {ok}
+        </p>
+      )}
+      {avertissement && (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> {avertissement}
         </p>
       )}
 

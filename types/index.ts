@@ -79,6 +79,14 @@ export interface DaySchedule {
   breakEnd?: string
 }
 
+// Pourquoi une adresse e-mail ne reçoit plus rien (migration v59), rapporté
+// par le webhook Resend. Un code, pas une phrase : l'écran choisit les mots
+// (components/shared/AlerteAdresseEmail.tsx).
+//   bounced    : refus définitif du serveur destinataire (adresse inexistante)
+//   complained : le destinataire a classé un message comme indésirable
+//   suppressed : Resend n'a pas tenté l'envoi, l'adresse ayant déjà échoué
+export type EmailBounceReason = 'bounced' | 'complained' | 'suppressed'
+
 export interface Patient {
   id: string
   doctor_id: string
@@ -86,6 +94,10 @@ export interface Patient {
   last_name: string
   phone: string
   email?: string | null
+  // Posés par le webhook Resend, effacés par la base dès que l'adresse change
+  // (trigger v59). Absents tant que la migration n'est pas passée.
+  email_bounced_at?: string | null
+  email_bounce_reason?: EmailBounceReason | null
   age?: number | null
   birth_date?: string | null // date de naissance (YYYY-MM-DD) — âge précis + courbes
   sex?: 'M' | 'F' | null    // sexe (couloirs OMS des courbes de croissance)
@@ -642,6 +654,9 @@ export interface CabinetStaff {
   permissions: StaffPermissions
   status: 'active' | 'disabled'
   created_at: string
+  // Même drapeau que sur Patient (v59) : l'invitation n'a pas pu être remise.
+  email_bounced_at?: string | null
+  email_bounce_reason?: EmailBounceReason | null
 }
 
 export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {

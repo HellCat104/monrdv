@@ -839,6 +839,15 @@ export default function PatientsPage() {
                           Dernier RDV : {formatDateShort(patient.last_appointment_date)}
                         </span>
                       )}
+                      {/* Rebond (v59) : repérable dès la liste, sans ouvrir
+                          chaque dossier. Le détail et la correction sont dans
+                          le dossier, à côté du champ e-mail. */}
+                      {patient.email_bounce_reason && (
+                        <span className="flex items-center gap-1 text-red-600 font-medium">
+                          <AlertTriangle className="h-3 w-3" />
+                          E-mail qui ne fonctionne pas
+                        </span>
+                      )}
                     </div>
                   </div>
 
