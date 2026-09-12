@@ -43,8 +43,10 @@ export async function GET(req: NextRequest) {
     .is('reminder_sent_at', null)   // idempotence : ne jamais renvoyer un rappel déjà envoyé
 
   if (error) {
+    // Même raisonnement que pour l'agenda : la raison voyage dans la réponse,
+    // que cron-job.org archive, parce que les journaux Vercel auront disparu.
     console.error('[Cron reminders] Erreur Supabase:', error)
-    return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
+    return NextResponse.json({ error: 'Lecture des rendez-vous impossible', detail: error.message }, { status: 500 })
   }
 
   let sent = 0, skipped = 0, failed = 0
@@ -97,7 +99,7 @@ export async function GET(req: NextRequest) {
   const today = format(nowMaroc, 'yyyy-MM-dd')
   let recallSent = 0, recallSkipped = 0, recallFailed = 0
 
-  const { data: recalls } = await supabase
+  const { data: recalls, error: errRecalls } = await supabase
     .from('recalls')
     .select(`
       id, reason,
@@ -106,6 +108,14 @@ export async function GET(req: NextRequest) {
     `)
     .eq('status', 'pending')
     .lte('due_date', today)
+
+  // Cette lecture n'était pas contrôlée : un échec donnait une liste vide, donc
+  // « 0 rappel de suivi envoyé » — indiscernable d'une journée sans échéance.
+  // Les rappels de la veille, eux, sont déjà partis : on ne fait pas échouer
+  // toute la tâche, on le dit dans la réponse que cron-job.org archive.
+  if (errRecalls) {
+    console.error('[Cron reminders] lecture des rappels de suivi impossible :', errRecalls.message)
+  }
 
   for (let i = 0; i < (recalls ?? []).length; i += batchSize) {
     const batch = recalls!.slice(i, i + batchSize)
@@ -151,6 +161,11 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     reminders: { sent, skipped, failed, date: targetDate },
-    recalls: { sent: recallSent, skipped: recallSkipped, failed: recallFailed },
+    recalls: {
+      sent: recallSent, skipped: recallSkipped, failed: recallFailed,
+      // Présent seulement en cas d'échec : « 0 envoyé » ne doit pas pouvoir
+      // se confondre avec « aucune échéance aujourd'hui ».
+      ...(errRecalls ? { erreurLecture: errRecalls.message } : {}),
+    },
   })
 }

@@ -51,8 +51,14 @@ export async function GET(req: NextRequest) {
     // Sans cette trace, un échec de cette requête produisait une 500 muette :
     // cron-job.org signalait la panne, et les journaux Vercel ne disaient pas
     // pourquoi. On ne peut pas réparer ce qu'on ne peut pas lire.
-    console.error('[cron agenda] lecture des médecins impossible :', error?.message ?? 'aucune donnée')
-    return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
+    // La raison part AUSSI dans la réponse. Les journaux d'exécution de Vercel
+    // ne se gardent que quelques dizaines de minutes sur l'offre Hobby : une
+    // panne à 6 h du matin est illisible avant même le réveil. cron-job.org,
+    // lui, conserve la réponse du serveur dans son historique. Aucun risque de
+    // fuite : on est déjà passé par la vérification du jeton ci-dessus.
+    const raison = error?.message ?? 'aucun médecin renvoyé'
+    console.error('[cron agenda] lecture des médecins impossible :', raison)
+    return NextResponse.json({ error: 'Lecture des médecins impossible', detail: raison }, { status: 500 })
   }
 
   // On ne garde que les médecins qui travaillent aujourd'hui.
@@ -79,7 +85,7 @@ export async function GET(req: NextRequest) {
   // envoyer et laisser la tâche échouer bruyamment : elle sera relancée.
   if (errApts) {
     console.error('[cron agenda] lecture des rendez-vous impossible :', errApts.message)
-    return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
+    return NextResponse.json({ error: 'Lecture des rendez-vous impossible', detail: errApts.message }, { status: 500 })
   }
 
   const aptsByDoctor = new Map<string, { time: string; patientName: string; phone: string }[]>()
