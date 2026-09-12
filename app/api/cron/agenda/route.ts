@@ -48,6 +48,10 @@ export async function GET(req: NextRequest) {
     .eq('subscription_status', 'actif')
 
   if (error || !doctors) {
+    // Sans cette trace, un échec de cette requête produisait une 500 muette :
+    // cron-job.org signalait la panne, et les journaux Vercel ne disaient pas
+    // pourquoi. On ne peut pas réparer ce qu'on ne peut pas lire.
+    console.error('[cron agenda] lecture des médecins impossible :', error?.message ?? 'aucune donnée')
     return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
   }
 
@@ -60,13 +64,23 @@ export async function GET(req: NextRequest) {
 
   // UNE seule requête pour tous les RDV du jour (au lieu d'une par médecin),
   // puis regroupement en mémoire par médecin — évite le N+1 qui faisait timeout.
-  const { data: allApts } = await supabase
+  const { data: allApts, error: errApts } = await supabase
     .from('appointments')
     .select('doctor_id, time, patient:patients(first_name, last_name, phone)')
     .in('doctor_id', workingDoctors.map((d) => d.id))
     .eq('date', today)
     .neq('status', 'cancelled')
     .order('time', { ascending: true })
+
+  // Le résultat de cette requête n'était pas contrôlé : en cas d'échec, la
+  // liste devenait vide et CHAQUE médecin recevait un agenda annonçant une
+  // journée sans rendez-vous. Un praticien qui s'y fie ne vient pas, ou ne
+  // prépare rien — c'est pire qu'un e-mail manquant. On préfère ne rien
+  // envoyer et laisser la tâche échouer bruyamment : elle sera relancée.
+  if (errApts) {
+    console.error('[cron agenda] lecture des rendez-vous impossible :', errApts.message)
+    return NextResponse.json({ error: 'Erreur serveur interne' }, { status: 500 })
+  }
 
   const aptsByDoctor = new Map<string, { time: string; patientName: string; phone: string }[]>()
   for (const apt of allApts ?? []) {
