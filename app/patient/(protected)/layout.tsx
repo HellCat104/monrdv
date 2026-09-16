@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import PatientHeader from './PatientHeader'
+import ServiceIndisponible from '@/components/ServiceIndisponible'
 
 /**
  * Rattache au compte les fiches créées lors d'une réservation EN INVITÉ.
@@ -47,25 +48,36 @@ export default async function PatientLayout({ children }: { children: React.Reac
     redirect('/patient/login')
   }
 
-  // Si c'est un médecin → renvoyer vers son dashboard médecin
-  const { data: doctor } = await supabase
+  // Si c'est un médecin → renvoyer vers son dashboard médecin.
+  //
+  // `maybeSingle` : ne pas être médecin est le cas ordinaire ici et ne doit
+  // pas prendre l'apparence d'une erreur. Une VRAIE erreur, elle, veut dire
+  // que la base n'a pas répondu : on ne peut alors rien conclure sur le rôle
+  // de cette personne. Poursuivre afficherait l'espace patient à un médecin
+  // ou à une secrétaire — et le contraire, dans l'autre sens, la faisait
+  // rebondir d'un espace à l'autre sur une page qui charge sans fin.
+  const { data: doctor, error: errDoctor } = await supabase
     .from('doctors')
     .select('id')
     .eq('email', user.email)
-    .single()
+    .maybeSingle()
+
+  if (errDoctor) return <ServiceIndisponible detail={errDoctor.message} />
 
   if (doctor) {
     redirect('/dashboard')
   }
 
   // Si c'est une secrétaire → renvoyer vers l'espace cabinet
-  const { data: staff } = await supabase
+  const { data: staff, error: errStaff } = await supabase
     .from('cabinet_staff')
     .select('id')
     .eq('email', (user.email ?? '').toLowerCase())
     .eq('status', 'active')
     .limit(1)
     .maybeSingle()
+
+  if (errStaff) return <ServiceIndisponible detail={errStaff.message} />
 
   if (staff) {
     redirect('/cabinet')

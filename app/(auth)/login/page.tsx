@@ -22,6 +22,12 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
+    // Passe à `true` juste avant de quitter la page : le bouton doit rester
+    // en « Connexion… » pendant la navigation. Le remettre au repos tout de
+    // suite donnait un formulaire d'apparence inerte alors que la page
+    // suivante se chargeait encore — on croyait la connexion perdue.
+    let navigue = false
+
     try {
       const supabase = createClient()
       const { error: authError } = await supabase.auth.signInWithPassword({
@@ -39,22 +45,37 @@ export default function LoginPage() {
       }
 
       // Admin → dashboard admin (vérifié côté serveur, ADMIN_EMAIL non exposé au client)
-      const meRes = await fetch('/api/auth/me')
-      const meData = await meRes.json()
-      if (meData.isAdmin) {
-        router.push('/admin')
-        router.refresh()
-        return
+      //
+      // Cet appel était attendu SANS limite de temps : quand le serveur ne
+      // répondait pas, la connexion restait bloquée sur sa roue pendant toute
+      // l'expiration de la requête. Or il ne sert qu'à reconnaître l'admin —
+      // s'il échoue, la connexion d'un médecin ou d'une secrétaire n'a aucune
+      // raison d'en pâtir : on poursuit simplement le chemin normal.
+      try {
+        const meRes = await fetch('/api/auth/me', { signal: AbortSignal.timeout(8000) })
+        if (meRes.ok) {
+          const meData = await meRes.json()
+          if (meData.isAdmin) {
+            navigue = true
+            router.push('/admin')
+            router.refresh()
+            return
+          }
+        }
+      } catch {
+        // Délai dépassé ou réseau : ce compte n'est pas traité comme admin.
       }
 
       const { data: { user } } = await supabase.auth.getUser()
 
-      // Vérifie le statut du médecin
+      // Vérifie le statut du médecin. `maybeSingle` : une secrétaire ou un
+      // patient n'a pas de ligne ici, ce qui est normal et ne doit pas
+      // ressembler à une panne.
       const { data: doctor } = await supabase
         .from('doctors')
         .select('status, rejection_reason')
         .eq('email', user?.email)
-        .single()
+        .maybeSingle()
 
       if (doctor?.status === 'pending') {
         await supabase.auth.signOut()
@@ -70,11 +91,12 @@ export default function LoginPage() {
 
       // Pas de router.refresh() ici : push() vers une route serveur en
       // déclenche déjà le rendu. L'appeler doublait le travail serveur.
+      navigue = true
       router.push('/dashboard')
     } catch {
       setError('Une erreur est survenue. Veuillez réessayer.')
     } finally {
-      setLoading(false)
+      if (!navigue) setLoading(false)
     }
   }
 

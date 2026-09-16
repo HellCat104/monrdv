@@ -5,6 +5,25 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DEFAULT_STAFF_PERMISSIONS, type CabinetStaff, type StaffPermissions } from '@/types'
 import { canAccess } from '@/lib/plan'
 
+/**
+ * Levée quand un contrôle d'accès n'a PAS PU être effectué : la base n'a pas
+ * répondu. À ne jamais confondre avec « cette personne n'a pas ce droit ».
+ *
+ * Auparavant les deux cas donnaient `null`, et l'espace cabinet en concluait
+ * « non autorisée » : il renvoyait vers /login, qui renvoyait vers /dashboard,
+ * qui renvoyait vers l'espace cabinet. Pour une secrétaire dont les droits
+ * étaient parfaitement en règle, cela se voyait comme une page qui charge sans
+ * fin. Une exception force chaque appelant à traiter la panne pour ce qu'elle
+ * est : les routes API répondent 500 (erreur serveur) et non 401 (refus), et
+ * les pages affichent « réessayez ».
+ */
+export class BaseInjoignable extends Error {
+  constructor(public readonly detail: string) {
+    super('Contrôle d\'accès impossible : ' + detail)
+    this.name = 'BaseInjoignable'
+  }
+}
+
 export interface StaffContext {
   email: string
   staff: CabinetStaff
@@ -16,11 +35,16 @@ export interface StaffContext {
 
 export async function getStaffContext(): Promise<StaffContext | null> {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error: errUser } = await supabase.auth.getUser()
+  // `AuthRetryableFetchError` est l'erreur que supabase-js produit quand le
+  // serveur d'authentification ne répond pas (réseau, délai dépassé). Toutes
+  // les autres — session absente, jeton invalide — sont de vrais refus et
+  // doivent continuer à mener à la page de connexion.
+  if (errUser?.name === 'AuthRetryableFetchError') throw new BaseInjoignable(errUser.message)
   if (!user?.email) return null
 
   const admin = createAdminClient()
-  const { data: staff } = await admin
+  const { data: staff, error: errStaff } = await admin
     .from('cabinet_staff')
     .select('*')
     .eq('email', user.email.toLowerCase())
@@ -28,13 +52,17 @@ export async function getStaffContext(): Promise<StaffContext | null> {
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
+  if (errStaff) throw new BaseInjoignable(errStaff.message)
   if (!staff) return null
 
-  const { data: doctor } = await admin
+  // `maybeSingle` : une ligne manquante n'est plus déguisée en erreur, donc
+  // `errDoctor` ne signale plus qu'une chose — la base n'a pas répondu.
+  const { data: doctor, error: errDoctor } = await admin
     .from('doctors')
     .select('id, name, specialty, city, confidential_mode, plan')
     .eq('id', staff.doctor_id)
-    .single()
+    .maybeSingle()
+  if (errDoctor) throw new BaseInjoignable(errDoctor.message)
   if (!doctor) return null
 
   // Fusion avec les défauts : les permissions ajoutées après l'invitation
