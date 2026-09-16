@@ -52,13 +52,18 @@ export default function LoginPage() {
       // s'il échoue, la connexion d'un médecin ou d'une secrétaire n'a aucune
       // raison d'en pâtir : on poursuit simplement le chemin normal.
       try {
-        const meRes = await fetch('/api/auth/me', { signal: AbortSignal.timeout(8000) })
+        // `AbortSignal.timeout` n'existe qu'à partir de Chrome 103 / Safari 16.
+        // Sur le PC personnel d'un médecin, un navigateur ancien n'a rien
+        // d'improbable : on s'en passe proprement au lieu de lever une erreur.
+        const limite = typeof AbortSignal?.timeout === 'function'
+          ? AbortSignal.timeout(8000)
+          : undefined
+        const meRes = await fetch('/api/auth/me', { signal: limite })
         if (meRes.ok) {
           const meData = await meRes.json()
           if (meData.isAdmin) {
             navigue = true
-            router.push('/admin')
-            router.refresh()
+            window.location.assign('/admin')
             return
           }
         }
@@ -89,10 +94,23 @@ export default function LoginPage() {
         return
       }
 
-      // Pas de router.refresh() ici : push() vers une route serveur en
-      // déclenche déjà le rendu. L'appeler doublait le travail serveur.
+      // Après une connexion réussie, on quitte la page par un CHARGEMENT COMPLET
+      // et non par `router.push`.
+      //
+      // `router.push` fait une navigation « douce » : le navigateur ne change
+      // pas de page, c'est React qui va chercher la suivante et l'insère. Or la
+      // destination peut très bien répondre « va ailleurs » — le middleware si
+      // la session n'est pas encore lisible côté serveur, le layout du tableau
+      // de bord selon le rôle. Quand cette redirection sort du segment
+      // (dashboard), qui possède le seul écran d'attente du site, le squelette
+      // gris reste affiché et RIEN ne vient le remplacer : la page charge à
+      // l'infini, sans erreur ni message.
+      //
+      // Un chargement complet ferme cette porte : les redirections sont suivies
+      // par le navigateur lui-même, comme pour n'importe quel lien. Cela coûte
+      // un rechargement, sur une page qu'on ne traverse qu'une fois.
       navigue = true
-      router.push('/dashboard')
+      window.location.assign('/dashboard')
     } catch {
       setError('Une erreur est survenue. Veuillez réessayer.')
     } finally {

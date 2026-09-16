@@ -94,7 +94,7 @@ export default function PatientLoginPage() {
         ? "Votre compte n'est pas encore activé. Ouvrez l'email de confirmation que nous vous avons envoyé."
         : messageErreur(error.message))
     } else {
-      router.push('/patient/dashboard')
+      window.location.assign('/patient/dashboard')
     }
   }
 
@@ -121,7 +121,7 @@ export default function PatientLoginPage() {
     // Session présente = confirmation désactivée côté Supabase : on entre directement.
     // Session absente = un e-mail de confirmation vient de partir.
     if (data.session) {
-      router.push('/patient/dashboard')
+      window.location.assign('/patient/dashboard')
     } else {
       setSuccess(`Compte créé. Un email de confirmation vient d'être envoyé à ${email}. Ouvrez-le pour activer votre compte (pensez à vérifier vos spams).`)
       setMode('email-login')
