@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import ServiceIndisponible from '@/components/ServiceIndisponible'
+import CompteEnAttente from '@/components/CompteEnAttente'
 
 export default async function DashboardLayout({
   children,
@@ -23,7 +24,7 @@ export default async function DashboardLayout({
   // sans quoi on ne saurait plus distinguer « pas médecin » d'une vraie panne.
   const { data: doctor, error: errDoctor } = await supabase
     .from('doctors')
-    .select('id, status')
+    .select('id, status, rejection_reason')
     .eq('email', user.email)
     .maybeSingle()
 
@@ -42,8 +43,18 @@ export default async function DashboardLayout({
     redirect('/patient/dashboard')
   }
 
+  // Compte pas encore approuvé — le cas de TOUT compte médecin fraîchement créé :
+  // l'inscription pose `status: 'pending'` alors que le compte d'authentification
+  // est créé confirmé (`email_confirm: true`). Le praticien se connecte donc
+  // réellement, et arrive ici.
+  //
+  // `redirect('/login')` partait d'un layout vers une route hors du segment
+  // (dashboard) — le seul du site à posséder un `loading.tsx`. Le squelette de
+  // chargement restait alors à l'écran, sans rien pour le remplacer ni le
+  // moindre message : « ça charge à l'infini ». On affiche désormais l'état réel
+  // du compte, sans redirection d'aucune sorte.
   if (doctor.status !== 'approved') {
-    redirect('/login')
+    return <CompteEnAttente statut={doctor.status} motif={doctor.rejection_reason} />
   }
 
   return (
