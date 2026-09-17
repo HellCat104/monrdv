@@ -58,6 +58,10 @@ export default function SettingsPage() {
     specialty: '',
     city: '',
     address: '',
+    // Coordonnées du cabinet (v60) — dans `form` et non à côté, pour que le
+    // rappel « pensez à enregistrer » les prenne en compte comme le reste.
+    latitude: null as number | null,
+    longitude: null as number | null,
     bio: '',
     ice: '',
     inpe: '',
@@ -76,6 +80,12 @@ export default function SettingsPage() {
   // l'interrupteur ET on ne l'envoie pas à l'enregistrement — une colonne
   // inconnue dans l'UPDATE ferait échouer TOUTE la sauvegarde des Paramètres.
   const [listeAttenteDispo, setListeAttenteDispo] = useState(false)
+  // Même précaution pour les coordonnées GPS : tant que la v60 n'est pas
+  // passée, on masque le bloc ET on ne l'envoie pas à l'enregistrement.
+  const [coordDispo, setCoordDispo] = useState(false)
+  const [lienCarte, setLienCarte] = useState('')
+  const [geoEtat, setGeoEtat] = useState<'repos' | 'recherche' | 'erreur'>('repos')
+  const [geoErreur, setGeoErreur] = useState('')
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -139,6 +149,8 @@ export default function SettingsPage() {
           specialty: data.specialty ?? '',
           city: data.city ?? '',
           address: data.address ?? '',
+          latitude: data.latitude ?? null,
+          longitude: data.longitude ?? null,
           bio: data.bio ?? '',
           ice: data.ice ?? '',
           inpe: data.inpe ?? '',
@@ -156,6 +168,7 @@ export default function SettingsPage() {
         const extraCharges = ((data.specialties as string[] | null) ?? [data.specialty]).filter((s) => s && s !== data.specialty)
         setForm(formCharge)
         setListeAttenteDispo(Object.prototype.hasOwnProperty.call(data, 'waitlist_enabled'))
+        setCoordDispo(Object.prototype.hasOwnProperty.call(data, 'latitude'))
         setEnabledVitals(vitalsCharges)
         setCustomVitals(customCharges)
         setExtraSpecs(extraCharges)
@@ -252,6 +265,41 @@ export default function SettingsPage() {
     setBreaks(day, getBreaks(day).map((b, i) => (i === index ? { ...b, [field]: value } : b)))
   }
 
+  /**
+   * Transforme le lien collé par le médecin en coordonnées GPS.
+   *
+   * On ne lui demande jamais une latitude : il colle ce que le bouton
+   * « Partager » de Google Maps lui a donné, et le serveur s'occupe du reste
+   * (les liens courts maps.app.goo.gl ne contiennent aucune coordonnée et
+   * doivent être suivis, ce que le navigateur ne peut pas faire).
+   */
+  async function localiserCabinet() {
+    if (!lienCarte.trim()) return
+    setGeoEtat('recherche')
+    setGeoErreur('')
+    try {
+      const rep = await fetch('/api/geo/resoudre', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lien: lienCarte }),
+      })
+      const data = await rep.json()
+      if (!rep.ok) {
+        setGeoEtat('erreur')
+        setGeoErreur(data.error ?? 'Lien non reconnu.')
+        return
+      }
+      // Rangé dans `form` : le rappel « pensez à enregistrer » s'allume, et
+      // rien n'est écrit en base avant que le médecin ne clique lui-même.
+      setForm((f) => ({ ...f, latitude: data.latitude, longitude: data.longitude }))
+      setLienCarte('')
+      setGeoEtat('repos')
+    } catch {
+      setGeoEtat('erreur')
+      setGeoErreur('Connexion impossible. Réessayez.')
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!doctor) return
@@ -280,6 +328,7 @@ export default function SettingsPage() {
           booking_lead_hours: form.booking_lead_hours,
           show_prices: form.show_prices,
           ...(listeAttenteDispo ? { waitlist_enabled: form.waitlist_enabled } : {}),
+          ...(coordDispo ? { latitude: form.latitude, longitude: form.longitude } : {}),
           working_hours: form.working_hours,
           has_secretary: form.has_secretary,
           confidential_mode: form.confidential_mode,
@@ -745,6 +794,67 @@ export default function SettingsPage() {
               />
               <p className="text-xs text-gray-400">Affichée sur votre page de réservation publique</p>
             </div>
+
+            {/* Position du cabinet sur la carte (v60) — masqué tant que la
+                migration n'est pas passée, comme la liste d'attente. */}
+            {coordDispo && (
+              <div className="space-y-1.5">
+                <Label htmlFor="s_carte" className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                  Position sur la carte
+                </Label>
+
+                {form.latitude != null && form.longitude != null ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                    <Check className="h-4 w-4 text-green-600 shrink-0" />
+                    <span className="text-sm text-green-800">Votre cabinet est situé sur la carte</span>
+                    <a
+                      href={`https://www.google.com/maps?q=${form.latitude},${form.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-green-700 underline underline-offset-2"
+                    >
+                      Vérifier <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, latitude: null, longitude: null })}
+                      className="ml-auto text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2"
+                    >
+                      Changer
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <Input
+                        id="s_carte"
+                        value={lienCarte}
+                        onChange={(e) => { setLienCarte(e.target.value); setGeoEtat('repos') }}
+                        placeholder="Collez ici le lien Google Maps de votre cabinet"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={localiserCabinet}
+                        disabled={!lienCarte.trim() || geoEtat === 'recherche'}
+                      >
+                        {geoEtat === 'recherche' ? 'Recherche…' : 'Localiser'}
+                      </Button>
+                    </div>
+                    {geoEtat === 'erreur' && (
+                      <p className="text-xs text-red-600">{geoErreur}</p>
+                    )}
+                    <p className="text-xs text-gray-400">
+                      Sur votre téléphone : ouvrez Google Maps, cherchez votre cabinet,
+                      appuyez sur « Partager », puis « Copier le lien » — et collez-le ici.
+                      Cela permet à Google de vous proposer aux patients qui cherchent
+                      un médecin près d&apos;eux.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Bio */}
             <div className="space-y-1.5">

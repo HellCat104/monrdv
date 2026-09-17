@@ -76,7 +76,13 @@ const jsonLd = {
       })),
     },
     {
-      '@type': 'Organization',
+      // `MedicalBusiness` plutôt qu'`Organization` : c'est un sous-type
+      // d'Organization, donc rien n'est perdu, mais il accepte en plus les
+      // propriétés d'un établissement de santé — adresse, coordonnées GPS,
+      // tarifs, devise. Un SEUL nœud décrit MonRDV, sous le même `@id` :
+      // publier côte à côte une Organization et un MedicalBusiness portant le
+      // même nom aurait présenté à Google deux entités concurrentes.
+      '@type': 'MedicalBusiness',
       '@id': `${APP_URL}/#organization`,
       name: 'MonRDV',
       url: APP_URL,
@@ -84,8 +90,25 @@ const jsonLd = {
         '@type': 'ImageObject',
         url: `${APP_URL}/favicon.ico`,
       },
-      areaServed: 'MA',
-      description: 'Plateforme marocaine de prise de rendez-vous médicaux en ligne',
+      description:
+        'Plateforme marocaine de prise de rendez-vous médicaux en ligne et de gestion de cabinet',
+      priceRange: '149 MAD - 549 MAD',
+      currenciesAccepted: 'MAD',
+      areaServed: {
+        '@type': 'Country',
+        name: 'Maroc',
+      },
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: 'Rabat',
+        addressRegion: 'Rabat-Salé-Kénitra',
+        addressCountry: 'MA',
+      },
+      geo: {
+        '@type': 'GeoCoordinates',
+        latitude: 34.020882,
+        longitude: -6.841650,
+      },
     },
   ],
 }

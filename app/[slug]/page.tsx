@@ -97,6 +97,29 @@ export default async function BookingPage({ params }: Props) {
   if (listeError) console.error('[Liste d\'attente] réglage illisible :', listeError.message)
   const waitlistEnabled = !listeError && reglageListe?.waitlist_enabled === true
 
+  // Coordonnées GPS du cabinet (v60) — lues À PART, pour la raison exacte
+  // rappelée juste au-dessus : tant que la migration n'est pas passée, ces
+  // colonnes n'existent pas, et les ajouter à la projection de getDoctor ferait
+  // échouer TOUTE la requête — la fiche de chaque médecin tomberait en 404.
+  // Ici, une erreur retire simplement le balisage `geo`.
+  const { data: coord, error: coordError } = await supabase
+    .from('doctors').select('latitude, longitude').eq('id', doctor.id).maybeSingle()
+  if (coordError) console.error('[Coordonnées cabinet] illisibles :', coordError.message)
+
+  // PostgREST renvoie les `numeric` sous forme de chaînes : sans conversion,
+  // Google recevrait "34.020882" entre guillemets là où il attend un nombre.
+  // Et surtout : PAS de balisage `geo` tant que les deux valeurs ne sont pas
+  // réellement renseignées. Des coordonnées inventées enverraient un patient à
+  // la mauvaise adresse, et Google sanctionne un balisage qui ne correspond pas.
+  const geo =
+    !coordError && coord?.latitude != null && coord?.longitude != null
+      ? {
+          '@type': 'GeoCoordinates',
+          latitude: Number(coord.latitude),
+          longitude: Number(coord.longitude),
+        }
+      : null
+
   // Médecin inactif → page d'erreur propre
   if (doctor.subscription_status !== 'actif') {
     return (
@@ -160,6 +183,21 @@ export default async function BookingPage({ params }: Props) {
       closes: v.end,
     }))
 
+  // Fourchette de tarifs — UNIQUEMENT si le médecin a choisi d'afficher ses
+  // prix. Un balisage doit refléter ce que le visiteur lit sur la page :
+  // annoncer un tarif à Google alors que la fiche n'en montre aucun serait à la
+  // fois trompeur pour le patient et sanctionnable.
+  const tarifs = doctor.show_prices
+    ? (consultationTypes ?? [])
+        .map((t) => Number(t.default_price))
+        .filter((n) => Number.isFinite(n) && n > 0)
+    : []
+  const priceRange = tarifs.length === 0
+    ? null
+    : Math.min(...tarifs) === Math.max(...tarifs)
+      ? `${Math.min(...tarifs)} MAD`
+      : `${Math.min(...tarifs)} - ${Math.max(...tarifs)} MAD`
+
   // Données structurées JSON-LD — Physician schema pour Google
   const cityPart = doctor.city ? ` à ${doctor.city}` : ''
   const canonicalSlug = `dr-${slug}`
@@ -178,8 +216,14 @@ export default async function BookingPage({ params }: Props) {
         ...(doctor.address && { streetAddress: doctor.address }),
       },
     }),
+    // Placer le cabinet sur une carte : c'est ce qui fait remonter le médecin
+    // sur les recherches « près de moi », majoritaires en santé depuis un
+    // téléphone. Absent tant que les coordonnées ne sont pas renseignées.
+    ...(geo && { geo }),
     ...(doctor.phone && { telephone: doctor.phone }),
     ...(doctor.photo_url && { image: doctor.photo_url }),
+    currenciesAccepted: 'MAD',
+    ...(priceRange && { priceRange }),
     availableService: {
       '@type': 'MedicalTherapy',
       name: 'Consultation médicale',

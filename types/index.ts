@@ -10,11 +10,16 @@ export interface Doctor {
   slug: string
   city?: string
   address?: string
+  // Coordonnées GPS du cabinet (v60) — publiées dans le balisage schema.org
+  // `geo` de la fiche publique. Nulles tant que le médecin ne les a pas
+  // renseignées : jamais devinées.
+  latitude?: number | null
+  longitude?: number | null
   photo_url?: string
   bio?: string | null
   status?: string
   subscription_status?: string
-  // Forfait : 'agenda' (149 DH, RDV seuls) | 'complet' (299 DH, cabinet complet)
+  // Forfait : 'agenda' (149 DH, RDV seuls) | 'complet' (249 DH, cabinet complet)
   plan?: 'agenda' | 'complet'
   pending_plan?: 'agenda' | 'complet' | null  // demande de changement à confirmer
   price_hidden?: boolean                       // masque les tarifs (médecins pilotes)
