@@ -62,6 +62,9 @@ export default function SettingsPage() {
     // rappel « pensez à enregistrer » les prenne en compte comme le reste.
     latitude: null as number | null,
     longitude: null as number | null,
+    // Lien de carte (v61) — alimente le bouton « Y aller » du patient. Posé
+    // même quand les coordonnées exactes n'ont pas pu être lues du lien.
+    map_url: null as string | null,
     bio: '',
     ice: '',
     inpe: '',
@@ -83,6 +86,7 @@ export default function SettingsPage() {
   // Même précaution pour les coordonnées GPS : tant que la v60 n'est pas
   // passée, on masque le bloc ET on ne l'envoie pas à l'enregistrement.
   const [coordDispo, setCoordDispo] = useState(false)
+  const [carteDispo, setCarteDispo] = useState(false)
   const [lienCarte, setLienCarte] = useState('')
   const [geoEtat, setGeoEtat] = useState<'repos' | 'recherche' | 'erreur'>('repos')
   const [geoErreur, setGeoErreur] = useState('')
@@ -151,6 +155,7 @@ export default function SettingsPage() {
           address: data.address ?? '',
           latitude: data.latitude ?? null,
           longitude: data.longitude ?? null,
+          map_url: data.map_url ?? null,
           bio: data.bio ?? '',
           ice: data.ice ?? '',
           inpe: data.inpe ?? '',
@@ -169,6 +174,7 @@ export default function SettingsPage() {
         setForm(formCharge)
         setListeAttenteDispo(Object.prototype.hasOwnProperty.call(data, 'waitlist_enabled'))
         setCoordDispo(Object.prototype.hasOwnProperty.call(data, 'latitude'))
+        setCarteDispo(Object.prototype.hasOwnProperty.call(data, 'map_url'))
         setEnabledVitals(vitalsCharges)
         setCustomVitals(customCharges)
         setExtraSpecs(extraCharges)
@@ -291,7 +297,16 @@ export default function SettingsPage() {
       }
       // Rangé dans `form` : le rappel « pensez à enregistrer » s'allume, et
       // rien n'est écrit en base avant que le médecin ne clique lui-même.
-      setForm((f) => ({ ...f, latitude: data.latitude, longitude: data.longitude }))
+      //
+      // `mapUrl` est le résultat principal — il suffit au bouton « Y aller ».
+      // Les coordonnées, elles, ne sont pas toujours lisibles d'un lien
+      // partagé depuis une recherche : leur absence n'est pas un échec.
+      setForm((f) => ({
+        ...f,
+        map_url: data.mapUrl ?? null,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+      }))
       setLienCarte('')
       setGeoEtat('repos')
     } catch {
@@ -329,6 +344,7 @@ export default function SettingsPage() {
           show_prices: form.show_prices,
           ...(listeAttenteDispo ? { waitlist_enabled: form.waitlist_enabled } : {}),
           ...(coordDispo ? { latitude: form.latitude, longitude: form.longitude } : {}),
+          ...(carteDispo ? { map_url: form.map_url } : {}),
           working_hours: form.working_hours,
           has_secretary: form.has_secretary,
           confidential_mode: form.confidential_mode,
@@ -795,34 +811,55 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-400">Affichée sur votre page de réservation publique</p>
             </div>
 
-            {/* Position du cabinet sur la carte (v60) — masqué tant que la
-                migration n'est pas passée, comme la liste d'attente. */}
-            {coordDispo && (
+            {/* Position du cabinet sur la carte (v60/v61) — masqué tant que les
+                migrations ne sont pas passées, comme la liste d'attente. */}
+            {(coordDispo || carteDispo) && (
               <div className="space-y-1.5">
                 <Label htmlFor="s_carte" className="flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5 text-gray-400" />
                   Position sur la carte
                 </Label>
 
-                {form.latitude != null && form.longitude != null ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                    <Check className="h-4 w-4 text-green-600 shrink-0" />
-                    <span className="text-sm text-green-800">Votre cabinet est situé sur la carte</span>
-                    <a
-                      href={`https://www.google.com/maps?q=${form.latitude},${form.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-green-700 underline underline-offset-2"
-                    >
-                      Vérifier <ExternalLink className="h-3 w-3" />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => setForm({ ...form, latitude: null, longitude: null })}
-                      className="ml-auto text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2"
-                    >
-                      Changer
-                    </button>
+                {form.map_url || (form.latitude != null && form.longitude != null) ? (
+                  <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Check className="h-4 w-4 text-green-600 shrink-0" />
+                      <span className="text-sm text-green-800">
+                        Vos patients verront un bouton « Y aller »
+                      </span>
+                      <a
+                        href={
+                          form.latitude != null && form.longitude != null
+                            ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}`
+                            : (form.map_url ?? '#')
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-green-700 underline underline-offset-2"
+                      >
+                        Vérifier <ExternalLink className="h-3 w-3" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, map_url: null, latitude: null, longitude: null })}
+                        className="ml-auto text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2"
+                      >
+                        Changer
+                      </button>
+                    </div>
+                    {/* Le bouton « Y aller » fonctionne dans les deux cas. La
+                        position exacte, elle, n'est lisible que sur un lien
+                        partagé depuis une fiche de lieu — et c'est elle seule
+                        qui fait remonter le cabinet sur Google. On le dit, sans
+                        présenter son absence comme une erreur. */}
+                    {form.latitude == null && (
+                      <p className="text-xs text-green-700/80 pl-6">
+                        Pour apparaître aussi sur Google Maps dans les recherches
+                        « médecin près de moi » : ouvrez le lieu dans Google Maps,
+                        appuyez sur son nom pour ouvrir sa fiche, puis partagez
+                        depuis cette fiche.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -848,8 +885,8 @@ export default function SettingsPage() {
                     <p className="text-xs text-gray-400">
                       Sur votre téléphone : ouvrez Google Maps, cherchez votre cabinet,
                       appuyez sur « Partager », puis « Copier le lien » — et collez-le ici.
-                      Cela permet à Google de vous proposer aux patients qui cherchent
-                      un médecin près d&apos;eux.
+                      Vos patients auront alors un bouton « Y aller » qui ouvre
+                      l&apos;itinéraire directement.
                     </p>
                   </>
                 )}

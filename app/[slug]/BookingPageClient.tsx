@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { TimeSlots } from '@/components/booking/TimeSlots'
 import { BookingForm, MessageListeAttente, type ResultatReservation } from '@/components/booking/BookingForm'
-import { Stethoscope, MapPin, Clock, ClipboardList, Phone, Mail } from 'lucide-react'
+import { Stethoscope, MapPin, Clock, ClipboardList, Phone, Mail, Navigation } from 'lucide-react'
 
 // Convertit un numéro marocain en format international pour wa.me (ex. 0612… → 212612…)
 function waNumber(raw: string): string {
@@ -43,12 +43,19 @@ interface Props {
   categorie?: { href: string; label: string }
   /** Liste d'attente proposée par ce médecin (v56). Lu à part dans page.tsx. */
   waitlistEnabled?: boolean
+  /**
+   * Itinéraire vers le cabinet, calculé côté serveur (v60/v61) : coordonnées
+   * exactes si elles existent, sinon le lien de carte du médecin, sinon
+   * l'adresse écrite. `null` quand le cabinet n'a rien de tout cela — le
+   * bouton disparaît plutôt que d'ouvrir une recherche vide.
+   */
+  itineraireUrl?: string | null
 }
 
 // Étapes de réservation
 type Step = 'datetime' | 'form' | 'success'
 
-export function BookingPageClient({ doctor, consultationTypes = [], categorie, waitlistEnabled = false }: Props) {
+export function BookingPageClient({ doctor, consultationTypes = [], categorie, waitlistEnabled = false, itineraireUrl = null }: Props) {
   const [step, setStep] = useState<Step>('datetime')
   // Résultat de l'inscription en liste d'attente, relayé par le formulaire :
   // l'écran de succès ci-dessous REMPLACE celui du formulaire, il doit donc
@@ -190,6 +197,22 @@ export function BookingPageClient({ doctor, consultationTypes = [], categorie, w
                   <Clock className="h-3 w-3" />
                   Consultation : {doctor.appointment_duration} min
                 </span>
+                {/* « Y aller » — ouvre l'itinéraire dans l'application de
+                    cartes du patient. Volontairement collé à l'adresse : c'est
+                    là qu'on le cherche quand on se demande comment s'y rendre.
+                    `target="_blank"` pour ne pas faire perdre au patient la
+                    réservation qu'il est en train de remplir. */}
+                {itineraireUrl && (
+                  <a
+                    href={itineraireUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700 hover:bg-primary-100 transition-colors"
+                  >
+                    <Navigation className="h-3 w-3" />
+                    Y aller
+                  </a>
+                )}
               </div>
               {doctor.bio && (
                 <p className="mt-2 text-sm text-gray-500 leading-relaxed line-clamp-3">{doctor.bio}</p>

@@ -15,6 +15,9 @@ export interface Doctor {
   // renseignées : jamais devinées.
   latitude?: number | null
   longitude?: number | null
+  // Lien de carte du cabinet (v61) — alimente le bouton « Y aller ». Posé même
+  // quand les coordonnées n'ont pas pu être lues du lien partagé.
+  map_url?: string | null
   photo_url?: string
   bio?: string | null
   status?: string

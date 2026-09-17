@@ -107,3 +107,42 @@ export function lienCarteAutorise(url: string): boolean {
     return false
   }
 }
+
+/**
+ * Adresse à ouvrir quand le patient clique sur « Y aller ».
+ *
+ * Trois sources, de la plus fiable à la plus approximative :
+ *   1. les coordonnées — l'itinéraire vise le cabinet au mètre près ;
+ *   2. le lien de carte enregistré par le médecin — une fiche de lieu Google,
+ *      qui s'ouvre directement dans l'application du patient ;
+ *   3. l'adresse écrite — Google la cherche, avec le risque d'ambiguïté d'une
+ *      rue portant le même nom dans deux quartiers. Mieux que rien.
+ *
+ * Renvoie null si le cabinet n'a rien de tout cela : le bouton disparaît
+ * plutôt que d'envoyer le patient sur une recherche vide.
+ */
+export function lienItineraire(opts: {
+  latitude?: number | null
+  longitude?: number | null
+  mapUrl?: string | null
+  address?: string | null
+  city?: string | null
+}): string | null {
+  const { latitude, longitude, mapUrl, address, city } = opts
+
+  if (latitude != null && longitude != null) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+  }
+
+  // On ne rouvre pas n'importe quoi : même liste blanche qu'à l'enregistrement.
+  // Une valeur douteuse arrivée en base par un autre chemin ne doit pas devenir
+  // un lien cliquable sur une page publique.
+  if (mapUrl && lienCarteAutorise(mapUrl)) return mapUrl
+
+  const ecrite = [address, city].filter(Boolean).join(', ').trim()
+  if (ecrite) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ecrite)}`
+  }
+
+  return null
+}

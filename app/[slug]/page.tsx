@@ -4,6 +4,7 @@ import { displayName } from '@/lib/profession'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/server'
 import { BookingPageClient } from './BookingPageClient'
+import { lienItineraire } from '@/lib/geo'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
@@ -103,7 +104,7 @@ export default async function BookingPage({ params }: Props) {
   // échouer TOUTE la requête — la fiche de chaque médecin tomberait en 404.
   // Ici, une erreur retire simplement le balisage `geo`.
   const { data: coord, error: coordError } = await supabase
-    .from('doctors').select('latitude, longitude').eq('id', doctor.id).maybeSingle()
+    .from('doctors').select('latitude, longitude, map_url').eq('id', doctor.id).maybeSingle()
   if (coordError) console.error('[Coordonnées cabinet] illisibles :', coordError.message)
 
   // PostgREST renvoie les `numeric` sous forme de chaînes : sans conversion,
@@ -119,6 +120,18 @@ export default async function BookingPage({ params }: Props) {
           longitude: Number(coord.longitude),
         }
       : null
+
+  // Bouton « Y aller » du patient. Il n'exige PAS de coordonnées : un lien de
+  // fiche Google Maps ouvre l'itinéraire aussi bien, et à défaut l'adresse
+  // écrite fait l'affaire. C'est pourquoi il survit là où le balisage `geo`,
+  // lui, s'abstient faute de position exacte.
+  const itineraire = lienItineraire({
+    latitude: coordError ? null : coord?.latitude,
+    longitude: coordError ? null : coord?.longitude,
+    mapUrl: coordError ? null : coord?.map_url,
+    address: doctor.address,
+    city: doctor.city,
+  })
 
   // Médecin inactif → page d'erreur propre
   if (doctor.subscription_status !== 'actif') {
@@ -280,6 +293,7 @@ export default async function BookingPage({ params }: Props) {
         consultationTypes={consultationTypes ?? []}
         categorie={categorie}
         waitlistEnabled={waitlistEnabled}
+        itineraireUrl={itineraire}
       />
     </>
   )
