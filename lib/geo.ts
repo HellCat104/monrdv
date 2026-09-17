@@ -118,8 +118,13 @@ export function lienCarteAutorise(url: string): boolean {
  *   3. l'adresse écrite — Google la cherche, avec le risque d'ambiguïté d'une
  *      rue portant le même nom dans deux quartiers. Mieux que rien.
  *
+ * La VILLE SEULE ne compte pas comme une source. Un itinéraire vers « Rabat »
+ * dépose le patient au centre-ville, à plusieurs kilomètres du cabinet : c'est
+ * pire qu'une absence de bouton, parce qu'il croit avoir été guidé. La ville ne
+ * sert donc qu'à lever l'ambiguïté d'une adresse, jamais à la remplacer.
+ *
  * Renvoie null si le cabinet n'a rien de tout cela : le bouton disparaît
- * plutôt que d'envoyer le patient sur une recherche vide.
+ * plutôt que d'envoyer le patient au mauvais endroit.
  */
 export function lienItineraire(opts: {
   latitude?: number | null
@@ -139,10 +144,9 @@ export function lienItineraire(opts: {
   // un lien cliquable sur une page publique.
   if (mapUrl && lienCarteAutorise(mapUrl)) return mapUrl
 
-  const ecrite = [address, city].filter(Boolean).join(', ').trim()
-  if (ecrite) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ecrite)}`
-  }
+  // Pas d'adresse de rue : rien à viser. On s'arrête ici.
+  if (!address || !address.trim()) return null
 
-  return null
+  const ecrite = [address.trim(), city?.trim()].filter(Boolean).join(', ')
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ecrite)}`
 }
