@@ -92,7 +92,9 @@ const jsonLd = {
       },
       description:
         'Plateforme marocaine de prise de rendez-vous médicaux en ligne et de gestion de cabinet',
-      priceRange: '149 MAD - 549 MAD',
+      // Les deux forfaits réellement affichés sur la page Abonnement.
+      // Un tarif balisé doit correspondre à ce que le visiteur lit.
+      priceRange: '149 MAD - 249 MAD',
       currenciesAccepted: 'MAD',
       areaServed: {
         '@type': 'Country',
