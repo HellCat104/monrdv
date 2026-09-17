@@ -853,12 +853,15 @@ export default function SettingsPage() {
                         qui fait remonter le cabinet sur Google. On le dit, sans
                         présenter son absence comme une erreur. */}
                     {form.latitude == null && (
-                      <p className="text-xs text-green-700/80 pl-6">
-                        Pour apparaître aussi sur Google Maps dans les recherches
-                        « médecin près de moi » : ouvrez le lieu dans Google Maps,
-                        appuyez sur son nom pour ouvrir sa fiche, puis partagez
-                        depuis cette fiche.
-                      </p>
+                      <details className="text-xs text-green-700/80 pl-6">
+                        <summary className="cursor-pointer hover:underline w-fit">
+                          Apparaître aussi sur Google
+                        </summary>
+                        <p className="mt-1.5">
+                          Sur un ordinateur : ouvrez votre cabinet dans Google Maps
+                          et copiez l&apos;adresse de la barre du navigateur.
+                        </p>
+                      </details>
                     )}
                   </div>
                 ) : (
@@ -882,12 +885,23 @@ export default function SettingsPage() {
                     {geoEtat === 'erreur' && (
                       <p className="text-xs text-red-600">{geoErreur}</p>
                     )}
+                    {/* Une ligne : ce que ça apporte. Le mode d'emploi est
+                        replié — celui qui sait faire n'a pas à le lire, et
+                        celui qui ne sait pas le déplie. Trois consignes
+                        empilées dans une phrase donnaient l'impression d'une
+                        manipulation compliquée, et faisaient renoncer. */}
                     <p className="text-xs text-gray-400">
-                      Sur votre téléphone : ouvrez Google Maps, cherchez votre cabinet,
-                      appuyez sur « Partager », puis « Copier le lien » — et collez-le ici.
-                      Vos patients auront alors un bouton « Y aller » qui ouvre
-                      l&apos;itinéraire directement.
+                      Vos patients auront un bouton « Y aller » qui ouvre l&apos;itinéraire.
                     </p>
+                    <details className="text-xs text-gray-400">
+                      <summary className="cursor-pointer text-primary-600 hover:underline w-fit">
+                        Où trouver ce lien ?
+                      </summary>
+                      <p className="mt-1.5 pl-0.5">
+                        Dans Google Maps, cherchez votre cabinet, puis
+                        « Partager » → « Copier le lien ».
+                      </p>
+                    </details>
                   </>
                 )}
               </div>
