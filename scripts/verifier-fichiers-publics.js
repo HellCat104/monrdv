@@ -40,6 +40,43 @@ function sansCommentaires(code) {
     .replace(/(^|[^:\\])\/\/.*$/gm, '$1')
 }
 
+// Ombres de PDF que le moteur d'Apple dessine en pavés gris (19-09-2026).
+//
+// Un PDF imprimé depuis Chrome dessine ses ombres CSS avec un masque doux
+// « Luminosity » dont la zone (/BBox) est exprimée en unités internes (échelle
+// 0,24). Le moteur d'Apple — Safari, Aperçu, tous les navigateurs sur iPhone —
+// ignore un tel masque dès que sa zone sort du rectangle de la page, et peint
+// l'ombre en bloc plein. Chrome sur Mac, lui, l'affiche normalement : même
+// fichier, deux apparences, et l'on croit à deux versions du document.
+//
+// Correction : python3 scripts/corriger-ombres-pdf.py entree.pdf sortie.pdf
+function ombresFautives(chemin) {
+  const brut = fs.readFileSync(chemin).toString('latin1')
+  // Dans un flux d'objets compressé, les dictionnaires sont illisibles ici :
+  // plutôt que de laisser passer sans avoir vérifié, on le signale.
+  if (/\/Type\s*\/ObjStm/.test(brut)) {
+    return ['objets compressés (ObjStm) : ombres non vérifiables — réenregistrer le PDF sans flux d\'objets']
+  }
+  const objet = (n) => {
+    const m = brut.match(new RegExp('(?:^|[\\r\\n\\s])' + n + '\\s+0\\s+obj([\\s\\S]*?)endobj'))
+    return m ? m[1] : ''
+  }
+  const pages = [...brut.matchAll(/\/MediaBox\s*\[\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s*\]/g)]
+    .map((m) => [+m[1], +m[2], +m[3], +m[4]])
+  if (!pages.length) return []
+  const W = Math.max(...pages.map((p) => p[2])), H = Math.max(...pages.map((p) => p[3]))
+  const fautes = []
+  for (const m of brut.matchAll(/\/S\s*\/Luminosity[\s\S]{0,80}?\/G\s+(\d+)\s+0\s+R/g)) {
+    const bb = objet(m[1]).match(/\/BBox\s*\[\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s*\]/)
+    if (!bb) continue
+    const [x0, y0, x1, y1] = bb.slice(1).map(Number)
+    if (x0 < -0.5 || y0 < -0.5 || x1 > W + 0.5 || y1 > H + 0.5) {
+      fautes.push(`ombre (groupe ${m[1]}, zone [${x0} ${y0} ${x1} ${y1}]) dessinée en pavé gris par Safari / iPhone / Aperçu`)
+    }
+  }
+  return fautes
+}
+
 function verifier() {
   const publics = lister(path.join(RACINE, 'public')).map(
     (f) => '/' + path.relative(path.join(RACINE, 'public'), f).split(path.sep).join('/'))
@@ -47,6 +84,14 @@ function verifier() {
     lister(path.join(RACINE, d), (f) => /\.(tsx?|jsx?|mjs)$/.test(f)))
 
   const erreurs = []
+
+  // 3. Aucun PDF publié avec des ombres que le moteur d'Apple dessine mal.
+  for (const pub of publics.filter((p) => /\.pdf$/i.test(p))) {
+    for (const faute of ombresFautives(path.join(RACINE, 'public', pub))) {
+      erreurs.push(`public${pub} — ${faute}. Corriger : python3 scripts/corriger-ombres-pdf.py public${pub} public${pub}`)
+    }
+  }
+
   for (const fichier of sources) {
     const code = sansCommentaires(fs.readFileSync(fichier, 'utf8'))
     const lignes = code.split('\n')
