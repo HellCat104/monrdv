@@ -8,6 +8,18 @@ import { createClient } from '@/lib/supabase/client'
 import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
 import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
+// Adresse VERSIONNÉE de la documentation téléchargeable.
+//
+// Le PDF garde toujours le même nom de fichier ; seul le `?v=` change quand son
+// contenu change. Sans cela, un appareil qui l'avait déjà ouvert continuait
+// d'afficher l'ancienne version même après rechargement — Safari sur iPhone
+// s'accroche aux PDF par adresse. Ce fut le cas le 19-09-2026 : le prix retiré
+// de la documentation restait visible sur un iPhone.
+//
+// À CHAQUE MODIFICATION de public/documentation-monrdv.pdf : changer la date.
+const DOCUMENTATION_URL = '/documentation-monrdv.pdf?v=2026-09-19'
+
+
 const SPECIALITES = [
   { label: 'Médecin généraliste', emoji: '🩺', color: 'bg-blue-50' },
   { label: 'Cardiologue',          emoji: '❤️', color: 'bg-red-50' },
@@ -279,7 +291,7 @@ export default function HomePageClient({ children }: { children?: React.ReactNod
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
             <a
-              href="/documentation-monrdv.pdf"
+              href={DOCUMENTATION_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 bg-primary-500 text-white font-semibold px-6 py-3 rounded-xl hover:bg-primary-600 transition-colors"
@@ -309,7 +321,7 @@ export default function HomePageClient({ children }: { children?: React.ReactNod
               S&apos;inscrire gratuitement
             </Link>
             <a
-              href="/documentation-monrdv.pdf"
+              href={DOCUMENTATION_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-2 bg-primary-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-primary-700 transition-colors border border-white/30"
