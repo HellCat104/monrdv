@@ -7,17 +7,11 @@ import { Search, MapPin, User, Stethoscope, Clock, Shield, Star, Calendar, Folde
 import { createClient } from '@/lib/supabase/client'
 import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
 import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
+import { fichierPublic } from '@/lib/fichiers-publics'
 
-// Adresse VERSIONNÉE de la documentation téléchargeable.
-//
-// Le PDF garde toujours le même nom de fichier ; seul le `?v=` change quand son
-// contenu change. Sans cela, un appareil qui l'avait déjà ouvert continuait
-// d'afficher l'ancienne version même après rechargement — Safari sur iPhone
-// s'accroche aux PDF par adresse. Ce fut le cas le 19-09-2026 : le prix retiré
-// de la documentation restait visible sur un iPhone.
-//
-// À CHAQUE MODIFICATION de public/documentation-monrdv.pdf : changer la date.
-const DOCUMENTATION_URL = '/documentation-monrdv.pdf?v=2026-09-19'
+// Adresse versionnée par l'empreinte du contenu : elle change d'elle-même
+// quand le PDF change (voir lib/fichiers-publics.ts).
+const DOCUMENTATION_URL = fichierPublic('/documentation-monrdv.pdf')
 
 
 const SPECIALITES = [

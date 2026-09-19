@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import HomePageClient from './HomePageClient'
 import { MaillageSEO, FAQ, QUESTIONS_FREQUENTES } from '@/components/home/MaillageSEO'
 import { chargerLiensSEO } from '@/lib/seo-liens'
+import { fichierPublic } from '@/lib/fichiers-publics'
 
 // Régénérée au maximum une fois par heure : le maillage suit les médecins
 // inscrits sans recalculer la page à chaque visite.
@@ -88,7 +89,7 @@ const jsonLd = {
       url: APP_URL,
       logo: {
         '@type': 'ImageObject',
-        url: `${APP_URL}/favicon.ico`,
+        url: `${APP_URL}${fichierPublic('/favicon.ico')}`,
       },
       description:
         'Plateforme marocaine de prise de rendez-vous médicaux en ligne et de gestion de cabinet',

@@ -6,6 +6,7 @@
 //
 // En SVG plutôt qu'en PNG : net sur tous les écrans, quelques centaines
 // d'octets, et le même fichier sert de favicon.
+import { fichierPublic } from '@/lib/fichiers-publics'
 
 interface LogoProps {
   /** Côté du monogramme en pixels. 36 dans un en-tête, 32 dans une barre dense. */
@@ -21,7 +22,7 @@ export function LogoMonRDV({ taille = 36, avecTexte = true, className = '' }: Lo
       {/* Dimensions explicites : sans elles, la page saute au chargement de
           l'image, ce que Google mesure et sanctionne. */}
       <img
-        src="/logo-monrdv.svg"
+        src={fichierPublic('/logo-monrdv.svg')}
         alt=""
         width={taille}
         height={taille}
