@@ -64,9 +64,18 @@ export async function GET() {
       adminDb.from('vital_signs')
         .select('id, measured_at, values, created_at')
         .in('patient_id', patientIds).order('measured_at', { ascending: false }),
-      // Inventaire des fichiers, pas les fichiers : nom, type, taille, date.
+      // Inventaire des fichiers, pas les fichiers : nom, type, date.
+      //
+      // `file_size` était demandé ici alors que la colonne N'EXISTE PAS en base
+      // (table créée en v7 : id, doctor_id, patient_id, file_path, file_name,
+      // file_type, created_at). La requête échouait donc toujours, et comme le
+      // résultat est lu en `docsRes.data ?? []`, l'inventaire des documents
+      // était VIDE dans tous les exports — en silence. Le patient recevait un
+      // fichier qui ne mentionnait aucune de ses pièces jointes, alors que
+      // l'écran lui promet « toutes les données que MonRDV détient sur vous ».
+      // La taille reviendra ici quand la colonne existera (migration v62).
       adminDb.from('patient_documents')
-        .select('id, file_name, file_type, file_size, created_at')
+        .select('id, file_name, file_type, created_at')
         .in('patient_id', patientIds).order('created_at', { ascending: false }),
       adminDb.from('recalls')
         .select('id, due_date, reason, status, sent_at, created_at')
