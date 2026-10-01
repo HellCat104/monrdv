@@ -15,9 +15,10 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals, type VitalDef } from '@/types'
-import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle } from 'lucide-react'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle, Paperclip } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 import { LogoCabinet } from '@/components/dashboard/LogoCabinet'
+import { espaceOccupe, formatOctets, QUOTA_DEFAUT_MO } from '@/lib/stockage'
 
 // Intertitre de section.
 //
@@ -86,6 +87,8 @@ export default function SettingsPage() {
   // Même précaution pour les coordonnées GPS : tant que la v60 n'est pas
   // passée, on masque le bloc ET on ne l'envoie pas à l'enregistrement.
   const [coordDispo, setCoordDispo] = useState(false)
+  // Stockage des documents (v63) : occupé / limite du cabinet, en octets.
+  const [stockage, setStockage] = useState<{ occupe: number; limite: number } | null>(null)
   const [carteDispo, setCarteDispo] = useState(false)
   const [lienCarte, setLienCarte] = useState('')
   const [geoEtat, setGeoEtat] = useState<'repos' | 'recherche' | 'erreur'>('repos')
@@ -174,6 +177,12 @@ export default function SettingsPage() {
         setForm(formCharge)
         setListeAttenteDispo(Object.prototype.hasOwnProperty.call(data, 'waitlist_enabled'))
         setCoordDispo(Object.prototype.hasOwnProperty.call(data, 'latitude'))
+        // La limite est figée côté base (verrou de la fiche praticien) : on
+        // ne fait que l'afficher. Tant que la v63 n'est pas passée, la
+        // colonne est absente et on retombe sur le quota par défaut.
+        espaceOccupe(supabase, data.id).then((occupe) => setStockage({
+          occupe, limite: (data.storage_limit_mb ?? QUOTA_DEFAUT_MO) * 1024 * 1024,
+        })).catch(() => {})
         setCarteDispo(Object.prototype.hasOwnProperty.call(data, 'map_url'))
         setEnabledVitals(vitalsCharges)
         setCustomVitals(customCharges)
@@ -1012,6 +1021,50 @@ export default function SettingsPage() {
         <LogoCabinet />
 
         <Groupe id="rdv" numero={2} titre="Vos rendez-vous" sous="Quand et comment vous recevez" />
+        {/* Stockage des documents (v63) — informatif : la limite est tenue par
+            la base, cette jauge évite seulement de la découvrir au mauvais
+            moment, un document à la main. */}
+        {stockage && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Paperclip className="h-4 w-4 text-primary-500" />
+                Stockage des documents
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const pct = Math.min(100, Math.round((stockage.occupe / stockage.limite) * 100))
+                const serre = pct >= 80
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="text-sm text-gray-700">
+                        <span className="font-semibold text-gray-900">{formatOctets(stockage.occupe)}</span>
+                        <span className="text-gray-500"> sur {formatOctets(stockage.limite)}</span>
+                      </p>
+                      <span className={`text-sm font-semibold ${serre ? 'text-amber-600' : 'text-primary-600'}`}>{pct}&nbsp;%</span>
+                    </div>
+                    <div className="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                      <div className={`h-full rounded-full ${serre ? 'bg-amber-500' : 'bg-primary-500'}`}
+                           style={{ width: `${Math.max(pct, stockage.occupe > 0 ? 2 : 0)}%` }} />
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Ordonnances, notes et mesures ne comptent pas : seules les pièces jointes aux dossiers occupent de la place.
+                      Un document ne peut pas dépasser 10&nbsp;Mo.
+                    </p>
+                    {serre && (
+                      <p className="text-xs text-amber-700">
+                        Vous approchez de la limite. Supprimez des documents devenus inutiles, ou contactez-nous pour l&apos;augmenter.
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">

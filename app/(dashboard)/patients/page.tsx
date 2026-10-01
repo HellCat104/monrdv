@@ -20,6 +20,7 @@ import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPe
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { getInitials, formatDateShort, formatDateFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
+import { messageQuota } from '@/lib/stockage'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -448,7 +449,7 @@ export default function PatientsPage() {
     const ext = '.' + (file.name.split('.').pop() || '').toLowerCase()
     const BLOCKED = ['.html', '.htm', '.xhtml', '.svg', '.xml', '.js', '.mjs', '.exe', '.sh', '.bat']
     if (BLOCKED.includes(ext)) {
-      alert('Ce type de fichier n\'est pas autorisé. Utilisez un PDF, une image (JPG/PNG) ou un document Word/Excel.')
+      alert('Ce type de fichier n\'est pas autorisé. Utilisez un PDF ou une image (JPG/PNG).')
       e.target.value = ''
       return
     }
@@ -480,11 +481,17 @@ export default function PatientsPage() {
         })
         .select()
         .single()
-      if (insErr) throw insErr
+      // Échec APRÈS l'envoi (quota du cabinet atteint — trigger v63 —, réseau…) :
+      // le fichier est retiré du stockage, sans quoi il y resterait sans ligne
+      // pour le désigner, invisible mais décompté du quota.
+      if (insErr) {
+        await supabase.storage.from(DOC_BUCKET).remove([path])
+        throw insErr
+      }
 
       setDocuments((prev) => [data, ...prev])
-    } catch {
-      alert('Échec de l\'envoi du document. Réessayez.')
+    } catch (e) {
+      alert(messageQuota(e) ?? 'Échec de l\'envoi du document. Réessayez.')
     } finally {
       setUploadingDoc(false)
       e.target.value = ''

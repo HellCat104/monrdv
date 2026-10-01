@@ -23,6 +23,7 @@ import { BLOOD_GROUPS, MUTUELLES_MAROC, isPediatricDoctor, isPsychiatricDoctor, 
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef, type SessionPackage } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
   Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users, Ticket } from 'lucide-react'
+import { messageQuota } from '@/lib/stockage'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -346,7 +347,7 @@ export default function PatientDossier({
     if (file.size > 10 * 1024 * 1024) { alert('Le fichier ne doit pas dépasser 10 Mo.'); e.target.value = ''; return }
     const ext = '.' + (file.name.split('.').pop() || '').toLowerCase()
     if (['.html', '.htm', '.xhtml', '.svg', '.xml', '.js', '.mjs', '.exe', '.sh', '.bat'].includes(ext)) {
-      alert('Ce type de fichier n\'est pas autorisé (PDF, image ou document Word/Excel).'); e.target.value = ''; return
+      alert('Ce type de fichier n\'est pas autorisé : joignez un PDF ou une image.'); e.target.value = ''; return
     }
     setUploadingDoc(true)
     try {
@@ -357,9 +358,18 @@ export default function PatientDossier({
       const { data, error: insErr } = await supabase.from('patient_documents')
         .insert({ doctor_id: doctorId, patient_id: patient.id, file_path: path, file_name: file.name.substring(0, 200),
                   file_type: file.type || null, file_size: file.size }).select().single()
-      if (insErr) throw insErr
+      // L'enregistrement peut échouer APRÈS l'envoi du fichier : quota du
+      // cabinet atteint (trigger v63), coupure réseau… Sans ce nettoyage, le
+      // fichier resterait dans le stockage sans aucune ligne pour le désigner :
+      // invisible dans le dossier, mais décompté du quota.
+      if (insErr) {
+        await supabase.storage.from(DOC_BUCKET).remove([path])
+        throw insErr
+      }
       setDocuments((prev) => [data, ...prev])
-    } catch { alert('Échec de l\'envoi du document.') } finally { setUploadingDoc(false); e.target.value = '' }
+    } catch (e) {
+      alert(messageQuota(e) ?? 'Échec de l\'envoi du document.')
+    } finally { setUploadingDoc(false); e.target.value = '' }
   }
   async function downloadDocument(doc: PatientDocument) {
     const { data, error } = await supabase.storage.from(DOC_BUCKET).createSignedUrl(doc.file_path, 120)
