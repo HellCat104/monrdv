@@ -355,7 +355,8 @@ export default function PatientDossier({
       const { error: upErr } = await supabase.storage.from(DOC_BUCKET).upload(path, file, { contentType: file.type || undefined })
       if (upErr) throw upErr
       const { data, error: insErr } = await supabase.from('patient_documents')
-        .insert({ doctor_id: doctorId, patient_id: patient.id, file_path: path, file_name: file.name.substring(0, 200), file_type: file.type || null }).select().single()
+        .insert({ doctor_id: doctorId, patient_id: patient.id, file_path: path, file_name: file.name.substring(0, 200),
+                  file_type: file.type || null, file_size: file.size }).select().single()
       if (insErr) throw insErr
       setDocuments((prev) => [data, ...prev])
     } catch { alert('Échec de l\'envoi du document.') } finally { setUploadingDoc(false); e.target.value = '' }

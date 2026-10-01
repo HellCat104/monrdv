@@ -66,16 +66,15 @@ export async function GET() {
         .in('patient_id', patientIds).order('measured_at', { ascending: false }),
       // Inventaire des fichiers, pas les fichiers : nom, type, date.
       //
-      // `file_size` était demandé ici alors que la colonne N'EXISTE PAS en base
-      // (table créée en v7 : id, doctor_id, patient_id, file_path, file_name,
-      // file_type, created_at). La requête échouait donc toujours, et comme le
-      // résultat est lu en `docsRes.data ?? []`, l'inventaire des documents
-      // était VIDE dans tous les exports — en silence. Le patient recevait un
-      // fichier qui ne mentionnait aucune de ses pièces jointes, alors que
-      // l'écran lui promet « toutes les données que MonRDV détient sur vous ».
-      // La taille reviendra ici quand la colonne existera (migration v62).
+      // `file_size` a longtemps été demandé ici alors que la colonne n'existait
+      // pas : la requête échouait à chaque appel et, le résultat étant lu en
+      // `docsRes.data ?? []`, l'inventaire des documents arrivait VIDE chez le
+      // patient, en silence. La colonne existe depuis la v62 (2026-10-01) ;
+      // la taille est donc de nouveau rendue. Une colonne retirée de la base
+      // reproduirait la panne : toute modification de cette projection doit
+      // s'accompagner d'une migration.
       adminDb.from('patient_documents')
-        .select('id, file_name, file_type, created_at')
+        .select('id, file_name, file_type, file_size, created_at')
         .in('patient_id', patientIds).order('created_at', { ascending: false }),
       adminDb.from('recalls')
         .select('id, due_date, reason, status, sent_at, created_at')

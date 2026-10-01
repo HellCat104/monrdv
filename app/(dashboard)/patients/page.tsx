@@ -473,6 +473,10 @@ export default function PatientsPage() {
           file_path: path,
           file_name: file.name.substring(0, 200),
           file_type: file.type || null,
+          // Taille (v62) : le stockage la connaît déjà, mais la garder ici
+          // permet de la rendre au patient dans son export, et de calculer
+          // l'espace occupé par un cabinet sans parcourir le stockage.
+          file_size: file.size,
         })
         .select()
         .single()
