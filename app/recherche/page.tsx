@@ -213,7 +213,7 @@ function RechercheContent() {
 
                   {/* Bouton RDV */}
                   <Link
-                    href={`/${doctor.slug}`}
+                    href={`/dr-${doctor.slug}`}
                     className="shrink-0 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors flex items-center gap-2"
                   >
                     <Calendar className="h-4 w-4" />

@@ -1,7 +1,7 @@
 // Page publique de réservation — accessible via /dr-hassan ou /slug-medecin
 import { cache } from 'react'
 import { displayName } from '@/lib/profession'
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/server'
 import { BookingPageClient } from './BookingPageClient'
 import { lienItineraire } from '@/lib/geo'
@@ -71,6 +71,14 @@ export default async function BookingPage({ params }: Props) {
   const doctor = await getDoctor(slug)
 
   if (!doctor) notFound()
+
+  // Une seule URL par médecin. La fiche répond historiquement à `/dr-nom` ET à
+  // `/nom` : Google a indexé les deux (vues dans la Search Console), ce qui
+  // divise le référencement d'une même page entre deux adresses. La balise
+  // canonique ne suffit pas — c'est une indication, pas une règle. On redirige
+  // donc l'adresse courte en 308 vers la forme canonique `/dr-…`, qui est
+  // celle du sitemap, des liens internes et des e-mails.
+  if (!params.slug.startsWith('dr-')) permanentRedirect(`/dr-${slug}`)
 
   // Motifs de consultation du médecin.
   //

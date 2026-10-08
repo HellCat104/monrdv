@@ -214,7 +214,7 @@ function AppointmentCard({ apt, isPast = false, childName = null, listeAttente =
           {(!isPast && apt.status !== 'cancelled') && (
             <div className="flex items-center gap-3 mt-2">
               {apt.doctor?.slug && (
-                <Link href={`/${apt.doctor.slug}`} className="text-xs text-primary-600 hover:underline">
+                <Link href={`/dr-${apt.doctor.slug}`} className="text-xs text-primary-600 hover:underline">
                   Reprendre RDV
                 </Link>
               )}
