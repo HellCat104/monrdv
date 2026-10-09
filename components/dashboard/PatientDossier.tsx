@@ -110,6 +110,10 @@ export default function PatientDossier({
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [vitals, setVitals] = useState<VitalSign[]>([])
   const [packages, setPackages] = useState<SessionPackage[]>([])
+  // Journal des séances : un seul forfait déplié à la fois.
+  const [journalOuvert, setJournalOuvert] = useState<string | null>(null)
+  const [journal, setJournal] = useState<{ id: string; delta: number; used_at: string; note: string | null }[]>([])
+  const [journalDispo, setJournalDispo] = useState(true)
   // Historique des accès : chargé seulement si le médecin l'ouvre. Il n'a pas
   // sa place dans le chargement initial du dossier, qu'il ralentirait pour
   // une information consultée une fois sur cent.
@@ -303,14 +307,43 @@ export default function PatientDossier({
     setPkgLabel(''); setPkgAmount(''); setPkgTotal('10')
   }
 
-  // Consomme (ou rend) une séance. Le passage en « terminé » est géré en base.
+  // Consomme (ou rend) une séance. Tout passe par /api/packages/[id] : le
+  // compteur et sa trace doivent partir du même geste, et la borne est relue
+  // sur la base — deux clics rapides ne décomptent plus deux séances.
   async function useSession(pkg: SessionPackage, delta: 1 | -1) {
-    const next = pkg.used_sessions + delta
-    if (next < 0 || next > pkg.total_sessions) return
-    const { data, error } = await supabase.from('session_packages')
-      .update({ used_sessions: next }).eq('id', pkg.id).select().single()
-    if (error || !data) { alert("La mise à jour du forfait a échoué."); return }
-    setPackages((prev) => prev.map((p) => (p.id === pkg.id ? data : p)))
+    const res = await fetch(`/api/packages/${pkg.id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delta }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) { alert(data.error || "La mise à jour du forfait a échoué."); return }
+    setPackages((prev) => prev.map((p) => (p.id === pkg.id ? data.package : p)))
+    // Le journal est rouvert s'il était affiché : la séance qu'on vient de
+    // pointer doit y apparaître tout de suite.
+    if (journalOuvert === pkg.id) chargerJournal(pkg.id)
+  }
+
+  /** Annuler un forfait : il disparaît de la liste active sans être effacé —
+   *  les séances déjà consommées restent au journal. */
+  async function cancelPackage(pkg: SessionPackage) {
+    const reste = pkg.total_sessions - pkg.used_sessions
+    if (!confirm(`Annuler ce forfait ? ${reste} séance${reste > 1 ? 's' : ''} non utilisée${reste > 1 ? 's' : ''} ne seront plus décomptées. Les séances déjà faites restent enregistrées.`)) return
+    const res = await fetch(`/api/packages/${pkg.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'annule' }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) { alert(data.error || "Le forfait n'a pas pu être annulé."); return }
+    setPackages((prev) => prev.map((p) => (p.id === pkg.id ? data.package : p)))
+  }
+
+  /** Journal des séances d'un forfait : quand chacune a été pointée. */
+  async function chargerJournal(id: string) {
+    setJournalOuvert(id)
+    const res = await fetch(`/api/packages/${id}`)
+    const data = await res.json().catch(() => ({}))
+    setJournal(res.ok ? (data.uses ?? []) : [])
+    setJournalDispo(res.ok ? data.journal !== false : false)
   }
 
   async function addRecall() {
@@ -854,7 +887,10 @@ export default function PatientDossier({
                         <div className="flex items-center justify-between gap-2 mt-1.5">
                           <span className="text-[11px] text-gray-500">
                             {p.used_sessions}/{p.total_sessions} utilisées
-                            {p.amount != null && <> · {p.amount} DH</>}
+                            {/* Le prix d'UNE séance : c'est ce qu'on cherche quand
+                                le patient demande ce que vaut la séance qu'il
+                                vient de faire, ou ce qu'on lui rembourse. */}
+                            {p.amount != null && <> · {p.amount} DH <span className="text-gray-400">({Math.round(Number(p.amount) / p.total_sessions)} DH la séance)</span></>}
                           </span>
                           <span className="flex items-center gap-1">
                             <button onClick={() => useSession(p, -1)} disabled={p.used_sessions === 0}
@@ -863,6 +899,39 @@ export default function PatientDossier({
                               className="text-[11px] px-2 py-0.5 rounded bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-30">Utiliser</button>
                           </span>
                         </div>
+
+                        <div className="flex items-center justify-between gap-2 mt-1.5">
+                          <button
+                            onClick={() => (journalOuvert === p.id ? setJournalOuvert(null) : chargerJournal(p.id))}
+                            className="text-[11px] text-gray-500 hover:text-primary-600"
+                          >
+                            {journalOuvert === p.id ? 'Masquer les séances' : 'Voir les séances'}
+                          </button>
+                          <button onClick={() => cancelPackage(p)} className="text-[11px] text-gray-400 hover:text-red-500">
+                            Annuler le forfait
+                          </button>
+                        </div>
+
+                        {journalOuvert === p.id && (
+                          <div className="mt-2 border-t border-white/70 pt-2">
+                            {!journalDispo ? (
+                              <p className="text-[11px] text-amber-700">Le journal des séances n&apos;est pas encore activé sur cette base (migration v64).</p>
+                            ) : journal.length === 0 ? (
+                              <p className="text-[11px] text-gray-400 italic">Aucune séance pointée depuis l&apos;activation du journal.</p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {journal.map((u) => (
+                                  <li key={u.id} className="flex items-center justify-between text-[11px]">
+                                    <span className={u.delta === 1 ? 'text-gray-600' : 'text-gray-400'}>
+                                      {u.delta === 1 ? 'Séance utilisée' : 'Séance rendue'}
+                                    </span>
+                                    <span className="text-gray-400 tabular-nums">{formatDateTimeFr(u.used_at)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
                       </li>
                     )
                   })}

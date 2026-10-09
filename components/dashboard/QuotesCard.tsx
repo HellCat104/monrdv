@@ -31,6 +31,7 @@ import { quoteTotal, quotePaid, quoteRemaining, itemTotal, installmentsTotal,
 import { PAYMENT_METHOD_LABELS, QUOTE_STATUS_COLORS, QUOTE_STATUS_LABELS,
   type PaymentMethod, type Quote, type QuoteStatus } from '@/types'
 import { FileSpreadsheet, Plus, Trash2, Printer, Check, ChevronDown, ChevronRight, CalendarClock } from 'lucide-react'
+import { FDI_UPPER, FDI_LOWER } from '@/lib/dental'
 
 const sec = 'bg-white border border-gray-100 rounded-xl p-4'
 const secTitle = 'text-sm font-semibold text-primary-600 mb-3 flex items-center justify-between'
@@ -79,6 +80,9 @@ export default function QuotesCard({
 
   // Saisies du devis ouvert. Un seul jeu d'états : un seul devis est déplié à
   // la fois, inutile de les indexer par identifiant.
+  // Catalogue d'actes : les libellés et tarifs déjà saisis par ce praticien,
+  // proposés à la frappe. Rien à paramétrer, et le prix suit le cabinet.
+  const [actes, setActes] = useState<{ label: string; unit_price: number }[]>([])
   const [itTooth, setItTooth] = useState('')
   const [itLabel, setItLabel] = useState('')
   const [itPrice, setItPrice] = useState('')
@@ -101,6 +105,26 @@ export default function QuotesCard({
     setLoading(false)
   }, [listeUrl])
   useEffect(() => { load() }, [load])
+
+  // La secrétaire ne crée pas de ligne : inutile de lui charger le catalogue.
+  useEffect(() => {
+    if (secretaire) return
+    let annule = false
+    fetch('/api/quotes/actes')
+      .then((r) => (r.ok ? r.json() : { actes: [] }))
+      .then((d) => { if (!annule) setActes(d.actes ?? []) })
+      .catch(() => { /* catalogue absent : on saisit à la main, comme avant */ })
+    return () => { annule = true }
+  }, [secretaire])
+
+  /** Acte choisi dans le catalogue : on remplit le prix À LA PLACE du praticien
+   *  seulement s'il n'a rien tapé — sinon on écraserait un tarif négocié. */
+  function choisirActe(label: string) {
+    setItLabel(label)
+    const cle = label.trim().toLowerCase().replace(/\s+/g, ' ')
+    const connu = actes.find((a) => a.label.toLowerCase().replace(/\s+/g, ' ') === cle)
+    if (connu && !itPrice.trim()) setItPrice(String(connu.unit_price))
+  }
 
   // Valeurs dérivées (pas des hooks) : la validité saisie diffère-t-elle de
   // celle qui est enregistrée sur le devis ouvert ? Comparaison APRÈS
@@ -353,7 +377,22 @@ export default function QuotesCard({
 
                     {/* ── Actes ───────────────────────────────────────── */}
                     <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Actes prévus</p>
+                      <div className="flex items-baseline justify-between mb-1.5 gap-2">
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Actes prévus</p>
+                        {/* Avancement des SOINS, à ne pas confondre avec l'argent :
+                            un plan peut être payé d'avance et pas encore réalisé.
+                            Le praticien veut savoir ce qu'il lui reste à faire. */}
+                        {items.length > 0 && (() => {
+                          const faits = items.filter((i) => i.done).length
+                          const resteAFaire = items.filter((i) => !i.done).reduce((t, i) => t + itemTotal(i), 0)
+                          return (
+                            <p className="text-[11px] text-gray-500">
+                              <b className={faits === items.length ? 'text-green-600' : 'text-gray-700'}>{faits}/{items.length}</b> réalisé{faits > 1 ? 's' : ''}
+                              {resteAFaire > 0 && <> · reste <b className="text-gray-700">{resteAFaire.toLocaleString('fr-FR')} DH</b> de soins à faire</>}
+                            </p>
+                          )
+                        })()}
+                      </div>
                       {items.length === 0 ? (
                         <p className="text-xs text-gray-400 italic">Aucun acte pour l&apos;instant.</p>
                       ) : (
@@ -405,13 +444,30 @@ export default function QuotesCard({
                           ligne, c'est décider d'un soin et de son prix. */}
                       {!secretaire && (
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {/* La dent se CHOISIT : tapée à la main, un 16 devient
+                            vite un 61, qui existe aussi (dent de lait). */}
                         {dental && (
-                          <input value={itTooth} onChange={(e) => setItTooth(e.target.value)} placeholder="Dent"
-                            title="Numéro de dent (notation FDI, ex. 16) — facultatif"
-                            className={`${inputCls} w-16`} />
+                          <select value={itTooth} onChange={(e) => setItTooth(e.target.value)}
+                            title="Dent concernée (notation FDI) — facultatif"
+                            className={`${inputCls} w-20 bg-white`}>
+                            <option value="">Dent</option>
+                            <optgroup label="Haut">
+                              {FDI_UPPER.map((n) => <option key={n} value={String(n)}>{n}</option>)}
+                            </optgroup>
+                            <optgroup label="Bas">
+                              {FDI_LOWER.map((n) => <option key={n} value={String(n)}>{n}</option>)}
+                            </optgroup>
+                          </select>
                         )}
-                        <input value={itLabel} onChange={(e) => setItLabel(e.target.value)} placeholder="Acte (ex. couronne)"
+                        <input value={itLabel} onChange={(e) => choisirActe(e.target.value)} placeholder="Acte (ex. couronne)"
+                          list={`actes-${q.id}`} autoComplete="off"
                           className={`${inputCls} flex-1 min-w-[130px]`} />
+                        {/* Le catalogue : ce que ce cabinet a déjà facturé. */}
+                        <datalist id={`actes-${q.id}`}>
+                          {actes.map((a) => (
+                            <option key={a.label} value={a.label}>{a.unit_price.toLocaleString('fr-FR')} DH</option>
+                          ))}
+                        </datalist>
                         <input value={itPrice} onChange={(e) => setItPrice(e.target.value)} type="number" min="0" placeholder="DH"
                           className={`${inputCls} w-20`} />
                         <input value={itQty} onChange={(e) => setItQty(e.target.value)} type="number" min="1" placeholder="Qté"
