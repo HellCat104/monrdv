@@ -1,7 +1,14 @@
 'use client'
 
-// Dossier patient pleine page — 3 colonnes : identité / historique / suivi.
-import { useEffect, useState, useCallback } from 'react'
+// Dossier patient pleine page.
+//
+// L'écran montrait tout en même temps : identité modifiable, antécédents,
+// documents, fusion, suppression, historique, devis, forfaits, journal d'accès,
+// ordonnances, certificats, schéma dentaire, constantes, rappels, encaissements
+// et notes — quinze cartes à lire avant d'en trouver une. Il se consulte
+// maintenant par onglets, et la modification de la fiche est un mode à part :
+// on consulte, ou on modifie, jamais les deux à la fois.
+import { useEffect, useState, useCallback, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
@@ -22,10 +29,13 @@ import { withConsultationSummary } from '@/lib/consultation-summary'
 import { BLOOD_GROUPS, MUTUELLES_MAROC, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef, type SessionPackage } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
-  Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users, Ticket } from 'lucide-react'
+  Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users, Ticket,
+  Pencil, Wallet, AlertTriangle } from 'lucide-react'
 import { messageQuota } from '@/lib/stockage'
 
 const DOC_BUCKET = 'patient-documents'
+
+type Onglet = 'suivi' | 'soins' | 'argent' | 'dossier'
 
 // Le journal stocke des codes ; l'écran doit parler français.
 const ACTIONS_LISIBLES: Record<string, string> = {"dossier_consulte": "Dossier consulté", "dossier_imprime": "Version imprimable ouverte", "dossier_exporte": "Dossier exporté", "patients_exportes": "Export groupé", "patient_fusionne": "Fiche fusionnée"}
@@ -44,6 +54,9 @@ export default function PatientDossier({
   const supabase = createClient()
   const router = useRouter()
   const patient = initialPatient
+  // Onglet affiché, et bascule consultation / modification de la fiche.
+  const [onglet, setOnglet] = useState<Onglet>('suivi')
+  const [edition, setEdition] = useState(false)
   const isPsy = isPsychiatricDoctor(specialties)
   // Psychologue, kinésithérapeute… : ni ordonnances, ni titre de « Docteur »
   const nonPrescriber = isNonPrescriber(specialties)
@@ -410,23 +423,70 @@ export default function PatientDossier({
   const sec = 'bg-white border border-gray-100 rounded-xl p-4'
   const secTitle = 'text-sm font-semibold text-primary-600 mb-3 flex items-center justify-between'
 
+  // Âge lisible : la date de naissance prime, sinon l'âge saisi à la main.
+  const ageLisible = editBirthDate
+    ? (formatAge(editBirthDate) || (ageFromBirthDate(editBirthDate) != null ? `${ageFromBirthDate(editBirthDate)} ans` : ''))
+    : (editAge ? `${editAge} ans` : '')
+
+  // L'onglet « soins » n'existe que s'il a quelque chose à montrer : inutile de
+  // proposer un onglet vide à un praticien dont la spécialité n'en relève pas.
+  const estDentiste = isDentalDoctor(specialties)
+  const estPediatre = isPediatricDoctor(specialties)
+  const aSoins = estDentiste || estPediatre || (!isPsy && enabledVitals.length > 0)
+  const onglets: { cle: Onglet; titre: string; icone: ReactNode }[] = [
+    { cle: 'suivi', titre: 'Consultations', icone: <Calendar className="h-4 w-4" /> },
+    ...(aSoins
+      ? [{
+          cle: 'soins' as Onglet,
+          titre: estDentiste ? 'Schéma dentaire' : estPediatre ? 'Croissance' : 'Constantes',
+          icone: <Activity className="h-4 w-4" />,
+        }]
+      : []),
+    { cle: 'argent', titre: 'Paiements', icone: <Wallet className="h-4 w-4" /> },
+    { cle: 'dossier', titre: 'Documents', icone: <Paperclip className="h-4 w-4" /> },
+  ]
+
   return (
     <div className="space-y-4">
-      {/* En-tête */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/patients')} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowLeft className="h-4 w-4" /></button>
-        <h1 className="text-xl font-bold text-gray-900">Détail du patient</h1>
+      {/* En-tête : qui est ce patient, et le seul bouton qui change sa fiche.
+          Tout le reste de l'écran se consulte ; on ne bascule en modification
+          que lorsqu'on le demande. */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={() => router.push('/patients')} className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" title="Retour à la liste"><ArrowLeft className="h-4 w-4" /></button>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-gray-900 truncate">{patient.first_name} {patient.last_name}</h1>
+          <p className="text-sm text-gray-500 truncate">
+            {ageLisible && <span>{ageLisible}</span>}
+            {ageLisible && patient.phone && <span className="text-gray-300"> · </span>}
+            {patient.phone}
+            {editMutuelle && <span className="ml-2 inline-block bg-green-100 text-green-700 text-[11px] font-medium px-2 py-0.5 rounded-full align-middle">{editMutuelle}</span>}
+          </p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {edition ? (
+            <>
+              <Button variant="outline" onClick={() => setEdition(false)}>Fermer</Button>
+              <Button onClick={saveIdentity} disabled={saving} className="shadow-sm">
+                {saved ? <span className="flex items-center gap-1.5"><Check className="h-4 w-4" /> Enregistré !</span> : <span className="flex items-center gap-1.5"><Save className="h-4 w-4" /> {saving ? 'Sauvegarde…' : 'Enregistrer la fiche'}</span>}
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => setEdition(true)}><Pencil className="h-4 w-4 mr-1.5" /> Modifier la fiche</Button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr_320px] gap-4 items-start">
-        {/* ── COLONNE GAUCHE : identité ── */}
-        <div className="space-y-4">
-          {/* Enregistrer — toujours visible (sticky) */}
-          <div className="sticky top-2 z-20">
-            <Button onClick={saveIdentity} disabled={saving} className="w-full shadow-md">
-              {saved ? <span className="flex items-center gap-1.5"><Check className="h-4 w-4" /> Enregistré !</span> : <span className="flex items-center gap-1.5"><Save className="h-4 w-4" /> {saving ? 'Sauvegarde…' : 'Enregistrer la fiche'}</span>}
-            </Button>
-          </div>
+      {/* L'allergie ne se range pas dans un onglet : elle reste sous les yeux. */}
+      {editAllergies.trim() && (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3">
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+          <p className="text-sm"><b>Allergies :</b> {editAllergies}</p>
+        </div>
+      )}
+
+      {edition ? (
+        /* Mode modification : le formulaire, et rien d'autre. */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           <div className={sec}>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-semibold">{getInitials(patient.first_name, patient.last_name)}</div>
@@ -517,7 +577,7 @@ export default function PatientDossier({
               )}
             </div>
           </div>
-
+          <div className="space-y-4">
           {/* Antécédents */}
           <div className={sec}>
             <div className={secTitle}><span className="flex items-center gap-1.5"><HeartPulse className="h-4 w-4" /> Antécédents</span></div>
@@ -531,7 +591,6 @@ export default function PatientDossier({
               )}
             </div>
           </div>
-
           {/* Famille / fratrie (pédiatrie) */}
           {isPediatricDoctor(specialties) && (
             <div className={sec}>
@@ -564,207 +623,156 @@ export default function PatientDossier({
               <p className="text-[11px] text-gray-400 mt-1.5">Reliez les enfants d&apos;une même famille : leurs dossiers deviennent accessibles en un clic.</p>
             </div>
           )}
-
-          {/* Documents */}
-          <div className={sec}>
-            <div className={secTitle}><span className="flex items-center gap-1.5"><Paperclip className="h-4 w-4" /> Documents ({documents.length})</span>
-              <label className="text-xs font-medium text-primary-600 cursor-pointer hover:text-primary-700">{uploadingDoc ? '…' : '＋ Ajouter'}<input type="file" className="hidden" onChange={uploadDocument} disabled={uploadingDoc} /></label>
-            </div>
-            {documents.length === 0 ? <p className="text-xs text-gray-400 italic">Analyses, radios, ordonnances scannées… (max 10 Mo)</p> : (
-              <ul className="space-y-1.5">
-                {documents.map((d) => (
-                  <li key={d.id}><button onClick={() => downloadDocument(d)} className="text-sm text-primary-600 hover:underline truncate flex items-center gap-1.5 w-full text-left"><Download className="h-3.5 w-3.5 shrink-0" /> {d.file_name}</button></li>
-                ))}
-              </ul>
-            )}
           </div>
-
-          {/* Fusionner un doublon */}
-          <div className={sec}>
-            <div className={secTitle}><span className="flex items-center gap-1.5"><Users className="h-4 w-4" /> Fusionner un doublon</span></div>
-            <p className="text-[11px] text-gray-400 mb-1.5">Deux fiches pour le même patient ? Recherchez l&apos;autre fiche pour tout regrouper ici.</p>
-            <Input value={mergeSearch} onChange={(e) => setMergeSearch(e.target.value)} placeholder="Nom du doublon…" className="h-9" />
-            {mergeResults.length > 0 && (
-              <div className="mt-1.5 border border-gray-100 rounded-lg divide-y divide-gray-50">
-                {mergeResults.map((p) => (
-                  <button key={p.id} onClick={() => mergeDuplicate(p.id, `${p.first_name} ${p.last_name}`)}
-                    className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between gap-2">
-                    <span>{p.first_name} {p.last_name}{p.phone ? ` · ${p.phone}` : ''}</span>
-                    <span className="text-primary-600 font-medium shrink-0">Fusionner</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button onClick={deletePatient} className="w-full text-xs text-gray-400 hover:text-red-500 flex items-center justify-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Supprimer ce patient</button>
         </div>
-
-        {/* ── COLONNE CENTRE : historique ── */}
-        <div className="space-y-4 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <a href={`/ordonnance/patient/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-3 py-2"><Pill className="h-4 w-4" /> Nouvelle ordonnance</a>
-            <a href={`/certificat/nouveau/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg px-3 py-2 hover:bg-primary-50"><FileText className="h-4 w-4" /> Nouveau certificat</a>
-            <a href={`/dossier/${patient.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50"><Printer className="h-4 w-4" /> Imprimer</a>
+      ) : (
+        <>
+          {/* Quatre onglets, des mots du quotidien du cabinet. Un praticien qui
+              ouvre un dossier cherche une chose à la fois : ce qu'il a fait,
+              ce qu'il soigne, ce qui est payé, ce qui est rangé. Quinze cartes
+              empilées obligeaient à lire tout l'écran pour en trouver une. */}
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {onglets.map((o) => (
+              <button
+                key={o.cle}
+                onClick={() => setOnglet(o.cle)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap border transition ${onglet === o.cle ? 'bg-primary-500 text-white border-transparent shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'}`}
+              >
+                {o.icone} {o.titre}
+              </button>
+            ))}
           </div>
 
-          <div className={sec}>
-            <div className={secTitle}><span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Historique des rendez-vous ({appts.length})</span></div>
-            {loading ? <p className="text-sm text-gray-400">Chargement…</p> : appts.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">Aucun rendez-vous pour ce patient.</p>
-            ) : (
-              <AppointmentList
-                appointments={appts}
-                onPayment={handlePayment}
-                onReschedule={handleReschedule}
-                onStatusChange={handleStatusChange}
-                onAttendanceChange={handleAttendance}
-              />
-            )}
-          </div>
-
-          {/* Devis / plan de traitement chiffré.
-              Affiché pour toutes les spécialités : chiffrer un plan et le faire
-              régler en plusieurs fois n'a rien de propre à la dentisterie.
-              Seule la colonne « dent » est réservée aux dentistes, sinon elle
-              n'aurait aucun sens pour un kinésithérapeute. */}
-          <QuotesCard key={`dev-${patient.id}`} patientId={patient.id} dental={isDentalDoctor(specialties)} />
-
-          {/* Forfaits de séances prépayées */}
-          <div className={sec}>
-            <div className={secTitle}><span className="flex items-center gap-1.5"><Ticket className="h-4 w-4" /> Forfait séances</span></div>
-
-            {packages.filter((p) => p.status !== 'annule').length === 0 ? (
-              <p className="text-xs text-gray-400 italic mb-2">Aucun forfait. Créez-en un pour suivre les séances prépayées.</p>
-            ) : (
-              <ul className="space-y-2 mb-3">
-                {packages.filter((p) => p.status !== 'annule').map((p) => {
-                  const left = p.total_sessions - p.used_sessions
-                  const pct = Math.round((p.used_sessions / p.total_sessions) * 100)
-                  const done = p.status === 'termine'
-                  return (
-                    <li key={p.id} className={`rounded-lg p-2.5 ${done ? 'bg-gray-50' : 'bg-primary-50/60'}`}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-gray-800 truncate">
-                          {p.label || `Forfait ${p.total_sessions} séances`}
-                        </span>
-                        <span className={`text-[11px] font-semibold shrink-0 ${done ? 'text-gray-400' : 'text-primary-600'}`}>
-                          {done ? 'Terminé' : `${left} restante${left > 1 ? 's' : ''}`}
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-gray-200 mt-2 overflow-hidden">
-                        <div className={`h-full rounded-full ${done ? 'bg-gray-400' : 'bg-primary-500'}`} style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className="flex items-center justify-between gap-2 mt-1.5">
-                        <span className="text-[11px] text-gray-500">
-                          {p.used_sessions}/{p.total_sessions} utilisées
-                          {p.amount != null && <> · {p.amount} DH</>}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <button onClick={() => useSession(p, -1)} disabled={p.used_sessions === 0}
-                            className="text-[11px] px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-white disabled:opacity-30" title="Retirer une séance">−</button>
-                          <button onClick={() => useSession(p, 1)} disabled={left === 0}
-                            className="text-[11px] px-2 py-0.5 rounded bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-30">Utiliser</button>
-                        </span>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              <input value={pkgLabel} onChange={(e) => setPkgLabel(e.target.value)} placeholder="Intitulé (optionnel)"
-                className="flex-1 min-w-[110px] text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
-              <input value={pkgTotal} onChange={(e) => setPkgTotal(e.target.value)} type="number" min="1" placeholder="Nb"
-                className="w-14 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
-              <input value={pkgAmount} onChange={(e) => setPkgAmount(e.target.value)} type="number" min="0" placeholder="DH"
-                className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
-              <Button size="sm" onClick={addPackage} disabled={savingPkg} className="h-[30px] text-xs">
-                {savingPkg ? '…' : 'Créer'}
-              </Button>
+          {onglet === 'suivi' && (
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
+              <div className="space-y-4 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <a href={`/ordonnance/patient/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-3 py-2"><Pill className="h-4 w-4" /> Nouvelle ordonnance</a>
+              <a href={`/certificat/nouveau/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg px-3 py-2 hover:bg-primary-50"><FileText className="h-4 w-4" /> Nouveau certificat</a>
+              <a href={`/dossier/${patient.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50"><Printer className="h-4 w-4" /> Imprimer</a>
             </div>
-          </div>
-
-          {/* Qui a consulté ce dossier */}
-          <div className={sec}>
-            <div className={secTitle}>
-              <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> Accès au dossier</span>
-              {!accesCharge && (
-                <button onClick={chargerAcces} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">
-                  Afficher
-                </button>
+            <div className={sec}>
+              <div className={secTitle}><span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Historique des rendez-vous ({appts.length})</span></div>
+              {loading ? <p className="text-sm text-gray-400">Chargement…</p> : appts.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">Aucun rendez-vous pour ce patient.</p>
+              ) : (
+                <AppointmentList
+                  appointments={appts}
+                  onPayment={handlePayment}
+                  onReschedule={handleReschedule}
+                  onStatusChange={handleStatusChange}
+                  onAttendanceChange={handleAttendance}
+                />
               )}
             </div>
-
-            {!accesCharge ? (
-              <p className="text-xs text-gray-400 italic">
-                Qui a ouvert ce dossier, et quand. Conservé pour vous permettre de répondre
-                si un patient s&apos;en inquiète.
-              </p>
-            ) : acces === null ? (
-              <p className="text-xs text-gray-400">Chargement…</p>
-            ) : acces.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">Aucun accès enregistré pour l&apos;instant.</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {acces.map((a) => {
-                  const role = String((a.metadata as Record<string, unknown>)?.role ?? '')
-                  const email = String((a.metadata as Record<string, unknown>)?.email ?? '')
-                  return (
-                    <li key={a.id} className="flex items-start justify-between gap-3 text-xs">
-                      <span className="min-w-0">
-                        <span className="text-gray-700">{ACTIONS_LISIBLES[a.action] ?? a.action}</span>
-                        <span className="block text-gray-400 truncate">
-                          {role === 'secretaire' ? 'Secrétaire' : 'Vous'}{email ? ` · ${email}` : ''}
-                        </span>
-                      </span>
-                      <span className="text-gray-400 shrink-0 tabular-nums">
-                        {new Date(a.created_at).toLocaleString('fr-FR', {
-                          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-                        })}
-                      </span>
+            {/* Ordonnances — masquées pour les professions non prescriptrices */}
+            {!nonPrescriber && prescriptions.length > 0 && (
+              <div className={sec}>
+                <div className={secTitle}><span className="flex items-center gap-1.5"><Pill className="h-4 w-4" /> Ordonnances ({prescriptions.length})</span></div>
+                <ul className="space-y-1.5">
+                  {prescriptions.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
+                      <button onClick={() => window.open(`/ordonnance/p/${p.id}`, '_blank')} className="text-gray-700 hover:text-primary-600 truncate text-left flex-1">
+                        <span className="text-gray-400">{formatDateShort(p.created_at)} · </span>{(p.content ?? '').split('\n').filter(Boolean)[0] || 'Ordonnance'}
+                      </button>
+                      <button onClick={() => renewPrescription(p)} title="Renouveler" className="text-primary-500 hover:text-primary-700 shrink-0"><RefreshCw className="h-3.5 w-3.5" /></button>
                     </li>
-                  )
-                })}
-              </ul>
+                  ))}
+                </ul>
+              </div>
             )}
-          </div>
-
-          {/* Ordonnances — masquées pour les professions non prescriptrices */}
-          {!nonPrescriber && prescriptions.length > 0 && (
+            {/* Certificats — l'écran de création promet qu'ils apparaissent ici */}
+            {certificates.length > 0 && (
+              <div className={sec}>
+                <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Certificats ({certificates.length})</span></div>
+                <ul className="space-y-1.5">
+                  {certificates.map((c) => (
+                    <li key={c.id}>
+                      <button onClick={() => window.open(`/certificat/${c.id}`, '_blank')} className="text-sm text-gray-700 hover:text-primary-600 truncate text-left w-full">
+                        <span className="text-gray-400">{formatDateShort(c.created_at)} · </span>{c.title}
+                        {c.motif && <span className="text-gray-400"> — {c.motif}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+              </div>
+              <div className="space-y-4">
+                {/* Antécédents en lecture : on les voit sans pouvoir les
+                    effacer d'un clic malheureux ; « Modifier » ouvre la fiche. */}
+                {(editAllergies || editChronic || editSurgeries || editTreatments) && (
+                  <div className={sec}>
+                    <div className={secTitle}>
+                      <span className="flex items-center gap-1.5"><HeartPulse className="h-4 w-4" /> Antécédents</span>
+                      <button onClick={() => setEdition(true)} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">Modifier</button>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      {editChronic && <div><p className="text-[11px] text-gray-400">Maladies chroniques</p><p className="text-gray-700 whitespace-pre-wrap">{editChronic}</p></div>}
+                      {editTreatments && <div><p className="text-[11px] text-gray-400">Traitements de fond</p><p className="text-gray-700 whitespace-pre-wrap">{editTreatments}</p></div>}
+                      {editSurgeries && <div><p className="text-[11px] text-gray-400">Antécédents chirurgicaux</p><p className="text-gray-700 whitespace-pre-wrap">{editSurgeries}</p></div>}
+                      {!isPsy && editVaccinations && <div><p className="text-[11px] text-gray-400">Vaccins</p><p className="text-gray-700 whitespace-pre-wrap">{editVaccinations}</p></div>}
+                    </div>
+                  </div>
+                )}
+            {/* Prochaine visite */}
             <div className={sec}>
-              <div className={secTitle}><span className="flex items-center gap-1.5"><Pill className="h-4 w-4" /> Ordonnances ({prescriptions.length})</span></div>
-              <ul className="space-y-1.5">
-                {prescriptions.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                    <button onClick={() => window.open(`/ordonnance/p/${p.id}`, '_blank')} className="text-gray-700 hover:text-primary-600 truncate text-left flex-1">
-                      <span className="text-gray-400">{formatDateShort(p.created_at)} · </span>{(p.content ?? '').split('\n').filter(Boolean)[0] || 'Ordonnance'}
-                    </button>
-                    <button onClick={() => renewPrescription(p)} title="Renouveler" className="text-primary-500 hover:text-primary-700 shrink-0"><RefreshCw className="h-3.5 w-3.5" /></button>
-                  </li>
+              <div className={secTitle}><span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Prochaine visite</span></div>
+              {nextApt ? (
+                <div className="text-sm text-gray-700">
+                  <p className="font-medium capitalize">{nextApt.date === todayStr ? "Aujourd'hui" : formatDateFr(nextApt.date)}</p>
+                  <p className="text-gray-500">{String(nextApt.time).substring(0, 5)}{(nextApt as { consultation_type?: { name?: string } }).consultation_type?.name ? ` · ${(nextApt as { consultation_type?: { name?: string } }).consultation_type!.name}` : ''}</p>
+                </div>
+              ) : <p className="text-sm text-gray-400 italic">Aucun RDV planifié.</p>}
+
+              {/* Programmer un rappel */}
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-[11px] text-gray-400 mb-1.5 flex items-center gap-1"><BellRing className="h-3 w-3" /> Rappel de suivi</p>
+                {recalls.filter((r) => r.status !== 'cancelled').map((r) => (
+                  <div key={r.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-2.5 py-1.5 mb-1.5">
+                    <span className="text-xs text-gray-700">{formatDateShort(r.due_date)}{r.reason ? ` — ${r.reason}` : ''}</span>
+                    {r.status === 'pending' && <button onClick={() => cancelRecall(r.id)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>}
+                  </div>
                 ))}
-              </ul>
+                <div className="flex gap-1.5">
+                  <Input type="date" value={recallDate} min={todayStr} onChange={(e) => setRecallDate(e.target.value)} className="h-9 text-xs" />
+                  <Button type="button" variant="outline" size="sm" onClick={addRecall} disabled={!recallDate || addingRecall} className="shrink-0"><Plus className="h-4 w-4" /></Button>
+                </div>
+                <Input value={recallReason} onChange={(e) => setRecallReason(e.target.value)} placeholder="Motif (optionnel)" className="h-9 text-xs mt-1.5" />
+              </div>
+            </div>
+            {/* Notes */}
+            <div className={sec}>
+              <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Notes ({consultNotes.length})</span></div>
+              <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} rows={isPsy ? 6 : 3}
+                placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Ajouter une note datée…'}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 mb-2" />
+              <Button size="sm" onClick={addConsultNote} disabled={addingNote || !newNote.trim() || newNote === PSY_NOTE_TEMPLATE} className="w-full"><Plus className="h-4 w-4 mr-1" /> Ajouter la note</Button>
+              <div className="space-y-2 mt-3">
+                {consultNotes.slice(0, 8).map((n) => (
+                  <div key={n.id} className={`rounded-lg p-2.5 ${n.signed_at ? 'bg-green-50/70 border border-green-100' : 'bg-gray-50'}`}>
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <p className="text-[11px] font-medium text-gray-500">Note du {formatDateTimeFr(n.created_at)}</p>
+                      {n.signed_at ? (
+                        <span className="text-[10px] text-green-600 font-medium flex items-center gap-0.5"><Check className="h-3 w-3" /> Signée</span>
+                      ) : (
+                        <span className="flex items-center gap-1.5">
+                          <button onClick={() => signNote(n.id)} className="text-[10px] text-primary-600 hover:underline">Signer</button>
+                          <button onClick={() => deleteNote(n.id)} className="text-gray-300 hover:text-red-500" title="Supprimer"><X className="h-3 w-3" /></button>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">{n.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+              </div>
             </div>
           )}
 
-          {/* Certificats — l'écran de création promet qu'ils apparaissent ici */}
-          {certificates.length > 0 && (
-            <div className={sec}>
-              <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Certificats ({certificates.length})</span></div>
-              <ul className="space-y-1.5">
-                {certificates.map((c) => (
-                  <li key={c.id}>
-                    <button onClick={() => window.open(`/certificat/${c.id}`, '_blank')} className="text-sm text-gray-700 hover:text-primary-600 truncate text-left w-full">
-                      <span className="text-gray-400">{formatDateShort(c.created_at)} · </span>{c.title}
-                      {c.motif && <span className="text-gray-400"> — {c.motif}</span>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
+          {onglet === 'soins' && (
+            <div className="space-y-4">
           {/* Sections spécialité */}
           {isDentalDoctor(specialties) && <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />}
           {isPediatricDoctor(specialties) && editBirthDate && (
@@ -779,7 +787,6 @@ export default function PatientDossier({
               📅 Renseignez la <b>date de naissance</b> (colonne de gauche) pour activer la courbe de croissance, le calendrier vaccinal et les repères de développement.
             </p>
           )}
-
           {/* Constantes (hors psy) */}
           {!isPsy && enabledVitals.length > 0 && (
             <div className={sec}>
@@ -807,86 +814,184 @@ export default function PatientDossier({
               )}
             </div>
           )}
-        </div>
+            </div>
+          )}
 
-        {/* ── COLONNE DROITE : prochaine visite / encaissements / notes ── */}
-        <div className="space-y-4">
-          {/* Prochaine visite */}
-          <div className={sec}>
-            <div className={secTitle}><span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Prochaine visite</span></div>
-            {nextApt ? (
-              <div className="text-sm text-gray-700">
-                <p className="font-medium capitalize">{nextApt.date === todayStr ? "Aujourd'hui" : formatDateFr(nextApt.date)}</p>
-                <p className="text-gray-500">{String(nextApt.time).substring(0, 5)}{(nextApt as { consultation_type?: { name?: string } }).consultation_type?.name ? ` · ${(nextApt as { consultation_type?: { name?: string } }).consultation_type!.name}` : ''}</p>
+          {onglet === 'argent' && (
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
+              <div className="space-y-4 min-w-0">
+            {/* Devis / plan de traitement chiffré.
+                Affiché pour toutes les spécialités : chiffrer un plan et le faire
+                régler en plusieurs fois n'a rien de propre à la dentisterie.
+                Seule la colonne « dent » est réservée aux dentistes, sinon elle
+                n'aurait aucun sens pour un kinésithérapeute. */}
+            <QuotesCard key={`dev-${patient.id}`} patientId={patient.id} dental={isDentalDoctor(specialties)} />
+            {/* Forfaits de séances prépayées */}
+            <div className={sec}>
+              <div className={secTitle}><span className="flex items-center gap-1.5"><Ticket className="h-4 w-4" /> Forfait séances</span></div>
+
+              {packages.filter((p) => p.status !== 'annule').length === 0 ? (
+                <p className="text-xs text-gray-400 italic mb-2">Aucun forfait. Créez-en un pour suivre les séances prépayées.</p>
+              ) : (
+                <ul className="space-y-2 mb-3">
+                  {packages.filter((p) => p.status !== 'annule').map((p) => {
+                    const left = p.total_sessions - p.used_sessions
+                    const pct = Math.round((p.used_sessions / p.total_sessions) * 100)
+                    const done = p.status === 'termine'
+                    return (
+                      <li key={p.id} className={`rounded-lg p-2.5 ${done ? 'bg-gray-50' : 'bg-primary-50/60'}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium text-gray-800 truncate">
+                            {p.label || `Forfait ${p.total_sessions} séances`}
+                          </span>
+                          <span className={`text-[11px] font-semibold shrink-0 ${done ? 'text-gray-400' : 'text-primary-600'}`}>
+                            {done ? 'Terminé' : `${left} restante${left > 1 ? 's' : ''}`}
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-gray-200 mt-2 overflow-hidden">
+                          <div className={`h-full rounded-full ${done ? 'bg-gray-400' : 'bg-primary-500'}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-1.5">
+                          <span className="text-[11px] text-gray-500">
+                            {p.used_sessions}/{p.total_sessions} utilisées
+                            {p.amount != null && <> · {p.amount} DH</>}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <button onClick={() => useSession(p, -1)} disabled={p.used_sessions === 0}
+                              className="text-[11px] px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-white disabled:opacity-30" title="Retirer une séance">−</button>
+                            <button onClick={() => useSession(p, 1)} disabled={left === 0}
+                              className="text-[11px] px-2 py-0.5 rounded bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-30">Utiliser</button>
+                          </span>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <input value={pkgLabel} onChange={(e) => setPkgLabel(e.target.value)} placeholder="Intitulé (optionnel)"
+                  className="flex-1 min-w-[110px] text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
+                <input value={pkgTotal} onChange={(e) => setPkgTotal(e.target.value)} type="number" min="1" placeholder="Nb"
+                  className="w-14 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
+                <input value={pkgAmount} onChange={(e) => setPkgAmount(e.target.value)} type="number" min="0" placeholder="DH"
+                  className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
+                <Button size="sm" onClick={addPackage} disabled={savingPkg} className="h-[30px] text-xs">
+                  {savingPkg ? '…' : 'Créer'}
+                </Button>
               </div>
-            ) : <p className="text-sm text-gray-400 italic">Aucun RDV planifié.</p>}
-
-            {/* Programmer un rappel */}
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <p className="text-[11px] text-gray-400 mb-1.5 flex items-center gap-1"><BellRing className="h-3 w-3" /> Rappel de suivi</p>
-              {recalls.filter((r) => r.status !== 'cancelled').map((r) => (
-                <div key={r.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-2.5 py-1.5 mb-1.5">
-                  <span className="text-xs text-gray-700">{formatDateShort(r.due_date)}{r.reason ? ` — ${r.reason}` : ''}</span>
-                  {r.status === 'pending' && <button onClick={() => cancelRecall(r.id)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>}
+            </div>
+              </div>
+              <div className="space-y-4">
+            {/* Encaissements */}
+            <div className={sec}>
+              <div className="flex items-center gap-2 text-sm font-semibold mb-3">
+                <span className="text-primary-600">{totalPaid} DH encaissés</span>
+                {totalDue > 0 && <><span className="text-gray-300">·</span><span className="text-red-500">reste {totalDue} DH</span></>}
+              </div>
+              {billed.length === 0 ? <p className="text-xs text-gray-400 italic">Aucun encaissement.</p> : (
+                <div className="divide-y divide-gray-50">
+                  {billed.map((a) => {
+                    const due = a.amount_due != null && (a.amount_paid ?? 0) < a.amount_due ? a.amount_due - (a.amount_paid ?? 0) : 0
+                    return (
+                      <div key={a.id} className="flex items-center justify-between py-2 text-sm">
+                        <span className="text-gray-500">{formatDateShort(a.date)}</span>
+                        {due > 0 ? <span className="text-red-500 font-semibold">reste {due} DH</span> : <span className="text-green-600 font-semibold">{a.amount_paid ?? 0} DH</span>}
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
-              <div className="flex gap-1.5">
-                <Input type="date" value={recallDate} min={todayStr} onChange={(e) => setRecallDate(e.target.value)} className="h-9 text-xs" />
-                <Button type="button" variant="outline" size="sm" onClick={addRecall} disabled={!recallDate || addingRecall} className="shrink-0"><Plus className="h-4 w-4" /></Button>
-              </div>
-              <Input value={recallReason} onChange={(e) => setRecallReason(e.target.value)} placeholder="Motif (optionnel)" className="h-9 text-xs mt-1.5" />
+              )}
             </div>
-          </div>
-
-          {/* Encaissements */}
-          <div className={sec}>
-            <div className="flex items-center gap-2 text-sm font-semibold mb-3">
-              <span className="text-primary-600">{totalPaid} DH encaissés</span>
-              {totalDue > 0 && <><span className="text-gray-300">·</span><span className="text-red-500">reste {totalDue} DH</span></>}
-            </div>
-            {billed.length === 0 ? <p className="text-xs text-gray-400 italic">Aucun encaissement.</p> : (
-              <div className="divide-y divide-gray-50">
-                {billed.map((a) => {
-                  const due = a.amount_due != null && (a.amount_paid ?? 0) < a.amount_due ? a.amount_due - (a.amount_paid ?? 0) : 0
-                  return (
-                    <div key={a.id} className="flex items-center justify-between py-2 text-sm">
-                      <span className="text-gray-500">{formatDateShort(a.date)}</span>
-                      {due > 0 ? <span className="text-red-500 font-semibold">reste {due} DH</span> : <span className="text-green-600 font-semibold">{a.amount_paid ?? 0} DH</span>}
-                    </div>
-                  )
-                })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Notes */}
-          <div className={sec}>
-            <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Notes ({consultNotes.length})</span></div>
-            <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} rows={isPsy ? 6 : 3}
-              placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Ajouter une note datée…'}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 mb-2" />
-            <Button size="sm" onClick={addConsultNote} disabled={addingNote || !newNote.trim() || newNote === PSY_NOTE_TEMPLATE} className="w-full"><Plus className="h-4 w-4 mr-1" /> Ajouter la note</Button>
-            <div className="space-y-2 mt-3">
-              {consultNotes.slice(0, 8).map((n) => (
-                <div key={n.id} className={`rounded-lg p-2.5 ${n.signed_at ? 'bg-green-50/70 border border-green-100' : 'bg-gray-50'}`}>
-                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <p className="text-[11px] font-medium text-gray-500">Note du {formatDateTimeFr(n.created_at)}</p>
-                    {n.signed_at ? (
-                      <span className="text-[10px] text-green-600 font-medium flex items-center gap-0.5"><Check className="h-3 w-3" /> Signée</span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        <button onClick={() => signNote(n.id)} className="text-[10px] text-primary-600 hover:underline">Signer</button>
-                        <button onClick={() => deleteNote(n.id)} className="text-gray-300 hover:text-red-500" title="Supprimer"><X className="h-3 w-3" /></button>
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">{n.note}</p>
+          {onglet === 'dossier' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div className="space-y-4">
+            {/* Documents */}
+            <div className={sec}>
+              <div className={secTitle}><span className="flex items-center gap-1.5"><Paperclip className="h-4 w-4" /> Documents ({documents.length})</span>
+                <label className="text-xs font-medium text-primary-600 cursor-pointer hover:text-primary-700">{uploadingDoc ? '…' : '＋ Ajouter'}<input type="file" className="hidden" onChange={uploadDocument} disabled={uploadingDoc} /></label>
+              </div>
+              {documents.length === 0 ? <p className="text-xs text-gray-400 italic">Analyses, radios, ordonnances scannées… (max 10 Mo)</p> : (
+                <ul className="space-y-1.5">
+                  {documents.map((d) => (
+                    <li key={d.id}><button onClick={() => downloadDocument(d)} className="text-sm text-primary-600 hover:underline truncate flex items-center gap-1.5 w-full text-left"><Download className="h-3.5 w-3.5 shrink-0" /> {d.file_name}</button></li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {/* Fusionner un doublon */}
+            <div className={sec}>
+              <div className={secTitle}><span className="flex items-center gap-1.5"><Users className="h-4 w-4" /> Fusionner un doublon</span></div>
+              <p className="text-[11px] text-gray-400 mb-1.5">Deux fiches pour le même patient ? Recherchez l&apos;autre fiche pour tout regrouper ici.</p>
+              <Input value={mergeSearch} onChange={(e) => setMergeSearch(e.target.value)} placeholder="Nom du doublon…" className="h-9" />
+              {mergeResults.length > 0 && (
+                <div className="mt-1.5 border border-gray-100 rounded-lg divide-y divide-gray-50">
+                  {mergeResults.map((p) => (
+                    <button key={p.id} onClick={() => mergeDuplicate(p.id, `${p.first_name} ${p.last_name}`)}
+                      className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between gap-2">
+                      <span>{p.first_name} {p.last_name}{p.phone ? ` · ${p.phone}` : ''}</span>
+                      <span className="text-primary-600 font-medium shrink-0">Fusionner</span>
+                    </button>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        </div>
-      </div>
+          <button onClick={deletePatient} className="w-full text-xs text-gray-400 hover:text-red-500 flex items-center justify-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Supprimer ce patient</button>
+              </div>
+              <div className="space-y-4">
+            {/* Qui a consulté ce dossier */}
+            <div className={sec}>
+              <div className={secTitle}>
+                <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> Accès au dossier</span>
+                {!accesCharge && (
+                  <button onClick={chargerAcces} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">
+                    Afficher
+                  </button>
+                )}
+              </div>
+
+              {!accesCharge ? (
+                <p className="text-xs text-gray-400 italic">
+                  Qui a ouvert ce dossier, et quand. Conservé pour vous permettre de répondre
+                  si un patient s&apos;en inquiète.
+                </p>
+              ) : acces === null ? (
+                <p className="text-xs text-gray-400">Chargement…</p>
+              ) : acces.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">Aucun accès enregistré pour l&apos;instant.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {acces.map((a) => {
+                    const role = String((a.metadata as Record<string, unknown>)?.role ?? '')
+                    const email = String((a.metadata as Record<string, unknown>)?.email ?? '')
+                    return (
+                      <li key={a.id} className="flex items-start justify-between gap-3 text-xs">
+                        <span className="min-w-0">
+                          <span className="text-gray-700">{ACTIONS_LISIBLES[a.action] ?? a.action}</span>
+                          <span className="block text-gray-400 truncate">
+                            {role === 'secretaire' ? 'Secrétaire' : 'Vous'}{email ? ` · ${email}` : ''}
+                          </span>
+                        </span>
+                        <span className="text-gray-400 shrink-0 tabular-nums">
+                          {new Date(a.created_at).toLocaleString('fr-FR', {
+                            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                          })}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

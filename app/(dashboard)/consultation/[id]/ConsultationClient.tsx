@@ -279,10 +279,21 @@ export default function ConsultationClient({
               onChange={(e) => setNote(e.target.value)}
               readOnly={noteSigned}
               placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Motif, examen clinique, diagnostic, conduite à tenir…'}
-              rows={14}
+              rows={9}
               className={`w-full text-sm text-gray-800 leading-relaxed border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 ${noteSigned ? 'bg-gray-50 cursor-not-allowed' : ''}`}
             />
           </div>
+
+          {/* Schéma dentaire — le même composant que dans la fiche patient, donc
+              le même enregistrement (auto, via /api/dental) et le même journal
+              dent par dent. Le dentiste note ce qu'il voit pendant qu'il le voit,
+              sans quitter la consultation. Le filet de séparation du composant
+              est retiré ici : il est déjà dans sa propre carte. */}
+          {isDental && (
+            <div className="bg-white border border-gray-100 rounded-xl p-4 [&>div]:border-t-0 [&>div]:pt-0">
+              <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />
+            </div>
+          )}
 
           {/* Ordonnances de cette consultation (plusieurs possibles) */}
           <div className="bg-white border border-gray-100 rounded-xl p-4">
@@ -341,16 +352,6 @@ export default function ConsultationClient({
             </div>
           )}
 
-          {/* Schéma dentaire — le même composant que dans la fiche patient, donc
-              le même enregistrement (auto, via /api/dental) et le même journal
-              dent par dent. Le dentiste note ce qu'il voit pendant qu'il le voit,
-              sans quitter la consultation. Le filet de séparation du composant
-              est retiré ici : il est déjà dans sa propre carte. */}
-          {isDental && (
-            <div className="bg-white border border-gray-100 rounded-xl p-4 [&>div]:border-t-0 [&>div]:pt-0">
-              <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />
-            </div>
-          )}
         </section>
 
         {/* ── Colonne droite : actions ─────────────────────────────── */}

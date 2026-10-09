@@ -129,7 +129,7 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
         onClick={() => setActive(isActive ? null : key)}
         title={states.length > 0 ? `Dent ${n} — ${statesLabel(states)}${info?.n ? ` (${info.n})` : ''}` : `Dent ${n}`}
         style={color ? { backgroundColor: color, color: '#fff', borderColor: color } : undefined}
-        className={`relative w-7 h-9 shrink-0 rounded text-[10px] font-semibold border border-gray-300 bg-white text-gray-600 transition ${isActive ? 'ring-2 ring-primary-500 ring-offset-1' : ''} ${extraite ? 'opacity-80' : ''}`}
+        className={`relative w-9 h-11 shrink-0 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-600 transition ${isActive ? 'ring-2 ring-primary-500 ring-offset-1' : ''} ${extraite ? 'opacity-80' : ''}`}
       >
         <span className={`block ${colors.length > 1 ? 'pb-2' : ''} ${extraite ? 'line-through' : ''}`}>{n}</span>
         {/* États multiples : une pastille par état, posée sur un liseré blanc pour
