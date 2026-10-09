@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { allVitalDefs, resolveEnabledVitals, isPsychiatricDoctor, type VitalDef } from '@/types'
 import { canAccess } from '@/lib/plan'
+import { isDentalDoctor } from '@/lib/dental'
 import ConsultationClient from './ConsultationClient'
 
 export const dynamic = 'force-dynamic'
@@ -72,6 +73,10 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       vitalDefs={vitalDefs}
       vitalDefsAll={vitalDefsAll}
       isPsy={isPsychiatricDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])}
+      // Dentistes : le schéma dentaire se modifie PENDANT la consultation, pas
+      // seulement depuis la fiche patient. Pas de test sur le forfait ici — cet
+      // écran est déjà réservé au Cabinet complet par le canAccess ci-dessus.
+      isDental={isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])}
     />
   )
 }

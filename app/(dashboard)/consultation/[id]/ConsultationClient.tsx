@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDateFr, formatAge } from '@/lib/utils'
 import { PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
+import DentalChart from '@/components/dashboard/DentalChart'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
   AlertTriangle, CheckCircle2, Plus,
@@ -21,6 +22,7 @@ export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, recentVitals,
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
+  isDental = false,
 }: {
   doctorId: string
   appointmentId: string
@@ -39,6 +41,7 @@ export default function ConsultationClient({
   vitalDefs: VitalDef[]
   vitalDefsAll: VitalDef[]
   isPsy?: boolean
+  isDental?: boolean
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -335,6 +338,17 @@ export default function ConsultationClient({
               <Button variant="outline" size="sm" onClick={saveVitals} disabled={savingVital}>
                 <Plus className="h-4 w-4 mr-1" /> {savingVital ? 'Enregistrement…' : 'Enregistrer les constantes'}
               </Button>
+            </div>
+          )}
+
+          {/* Schéma dentaire — le même composant que dans la fiche patient, donc
+              le même enregistrement (auto, via /api/dental) et le même journal
+              dent par dent. Le dentiste note ce qu'il voit pendant qu'il le voit,
+              sans quitter la consultation. Le filet de séparation du composant
+              est retiré ici : il est déjà dans sa propre carte. */}
+          {isDental && (
+            <div className="bg-white border border-gray-100 rounded-xl p-4 [&>div]:border-t-0 [&>div]:pt-0">
+              <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />
             </div>
           )}
         </section>
