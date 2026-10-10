@@ -48,6 +48,28 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const existingNote = thisAptNoteRes.data ?? null
 
+  // Feuille de soins : les lignes arrivent pré-remplies avec les actes du plan
+  // de traitement marqués « réalisés » AUJOURD'HUI. À défaut, l'acte du jour
+  // est la consultation elle-même. Le praticien relit au lieu de ressaisir.
+  const aujourdhui = new Date().toISOString().slice(0, 10)
+  const { data: devisPatient } = await supabase
+    .from('quotes')
+    .select('items:quote_items(tooth, label, unit_price, quantity, done, done_at)')
+    .eq('doctor_id', doctor.id)
+    .eq('patient_id', patient.id)
+  const actesDuJour = (devisPatient ?? [])
+    .flatMap((q) => (q.items ?? []) as { tooth: string | null; label: string; unit_price: number; quantity: number; done: boolean; done_at: string | null }[])
+    .filter((it) => it.done && (it.done_at ?? '').slice(0, 10) === aujourdhui)
+    .map((it) => ({ tooth: it.tooth, label: it.label, amount: Number(it.unit_price) * (it.quantity || 1) }))
+
+  const suggestionsFeuille = actesDuJour.length > 0
+    ? actesDuJour
+    : [{
+        tooth: null,
+        label: consultationType?.name ?? 'Consultation',
+        amount: Number(apt.amount_due ?? consultationType?.default_price ?? 0),
+      }]
+
   const vitalDefsAll = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabled = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
   const vitalDefs = vitalDefsAll.filter((v) => enabled.includes(v.key))
@@ -77,6 +99,11 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       // seulement depuis la fiche patient. Pas de test sur le forfait ici — cet
       // écran est déjà réservé au Cabinet complet par le canAccess ci-dessus.
       isDental={isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])}
+      // Feuille de soins : affichée seulement si le patient a une couverture —
+      // sans organisme, il n'y a rien à faire rembourser, et la carte
+      // encombrerait l'écran de consultation pour rien.
+      mutuelle={(patient.mutuelle as string | null) ?? null}
+      suggestionsFeuille={suggestionsFeuille}
     />
   )
 }

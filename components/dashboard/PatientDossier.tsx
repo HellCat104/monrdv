@@ -17,6 +17,7 @@ import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
 import QuotesCard from '@/components/dashboard/QuotesCard'
+import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
 import { isNonPrescriber } from '@/lib/profession'
@@ -92,6 +93,12 @@ export default function PatientDossier({
     : null)
   const [editAddress, setEditAddress] = useState(patient.address ?? '')
   const [editMutuelle, setEditMutuelle] = useState(patient.mutuelle ?? '')
+  // L'assuré n'est pas toujours le patient : un enfant est soigné sous le
+  // numéro de son père ou de sa mère. Sans ces trois champs, la feuille de
+  // soins serait à recopier à la main à chaque visite.
+  const [editAssureNom, setEditAssureNom] = useState((patient as { insured_name?: string | null }).insured_name ?? '')
+  const [editAssureNum, setEditAssureNum] = useState((patient as { insured_number?: string | null }).insured_number ?? '')
+  const [editAssureLien, setEditAssureLien] = useState((patient as { insured_relation?: string | null }).insured_relation ?? '')
   const [mutuelleOther, setMutuelleOther] = useState(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
   const [editAllergies, setEditAllergies] = useState(patient.allergies ?? '')
   const [editChronic, setEditChronic] = useState(patient.chronic_conditions ?? '')
@@ -244,6 +251,9 @@ export default function PatientDossier({
       email: editEmail.trim() || null,
       address: editAddress.trim() || null,
       mutuelle: editMutuelle.trim() || null,
+      insured_name: editAssureNom.trim() || null,
+      insured_number: editAssureNum.trim() || null,
+      insured_relation: editAssureLien.trim() || null,
       notes: editNotes || null,
       allergies: editAllergies || null,
       chronic_conditions: editChronic || null,
@@ -639,6 +649,21 @@ export default function PatientDossier({
                 </Select>
                 {mutuelleOther && <Input value={editMutuelle} onChange={(e) => setEditMutuelle(e.target.value)} placeholder="Précisez" className="h-9 mt-1.5" />}
               </div>
+              {/* Assuré — n'apparaît que si le patient a une couverture : un
+                  patient sans mutuelle n'a pas d'immatriculation à saisir. */}
+              {editMutuelle && editMutuelle !== 'Aucune' && (
+                <div className="space-y-2 bg-gray-50 rounded-lg p-2.5">
+                  <p className="text-[11px] text-gray-400">À remplir si l&apos;assuré n&apos;est pas le patient</p>
+                  <div className="space-y-1"><Label className="text-[11px] text-gray-400">Nom de l&apos;assuré</Label>
+                    <Input value={editAssureNom} onChange={(e) => setEditAssureNom(e.target.value)} placeholder="Laisser vide si c'est le patient" className="h-9" /></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1"><Label className="text-[11px] text-gray-400">Immatriculation</Label>
+                      <Input value={editAssureNum} onChange={(e) => setEditAssureNum(e.target.value)} className="h-9" /></div>
+                    <div className="space-y-1"><Label className="text-[11px] text-gray-400">Lien</Label>
+                      <Input value={editAssureLien} onChange={(e) => setEditAssureLien(e.target.value)} placeholder="Fils, épouse…" className="h-9" /></div>
+                  </div>
+                </div>
+              )}
               {!isPsy && (
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Groupe sanguin</Label>
                   <Select value={editBloodGroup || undefined} onValueChange={setEditBloodGroup}>
@@ -898,6 +923,16 @@ export default function PatientDossier({
                 Seule la colonne « dent » est réservée aux dentistes, sinon elle
                 n'aurait aucun sens pour un kinésithérapeute. */}
             <QuotesCard key={`dev-${patient.id}`} patientId={patient.id} dental={isDentalDoctor(specialties)} />
+
+            {/* Feuille de soins — seulement si le patient a une couverture :
+                sans organisme, il n'y a rien à faire rembourser. */}
+            {editMutuelle && editMutuelle !== 'Aucune' && (
+              <FeuilleSoinsCard
+                patientId={patient.id}
+                dental={isDentalDoctor(specialties)}
+                mutuelle={editMutuelle}
+              />
+            )}
             {/* Forfaits de séances prépayées */}
             <div className={sec}>
               <div className={secTitle}><span className="flex items-center gap-1.5"><Ticket className="h-4 w-4" /> Forfait séances</span></div>

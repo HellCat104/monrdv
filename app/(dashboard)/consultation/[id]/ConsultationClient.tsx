@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { formatDateFr, formatAge } from '@/lib/utils'
 import { PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import DentalChart from '@/components/dashboard/DentalChart'
+import FeuilleSoinsCard, { type ActeSuggere } from '@/components/dashboard/FeuilleSoinsCard'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
   AlertTriangle, CheckCircle2, Plus,
@@ -22,7 +23,7 @@ export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, recentVitals,
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
-  isDental = false,
+  isDental = false, mutuelle = null, suggestionsFeuille = [],
 }: {
   doctorId: string
   appointmentId: string
@@ -42,6 +43,8 @@ export default function ConsultationClient({
   vitalDefsAll: VitalDef[]
   isPsy?: boolean
   isDental?: boolean
+  mutuelle?: string | null
+  suggestionsFeuille?: ActeSuggere[]
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -329,6 +332,19 @@ export default function ConsultationClient({
               </div>
             )}
           </div>
+
+          {/* Feuille de soins — seulement si le patient a une couverture.
+              Les actes du jour y sont déjà inscrits : il reste à vérifier les
+              codes, et à imprimer. */}
+          {mutuelle && mutuelle !== 'Aucune' && (
+            <FeuilleSoinsCard
+              patientId={patient.id}
+              appointmentId={appointmentId}
+              dental={isDental}
+              mutuelle={mutuelle}
+              suggestions={suggestionsFeuille}
+            />
+          )}
 
           {vitalDefs.length > 0 && (
             <div className="bg-white border border-gray-100 rounded-xl p-4">
