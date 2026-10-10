@@ -90,6 +90,26 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     vitalDefs = defs.filter((d) => enabled.includes(d.key))
   }
 
+  // Restes à payer — permission « Saisir les encaissements ».
+  //
+  // Le patient qui passe à l'accueil pour régler une ancienne consultation n'a
+  // pas de rendez-vous aujourd'hui : sans cette liste, la secrétaire n'a aucun
+  // moyen de retrouver la somme due depuis la fiche. Les rendez-vous rattachés
+  // à un devis sont écartés : ils se règlent sur le devis (verrou v54), et les
+  // afficher ici mènerait à un refus du serveur.
+  let impayes: unknown[] = []
+  if (ctx.permissions.payments) {
+    const { data, error: errImpayes } = await admin.from('appointments')
+      .select('id, date, amount_due, amount_paid, payment_method, quote_id, consultation_type:consultation_types(name)')
+      .eq('patient_id', patient.id).eq('doctor_id', ctx.doctor.id)
+      .not('amount_due', 'is', null)
+      .is('quote_id', null)
+      .order('date', { ascending: false })
+      .limit(30)
+    if (errImpayes) console.error('[cabinet/patients/id] restes à payer illisibles :', errImpayes.message)
+    impayes = (data ?? []).filter((a) => Number(a.amount_paid ?? 0) < Number(a.amount_due ?? 0))
+  }
+
   return NextResponse.json({
     patient: {
       id: patient.id, first_name: patient.first_name, last_name: patient.last_name,
@@ -107,6 +127,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     prescriptions,
     vitals,
     vitalDefs,
+    impayes,
     permissions: ctx.permissions,
   })
 }

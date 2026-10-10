@@ -106,7 +106,7 @@ export default function PatientsPage() {
 
   // Ajout d'un patient
   const [addOpen, setAddOpen] = useState(false)
-  const [newPatient, setNewPatient] = useState({ first_name: '', last_name: '', phone: '', birth_date: '', notes: '' })
+  const [newPatient, setNewPatient] = useState({ first_name: '', last_name: '', phone: '', birth_date: '', cin: '', mutuelle: '', email: '', notes: '' })
   const [addingPatient, setAddingPatient] = useState(false)
   const [addError, setAddError] = useState('')
   const [similarPatient, setSimilarPatient] = useState<PatientWithStats | null>(null)
@@ -568,6 +568,11 @@ export default function PatientsPage() {
       if (match) { setSimilarPatient(match); return }
     }
 
+    if (newPatient.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatient.email.trim())) {
+      setAddError('L\'adresse e-mail ne semble pas valide.')
+      return
+    }
+
     setSimilarPatient(null)
     setAddingPatient(true)
 
@@ -578,6 +583,12 @@ export default function PatientsPage() {
       phone: newPatient.phone.trim(),
       birth_date: newPatient.birth_date || null,
       age: ageFromBirthDate(newPatient.birth_date),
+      // Saisis à la création plutôt qu'« plus tard » : la CIN et la mutuelle
+      // sont demandées au guichet, pas trois semaines après, et ce sont elles
+      // qui remplissent la facture et la feuille de soins.
+      cin: newPatient.cin.trim().toUpperCase() || null,
+      mutuelle: newPatient.mutuelle || null,
+      email: newPatient.email.trim() || null,
       notes: newPatient.notes.trim() || null,
     })
 
@@ -593,7 +604,7 @@ export default function PatientsPage() {
     }
 
     setAddOpen(false)
-    setNewPatient({ first_name: '', last_name: '', phone: '', birth_date: '', notes: '' })
+    setNewPatient({ first_name: '', last_name: '', phone: '', birth_date: '', cin: '', mutuelle: '', email: '', notes: '' })
     setLoading(true)
     await load()
   }
@@ -936,6 +947,43 @@ export default function PatientsPage() {
                 {formatAge(newPatient.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(newPatient.birth_date)}</p>}
               </div>
             )}
+            {/* CIN et mutuelle : ce qu'on demande au patient quand il est
+                DEVANT le bureau. Réservés au forfait Cabinet complet, seul à
+                facturer — un agenda seul n'en a pas l'usage. */}
+            {doctorPlan === 'complet' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500">CIN (optionnel)</label>
+                  <Input
+                    value={newPatient.cin}
+                    onChange={(e) => setNewPatient({ ...newPatient, cin: e.target.value })}
+                    placeholder="AB123456"
+                    className="uppercase"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-gray-500">Mutuelle (optionnel)</label>
+                  <Select value={newPatient.mutuelle} onValueChange={(v) => setNewPatient({ ...newPatient, mutuelle: v === '__aucune' ? '' : v })}>
+                    <SelectTrigger><SelectValue placeholder="Aucune" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__aucune">Aucune</SelectItem>
+                      {MUTUELLES_MAROC.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-gray-500">E-mail (optionnel) — pour la confirmation et le rappel</label>
+              <Input
+                type="email"
+                value={newPatient.email}
+                onChange={(e) => setNewPatient({ ...newPatient, email: e.target.value })}
+                placeholder="patient@email.com"
+              />
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-xs text-gray-500">Notes (optionnel)</label>
               <textarea
@@ -961,7 +1009,7 @@ export default function PatientsPage() {
                     onClick={() => {
                       const p = similarPatient
                       setAddOpen(false); setSimilarPatient(null)
-                      setNewPatient({ first_name: '', last_name: '', phone: '', birth_date: '', notes: '' })
+                      setNewPatient({ first_name: '', last_name: '', phone: '', birth_date: '', cin: '', mutuelle: '', email: '', notes: '' })
                       if (p) router.push(`/patients/${p.id}`)
                     }}
                   >

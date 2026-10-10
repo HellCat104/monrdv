@@ -26,7 +26,8 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getInitials, formatDateFr, formatDateShort, formatDateTimeFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { withConsultationSummary } from '@/lib/consultation-summary'
-import { BLOOD_GROUPS, MUTUELLES_MAROC, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
+import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
+  type PaymentMethod,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef, type SessionPackage } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
   Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users, Ticket,
@@ -110,6 +111,13 @@ export default function PatientDossier({
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [vitals, setVitals] = useState<VitalSign[]>([])
   const [packages, setPackages] = useState<SessionPackage[]>([])
+  // Solder un reste dû sans rouvrir le rendez-vous : le patient qui passe à
+  // l'accueil pour régler une ancienne consultation n'a pas de RDV du jour.
+  const [soldeId, setSoldeId] = useState<string | null>(null)
+  const [soldeMontant, setSoldeMontant] = useState('')
+  const [soldeMode, setSoldeMode] = useState<PaymentMethod>('especes')
+  const [soldeEnCours, setSoldeEnCours] = useState(false)
+
   // Journal des séances : un seul forfait déplié à la fois.
   const [journalOuvert, setJournalOuvert] = useState<string | null>(null)
   const [journal, setJournal] = useState<{ id: string; delta: number; used_at: string; note: string | null }[]>([])
@@ -365,6 +373,37 @@ export default function PatientDossier({
     const updated = await res.json().catch(() => null)
     setAppts((prev) => prev.map((a) => a.id === id ? { ...a, amount_paid: payload.amount_paid, amount_due: payload.amount_due, payment_method: payload.payment_method, paid_at: updated?.paid_at ?? (payload.amount_paid !== null ? new Date().toISOString() : null) } : a))
   }
+  /** Ouvre la saisie pour un rendez-vous, le montant pré-rempli au reste dû :
+   *  dans la très grande majorité des cas le patient solde tout. */
+  function ouvrirSolde(aptId: string, reste: number) {
+    setSoldeId(aptId)
+    setSoldeMontant(String(reste))
+    setSoldeMode('especes')
+  }
+
+  /** Encaisse un versement sur un rendez-vous déjà facturé. On envoie le
+   *  TOTAL payé (ancien + versement) : c'est ce que la colonne `amount_paid`
+   *  représente, et le serveur refuse un total supérieur au dû. */
+  async function solder(a: Appointment) {
+    const verse = Number(String(soldeMontant).replace(',', '.'))
+    const reste = (a.amount_due ?? 0) - (a.amount_paid ?? 0)
+    if (!Number.isFinite(verse) || verse <= 0) { alert('Indiquez le montant reçu.'); return }
+    if (verse > reste) { alert(`Le reste dû est de ${reste} DH.`); return }
+    setSoldeEnCours(true)
+    try {
+      await handlePayment(a.id, {
+        amount_paid: (a.amount_paid ?? 0) + verse,
+        amount_due: a.amount_due ?? null,
+        payment_method: soldeMode,
+      })
+      setSoldeId(null); setSoldeMontant('')
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "L'encaissement a échoué.")
+    } finally {
+      setSoldeEnCours(false)
+    }
+  }
+
   async function handleReschedule(id: string, date: string, time: string) {
     const res = await fetch(`/api/appointments/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, time }) })
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Échec du déplacement') }
@@ -963,9 +1002,46 @@ export default function PatientDossier({
                   {billed.map((a) => {
                     const due = a.amount_due != null && (a.amount_paid ?? 0) < a.amount_due ? a.amount_due - (a.amount_paid ?? 0) : 0
                     return (
-                      <div key={a.id} className="flex items-center justify-between py-2 text-sm">
-                        <span className="text-gray-500">{formatDateShort(a.date)}</span>
-                        {due > 0 ? <span className="text-red-500 font-semibold">reste {due} DH</span> : <span className="text-green-600 font-semibold">{a.amount_paid ?? 0} DH</span>}
+                      <div key={a.id} className="py-2 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-gray-500">{formatDateShort(a.date)}</span>
+                          {due > 0 ? (
+                            <span className="flex items-center gap-2">
+                              <span className="text-red-500 font-semibold">reste {due} DH</span>
+                              <button
+                                onClick={() => (soldeId === a.id ? setSoldeId(null) : ouvrirSolde(a.id, due))}
+                                className="text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-2 py-1"
+                              >
+                                {soldeId === a.id ? 'Fermer' : 'Encaisser'}
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="text-green-600 font-semibold">{a.amount_paid ?? 0} DH</span>
+                          )}
+                        </div>
+
+                        {soldeId === a.id && due > 0 && (
+                          <div className="mt-2 bg-gray-50 rounded-lg p-2 space-y-2">
+                            <div className="flex items-center gap-1.5">
+                              <Input type="number" min="1" max={due} value={soldeMontant}
+                                onChange={(e) => setSoldeMontant(e.target.value)}
+                                className="h-9 text-sm" aria-label="Montant reçu" />
+                              <span className="text-xs text-gray-400">DH</span>
+                            </div>
+                            <select value={soldeMode} onChange={(e) => setSoldeMode(e.target.value as PaymentMethod)}
+                              className="w-full h-9 text-sm border border-gray-200 rounded-lg px-2 bg-white">
+                              {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
+                                <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>
+                              ))}
+                            </select>
+                            <Button size="sm" className="w-full" onClick={() => solder(a)} disabled={soldeEnCours}>
+                              {soldeEnCours ? 'Encaissement…' : `Encaisser ${soldeMontant || 0} DH`}
+                            </Button>
+                            <p className="text-[11px] text-gray-400">
+                              Un versement partiel est accepté : le reste suit le patient.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
