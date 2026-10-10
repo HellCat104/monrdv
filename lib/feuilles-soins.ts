@@ -42,3 +42,17 @@ export function normaliserLigne(brut: unknown, position: number): LigneFeuille |
     position,
   }
 }
+
+/** Champs de l'assuré venus du navigateur : on garde des paires texte courtes,
+ *  on jette le reste. La liste des clés attendues vit dans lib/organismes.ts,
+ *  mais la base ne doit rien avaler d'autre que du texte. */
+export function nettoyerDonneesAssure(brut: unknown): Record<string, string> {
+  if (!brut || typeof brut !== 'object') return {}
+  const sortie: Record<string, string> = {}
+  for (const [cle, valeur] of Object.entries(brut as Record<string, unknown>)) {
+    if (!/^[a-z_]{1,32}$/.test(cle)) continue
+    const texte = String(valeur ?? '').trim().slice(0, 120)
+    if (texte) sortie[cle] = texte
+  }
+  return sortie
+}

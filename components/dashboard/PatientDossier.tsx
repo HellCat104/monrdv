@@ -18,6 +18,7 @@ import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
 import QuotesCard from '@/components/dashboard/QuotesCard'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
+import { organismePour } from '@/lib/organismes'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
 import { isNonPrescriber } from '@/lib/profession'
@@ -94,11 +95,11 @@ export default function PatientDossier({
   const [editAddress, setEditAddress] = useState(patient.address ?? '')
   const [editMutuelle, setEditMutuelle] = useState(patient.mutuelle ?? '')
   // L'assuré n'est pas toujours le patient : un enfant est soigné sous le
-  // numéro de son père ou de sa mère. Sans ces trois champs, la feuille de
-  // soins serait à recopier à la main à chaque visite.
-  const [editAssureNom, setEditAssureNom] = useState((patient as { insured_name?: string | null }).insured_name ?? '')
-  const [editAssureNum, setEditAssureNum] = useState((patient as { insured_number?: string | null }).insured_number ?? '')
-  const [editAssureLien, setEditAssureLien] = useState((patient as { insured_relation?: string | null }).insured_relation ?? '')
+  // numéro de son père ou de sa mère. Les champs demandés dépendent de
+  // l'organisme (lib/organismes.ts), d'où un objet plutôt que des colonnes.
+  const [assureData, setAssureData] = useState<Record<string, string>>(
+    ((patient as { insurer_data?: Record<string, string> | null }).insurer_data ?? {}) as Record<string, string>,
+  )
   const [mutuelleOther, setMutuelleOther] = useState(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
   const [editAllergies, setEditAllergies] = useState(patient.allergies ?? '')
   const [editChronic, setEditChronic] = useState(patient.chronic_conditions ?? '')
@@ -251,9 +252,10 @@ export default function PatientDossier({
       email: editEmail.trim() || null,
       address: editAddress.trim() || null,
       mutuelle: editMutuelle.trim() || null,
-      insured_name: editAssureNom.trim() || null,
-      insured_number: editAssureNum.trim() || null,
-      insured_relation: editAssureLien.trim() || null,
+      // Couverture : seulement les cases réellement remplies.
+      insurer_data: Object.fromEntries(
+        Object.entries(assureData).map(([k, v]) => [k, (v ?? '').trim()]).filter(([, v]) => v !== ''),
+      ),
       notes: editNotes || null,
       allergies: editAllergies || null,
       chronic_conditions: editChronic || null,
@@ -649,21 +651,28 @@ export default function PatientDossier({
                 </Select>
                 {mutuelleOther && <Input value={editMutuelle} onChange={(e) => setEditMutuelle(e.target.value)} placeholder="Précisez" className="h-9 mt-1.5" />}
               </div>
-              {/* Assuré — n'apparaît que si le patient a une couverture : un
-                  patient sans mutuelle n'a pas d'immatriculation à saisir. */}
-              {editMutuelle && editMutuelle !== 'Aucune' && (
-                <div className="space-y-2 bg-gray-50 rounded-lg p-2.5">
-                  <p className="text-[11px] text-gray-400">À remplir si l&apos;assuré n&apos;est pas le patient</p>
-                  <div className="space-y-1"><Label className="text-[11px] text-gray-400">Nom de l&apos;assuré</Label>
-                    <Input value={editAssureNom} onChange={(e) => setEditAssureNom(e.target.value)} placeholder="Laisser vide si c'est le patient" className="h-9" /></div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1"><Label className="text-[11px] text-gray-400">Immatriculation</Label>
-                      <Input value={editAssureNum} onChange={(e) => setEditAssureNum(e.target.value)} className="h-9" /></div>
-                    <div className="space-y-1"><Label className="text-[11px] text-gray-400">Lien</Label>
-                      <Input value={editAssureLien} onChange={(e) => setEditAssureLien(e.target.value)} placeholder="Fils, épouse…" className="h-9" /></div>
+              {/* Couverture — les champs demandés par CET organisme, dans son
+                  ordre. Un patient sans mutuelle n'a rien à saisir ici. */}
+              {(() => {
+                const org = organismePour(editMutuelle)
+                if (!org) return null
+                return (
+                  <div className="space-y-2 bg-gray-50 rounded-lg p-2.5">
+                    <p className="text-[11px] font-semibold text-gray-500">{org.intitule}</p>
+                    {org.champs.map((c) => (
+                      <div key={c.cle} className="space-y-1">
+                        <Label className="text-[11px] text-gray-400">{c.label}</Label>
+                        <Input
+                          value={assureData[c.cle] ?? ''}
+                          onChange={(e) => setAssureData((prev) => ({ ...prev, [c.cle]: e.target.value }))}
+                          className="h-9"
+                        />
+                        {c.aide && <p className="text-[10px] text-gray-400">{c.aide}</p>}
+                      </div>
+                    ))}
                   </div>
-                </div>
-              )}
+                )
+              })()}
               {!isPsy && (
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Groupe sanguin</Label>
                   <Select value={editBloodGroup || undefined} onValueChange={setEditBloodGroup}>

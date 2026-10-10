@@ -13,6 +13,7 @@ import { canAccess } from '@/lib/plan'
 import { FEUILLE_FONCTION } from '@/lib/feuilles-soins-server'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
+import { champsRenseignes, organismePour } from '@/lib/organismes'
 import { FeuilleDocument, type LigneSoin } from './FeuilleDocument'
 
 export const dynamic = 'force-dynamic'
@@ -49,9 +50,12 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
       patientNom={patient ? `${patient.first_name ?? ''} ${patient.last_name ?? ''}`.trim() : ''}
       patientCin={patient?.cin ?? null}
       organisme={(feuille.insurer as string | null) ?? null}
-      assureNom={(feuille.insured_name as string | null) ?? null}
-      assureNumero={(feuille.insured_number as string | null) ?? null}
-      assureLien={(feuille.insured_relation as string | null) ?? null}
+      // Les champs que CET organisme demande, dans son ordre (lib/organismes.ts).
+      champsAssure={champsRenseignes(
+        feuille.insurer as string | null,
+        (feuille.insurer_data as Record<string, unknown> | null) ?? null,
+      )}
+      intituleOrganisme={organismePour(feuille.insurer as string | null)?.intitule ?? null}
       dateSoins={feuille.care_date as string}
       items={(feuille.items ?? []) as LigneSoin[]}
     />

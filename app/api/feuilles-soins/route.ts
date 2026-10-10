@@ -4,7 +4,7 @@
 // sous sa signature. La secrétaire peut en revanche la retrouver dans le
 // dossier (lecture) une fois qu'elle existe — ce n'est pas cette route.
 import { NextRequest, NextResponse } from 'next/server'
-import { normaliserLigne, totalFeuille, type LigneFeuille } from '@/lib/feuilles-soins'
+import { normaliserLigne, totalFeuille, nettoyerDonneesAssure, type LigneFeuille } from '@/lib/feuilles-soins'
 import { requireFeuilleDoctor, TABLE_ABSENTE, FEUILLE_NON_ACTIVEE } from '@/lib/feuilles-soins-server'
 
 export const dynamic = 'force-dynamic'
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   // la feuille le RECOPIE (migration v65), elle ne le pointe pas.
   const { data: patient } = await supabase
     .from('patients')
-    .select('id, mutuelle, insured_name, insured_number, insured_relation, first_name, last_name')
+    .select('id, mutuelle, insurer_data, first_name, last_name')
     .eq('id', patientId).eq('doctor_id', doctor.id).maybeSingle()
   if (!patient) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
 
@@ -73,9 +73,9 @@ export async function POST(req: NextRequest) {
       // L'organisme vient de la fiche, sauf si le médecin en choisit un autre
       // sur cette feuille (un patient peut changer de couverture).
       insurer: body.insurer ? String(body.insurer).slice(0, 60) : (patient.mutuelle ?? null),
-      insured_name: body.insured_name ? String(body.insured_name).slice(0, 120) : (patient.insured_name ?? null),
-      insured_number: body.insured_number ? String(body.insured_number).slice(0, 40) : (patient.insured_number ?? null),
-      insured_relation: body.insured_relation ? String(body.insured_relation).slice(0, 40) : (patient.insured_relation ?? null),
+      // Les champs de l'assuré, tels que l'organisme les demande
+      // (lib/organismes.ts). Recopiés, jamais pointés : voir la v65.
+      insurer_data: nettoyerDonneesAssure(body.insurer_data ?? patient.insurer_data),
       care_date: careDate,
       total: totalFeuille(lignes),
       notes: body.notes ? String(body.notes).slice(0, 500) : null,

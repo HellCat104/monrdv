@@ -18,13 +18,20 @@
 -- proposent automatiquement à partir de ce qu'il a déjà établi.
 
 -- ── L'assuré, qui n'est pas toujours le patient ─────────────────────────────
--- Un enfant est soigné sous le numéro d'immatriculation de son père ou de sa
--- mère. Sans ces trois colonnes, la feuille serait à recopier à la main à
--- chaque visite.
+--
+-- Un enfant est soigné sous le numéro de son père ou de sa mère : sans cette
+-- colonne, la feuille serait à recopier à la main à chaque visite.
+--
+-- POURQUOI DU JSON ET PAS DES COLONNES
+--
+-- Chaque organisme demande autre chose : immatriculation pour la CNSS, numéro
+-- d'affiliation et mutuelle de rattachement pour le CNOPS, matricule et unité
+-- pour les FAR, numéro de police et compagnie pour un assureur privé. Des
+-- colonnes figées obligeraient à une migration à chaque organisme ajouté, et
+-- laisseraient le reste à écrire à la main. La liste des champs vit dans
+-- lib/organismes.ts ; la base stocke ce que le praticien a saisi.
 alter table patients
-  add column if not exists insured_name     text,
-  add column if not exists insured_number   text,
-  add column if not exists insured_relation text;
+  add column if not exists insurer_data jsonb not null default '{}'::jsonb;
 
 -- ── La feuille ──────────────────────────────────────────────────────────────
 create table if not exists care_sheets (
@@ -38,10 +45,8 @@ create table if not exists care_sheets (
   -- Organisme et identité de l'assuré RECOPIÉS à l'établissement : la fiche
   -- patient peut changer ensuite (mariage, changement d'employeur), le
   -- document remis, lui, ne change plus.
-  insurer           text,
-  insured_name      text,
-  insured_number    text,
-  insured_relation  text,
+  insurer       text,
+  insurer_data  jsonb not null default '{}'::jsonb,
   care_date       date not null default current_date,
   total           numeric(10,2) not null default 0 check (total >= 0),
   status          text not null default 'etablie' check (status in ('etablie','remise','remboursee')),

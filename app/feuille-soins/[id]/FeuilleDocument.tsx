@@ -29,9 +29,10 @@ interface Props {
   patientNom: string
   patientCin: string | null
   organisme: string | null
-  assureNom: string | null
-  assureNumero: string | null
-  assureLien: string | null
+  /** Intitulé imprimé du régime (« CNSS — Assurance Maladie Obligatoire »). */
+  intituleOrganisme: string | null
+  /** Champs propres à l'organisme, déjà filtrés : libellé + valeur. */
+  champsAssure: { label: string; valeur: string }[]
   dateSoins: string
   items: LigneSoin[]
 }
@@ -40,13 +41,17 @@ const dh = (n: number) => `${n.toLocaleString('fr-FR')} DH`
 
 export function FeuilleDocument({
   lignes, logoUrl, ville, patientId, patientNom, patientCin,
-  organisme, assureNom, assureNumero, assureLien, dateSoins, items: itemsBruts,
+  organisme, intituleOrganisme, champsAssure, dateSoins, items: itemsBruts,
 }: Props) {
   const items = itemsBruts.slice().sort((a, b) => a.position - b.position)
   const total = items.reduce((t, i) => t + Number(i.amount || 0), 0)
   const avecDents = items.some((i) => !!i.tooth)
-  // L'assuré, c'est le patient lui-même tant qu'on n'a pas dit le contraire.
-  const assure = assureNom?.trim() || patientNom
+  // L'assuré, c'est le patient lui-même tant qu'on n'a pas dit le contraire :
+  // le champ « nom de l'assuré » reste vide dans ce cas, et on l'affiche ici
+  // plutôt que de laisser la case blanche sur un document remis à une caisse.
+  const nomAssureSaisi = champsAssure.find((c) => /assur/i.test(c.label))?.valeur
+  const assure = nomAssureSaisi || patientNom
+  const autresChamps = champsAssure.filter((c) => !/assur/i.test(c.label))
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
@@ -69,15 +74,17 @@ export function FeuilleDocument({
             premier, et la cause numéro un des dossiers renvoyés. */}
         <div className="grid grid-cols-2 gap-6 text-sm mb-8">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Assuré(e)</p>
+            <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">
+              Assuré(e){intituleOrganisme ? ` · ${intituleOrganisme}` : organisme ? ` · ${organisme}` : ''}
+            </p>
             <p className="font-semibold text-gray-900">{assure}</p>
-            {assureNumero && <p className="text-gray-600">Immatriculation : {assureNumero}</p>}
-            {organisme && <p className="text-gray-600">{organisme}</p>}
+            {autresChamps.map((c) => (
+              <p key={c.label} className="text-gray-600">{c.label} : {c.valeur}</p>
+            ))}
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Bénéficiaire des soins</p>
             <p className="font-semibold text-gray-900">{patientNom}</p>
-            {assureLien && <p className="text-gray-600">Lien : {assureLien}</p>}
             {patientCin && <p className="text-gray-600">CIN : {patientCin}</p>}
           </div>
         </div>
