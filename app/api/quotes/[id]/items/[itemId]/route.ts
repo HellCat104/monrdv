@@ -46,6 +46,20 @@ export async function PATCH(
     updates.tooth = raw || null
   }
 
+  // Séance prévue du plan. Planification pure : elle n'implique aucun
+  // rendez-vous, et n'en crée aucun.
+  if (body.session_no !== undefined) {
+    if (body.session_no === null || body.session_no === '') {
+      updates.session_no = null
+    } else {
+      const n = Number(body.session_no)
+      if (!Number.isInteger(n) || n < 1 || n > 20) {
+        return NextResponse.json({ error: 'Numéro de séance invalide (1 à 20)' }, { status: 400 })
+      }
+      updates.session_no = n
+    }
+  }
+
   // Acte réalisé : on note QUAND, et lors de quel rendez-vous quand
   // l'information est fournie. C'est ce qui permet, plus tard, de savoir quel
   // acte a été posé à quelle séance — le devis seul ne le dirait pas.
@@ -94,7 +108,16 @@ export async function PATCH(
     .eq('id', params.itemId).eq('quote_id', quote.id).eq('doctor_id', doctor.id)
     .select('*').maybeSingle()
 
-  if (error) return NextResponse.json({ error: 'Modification impossible' }, { status: 500 })
+  if (error) {
+    // Colonne absente : la v67 n'est pas passée. Le message dit quoi faire,
+    // au lieu d'un « modification impossible » que personne ne peut corriger.
+    if (error.code === '42703' || error.code === 'PGRST204') {
+      return NextResponse.json({
+        error: 'Les séances du plan de traitement ne sont pas encore activées sur votre base (migration v67).',
+      }, { status: 503 })
+    }
+    return NextResponse.json({ error: 'Modification impossible' }, { status: 500 })
+  }
   if (!data) return NextResponse.json({ error: 'Ligne introuvable' }, { status: 404 })
 
   await supabase.from('quotes').update({ updated_at: new Date().toISOString() })

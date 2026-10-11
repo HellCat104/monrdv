@@ -595,6 +595,10 @@ export interface QuoteItem {
   quantity: number
   done: boolean
   done_at: string | null
+  /** Séance PRÉVUE du plan de traitement (v67). NULL : pas encore planifié.
+   *  À ne pas confondre avec `appointment_id`, qui est le rendez-vous RÉEL
+   *  auquel la séance a été rattachée. */
+  session_no?: number | null
   appointment_id: string | null
   position: number
   created_at: string

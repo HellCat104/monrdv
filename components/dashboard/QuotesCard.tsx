@@ -29,7 +29,7 @@ import { formatDateShort } from '@/lib/utils'
 import { quoteTotal, quotePaid, quoteRemaining, itemTotal, installmentsTotal,
   normaliserValidite, ligneValidite } from '@/lib/devis'
 import { PAYMENT_METHOD_LABELS, QUOTE_STATUS_COLORS, QUOTE_STATUS_LABELS,
-  type PaymentMethod, type Quote, type QuoteStatus } from '@/types'
+  type PaymentMethod, type Quote, type QuoteItem, type QuoteStatus } from '@/types'
 import { FileSpreadsheet, Plus, Trash2, Printer, Check, ChevronDown, ChevronRight, CalendarClock } from 'lucide-react'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 
@@ -42,14 +42,50 @@ const inputCls = 'text-xs border border-gray-200 rounded-lg px-2 py-1.5'
 // croire qu'il solde le paiement — ce qu'il ne fait pas.
 const STATUS_CHOICES: QuoteStatus[] = ['brouillon', 'propose', 'accepte', 'refuse', 'annule']
 
+// Vingt séances couvrent large, y compris un traitement orthodontique ; la
+// base pose la même borne (migration v67).
+const SEANCES = Array.from({ length: 20 }, (_, i) => i + 1)
+
+/** Les actes groupés par séance prévue, dans l'ordre des séances, les actes
+ *  non planifiés en dernier — c'est le reste à organiser, pas le début du
+ *  plan. L'ordre de saisie du médecin est conservé à l'intérieur d'une séance. */
+function grouperParSeance(items: QuoteItem[]): {
+  cle: string; seance: number | null; titre: string; items: QuoteItem[]; total: number
+}[] {
+  const parSeance = new Map<number | null, QuoteItem[]>()
+  for (const it of items.slice().sort((a, b) => a.position - b.position)) {
+    const s = it.session_no ?? null
+    const liste = parSeance.get(s)
+    if (liste) liste.push(it)
+    else parSeance.set(s, [it])
+  }
+  return Array.from(parSeance.entries())
+    .sort((a, b) => {
+      if (a[0] === null) return 1
+      if (b[0] === null) return -1
+      return a[0] - b[0]
+    })
+    .map(([seance, liste]) => ({
+      cle: String(seance ?? 'libre'),
+      seance,
+      titre: seance === null ? 'À planifier' : `Séance ${seance}`,
+      items: liste,
+      total: liste.reduce((t, i) => t + itemTotal(i), 0),
+    }))
+}
+
 export default function QuotesCard({
   patientId,
   dental,
   mode = 'medecin',
   canPay = true,
+  rdvs = [],
 }: {
   patientId: string
   dental: boolean
+  /** Rendez-vous à venir du patient : une séance planifiée peut y être
+   *  rattachée. Vide côté secrétaire, qui ne planifie pas de soins. */
+  rdvs?: { id: string; date: string; time: string }[]
   /** 'secretaire' : lecture seule + éventuellement l'encaissement. Défaut
    *  'medecin' pour que l'écran du praticien reste ce qu'il était. */
   mode?: 'medecin' | 'secretaire'
@@ -247,6 +283,29 @@ export default function QuotesCard({
     await refresh(q.id)
   }
 
+  /** Séance prévue d'un acte. Planification seule : aucun rendez-vous créé. */
+  async function setSeance(q: Quote, itemId: string, valeur: string) {
+    const data = await call(`/api/quotes/${q.id}/items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ session_no: valeur === '' ? null : Number(valeur) }),
+    })
+    if (data) await refresh(q.id)
+  }
+
+  /** Rattache TOUS les actes d'une séance à un rendez-vous réel. Les appels
+   *  sont séquentiels : si le serveur refuse (rendez-vous portant déjà un
+   *  encaissement), on s'arrête à la première ligne plutôt que de laisser la
+   *  séance à moitié rattachée. */
+  async function rattacherSeance(q: Quote, lignes: QuoteItem[], aptId: string) {
+    for (const it of lignes) {
+      const data = await call(`/api/quotes/${q.id}/items/${it.id}`, {
+        method: 'PATCH', body: JSON.stringify({ appointment_id: aptId }),
+      })
+      if (!data) break
+    }
+    await refresh(q.id)
+  }
+
   async function toggleDone(q: Quote, itemId: string, done: boolean) {
     const data = await call(`/api/quotes/${q.id}/items/${itemId}`, {
       method: 'PATCH', body: JSON.stringify({ done }),
@@ -396,8 +455,42 @@ export default function QuotesCard({
                       {items.length === 0 ? (
                         <p className="text-xs text-gray-400 italic">Aucun acte pour l&apos;instant.</p>
                       ) : (
-                        <ul className="divide-y divide-gray-50 border border-gray-100 rounded-lg">
-                          {items.slice().sort((a, b) => a.position - b.position).map((it) => (
+                        <div className="space-y-2">
+                          {grouperParSeance(items).map((groupe) => (
+                            <div key={groupe.cle} className="border border-gray-100 rounded-lg overflow-hidden">
+                              {/* En-tête de séance : ce que le patient demande en
+                                  premier — « je paie combien à celle-là ? ». */}
+                              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50">
+                                <span className="text-[11px] font-semibold text-gray-600">
+                                  {groupe.titre}
+                                </span>
+                                <span className="text-[11px] text-gray-400">
+                                  {groupe.items.length} acte{groupe.items.length > 1 ? 's' : ''}
+                                </span>
+                                <span className="ml-auto text-xs font-semibold text-gray-800 tabular-nums">
+                                  {groupe.total.toLocaleString('fr-FR')} DH
+                                </span>
+                                {/* Rattacher la séance à un vrai rendez-vous :
+                                    le devis cesse d'être un plan abstrait. */}
+                                {!secretaire && groupe.seance !== null && rdvs.length > 0 && (
+                                  <select
+                                    value=""
+                                    onChange={(e) => e.target.value && rattacherSeance(q, groupe.items, e.target.value)}
+                                    disabled={busy}
+                                    className="text-[11px] border border-gray-200 rounded px-1.5 py-1 bg-white"
+                                    title="Rattacher cette séance à un rendez-vous"
+                                  >
+                                    <option value="">Programmer…</option>
+                                    {rdvs.map((r) => (
+                                      <option key={r.id} value={r.id}>
+                                        {formatDateShort(r.date)} · {String(r.time).substring(0, 5)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                              <ul className="divide-y divide-gray-50">
+                                {groupe.items.map((it) => (
                             <li key={it.id} className="flex items-center gap-2 px-2.5 py-1.5">
                               {secretaire ? (
                                 // Même pastille, sans le bouton : « réalisé » est
@@ -423,6 +516,21 @@ export default function QuotesCard({
                                   {it.tooth}
                                 </span>
                               )}
+                              {/* Séance prévue. Vide = pas encore planifié, ce
+                                  qui est l'état normal d'un devis qu'on vient
+                                  de chiffrer. */}
+                              {!secretaire && (
+                                <select
+                                  value={it.session_no ?? ''}
+                                  onChange={(e) => setSeance(q, it.id, e.target.value)}
+                                  disabled={busy}
+                                  title="Séance prévue"
+                                  className="text-[11px] border border-gray-200 rounded px-1 py-0.5 bg-white shrink-0 text-gray-600"
+                                >
+                                  <option value="">S—</option>
+                                  {SEANCES.map((n) => <option key={n} value={n}>S{n}</option>)}
+                                </select>
+                              )}
                               <span className={`flex-1 text-xs truncate ${it.done ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
                                 {it.label}{it.quantity > 1 ? ` × ${it.quantity}` : ''}
                               </span>
@@ -436,8 +544,11 @@ export default function QuotesCard({
                                 </button>
                               )}
                             </li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       )}
 
                       {/* Ajout d'un acte — jamais côté secrétaire : ajouter une

@@ -80,7 +80,7 @@ export default async function DevisPage({ params }: Props) {
   const { data: quote } = await supabase
     .from('quotes')
     .select(`*, patient:patients(first_name, last_name),
-      items:quote_items(tooth, label, unit_price, quantity, position, created_at),
+      items:quote_items(tooth, label, unit_price, quantity, position, created_at, session_no),
       payments:quote_payments(amount),
       installments:quote_installments(due_date, amount, label)`)
     .eq('id', params.id)

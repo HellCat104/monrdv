@@ -6,6 +6,7 @@
 // Les règles du document — pas de numéro, échéancier prévisionnel, date
 // d'émission, mention « ni facture ni reçu » — sont expliquées en tête de
 // app/devis/[id]/page.tsx.
+import { Fragment } from 'react'
 import { formatDateFr, formatDateShort } from '@/lib/utils'
 import { itemTotal, quoteTotal, quotePaid, quoteRemaining, installmentsTotal, ligneValidite } from '@/lib/devis'
 import type { LignesEnTete } from '@/lib/document-entete'
@@ -13,7 +14,7 @@ import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
 import { PrintButton } from '../../facture/[id]/PrintButton'
 import type { QuoteStatus } from '@/types'
 
-export interface LigneDevis { tooth: string | null; label: string; unit_price: number; quantity: number; position: number; created_at: string }
+export interface LigneDevis { tooth: string | null; label: string; unit_price: number; quantity: number; position: number; created_at: string; session_no?: number | null }
 export interface EcheanceDevis { due_date: string; amount: number; label: string | null }
 
 interface Props {
@@ -55,6 +56,28 @@ export function DevisDocument({
   const verse = quotePaid(payments)
   const reste = quoteRemaining(items, payments)
   const avecDents = items.some((it) => !!it.tooth)
+
+  // Séances du plan de traitement (v67). Les actes non planifiés ferment la
+  // liste : c'est ce qui reste à organiser.
+  const avecSeances = items.some((it) => it.session_no != null)
+  const groupesSeances = (() => {
+    if (!avecSeances) return [{ cle: 'tout', titre: '', items, total: 0 }]
+    const parSeance = new Map<number | null, LigneDevis[]>()
+    for (const it of items) {
+      const s = it.session_no ?? null
+      const l = parSeance.get(s)
+      if (l) l.push(it)
+      else parSeance.set(s, [it])
+    }
+    return Array.from(parSeance.entries())
+      .sort((a, b) => (a[0] === null ? 1 : b[0] === null ? -1 : a[0] - b[0]))
+      .map(([seance, liste]) => ({
+        cle: String(seance ?? 'libre'),
+        titre: seance === null ? 'À planifier' : `Séance ${seance}`,
+        items: liste,
+        total: liste.reduce((t, i) => t + itemTotal(i), 0),
+      }))
+  })()
   // « Valable » + texte du médecin, ou null : aucune ligne (lib/devis.ts).
   const validite = ligneValidite(texteValidite)
 
@@ -121,14 +144,30 @@ export function DevisDocument({
               </tr>
             </thead>
             <tbody>
-              {items.map((it, i) => (
-                <tr key={i} className="border-b border-gray-100 align-top break-inside-avoid">
-                  {avecDents && <td className="py-2 pr-3 font-semibold text-gray-800 tabular-nums">{it.tooth ?? ''}</td>}
-                  <td className="py-2 pr-3 text-gray-800">{it.label}</td>
-                  <td className="py-2 pr-3 text-center text-gray-700 tabular-nums">{it.quantity}</td>
-                  <td className="py-2 pr-3 text-right text-gray-700 whitespace-nowrap tabular-nums">{dh(Number(it.unit_price))}</td>
-                  <td className="py-2 text-right text-gray-900 whitespace-nowrap tabular-nums">{dh(itemTotal(it))}</td>
-                </tr>
+              {/* Le plan se lit séance par séance, avec le sous-total de
+                  chacune : c'est la première question du patient — « je paie
+                  combien à la prochaine ? ». Un devis sans séances garde son
+                  tableau d'avant, sans en-tête parasite. */}
+              {groupesSeances.map((g) => (
+                <Fragment key={g.cle}>
+                  {avecSeances && (
+                    <tr className="break-inside-avoid">
+                      <td colSpan={avecDents ? 5 : 4} className="pt-4 pb-1">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{g.titre}</span>
+                        <span className="float-right text-[12px] font-semibold text-gray-700 tabular-nums">{dh(g.total)}</span>
+                      </td>
+                    </tr>
+                  )}
+                  {g.items.map((it, i) => (
+                    <tr key={i} className="border-b border-gray-100 align-top break-inside-avoid">
+                      {avecDents && <td className="py-2 pr-3 font-semibold text-gray-800 tabular-nums">{it.tooth ?? ''}</td>}
+                      <td className="py-2 pr-3 text-gray-800">{it.label}</td>
+                      <td className="py-2 pr-3 text-center text-gray-700 tabular-nums">{it.quantity}</td>
+                      <td className="py-2 pr-3 text-right text-gray-700 whitespace-nowrap tabular-nums">{dh(Number(it.unit_price))}</td>
+                      <td className="py-2 text-right text-gray-900 whitespace-nowrap tabular-nums">{dh(itemTotal(it))}</td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -931,7 +931,17 @@ export default function PatientDossier({
                 régler en plusieurs fois n'a rien de propre à la dentisterie.
                 Seule la colonne « dent » est réservée aux dentistes, sinon elle
                 n'aurait aucun sens pour un kinésithérapeute. */}
-            <QuotesCard key={`dev-${patient.id}`} patientId={patient.id} dental={isDentalDoctor(specialties)} />
+            <QuotesCard
+              key={`dev-${patient.id}`}
+              patientId={patient.id}
+              dental={isDentalDoctor(specialties)}
+              // Rendez-vous à venir : une séance du plan s'y rattache en un clic.
+              rdvs={appts
+                .filter((a) => a.date >= todayStr && a.status !== 'cancelled')
+                .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+                .slice(0, 12)
+                .map((a) => ({ id: a.id, date: a.date, time: String(a.time) }))}
+            />
 
             {/* Feuille de soins — seulement si le patient a une couverture :
                 sans organisme, il n'y a rien à faire rembourser. */}
