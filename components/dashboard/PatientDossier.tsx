@@ -21,6 +21,7 @@ import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import PerioCard from '@/components/dashboard/PerioCard'
 import OrthoCard from '@/components/dashboard/OrthoCard'
+import VitalsTrend from '@/components/dashboard/VitalsTrend'
 import { organismePour } from '@/lib/organismes'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
@@ -517,6 +518,17 @@ export default function PatientDossier({
 
   // L'onglet « soins » n'existe que s'il a quelque chose à montrer : inutile de
   // proposer un onglet vide à un praticien dont la spécialité n'en relève pas.
+  // Courbes, vaccins et repères de développement : ils suivent désormais
+  // l'ÂGE DU PATIENT, et non la spécialité du médecin. Un généraliste qui suit
+  // les enfants d'une famille y a droit — tout existait déjà, seule une
+  // condition d'affichage l'en privait. Les couloirs OMS du composant
+  // s'arrêtent à 15 ans (taille/IMC), d'où la borne.
+  const ageDuPatient = ageFromBirthDate(editBirthDate)
+  const estEnfant = !!editBirthDate && ageDuPatient != null && ageDuPatient < 16
+  const suiviEnfant = !!editBirthDate && (isPediatricDoctor(specialties) || estEnfant)
+  // Les repères de développement n'ont de sens que chez le tout-petit.
+  const suiviDevelopppement = suiviEnfant && (ageDuPatient == null || ageDuPatient < 6)
+
   const estDentiste = isDentalDoctor(specialties)
   const estPediatre = isPediatricDoctor(specialties)
   const aSoins = estDentiste || estPediatre || (!isPsy && enabledVitals.length > 0)
@@ -911,11 +923,13 @@ export default function PatientDossier({
               )}
           {/* Sections spécialité */}
           {isDentalDoctor(specialties) && <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />}
-          {isPediatricDoctor(specialties) && editBirthDate && (
+          {suiviEnfant && (
             <div className="space-y-4">
               <GrowthChart key={`g-${patient.id}`} birthDate={editBirthDate} vitals={vitals} sex={editSex || null} gestationalWeeks={editGestWeeks ? Number(editGestWeeks) : null} />
               <VaccinationCard key={`v-${patient.id}`} patientId={patient.id} birthDate={editBirthDate} initial={patient.vaccines ?? {}} />
-              <MilestonesCard key={`ms-${patient.id}`} patientId={patient.id} birthDate={editBirthDate} initial={patient.milestones ?? {}} />
+              {suiviDevelopppement && (
+                <MilestonesCard key={`ms-${patient.id}`} patientId={patient.id} birthDate={editBirthDate} initial={patient.milestones ?? {}} />
+              )}
             </div>
           )}
           {isPediatricDoctor(specialties) && !editBirthDate && (
@@ -923,6 +937,13 @@ export default function PatientDossier({
               📅 Renseignez la <b>date de naissance</b> (colonne de gauche) pour activer la courbe de croissance, le calendrier vaccinal et les repères de développement.
             </p>
           )}
+          {/* Évolution des constantes — la liste de mesures ne permettait pas
+              de suivre un hypertendu ou un diabétique sur un an. Le composant
+              s'efface tout seul tant qu'il n'y a pas deux mesures. */}
+          {!isPsy && vitals.length > 1 && (
+            <VitalsTrend vitals={vitals as unknown as { id: string; measured_at: string; values: Record<string, number> }[]} vitalDefs={vitalDefsAll} />
+          )}
+
           {/* Constantes (hors psy) */}
           {!isPsy && enabledVitals.length > 0 && (
             <div className={sec}>

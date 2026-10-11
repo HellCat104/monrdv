@@ -1459,18 +1459,20 @@ export default function PatientsPage() {
                 <DentalChart key={selectedPatient.id} patientId={selectedPatient.id} doctorId={doctorId} />
               )}
 
-              {/* Courbe de croissance + calendrier vaccinal — pédiatres */}
-              {selectedPatient && isPediatricDoctor(doctorSpecialties) && (
+              {/* Courbe de croissance + calendrier vaccinal. Affichés selon
+                  l'ÂGE DU PATIENT, et non la spécialité du médecin : un
+                  généraliste qui suit les enfants d'une famille y a droit. */}
+              {selectedPatient && (isPediatricDoctor(doctorSpecialties) || (ageFromBirthDate(editBirthDate) ?? 99) < 16) && (
                 editBirthDate ? (
                   <>
                     <GrowthChart key={`g-${selectedPatient.id}`} birthDate={editBirthDate} vitals={vitals} sex={selectedPatient.sex ?? null} />
                     <VaccinationCard key={`v-${selectedPatient.id}`} patientId={selectedPatient.id} birthDate={editBirthDate} initial={selectedPatient.vaccines ?? {}} />
                   </>
-                ) : (
+                ) : isPediatricDoctor(doctorSpecialties) ? (
                   <div className="border-t border-gray-100 pt-4">
                     <p className="text-xs text-gray-400 italic">Renseignez la <b>date de naissance</b> ci-dessus pour afficher la courbe de croissance et le calendrier vaccinal.</p>
                   </div>
-                )
+                ) : null
               )}
 
               {/* Notes de consultation datées (timeline) */}
