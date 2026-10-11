@@ -46,6 +46,26 @@ const STATUS_CHOICES: QuoteStatus[] = ['brouillon', 'propose', 'accepte', 'refus
 // base pose la même borne (migration v67).
 const SEANCES = Array.from({ length: 20 }, (_, i) => i + 1)
 
+/** La prochaine séance à réaliser : parmi les actes NON FAITS, celle qui
+ *  porte le plus petit numéro. Les actes non planifiés ferment la marche —
+ *  ils restent à organiser, ils ne sont pas « la prochaine étape ».
+ *
+ *  C'est ce que la secrétaire doit lire au moment où le patient se lève : sans
+ *  cette ligne, elle ne peut pas proposer le rendez-vous suivant, et le patient
+ *  repart en disant « je rappellerai ». */
+export function prochaineSeanceAFaire(items: QuoteItem[]): {
+  seance: number | null; items: QuoteItem[]; total: number
+} | null {
+  const restants = items.filter((i) => !i.done)
+  if (restants.length === 0) return null
+  const numerotes = restants.filter((i) => i.session_no != null)
+  const seance = numerotes.length > 0
+    ? Math.min(...numerotes.map((i) => i.session_no as number))
+    : null
+  const lot = restants.filter((i) => (i.session_no ?? null) === seance)
+  return { seance, items: lot, total: lot.reduce((t, i) => t + itemTotal(i), 0) }
+}
+
 /** Les actes groupés par séance prévue, dans l'ordre des séances, les actes
  *  non planifiés en dernier — c'est le reste à organiser, pas le début du
  *  plan. L'ordre de saisie du médecin est conservé à l'intérieur d'une séance. */
@@ -398,6 +418,10 @@ export default function QuotesCard({
                     </span>
                     <span className="block text-[11px] text-gray-400">
                       {items.length} acte{items.length > 1 ? 's' : ''} · {total.toLocaleString('fr-FR')} DH · versé {paid.toLocaleString('fr-FR')} DH
+                      {(() => {
+                        const reste = items.filter((i) => !i.done).length
+                        return reste > 0 ? ` · ${reste} à faire` : ''
+                      })()}
                     </span>
                   </span>
                   <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 ${QUOTE_STATUS_COLORS[q.status]}`}>
@@ -433,6 +457,27 @@ export default function QuotesCard({
                         </a>
                       </div>
                     )}
+
+                    {/* Prochaine séance à programmer. Visible des DEUX côtés :
+                        le praticien la dicte, la secrétaire la prend. */}
+                    {(() => {
+                      const suite = prochaineSeanceAFaire(items)
+                      if (!suite) return null
+                      return (
+                        <div className="rounded-lg bg-primary-50/60 border border-primary-100 p-2.5">
+                          <p className="text-[11px] font-semibold text-primary-700">
+                            Prochaine séance à programmer
+                            {suite.seance !== null ? ` — séance ${suite.seance}` : ' — actes non planifiés'}
+                          </p>
+                          <p className="text-xs text-gray-700 mt-1">
+                            {suite.items.map((i) => `${i.tooth ? `${i.tooth} · ` : ''}${i.label}`).join(' · ')}
+                          </p>
+                          <p className="text-[11px] text-gray-500 mt-1">
+                            {suite.items.length} acte{suite.items.length > 1 ? 's' : ''} · {suite.total.toLocaleString('fr-FR')} DH
+                          </p>
+                        </div>
+                      )
+                    })()}
 
                     {/* ── Actes ───────────────────────────────────────── */}
                     <div>
