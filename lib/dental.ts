@@ -6,14 +6,28 @@ export type ToothStatus = 'carie' | 'obturation' | 'couronne' | 'a_extraire' | '
 // Une dent porte PLUSIEURS états simultanés : une couronne peut se carier, une dent
 // obturée peut devenir à extraire. Format écrit en base (jsonb) :
 //   { "16": { "s": ["couronne", "carie"], "n": "à surveiller" } }
-export interface ToothInfo { s: ToothStatus[]; n?: string }
+//
+// LES FACES (`f`)
+//
+// Un dentiste ne note pas « carie sur la 16 », il note « carie occlusale, et
+// composite mésial ». La face appartient donc à l'ÉTAT, pas à la dent : une
+// même dent peut porter une carie sur une face et une obturation sur une autre.
+//   { "16": { "s": ["carie", "obturation"], "f": { "carie": ["O"], "obturation": ["M"] } } }
+// `f` absent ou vide = l'état porte sur la dent entière, ce qui reste le cas de
+// la couronne, de l'implant ou d'une dent absente. C'est aussi l'état de toutes
+// les lignes écrites avant cette version : rien à migrer.
+export interface ToothInfo { s: ToothStatus[]; n?: string; f?: Partial<Record<ToothStatus, ToothFace[]>> }
 export type DentalTeeth = Record<string, ToothInfo>
 
 // Ancien format, antérieur aux états multiples : { "16": { "s": "carie" } }.
 // Les lignes déjà en base restent telles quelles (pas de migration SQL, on ne
 // réécrit aucune donnée existante). Conséquence : TOUTE lecture doit passer par
 // normalizeTeeth() / toothStates(), qui acceptent la chaîne comme le tableau.
-export interface StoredToothInfo { s?: ToothStatus | ToothStatus[] | null; n?: string | null }
+export interface StoredToothInfo {
+  s?: ToothStatus | ToothStatus[] | null
+  n?: string | null
+  f?: Record<string, unknown> | null
+}
 export type StoredDentalTeeth = Record<string, StoredToothInfo | null | undefined>
 
 export const DENTAL_STATES: { key: ToothStatus; label: string; color: string }[] = [
@@ -24,6 +38,28 @@ export const DENTAL_STATES: { key: ToothStatus; label: string; color: string }[]
   { key: 'extraite',   label: 'Absente / extraite',    color: '#6b7280' },
   { key: 'implant',    label: 'Implant',               color: '#8b5cf6' },
 ]
+// Les cinq faces d'une dent, dans l'ordre où un praticien les lit sur un schéma.
+// Les initiales sont celles qu'il écrit déjà à la main sur ses fiches.
+export type ToothFace = 'M' | 'O' | 'D' | 'V' | 'P'
+
+export const DENTAL_FACES: { key: ToothFace; label: string; aide: string }[] = [
+  { key: 'M', label: 'M', aide: 'Mésiale (vers le milieu)' },
+  { key: 'O', label: 'O', aide: 'Occlusale / incisive (surface de mastication)' },
+  { key: 'D', label: 'D', aide: 'Distale (vers le fond)' },
+  { key: 'V', label: 'V', aide: 'Vestibulaire (côté joue ou lèvre)' },
+  { key: 'P', label: 'P', aide: 'Palatine / linguale (côté langue)' },
+]
+
+const VALID_FACES = new Set<string>(DENTAL_FACES.map((f) => f.key))
+const FACE_RANK: Record<string, number> = Object.fromEntries(DENTAL_FACES.map((f, i) => [f.key, i]))
+export const DENTAL_FACE_LABEL: Record<string, string> =
+  Object.fromEntries(DENTAL_FACES.map((f) => [f.key, f.aide]))
+
+// Quels états se localisent sur une face. Une couronne coiffe la dent entière,
+// un implant la remplace, une dent extraite n'a plus de face : proposer des
+// cases à cocher pour ces états-là inviterait à saisir un non-sens.
+export const ETATS_AVEC_FACES = new Set<ToothStatus>(['carie', 'obturation'])
+
 export const DENTAL_LABEL: Record<string, string> = Object.fromEntries(DENTAL_STATES.map((s) => [s.key, s.label]))
 export const DENTAL_COLOR: Record<string, string> = Object.fromEntries(DENTAL_STATES.map((s) => [s.key, s.color]))
 
@@ -40,6 +76,19 @@ const PRIMARY_PRIORITY: ToothStatus[] = ['extraite', 'a_extraire', 'carie', 'imp
 // Arcades, dans l'ordre d'affichage (vue du praticien : côté droit du patient à gauche).
 export const FDI_UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]
 export const FDI_LOWER = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38]
+
+// Denture temporaire (dents de lait) — numérotation FDI 51 à 85, même ordre de
+// lecture : côté droit du patient à gauche de l'écran. Sans ces deux lignes, un
+// enfant de six ans n'avait aucun schéma utilisable, alors que le champ « dent »
+// d'un devis acceptait déjà ces numéros.
+export const FDI_UPPER_LAIT = [55, 54, 53, 52, 51, 61, 62, 63, 64, 65]
+export const FDI_LOWER_LAIT = [85, 84, 83, 82, 81, 71, 72, 73, 74, 75]
+
+/** Une dent de lait se reconnaît à son premier chiffre (5 à 8). */
+export function estDentDeLait(n: string | number): boolean {
+  const t = String(n)
+  return /^[5-8][1-5]$/.test(t)
+}
 
 // Le schéma dentaire ne concerne que les spécialités dentaires.
 export function isDentalDoctor(specialties: (string | null | undefined)[]): boolean {
@@ -61,6 +110,57 @@ export function toothStates(info: StoredToothInfo | ToothInfo | null | undefined
   return out.sort((a, b) => STATE_RANK[a] - STATE_RANK[b])
 }
 
+/** Les faces d'UN état, quel que soit ce qui dort en base. Filtre les valeurs
+ *  inconnues, dédoublonne et trie dans l'ordre de la légende. */
+export function toothFaces(
+  info: StoredToothInfo | ToothInfo | null | undefined,
+  state: ToothStatus,
+): ToothFace[] {
+  const brut = (info as { f?: Record<string, unknown> } | null)?.f?.[state]
+  if (!Array.isArray(brut)) return []
+  const out: ToothFace[] = []
+  for (const f of brut) {
+    if (typeof f === 'string' && VALID_FACES.has(f) && !out.includes(f as ToothFace)) out.push(f as ToothFace)
+  }
+  return out.sort((a, b) => FACE_RANK[a] - FACE_RANK[b])
+}
+
+/** Toutes les faces d'une dent, état par état — déjà filtrées sur les états
+ *  réellement présents et sur ceux qui acceptent une face. */
+export function allToothFaces(
+  info: StoredToothInfo | ToothInfo | null | undefined,
+): Partial<Record<ToothStatus, ToothFace[]>> {
+  const out: Partial<Record<ToothStatus, ToothFace[]>> = {}
+  for (const s of toothStates(info)) {
+    if (!ETATS_AVEC_FACES.has(s)) continue
+    const faces = toothFaces(info, s)
+    if (faces.length > 0) out[s] = faces
+  }
+  return out
+}
+
+/** Coche / décoche une face pour un état. */
+export function toggleFace(current: ToothFace[], f: ToothFace): ToothFace[] {
+  return current.includes(f)
+    ? current.filter((x) => x !== f)
+    : [...current, f].sort((a, b) => FACE_RANK[a] - FACE_RANK[b])
+}
+
+/** « O, M » — ce que le praticien écrit à la main. */
+export function facesLabel(faces: ToothFace[]): string {
+  return faces.join(', ')
+}
+
+/** « Carie (O, M), Plombage (D) » — pour les infobulles, le journal et le PDF. */
+export function statesWithFacesLabel(info: StoredToothInfo | ToothInfo | null | undefined): string {
+  return toothStates(info)
+    .map((s) => {
+      const faces = toothFaces(info, s)
+      return faces.length > 0 ? `${DENTAL_LABEL[s]} (${facesLabel(faces)})` : DENTAL_LABEL[s]
+    })
+    .join(', ')
+}
+
 // Normalise la carte entière lue en base (ancien OU nouveau format) vers le format
 // tableau utilisé partout dans le code. Ne touche évidemment à rien en base.
 export function normalizeTeeth(raw: StoredDentalTeeth | DentalTeeth | null | undefined): DentalTeeth {
@@ -70,7 +170,10 @@ export function normalizeTeeth(raw: StoredDentalTeeth | DentalTeeth | null | und
     const s = toothStates(value as StoredToothInfo)
     if (s.length === 0) continue // une dent sans état n'a rien à faire dans le schéma
     const note = typeof value?.n === 'string' && value.n.trim() ? value.n : undefined
-    out[key] = note ? { s, n: note } : { s }
+    // Les faces suivent leur état : une face rattachée à un état disparu, ou à
+    // un état qui n'en accepte pas, n'a plus de sens et n'est pas conservée.
+    const faces = allToothFaces(value as StoredToothInfo)
+    out[key] = { s, ...(note ? { n: note } : {}), ...(Object.keys(faces).length > 0 ? { f: faces } : {}) }
   }
   return out
 }
@@ -109,7 +212,15 @@ export function summarizeTeeth(teeth: StoredDentalTeeth | DentalTeeth | null | u
   return DENTAL_STATES
     .map((st) => ({
       label: st.label,
-      teeth: Object.keys(norm).filter((k) => norm[k].s.includes(st.key)).sort((a, b) => Number(a) - Number(b)),
+      teeth: Object.keys(norm)
+        .filter((k) => norm[k].s.includes(st.key))
+        .sort((a, b) => Number(a) - Number(b))
+        // « 16 (O, M) » : sans la face, l'export perd ce qui distingue une
+        // carie d'une dent entièrement refaite.
+        .map((k) => {
+          const faces = toothFaces(norm[k], st.key)
+          return faces.length > 0 ? `${k} (${facesLabel(faces)})` : k
+        }),
     }))
     .filter((g) => g.teeth.length > 0)
 }

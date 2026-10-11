@@ -3,7 +3,7 @@
 import PDFDocument from 'pdfkit'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
-import { summarizeTeeth, normalizeTeeth, stateColors, statesLabel, DENTAL_STATES, FDI_UPPER, FDI_LOWER, type DentalTeeth } from '@/lib/dental'
+import { summarizeTeeth, normalizeTeeth, stateColors, statesLabel, toothFaces, DENTAL_STATES, FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT, estDentDeLait, type DentalTeeth } from '@/lib/dental'
 import { loadCabinetLogoForPdf } from '@/lib/cabinet-logo-server'
 import { lignesEnTete, ligneCoordonnees, type PraticienEnTete } from '@/lib/document-entete'
 
@@ -329,8 +329,9 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData, logo: Buffer | 
         ensure(bh + 8)
         const y = doc.y
         let x = M
+        const moitie = ids.length / 2
         ids.forEach((n, i) => {
-          if (i === 8) {
+          if (i === moitie) {
             // Ligne médiane, discrète : c'est l'écart qui porte l'information.
             doc.moveTo(x + midGap / 2, y - 2).lineTo(x + midGap / 2, y + bh + 2)
               .lineWidth(0.5).strokeColor('#d1d5db').dash(2, { space: 2 }).stroke().undash()
@@ -343,7 +344,13 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData, logo: Buffer | 
           if (color) doc.fillAndStroke(color, color)
           else doc.lineWidth(0.5).strokeColor('#d1d5db').stroke()
           doc.fillColor(color ? '#ffffff' : '#6b7280').font('Helvetica').fontSize(8)
-            .text(String(n), x, y + 6, { width: bw, align: 'center', lineBreak: false })
+            .text(String(n), x, y + 4, { width: bw, align: 'center', lineBreak: false })
+          // Les faces, en initiales : sans elles, le dossier imprimé dit « carie
+          // sur la 16 » là où le praticien avait noté « carie occlusale ».
+          const faces = Array.from(new Set(states.flatMap((st) => toothFaces(dentalTeeth[String(n)], st)))).join('')
+          if (faces) {
+            doc.fontSize(6).text(faces, x, y + 12.5, { width: bw, align: 'center', lineBreak: false })
+          }
           // Plusieurs états : une pastille par état sur un liseré blanc, comme à
           // l'écran. Un aplat dégradé serait illisible sur 26 points de large.
           if (colors.length > 1) {
@@ -360,6 +367,16 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData, logo: Buffer | 
       }
       drawArch(FDI_UPPER)
       drawArch(FDI_LOWER)
+      // Denture temporaire : imprimée seulement si ce dossier en porte. Deux
+      // arcades vides sur chaque dossier d'adulte n'apprendraient rien.
+      if (Object.keys(dentalTeeth).some((k) => estDentDeLait(k))) {
+        doc.fillColor(C.faint).font('Helvetica').fontSize(7.5)
+          .text('Dents de lait', M, doc.y + 2, { width: CONTENT_W })
+        doc.x = M
+        doc.moveDown(0.2)
+        drawArch(FDI_UPPER_LAIT)
+        drawArch(FDI_LOWER_LAIT)
+      }
 
       // Légende
       doc.moveDown(0.2)

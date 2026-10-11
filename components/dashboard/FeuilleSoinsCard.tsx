@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatDateShort } from '@/lib/utils'
-import { FDI_UPPER, FDI_LOWER } from '@/lib/dental'
+import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, type StatutFeuille } from '@/lib/feuilles-soins'
 import { FileSpreadsheet, Plus, Printer, Trash2 } from 'lucide-react'
 
@@ -168,6 +168,8 @@ export default function FeuilleSoinsCard({
                   <option value="">Dent</option>
                   <optgroup label="Haut">{FDI_UPPER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
                   <optgroup label="Bas">{FDI_LOWER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
+                  <optgroup label="Lait — haut">{FDI_UPPER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
+                  <optgroup label="Lait — bas">{FDI_LOWER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
                 </select>
               )}
               <input value={l.label} onChange={(e) => choisirActe(i, e.target.value)} placeholder="Acte"

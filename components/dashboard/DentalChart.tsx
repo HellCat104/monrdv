@@ -15,9 +15,11 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Check } from 'lucide-react'
 import {
-  DENTAL_STATES, DENTAL_COLOR, FDI_UPPER, FDI_LOWER,
-  normalizeTeeth, toggleToothState, primaryState, stateColors, statesLabel,
-  type DentalTeeth, type ToothStatus,
+  DENTAL_STATES, DENTAL_COLOR, FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT,
+  DENTAL_FACES, ETATS_AVEC_FACES, estDentDeLait,
+  normalizeTeeth, toggleToothState, toggleFace, toothFaces, facesLabel,
+  primaryState, stateColors, statesLabel, statesWithFacesLabel,
+  type DentalTeeth, type ToothStatus, type ToothFace,
 } from '@/lib/dental'
 import {
   describeToothChange, formatToothEventDate, toothEventTitle,
@@ -35,6 +37,9 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
   // praticien doit le savoir, c'est précisément ce sur quoi il comptera le jour
   // où un patient contestera.
   const [journalKo, setJournalKo] = useState(false)
+  // null = pas encore choisi par le praticien : l'affichage se règle alors sur
+  // le contenu du dossier (voir `denture` plus bas).
+  const [dentureChoisie, setDentureChoisie] = useState<'definitive' | 'lait' | 'mixte' | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -96,6 +101,25 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
       return next
     })
   }
+  // Coche / décoche une face pour un état. La face appartient à l'état : une
+  // carie occlusale et un composite mésial cohabitent sur la même dent.
+  function toggleToothFace(n: string, s: ToothStatus, f: ToothFace) {
+    setTeeth((prev) => {
+      const cur = prev[n]
+      if (!cur || !cur.s.includes(s)) return prev
+      const faces = toggleFace(toothFaces(cur, s), f)
+      const toutes = { ...(cur.f ?? {}) }
+      if (faces.length > 0) toutes[s] = faces
+      else delete toutes[s]
+      const next = {
+        ...prev,
+        [n]: { ...cur, ...(Object.keys(toutes).length > 0 ? { f: toutes } : { f: undefined }) },
+      }
+      scheduleSave(next)
+      return next
+    })
+  }
+
   function clearTooth(n: string) {
     setTeeth((prev) => {
       const next = { ...prev }
@@ -123,15 +147,28 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
     const colors = stateColors(states)
     const isActive = active === key
     const extraite = primary === 'extraite'
+    // Toutes les faces notées sur cette dent, sans doublon : « O » d'une carie
+    // et « O » d'une obturation ne s'affichent qu'une fois.
+    const marqueFaces = Array.from(
+      new Set(states.flatMap((st) => toothFaces(info, st))),
+    ).join('')
     return (
       <button
         type="button"
         onClick={() => setActive(isActive ? null : key)}
-        title={states.length > 0 ? `Dent ${n} — ${statesLabel(states)}${info?.n ? ` (${info.n})` : ''}` : `Dent ${n}`}
+        title={states.length > 0 ? `Dent ${n} — ${statesWithFacesLabel(info)}${info?.n ? ` · ${info.n}` : ''}` : `Dent ${n}`}
         style={color ? { backgroundColor: color, color: '#fff', borderColor: color } : undefined}
         className={`relative w-9 h-11 shrink-0 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-600 transition ${isActive ? 'ring-2 ring-primary-500 ring-offset-1' : ''} ${extraite ? 'opacity-80' : ''}`}
       >
-        <span className={`block ${colors.length > 1 ? 'pb-2' : ''} ${extraite ? 'line-through' : ''}`}>{n}</span>
+        <span className={`block leading-tight ${colors.length > 1 ? 'pb-2' : ''} ${extraite ? 'line-through' : ''}`}>{n}</span>
+        {/* Les faces, en toutes petites initiales sous le numéro : « OM » se lit
+            d'un coup d'œil sur l'arcade entière, là où il faudrait ouvrir
+            chaque dent pour les retrouver. */}
+        {marqueFaces && (
+          <span className={`block text-[8px] font-bold leading-none ${color ? 'text-white/90' : 'text-gray-400'} ${colors.length > 1 ? 'mb-1.5' : ''}`}>
+            {marqueFaces}
+          </span>
+        )}
         {/* États multiples : une pastille par état, posée sur un liseré blanc pour
             rester lisible par-dessus la couleur principale. Un dégradé serait
             illisible à 28 px de large ; des pastilles se comptent d'un coup d'œil. */}
@@ -148,17 +185,28 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
 
   // Une arcade = hémi-arcade droite du patient (à gauche de l'écran : vue du
   // praticien), écart médian franc, puis hémi-arcade gauche.
-  const Row = ({ ids }: { ids: number[] }) => (
-    <div className="flex justify-center">
-      <div className="flex gap-1">{ids.slice(0, 8).map((n) => <Tooth key={n} n={n} />)}</div>
-      <div className="w-6 shrink-0 flex justify-center"><span className="border-l border-dashed border-gray-300 self-stretch" /></div>
-      <div className="flex gap-1">{ids.slice(8).map((n) => <Tooth key={n} n={n} />)}</div>
-    </div>
-  )
+  const Row = ({ ids, lait = false }: { ids: number[]; lait?: boolean }) => {
+    // Une hémi-arcade : 8 dents définitives, 5 de lait.
+    const moitie = ids.length / 2
+    return (
+      <div className="flex justify-center">
+        <div className="flex gap-1">{ids.slice(0, moitie).map((n) => <Tooth key={n} n={n} />)}</div>
+        <div className="w-6 shrink-0 flex justify-center"><span className="border-l border-dashed border-gray-300 self-stretch" /></div>
+        <div className="flex gap-1">{ids.slice(moitie).map((n) => <Tooth key={n} n={n} />)}</div>
+        {lait && <span className="self-center ml-2 text-[9px] text-gray-300 shrink-0">lait</span>}
+      </div>
+    )
+  }
 
   if (!loaded) {
     return <div className="border-t border-gray-100 pt-4"><div className="h-24 bg-gray-50 rounded animate-pulse" /></div>
   }
+
+  // Denture affichée. On ouvre sur les définitives, sauf si ce dossier porte
+  // déjà des dents de lait : un enfant suivi depuis deux ans ne doit pas
+  // obliger le praticien à cliquer avant de voir ce qu'il a noté.
+  const aDesDentsDeLait = Object.keys(teeth).some((k) => estDentDeLait(k))
+  const denture = dentureChoisie ?? (aDesDentsDeLait ? 'mixte' : 'definitive')
 
   const activeInfo = active ? teeth[active] : undefined
   const activeStates = activeInfo?.s ?? []
@@ -181,6 +229,21 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
         </p>
       )}
 
+      {/* Denture temporaire : un enfant de six ans a vingt dents de lait et
+          déjà ses premières molaires définitives — d'où le choix « les deux ». */}
+      <div className="flex gap-1 mb-3">
+        {([['definitive', 'Définitives'], ['lait', 'Dents de lait'], ['mixte', 'Les deux']] as const).map(([cle, lbl]) => (
+          <button
+            key={cle}
+            type="button"
+            onClick={() => setDentureChoisie(cle)}
+            className={`text-[12px] px-2.5 py-1 rounded-lg border transition ${denture === cle ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+
       <div className="overflow-x-auto pb-1">
         <div className="inline-flex flex-col gap-1.5 mx-auto">
           {/* Vue du praticien : le côté droit du patient est à GAUCHE de l'écran.
@@ -190,9 +253,11 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
             <div className="w-6 shrink-0" />
             <div className="flex-1 text-center">Gauche du patient</div>
           </div>
-          <Row ids={FDI_UPPER} />
+          {denture !== 'lait' && <Row ids={FDI_UPPER} />}
+          {denture !== 'definitive' && <Row ids={FDI_UPPER_LAIT} lait />}
           <div className="text-center text-[9px] text-gray-300 tracking-widest">— haut / bas —</div>
-          <Row ids={FDI_LOWER} />
+          {denture !== 'definitive' && <Row ids={FDI_LOWER_LAIT} lait />}
+          {denture !== 'lait' && <Row ids={FDI_LOWER} />}
         </div>
       </div>
 
@@ -244,6 +309,45 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
               Tout effacer
             </button>
           </div>
+          {/* Faces — seulement pour les états qui se localisent (carie,
+              obturation) : une couronne coiffe la dent entière, proposer des
+              faces inviterait à saisir un non-sens. */}
+          {activeInfo && activeStates.some((st) => ETATS_AVEC_FACES.has(st)) && (
+            <div className="mt-2 space-y-1.5">
+              {activeStates.filter((st) => ETATS_AVEC_FACES.has(st)).map((st) => {
+                const faces = toothFaces(activeInfo, st)
+                return (
+                  <div key={st} className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[12px] text-gray-600 w-[90px] shrink-0">
+                      {DENTAL_STATES.find((x) => x.key === st)?.label}
+                    </span>
+                    {DENTAL_FACES.map((f) => {
+                      const on = faces.includes(f.key)
+                      return (
+                        <button
+                          key={f.key}
+                          type="button"
+                          aria-pressed={on}
+                          title={f.aide}
+                          onClick={() => toggleToothFace(active, st, f.key)}
+                          className={`w-7 h-7 rounded border text-[12px] font-semibold transition ${on ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'}`}
+                        >
+                          {f.label}
+                        </button>
+                      )
+                    })}
+                    {faces.length === 0 && (
+                      <span className="text-[11px] text-gray-400">dent entière</span>
+                    )}
+                  </div>
+                )
+              })}
+              <p className="text-[10px] text-gray-400">
+                M mésiale · O occlusale · D distale · V vestibulaire · P palatine / linguale
+              </p>
+            </div>
+          )}
+
           {activeInfo && (
             <input
               value={activeInfo.n ?? ''}
@@ -263,7 +367,9 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
               <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Historique de la dent {active}</p>
               <ul className="space-y-1">
                 {activeHistory.map((e, i) => {
-                  const { kind, texte } = describeToothChange(e.states_before, e.states_after)
+                  const { kind, texte } = describeToothChange(
+                    e.states_before, e.states_after, e.faces_before, e.faces_after,
+                  )
                   // La liste est du plus récent au plus ancien : la dernière
                   // ligne est le plus vieil événement connu de cette dent.
                   const premiere = kind === 'creation' && i === activeHistory.length - 1

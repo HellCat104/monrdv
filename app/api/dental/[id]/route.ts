@@ -103,7 +103,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   for (const [k, v] of Object.entries(normalizeTeeth(raw as StoredDentalTeeth))) {
     if (!isValidTooth(k)) continue
     const note = v.n?.trim().slice(0, NOTE_MAX)
-    teeth[k] = note ? { s: v.s, n: note } : { s: v.s }
+    // normalizeTeeth() a déjà filtré les faces : état inconnu, face inventée ou
+    // face posée sur un état qui n'en accepte pas ne sont plus là.
+    teeth[k] = { s: v.s, ...(note ? { n: note } : {}), ...(v.f ? { f: v.f } : {}) }
   }
 
   const admin = createAdminClient()
@@ -122,22 +124,45 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (changes.length === 0) return NextResponse.json({ ok: true, events: [] })
 
-  const { data: inserted, error: histError } = await admin.from('tooth_history').insert(
-    changes.map((c) => ({
-      doctor_id: ctx.doctorId,
-      patient_id: ctx.patientId,
-      tooth: c.tooth,
-      states_before: c.before,
-      states_after: c.after,
-      note: c.note,
-      // L'odontogramme n'est affiché qu'au praticien (PatientDossier et la
-      // fiche patient) ; la colonne accepte 'secretaire' pour le jour où le
-      // secrétariat y accédera, mais aucun chemin ne l'écrit aujourd'hui.
-      actor_role: 'medecin',
-      actor_user_id: ctx.userId,
-      actor_email: ctx.email,
-    })),
-  ).select('id, tooth, states_before, states_after, note, actor_role, actor_email, created_at')
+  const COLONNE_ABSENTE = new Set(['42703', 'PGRST204'])
+  const ligneHistorique = (c: (typeof changes)[number], avecFaces: boolean) => ({
+    doctor_id: ctx.doctorId,
+    patient_id: ctx.patientId,
+    tooth: c.tooth,
+    states_before: c.before,
+    states_after: c.after,
+    // Colonnes de la v66. Tant qu'elle n'est pas passée, l'insertion est
+    // rejouée sans elles : le journal perd la face, jamais la ligne.
+    ...(avecFaces ? { faces_before: c.facesBefore, faces_after: c.facesAfter } : {}),
+    note: c.note,
+    // L'odontogramme n'est affiché qu'au praticien (PatientDossier et la
+    // fiche patient) ; la colonne accepte 'secretaire' pour le jour où le
+    // secrétariat y accédera, mais aucun chemin ne l'écrit aujourd'hui.
+    actor_role: 'medecin',
+    actor_user_id: ctx.userId,
+    actor_email: ctx.email,
+  })
+
+  const COLONNES_LUES = 'id, tooth, states_before, states_after, note, actor_role, actor_email, created_at'
+
+  // Typé large : les deux tentatives ne renvoient pas les mêmes colonnes, et
+  // parseToothEvent accepte l'absence de faces.
+  const premiere = await admin
+    .from('tooth_history')
+    .insert(changes.map((c) => ligneHistorique(c, true)))
+    .select(`${COLONNES_LUES}, faces_before, faces_after`)
+
+  let inserted: Record<string, unknown>[] | null = premiere.data
+  let histError = premiere.error
+
+  if (histError && COLONNE_ABSENTE.has(histError.code ?? '')) {
+    const repli = await admin
+      .from('tooth_history')
+      .insert(changes.map((c) => ligneHistorique(c, false)))
+      .select(COLONNES_LUES)
+    inserted = repli.data
+    histError = repli.error
+  }
 
   // Même arbitrage que lib/audit.ts : un journal muet doit se voir dans les
   // logs, mais on ne rejette pas un enregistrement clinique déjà écrit parce
@@ -148,5 +173,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ ok: true, events: [], journal: false })
   }
 
-  return NextResponse.json({ ok: true, events: (inserted ?? []).map(parseToothEvent) })
+  return NextResponse.json({
+    ok: true,
+    events: (inserted ?? []).map((r) => parseToothEvent(r as Parameters<typeof parseToothEvent>[0])),
+  })
 }

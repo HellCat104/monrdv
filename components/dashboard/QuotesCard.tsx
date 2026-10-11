@@ -31,7 +31,7 @@ import { quoteTotal, quotePaid, quoteRemaining, itemTotal, installmentsTotal,
 import { PAYMENT_METHOD_LABELS, QUOTE_STATUS_COLORS, QUOTE_STATUS_LABELS,
   type PaymentMethod, type Quote, type QuoteStatus } from '@/types'
 import { FileSpreadsheet, Plus, Trash2, Printer, Check, ChevronDown, ChevronRight, CalendarClock } from 'lucide-react'
-import { FDI_UPPER, FDI_LOWER } from '@/lib/dental'
+import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 
 const sec = 'bg-white border border-gray-100 rounded-xl p-4'
 const secTitle = 'text-sm font-semibold text-primary-600 mb-3 flex items-center justify-between'
@@ -456,6 +456,13 @@ export default function QuotesCard({
                             </optgroup>
                             <optgroup label="Bas">
                               {FDI_LOWER.map((n) => <option key={n} value={String(n)}>{n}</option>)}
+                            </optgroup>
+                            {/* Un devis de pédodontie porte sur des dents de lait. */}
+                            <optgroup label="Lait — haut">
+                              {FDI_UPPER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}
+                            </optgroup>
+                            <optgroup label="Lait — bas">
+                              {FDI_LOWER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}
                             </optgroup>
                           </select>
                         )}

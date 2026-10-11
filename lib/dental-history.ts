@@ -15,8 +15,7 @@ import { fr } from 'date-fns/locale'
 import { MAROC_TZ } from '@/lib/utils'
 import {
   normalizeTeeth, statesLabel, toothStates,
-  type DentalTeeth, type StoredDentalTeeth, type ToothStatus,
-} from '@/lib/dental'
+  type DentalTeeth, type StoredDentalTeeth, type ToothStatus, toothFaces, facesLabel, type ToothFace } from '@/lib/dental'
 
 /** Rôle de l'auteur du changement — repris de lib/audit.ts (AuditActor). */
 export type ToothActorRole = 'medecin' | 'secretaire' | 'admin'
@@ -27,6 +26,9 @@ export interface ToothEvent {
   tooth: string
   states_before: ToothStatus[]
   states_after: ToothStatus[]
+  /** Faces par état, avant et après — vides tant que la v66 n'est pas passée. */
+  faces_before?: Partial<Record<ToothStatus, ToothFace[]>>
+  faces_after?: Partial<Record<ToothStatus, ToothFace[]>>
   note: string | null
   actor_role: ToothActorRole
   actor_email: string | null
@@ -38,6 +40,10 @@ export interface ToothChange {
   tooth: string
   before: ToothStatus[]
   after: ToothStatus[]
+  /** Faces par état. Changer une face sans changer l'état reste un acte de
+   *  soin : « la carie est passée de occlusale à occlusale + mésiale ». */
+  facesBefore: Partial<Record<ToothStatus, ToothFace[]>>
+  facesAfter: Partial<Record<ToothStatus, ToothFace[]>>
   /** La note de la dent après le changement (contexte, cf. colonne `note`). */
   note: string | null
 }
@@ -47,6 +53,30 @@ export interface ToothChange {
  *  positionnelle suffit donc — et évite un tri de plus à chaque dent. */
 function sameStates(a: ToothStatus[], b: ToothStatus[]): boolean {
   return a.length === b.length && a.every((s, i) => s === b[i])
+}
+
+/** Les faces de deux jeux d'états, état par état. toothFaces() les a déjà
+ *  triées : une comparaison positionnelle suffit. */
+function sameFaces(
+  a: Partial<Record<ToothStatus, ToothFace[]>>,
+  b: Partial<Record<ToothStatus, ToothFace[]>>,
+): boolean {
+  const cles = Array.from(new Set([...Object.keys(a), ...Object.keys(b)])) as ToothStatus[]
+  return cles.every((c) => {
+    const x = a[c] ?? []
+    const y = b[c] ?? []
+    return x.length === y.length && x.every((f, i) => f === y[i])
+  })
+}
+
+/** Les faces d'une dent, par état présent. */
+function facesDe(info: unknown, etats: ToothStatus[]): Partial<Record<ToothStatus, ToothFace[]>> {
+  const out: Partial<Record<ToothStatus, ToothFace[]>> = {}
+  for (const e of etats) {
+    const f = toothFaces(info as never, e)
+    if (f.length > 0) out[e] = f
+  }
+  return out
 }
 
 // Différence entre le schéma stocké et le schéma soumis, dent par dent.
@@ -72,8 +102,10 @@ export function diffTeeth(
   for (const tooth of Array.from(new Set([...Object.keys(av), ...Object.keys(ap)]))) {
     const a = toothStates(av[tooth])
     const b = toothStates(ap[tooth])
-    if (sameStates(a, b)) continue
-    changes.push({ tooth, before: a, after: b, note: ap[tooth]?.n ?? null })
+    const fa = facesDe(av[tooth], a)
+    const fb = facesDe(ap[tooth], b)
+    if (sameStates(a, b) && sameFaces(fa, fb)) continue
+    changes.push({ tooth, before: a, after: b, facesBefore: fa, facesAfter: fb, note: ap[tooth]?.n ?? null })
   }
   // Ordre de dent stable : deux dents modifiées d'un même geste apparaissent
   // toujours dans le même ordre, à l'écran comme dans un export.
@@ -81,7 +113,7 @@ export function diffTeeth(
 }
 
 /** Nature du changement — sert autant au libellé qu'à la couleur de la pastille. */
-export type ToothChangeKind = 'creation' | 'ajout' | 'retrait' | 'remplacement' | 'effacement'
+export type ToothChangeKind = 'creation' | 'ajout' | 'retrait' | 'remplacement' | 'effacement' | 'faces'
 
 // Met le changement en français de praticien. Un dentiste qui rouvre un dossier
 // trois ans plus tard veut lire ce qu'il a fait, pas décoder une notation :
@@ -91,15 +123,46 @@ export type ToothChangeKind = 'creation' | 'ajout' | 'retrait' | 'remplacement' 
 export function describeToothChange(
   before: ToothStatus[],
   after: ToothStatus[],
+  facesBefore?: Partial<Record<ToothStatus, ToothFace[]>>,
+  facesAfter?: Partial<Record<ToothStatus, ToothFace[]>>,
 ): { kind: ToothChangeKind; texte: string } {
-  if (before.length === 0) return { kind: 'creation', texte: statesLabel(after) }
+  // Mêmes états, faces différentes : la carie s'est étendue, ou le praticien a
+  // précisé ce qu'il n'avait pas noté. C'est un acte, pas un détail.
+  if (before.length > 0 && after.length > 0 && sameStates(before, after)) {
+    const fa = facesBefore ?? {}
+    const fb = facesAfter ?? {}
+    if (!sameFaces(fa, fb)) {
+      const detail = after
+        .filter((s) => (fb[s] ?? []).length > 0)
+        .map((s) => `${statesLabel([s])} (${facesLabel(fb[s] ?? [])})`)
+        .join(', ')
+      return { kind: 'faces', texte: detail ? `Faces : ${detail}` : 'Faces effacées' }
+    }
+  }
+  if (before.length === 0) return { kind: 'creation', texte: statesLabelAvecFaces(after, facesAfter) }
   if (after.length === 0) return { kind: 'effacement', texte: `Plus aucun état (était : ${statesLabel(before)})` }
 
   const ajoutes = after.filter((s) => !before.includes(s))
   const retires = before.filter((s) => !after.includes(s))
-  if (ajoutes.length > 0 && retires.length === 0) return { kind: 'ajout', texte: `Ajout : ${statesLabel(ajoutes)}` }
+  if (ajoutes.length > 0 && retires.length === 0) return { kind: 'ajout', texte: `Ajout : ${statesLabelAvecFaces(ajoutes, facesAfter)}` }
   if (retires.length > 0 && ajoutes.length === 0) return { kind: 'retrait', texte: `Retrait : ${statesLabel(retires)}` }
-  return { kind: 'remplacement', texte: `${statesLabel(before)} → ${statesLabel(after)}` }
+  return {
+    kind: 'remplacement',
+    texte: `${statesLabelAvecFaces(before, facesBefore)} → ${statesLabelAvecFaces(after, facesAfter)}`,
+  }
+}
+
+/** « Carie (O), Plombage » — les faces quand elles existent, rien de plus. */
+function statesLabelAvecFaces(
+  etats: ToothStatus[],
+  faces?: Partial<Record<ToothStatus, ToothFace[]>>,
+): string {
+  return etats
+    .map((s) => {
+      const f = faces?.[s] ?? []
+      return f.length > 0 ? `${statesLabel([s])} (${facesLabel(f)})` : statesLabel([s])
+    })
+    .join(', ')
 }
 
 // « 12 mars 2026 ». Pas d'heure : elle encombre une liste qui se lit à la
@@ -140,6 +203,8 @@ export function parseToothEvent(row: {
   tooth: string
   states_before: string[] | null
   states_after: string[] | null
+  faces_before?: Record<string, unknown> | null
+  faces_after?: Record<string, unknown> | null
   note: string | null
   actor_role: string | null
   actor_email: string | null
@@ -150,6 +215,8 @@ export function parseToothEvent(row: {
     tooth: row.tooth,
     states_before: toothStates({ s: (row.states_before ?? []) as ToothStatus[] }),
     states_after: toothStates({ s: (row.states_after ?? []) as ToothStatus[] }),
+    faces_before: facesDe({ f: row.faces_before ?? {} }, toothStates({ s: (row.states_before ?? []) as ToothStatus[] })),
+    faces_after: facesDe({ f: row.faces_after ?? {} }, toothStates({ s: (row.states_after ?? []) as ToothStatus[] })),
     note: row.note,
     actor_role: (row.actor_role === 'secretaire' || row.actor_role === 'admin' ? row.actor_role : 'medecin'),
     actor_email: row.actor_email,
