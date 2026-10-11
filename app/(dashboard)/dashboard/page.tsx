@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { StatsCard } from '@/components/dashboard/StatsCard'
+import SuiviLabo from '@/components/dashboard/SuiviLabo'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
@@ -120,6 +121,10 @@ export default async function DashboardPage() {
           </div>
         </Link>
       )}
+
+      {/* Laboratoire — ne s'affiche que s'il y a un travail en retard ou
+          attendu cette semaine (le composant rend null sinon). */}
+      <SuiviLabo />
 
       {/* Statistiques */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

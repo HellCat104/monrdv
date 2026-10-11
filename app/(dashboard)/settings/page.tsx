@@ -18,6 +18,7 @@ import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLE
 import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle, Paperclip } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 import { LogoCabinet } from '@/components/dashboard/LogoCabinet'
+import ReglageBonLabo from '@/components/dashboard/ReglageBonLabo'
 import { espaceOccupe, formatOctets, QUOTA_DEFAUT_MO } from '@/lib/stockage'
 
 // Intertitre de section.
@@ -1019,6 +1020,9 @@ export default function SettingsPage() {
             dépend en rien du bouton « Enregistrer » de cette page — un logo
             s'enregistre dès qu'il est envoyé. */}
         <LogoCabinet />
+
+        {/* Bon de laboratoire — dentistes. Autonome, comme le logo. */}
+        <ReglageBonLabo />
 
         <Groupe id="rdv" numero={2} titre="Vos rendez-vous" sous="Quand et comment vous recevez" />
         {/* Stockage des documents (v63) — informatif : la limite est tenue par

@@ -18,6 +18,7 @@ import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
 import QuotesCard from '@/components/dashboard/QuotesCard'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
+import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import { organismePour } from '@/lib/organismes'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
@@ -879,6 +880,19 @@ export default function PatientDossier({
 
           {onglet === 'soins' && (
             <div className="space-y-4">
+              {/* Travaux de laboratoire — dentistes. La couronne qui n'est pas
+                  revenue le jour de la pose est le premier rendez-vous perdu
+                  d'un cabinet dentaire ; elle se suit donc dans le dossier. */}
+              {isDentalDoctor(specialties) && (
+                <LabWorksCard
+                  patientId={patient.id}
+                  rdvs={appts
+                    .filter((a) => a.date >= todayStr && a.status !== 'cancelled')
+                    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+                    .slice(0, 12)
+                    .map((a) => ({ id: a.id, date: a.date, time: String(a.time) }))}
+                />
+              )}
           {/* Sections spécialité */}
           {isDentalDoctor(specialties) && <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />}
           {isPediatricDoctor(specialties) && editBirthDate && (
