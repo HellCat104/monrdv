@@ -1,56 +1,10 @@
 // Travaux de laboratoire — liste (par patient, ou suivi du cabinet) et création.
 import { NextRequest, NextResponse } from 'next/server'
 import { requireLaboDoctor, TABLE_ABSENTE, LABO_NON_ACTIVE } from '@/lib/labo-server'
-import { LAB_EN_COURS, LAB_STATUTS, type LabStatut } from '@/lib/labo'
-import { isValidTooth } from '@/lib/dental'
+import { LAB_EN_COURS, nettoyerTravail } from '@/lib/labo'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_DENTS = 16
-
-/** Champs communs à la création et à la modification, assainis une seule fois. */
-export function nettoyerTravail(body: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  const texte = (v: unknown, max: number) => {
-    const t = String(v ?? '').trim().slice(0, max)
-    return t || null
-  }
-  if ('lab_name' in body) out.lab_name = texte(body.lab_name, 120)
-  if ('work_type' in body) out.work_type = texte(body.work_type, 80)
-  if ('shade' in body) out.shade = texte(body.shade, 40)
-  if ('material' in body) out.material = texte(body.material, 80)
-  if ('instructions' in body) out.instructions = texte(body.instructions, 1000)
-  if ('notes' in body) out.notes = texte(body.notes, 500)
-
-  if ('teeth' in body) {
-    const brut = Array.isArray(body.teeth) ? body.teeth : []
-    out.teeth = brut
-      .map((t) => String(t).trim())
-      .filter((t, i, a) => t && isValidTooth(t) && a.indexOf(t) === i)
-      .slice(0, MAX_DENTS)
-  }
-
-  for (const cle of ['sent_at', 'due_at', 'received_at'] as const) {
-    if (cle in body) {
-      const v = String(body[cle] ?? '')
-      out[cle] = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null
-    }
-  }
-
-  if ('cost' in body) {
-    if (body.cost === null || body.cost === '') out.cost = null
-    else {
-      const n = Number(String(body.cost).replace(',', '.'))
-      out.cost = Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null
-    }
-  }
-
-  if ('status' in body) {
-    const s = String(body.status) as LabStatut
-    if (LAB_STATUTS.includes(s)) out.status = s
-  }
-  return out
-}
 
 export async function GET(req: NextRequest) {
   const auth = await requireLaboDoctor()

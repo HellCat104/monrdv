@@ -20,6 +20,7 @@ import QuotesCard from '@/components/dashboard/QuotesCard'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import PerioCard from '@/components/dashboard/PerioCard'
+import OrthoCard from '@/components/dashboard/OrthoCard'
 import { organismePour } from '@/lib/organismes'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
@@ -881,6 +882,10 @@ export default function PatientDossier({
 
           {onglet === 'soins' && (
             <div className="space-y-4">
+              {/* Orthodontie — dentistes. Un traitement se mesure en mois,
+                  pas en séances : l'écran répond d'abord à « où en est-on ». */}
+              {isDentalDoctor(specialties) && <OrthoCard patientId={patient.id} />}
+
               {/* Parodonte — dentistes. Un relevé par date, jamais écrasé :
                   c'est l'écart entre deux dates qui soigne, pas le chiffre. */}
               {isDentalDoctor(specialties) && <PerioCard patientId={patient.id} />}

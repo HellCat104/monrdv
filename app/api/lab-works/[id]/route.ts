@@ -1,7 +1,7 @@
 // Un travail de laboratoire — modification (statut, dates, coût) et suppression.
 import { NextRequest, NextResponse } from 'next/server'
 import { requireLaboDoctor } from '@/lib/labo-server'
-import { nettoyerTravail } from '../route'
+import { nettoyerTravail } from '@/lib/labo'
 
 export const dynamic = 'force-dynamic'
 
