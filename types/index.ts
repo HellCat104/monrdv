@@ -642,6 +642,10 @@ export interface StaffPermissions {
   // Un devis nomme des ACTES et des DENTS avant d'énoncer des dirhams : sa
   // consultation est rangée dans le bloc médical, pas dans les finances.
   quotes_view: boolean          // consulter les devis d'un patient (actes, total, versé, reste dû)
+  // C'est la secrétaire qui appelle le prothésiste. Elle doit donc pouvoir
+  // suivre un travail — dates, statut — sans accéder au dossier médical ni
+  // au coût facturé par le laboratoire, qui regarde le médecin seul.
+  lab_works: boolean            // suivre les travaux de laboratoire (dentistes)
   // Bloc finances
   payments: boolean             // saisir les encaissements (espèces, chèque…)
   // Volontairement distinct de `payments`, qui ne règle QU'UN rendez-vous : un
@@ -682,6 +686,7 @@ export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
   // Argent et clinique : refusés tant que le médecin ne les a pas cochés
   // lui-même. Un devis cumule les deux.
   quotes_view: false,
+  lab_works: false,
   quotes_payment: false,
   payments: false,
   edit_prices: false,
@@ -720,6 +725,7 @@ export const STAFF_PERMISSION_GROUPS: {
       // La secrétaire ne peut que LIRE : créer un devis, en modifier une ligne,
       // un prix ou un statut reste au médecin, sans case pour l'ouvrir.
       { key: 'quotes_view',         label: 'Afficher les devis',                hint: 'Actes prévus, total, déjà versé, reste dû — sans pouvoir les modifier', requiert: 'records' },
+      { key: 'lab_works',           label: 'Suivre les travaux de laboratoire', hint: 'Dates et statut d\'un travail de prothèse — sans le coût facturé par le labo', requiert: 'records' },
     ],
   },
   {
