@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select'
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { ArrowLeft, FileText, Printer } from 'lucide-react'
 
@@ -85,19 +85,40 @@ export default function NewCertificate({ doctorId, doctorName, patient, appointm
       <div className="flex items-center gap-3">
         <button onClick={() => router.push(backHref)} className="text-gray-400 hover:text-gray-600" title="Retour"><ArrowLeft className="h-5 w-5" /></button>
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-          <FileText className="h-5 w-5 text-primary-500" /> Nouveau certificat — {patient.first_name} {patient.last_name}
+          <FileText className="h-5 w-5 text-primary-500" /> {tpl?.consentement ? 'Nouveau consentement' : 'Nouveau certificat'} — {patient.first_name} {patient.last_name}
         </h1>
       </div>
 
       <div className="bg-white border border-gray-100 rounded-xl p-5 space-y-4">
         <div className="space-y-1.5">
-          <Label>Type de certificat</Label>
+          <Label>Type de document</Label>
           <Select value={type} onValueChange={changeType}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {CERT_TEMPLATES.map((t) => <SelectItem key={t.key} value={t.key}>{t.title}</SelectItem>)}
+              {/* Deux familles, et la séparation se voit : un certificat
+                  atteste quelque chose à un tiers, un consentement est signé
+                  PAR le patient. Les confondre au moment de choisir, c'est
+                  imprimer le mauvais document. */}
+              <SelectGroup>
+                <SelectLabel>Certificats</SelectLabel>
+                {CERT_TEMPLATES.filter((t) => !t.consentement).map((t) => (
+                  <SelectItem key={t.key} value={t.key}>{t.title}</SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Consentements éclairés</SelectLabel>
+                {CERT_TEMPLATES.filter((t) => t.consentement).map((t) => (
+                  <SelectItem key={t.key} value={t.key}>{t.title.replace('Consentement éclairé — ', '')}</SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
+          {tpl?.consentement && (
+            <p className="text-xs text-gray-500">
+              Relisez le texte avec le patient avant de l&apos;imprimer, et complétez-le pour son cas :
+              un consentement signé sans avoir été lu ne protège personne.
+            </p>
+          )}
         </div>
 
         {tpl?.extraField && (

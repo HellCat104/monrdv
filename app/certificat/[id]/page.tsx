@@ -38,6 +38,16 @@ export default async function CertificatPage({ params }: { params: { id: string 
   // migration v57, le certificat s'imprime sans logo au lieu de tomber.
   const logoUrl = await getCabinetLogoUrl(supabase, doctor.id)
 
+  // Consentement : le patient signe, le praticien contresigne. On le reconnaît
+  // à la clé du modèle (`consent_…`), ce qui évite une colonne de plus en base
+  // et laisse intacts les certificats déjà émis.
+  const estConsentement = String(cert.type ?? '').startsWith('consent_')
+  const patientCert = (Array.isArray(cert.patient) ? cert.patient[0] : cert.patient) as
+    { first_name?: string; last_name?: string } | null
+  const nomPatient = patientCert
+    ? `${patientCert.first_name ?? ''} ${patientCert.last_name ?? ''}`.trim()
+    : ''
+
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
       <PrintBar />
@@ -66,14 +76,39 @@ export default async function CertificatPage({ params }: { params: { id: string 
           {cert.content}
         </div>
 
-        {/* Signature */}
-        <div className="mt-20 flex justify-end">
-          <div className="text-center">
-            <div className="w-52 border-t border-gray-400 pt-1.5">
-              <p className="text-xs text-gray-500">Signature et cachet</p>
+        {/* Signatures. Un certificat n'en porte qu'une — celle du praticien.
+            Un consentement en porte DEUX, et c'est celle du patient qui compte :
+            un document que personne n'a signé ne prouve rien le jour où l'on
+            conteste avoir été informé. */}
+        {estConsentement ? (
+          <div className="mt-16 grid grid-cols-2 gap-10">
+            <div>
+              <p className="text-[12px] text-gray-700 mb-1">
+                {nomPatient || 'Le patient'}
+                <span className="text-gray-400"> — ou son représentant légal</span>
+              </p>
+              <p className="text-[11px] text-gray-500 mb-12">
+                Porter la mention manuscrite « Lu et approuvé », puis dater et signer.
+              </p>
+              <div className="border-t border-gray-400 pt-1.5">
+                <p className="text-xs text-gray-500">Date et signature</p>
+              </div>
+            </div>
+            <div className="text-center self-end">
+              <div className="border-t border-gray-400 pt-1.5">
+                <p className="text-xs text-gray-500">Signature et cachet du praticien</p>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-20 flex justify-end">
+            <div className="text-center">
+              <div className="w-52 border-t border-gray-400 pt-1.5">
+                <p className="text-xs text-gray-500">Signature et cachet</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

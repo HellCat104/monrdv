@@ -117,7 +117,7 @@ export default function PatientDossier({
   const [appts, setAppts] = useState<Appointment[]>([])
   const [consultNotes, setConsultNotes] = useState<ConsultationNote[]>([])
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
-  const [certificates, setCertificates] = useState<{ id: string; title: string; motif: string | null; created_at: string }[]>([])
+  const [certificates, setCertificates] = useState<{ id: string; type: string | null; title: string; motif: string | null; created_at: string }[]>([])
   const [recalls, setRecalls] = useState<Recall[]>([])
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [vitals, setVitals] = useState<VitalSign[]>([])
@@ -163,7 +163,7 @@ export default function PatientDossier({
       supabase.from('recalls').select('*').eq('patient_id', patient.id).order('due_date', { ascending: true }),
       supabase.from('patient_documents').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
       supabase.from('vital_signs').select('*').eq('patient_id', patient.id).order('measured_at', { ascending: false }),
-      supabase.from('certificates').select('id, title, motif, created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }),
+      supabase.from('certificates').select('id, type, title, motif, created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }),
       supabase.from('session_packages').select('*').eq('patient_id', patient.id).order('created_at', { ascending: false }),
     ])
     // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »)
@@ -793,12 +793,18 @@ export default function PatientDossier({
             {/* Certificats — l'écran de création promet qu'ils apparaissent ici */}
             {certificates.length > 0 && (
               <div className={sec}>
-                <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Certificats ({certificates.length})</span></div>
+                <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Certificats et consentements ({certificates.length})</span></div>
                 <ul className="space-y-1.5">
                   {certificates.map((c) => (
                     <li key={c.id}>
                       <button onClick={() => window.open(`/certificat/${c.id}`, '_blank')} className="text-sm text-gray-700 hover:text-primary-600 truncate text-left w-full">
-                        <span className="text-gray-400">{formatDateShort(c.created_at)} · </span>{c.title}
+                        <span className="text-gray-400">{formatDateShort(c.created_at)} · </span>
+                      {/* Un consentement se repère dans la liste : c'est la
+                          pièce qu'on cherche quand un patient conteste. */}
+                      {String(c.type ?? '').startsWith('consent_') && (
+                        <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 rounded px-1.5 py-0.5 mr-1.5">Consentement</span>
+                      )}
+                      {c.title}
                         {c.motif && <span className="text-gray-400"> — {c.motif}</span>}
                       </button>
                     </li>

@@ -16,6 +16,11 @@ export interface CertField {
 export interface CertTemplate {
   key: string
   title: string
+  /** Document signé PAR LE PATIENT, et non délivré par le praticien. Change
+   *  la mise en page imprimée : deux signatures, et la mention « lu et
+   *  approuvé ». Les clés commencent toutes par `consent_`, ce qui permet au
+   *  document imprimé de le reconnaître sans nouvelle colonne en base. */
+  consentement?: true
   // champ complémentaire demandé au médecin (en plus du motif, commun à tous)
   extraField?: CertField
   // Certains documents en exigent plusieurs : une demande d'imagerie n'a aucun
@@ -45,6 +50,21 @@ const entete = (d: CertDoctor) =>
 
 const pied = () =>
   `\nCertificat établi à la demande de l'intéressé(e) et remis en main propre pour faire valoir ce que de droit.\n\nFait le ${formatDateFr(new Date())}.`
+
+// Un consentement n'est pas un certificat : il n'atteste rien à un tiers, il
+// constate que le patient a compris ce qu'on lui propose et qu'il l'accepte.
+// D'où un en-tête à la première personne DU PATIENT, et un pied qui rappelle
+// ce qui protège réellement le praticien : la possibilité d'avoir posé des
+// questions, et le double remis.
+const enteteConsent = (p: CertPatient) =>
+  `Je soussigné(e) ${identite(p)},\n\n`
+
+const piedConsent = () =>
+  `\nJ'ai pu poser toutes les questions que je souhaitais et j'ai reçu des réponses claires. ` +
+  `J'ai été informé(e) que je peux revenir sur ma décision à tout moment avant le début des soins.\n\n` +
+  `Je donne mon accord pour la réalisation de ces soins.\n\n` +
+  `Document établi en deux exemplaires : un remis au patient, un conservé au dossier.\n\n` +
+  `Fait le ${formatDateFr(new Date())}.`
 
 export const CERT_TEMPLATES: CertTemplate[] = [
   {
@@ -119,6 +139,113 @@ export const CERT_TEMPLATES: CertTemplate[] = [
         `Confraternellement,\n\nDr. ${d.name} — le ${formatDateFr(new Date())}`
       )
     },
+  },
+  // ── Consentements éclairés ─────────────────────────────────────────────
+  // Textes volontairement sobres et GÉNÉRIQUES : ils sont éditables avant
+  // enregistrement, et c'est au praticien d'y porter ce qui concerne son
+  // patient. Un consentement pré-rempli qu'on signe sans le lire ne protège
+  // personne — la loi comme le juge regardent l'information réellement donnée.
+  {
+    key: 'consent_extraction',
+    title: 'Consentement éclairé — extraction dentaire',
+    consentement: true,
+    extraField: { key: 'dents', label: 'Dent(s) concernée(s)', type: 'text', placeholder: '36, 37' },
+    build: (p, d, dents) =>
+      enteteConsent(p) +
+      `déclare avoir été informé(e) par le Dr. ${d.name} de la nécessité de procéder à l'extraction de la ou des dents suivantes : ${dents || '…'}.\n\n` +
+      `Le praticien m'a expliqué :\n` +
+      `— la raison de cette extraction et ce qui se passerait si elle n'était pas réalisée ;\n` +
+      `— les autres traitements possibles, le cas échéant, et leur coût ;\n` +
+      `— le déroulement de l'intervention et l'anesthésie locale qui l'accompagne ;\n` +
+      `— les suites habituelles : douleur, gonflement et saignement modérés pendant quelques jours ;\n` +
+      `— les complications possibles, rares mais connues : infection, saignement prolongé, douleur persistante (alvéolite), atteinte d'une dent voisine, et, selon la localisation, trouble temporaire ou durable de la sensibilité de la lèvre ou de la langue.\n\n` +
+      `Je m'engage à signaler mes antécédents médicaux et les traitements que je prends, notamment anticoagulants, et à respecter les consignes qui me seront remises après l'intervention.` +
+      piedConsent(),
+  },
+  {
+    key: 'consent_sagesse',
+    title: 'Consentement éclairé — extraction de dent de sagesse',
+    consentement: true,
+    extraField: { key: 'dents', label: 'Dent(s) de sagesse', type: 'text', placeholder: '38, 48' },
+    build: (p, d, dents) =>
+      enteteConsent(p) +
+      `déclare avoir été informé(e) par le Dr. ${d.name} de l'indication d'extraction de la ou des dents de sagesse suivantes : ${dents || '…'}.\n\n` +
+      `Le praticien m'a expliqué le déroulement de l'intervention, qui peut nécessiter une incision de la gencive et la section de la dent, ainsi que les suites habituelles : douleur, gonflement et difficulté à ouvrir la bouche pendant quelques jours.\n\n` +
+      `J'ai été informé(e) des complications possibles, rares mais connues : infection, saignement prolongé, alvéolite, et surtout, en raison de la proximité anatomique des nerfs, trouble de la sensibilité de la lèvre, du menton ou de la langue, le plus souvent temporaire mais parfois durable. Pour les dents du haut, une communication avec le sinus est possible.\n\n` +
+      `Je m'engage à respecter les consignes post-opératoires et à consulter sans attendre en cas de fièvre, de saignement important ou de douleur croissante.` +
+      piedConsent(),
+  },
+  {
+    key: 'consent_implant',
+    title: 'Consentement éclairé — pose d\'implant',
+    consentement: true,
+    extraField: { key: 'site', label: 'Site(s) implantaire(s)', type: 'text', placeholder: '16' },
+    build: (p, d, site) =>
+      enteteConsent(p) +
+      `déclare avoir été informé(e) par le Dr. ${d.name} du traitement implantaire proposé au niveau de : ${site || '…'}.\n\n` +
+      `Le praticien m'a expliqué :\n` +
+      `— le déroulement du traitement en plusieurs étapes, et sa durée totale de plusieurs mois ;\n` +
+      `— les alternatives : bridge, prothèse amovible, ou abstention, et leurs conséquences ;\n` +
+      `— que le succès dépend de l'intégration osseuse de l'implant, qui n'est jamais garantie à 100 % ;\n` +
+      `— les complications possibles : infection, échec de l'intégration nécessitant la dépose de l'implant, atteinte d'une structure anatomique voisine, et péri-implantite à long terme ;\n` +
+      `— que le tabac et un diabète mal équilibré augmentent nettement le risque d'échec.\n\n` +
+      `Je m'engage à suivre les contrôles réguliers et à maintenir une hygiène rigoureuse, dont dépend la durée de vie de l'implant. Le devis correspondant m'a été remis.` +
+      piedConsent(),
+  },
+  {
+    key: 'consent_endo',
+    title: 'Consentement éclairé — traitement de racine',
+    consentement: true,
+    extraField: { key: 'dents', label: 'Dent(s) concernée(s)', type: 'text', placeholder: '26' },
+    build: (p, d, dents) =>
+      enteteConsent(p) +
+      `déclare avoir été informé(e) par le Dr. ${d.name} de la nécessité d'un traitement endodontique (traitement de racine) sur : ${dents || '…'}.\n\n` +
+      `Le praticien m'a expliqué que ce traitement vise à conserver une dent dont le nerf est atteint, qu'il peut demander plusieurs séances, et que la dent devra ensuite être protégée, le plus souvent par une couronne, sans quoi elle risque de se fracturer.\n\n` +
+      `J'ai été informé(e) des aléas possibles : douleur passagère après la séance, canal difficile d'accès ou calcifié, fracture d'un instrument, persistance de l'infection pouvant conduire à une reprise du traitement, à une intervention chirurgicale, ou en dernier recours à l'extraction de la dent.` +
+      piedConsent(),
+  },
+  {
+    key: 'consent_prothese',
+    title: 'Consentement éclairé — prothèse',
+    consentement: true,
+    extraField: { key: 'travail', label: 'Travail prévu', type: 'text', placeholder: 'couronne céramique sur 16' },
+    build: (p, d, travail) =>
+      enteteConsent(p) +
+      `déclare avoir été informé(e) par le Dr. ${d.name} du travail prothétique proposé : ${travail || '…'}.\n\n` +
+      `Le praticien m'a expliqué le déroulement du traitement, le nombre de séances, le délai de réalisation par le laboratoire, ainsi que les alternatives possibles et leur coût. Le devis détaillé m'a été remis et j'en ai pris connaissance.\n\n` +
+      `J'ai été informé(e) que la teinte et la forme sont choisies avant la réalisation, qu'une prothèse peut demander des retouches, et que sa durée de vie dépend de l'hygiène, des contrôles réguliers et de l'état des dents support.` +
+      piedConsent(),
+  },
+  {
+    key: 'consent_ortho',
+    title: 'Consentement éclairé — traitement orthodontique',
+    consentement: true,
+    extraField: { key: 'duree', label: 'Durée annoncée (mois)', type: 'number', placeholder: '18' },
+    build: (p, d, duree) =>
+      enteteConsent(p) +
+      `déclare avoir été informé(e) par le Dr. ${d.name} du traitement orthodontique proposé, d'une durée estimée à ${duree || '…'} mois.\n\n` +
+      `Le praticien m'a expliqué :\n` +
+      `— que cette durée est une estimation, et qu'elle dépend directement de la régularité des rendez-vous et du respect des consignes ;\n` +
+      `— que le traitement impose une hygiène rigoureuse, sans laquelle des caries et des taches peuvent apparaître autour des attaches ;\n` +
+      `— les suites habituelles : gêne et sensibilité pendant quelques jours après chaque activation ;\n` +
+      `— les aléas possibles : décollement d'attache, résorption radiculaire, récidive après la fin du traitement ;\n` +
+      `— qu'une contention est indispensable à la fin, et que son abandon expose à un retour des dents vers leur position initiale.\n\n` +
+      `Je m'engage à honorer les rendez-vous d'activation et à porter la contention selon les consignes.` +
+      piedConsent(),
+  },
+  {
+    key: 'consent_mineur',
+    title: 'Autorisation de soins pour un mineur',
+    consentement: true,
+    extraField: { key: 'soins', label: 'Soins envisagés', type: 'text', placeholder: 'soins conservateurs et extraction' },
+    build: (p, d, soins) =>
+      `Je soussigné(e), ______________________________, agissant en qualité de père, mère ou tuteur légal de :\n\n` +
+      `${identite(p)}\n\n` +
+      `autorise le Dr. ${d.name} à pratiquer les soins suivants : ${soins || '…'}, ainsi que l'anesthésie locale qu'ils nécessitent.\n\n` +
+      `J'ai été informé(e) du déroulement de ces soins, de leurs suites habituelles et de leurs alternatives, et j'ai pu poser toutes mes questions.\n\n` +
+      `Je m'engage à signaler les antécédents médicaux et les traitements en cours de l'enfant.\n\n` +
+      `Document établi en deux exemplaires : un remis au représentant légal, un conservé au dossier.\n\n` +
+      `Fait le ${formatDateFr(new Date())}.`,
   },
   {
     key: 'libre',
