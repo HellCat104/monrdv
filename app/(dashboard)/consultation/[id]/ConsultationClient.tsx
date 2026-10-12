@@ -234,7 +234,12 @@ export default function ConsultationClient({
   async function terminer() {
     // Une fois clôturé, le RDV quitte la file du jour : si rien n'a été encaissé,
     // la recette se perd facilement. On demande confirmation explicite.
-    if (paidAmount == null) {
+    //
+    // SAUF quand la séance est réglée sur le devis (verrou v54) : le rendez-vous
+    // ne PEUT PAS porter son propre `amount_paid`, c'est le logiciel qui l'a
+    // interdit. Avertir « aucun encaissement n'a été saisi » serait alors faux,
+    // et inquiéter le praticien pour de l'argent qui est bien enregistré.
+    if (paidAmount == null && !actesSurDevis) {
       if (!confirm('Aucun encaissement n\'a été saisi pour cette consultation.\n\nTerminer quand même ? Vous pourrez encaisser plus tard depuis l\'agenda.')) return
     }
     setFinishing(true)
