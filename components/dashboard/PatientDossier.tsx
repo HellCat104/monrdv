@@ -628,6 +628,17 @@ export default function PatientDossier({
   // Les repères de développement n'ont de sens que chez le tout-petit.
   const suiviDevelopppement = suiviEnfant && (ageDuPatient == null || ageDuPatient < 6)
 
+  // Même raisonnement que ci-dessus, appliqué aux PARENTS : ils étaient réservés
+  // au pédiatre. Or un patient mineur a un représentant légal quelle que soit la
+  // spécialité du praticien, et c'est LUI qui signe l'autorisation de soins —
+  // un dentiste qui soigne un enfant de 8 ans n'avait donc nulle part où noter
+  // son nom, et devait le réécrire à la main sur chaque document.
+  // L'âge saisi à la main compte autant que la date de naissance : beaucoup de
+  // fiches n'ont que lui.
+  const ageSaisi = editAge ? Number(editAge) : null
+  const ageConnu = ageDuPatient ?? (Number.isFinite(ageSaisi) ? ageSaisi : null)
+  const patientMineur = ageConnu != null && ageConnu < 18
+
   const estDentiste = isDentalDoctor(specialties)
   const estPediatre = isPediatricDoctor(specialties)
   const aSoins = estDentiste || estPediatre || (!isPsy && enabledVitals.length > 0)
@@ -727,7 +738,11 @@ export default function PatientDossier({
                       <Input type="number" min={22} max={43} value={editGestWeeks} onChange={(e) => setEditGestWeeks(e.target.value)} placeholder="Ex : 34" className="h-9" />
                     </div>
                   </div>
-                  {([
+                </>
+              )}
+              {/* Parents / tuteurs : au pédiatre toujours, et à tout praticien
+                  dès que le patient est mineur. */}
+              {(isPediatricDoctor(specialties) || patientMineur) && ([
                     ['parent1', 'Parent / tuteur 1', editParent1, setEditParent1, editParent1Phone, setEditParent1Phone, 'Ex : Fatima Alami (mère)'],
                     ['parent2', 'Parent / tuteur 2', editParent2, setEditParent2, editParent2Phone, setEditParent2Phone, 'Ex : Karim Alami (père)'],
                   ] as const).map(([key, lbl, name, setName, phone, setPhone, ph]) => (
@@ -745,8 +760,6 @@ export default function PatientDossier({
                       <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12 34 56 78" className="h-9" />
                     </div>
                   ))}
-                </>
-              )}
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</Label><Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="patient@email.com" className={`h-9 ${rebond && memeAdresse(editEmail, rebond.adresse) ? 'border-red-300' : ''}`} />
                 {/* Tant que le champ contient l'adresse qui a rebondi, on le
                     dit ; dès qu'il en contient une autre, on rappelle qu'elle
