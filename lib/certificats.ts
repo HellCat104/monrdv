@@ -2,7 +2,17 @@
 // Le texte généré est ÉDITABLE avant enregistrement, puis figé (archive légale).
 import { formatDateFr } from '@/lib/utils'
 
-export interface CertPatient { first_name: string; last_name: string; age?: number | null; cin?: string | null }
+export interface CertPatient {
+  first_name: string
+  last_name: string
+  age?: number | null
+  cin?: string | null
+  /** Parents (migrations v33/v34) : l'autorisation de soins sur mineur est
+   *  signée par eux, pas par l'enfant. Le logiciel connaît leur nom, il n'y a
+   *  aucune raison de le faire recopier à la main sur chaque document. */
+  parent1_name?: string | null
+  parent2_name?: string | null
+}
 export interface CertDoctor { name: string }
 
 export interface CertField {
@@ -56,6 +66,12 @@ const pied = () =>
 // D'où un en-tête à la première personne DU PATIENT, et un pied qui rappelle
 // ce qui protège réellement le praticien : la possibilité d'avoir posé des
 // questions, et le double remis.
+/** Le représentant légal connu de la fiche, s'il y en a un. */
+export function representantLegal(p: CertPatient): string | null {
+  const nom = (p.parent1_name ?? '').trim() || (p.parent2_name ?? '').trim()
+  return nom || null
+}
+
 const enteteConsent = (p: CertPatient) =>
   `Je soussigné(e) ${identite(p)},\n\n`
 
@@ -239,7 +255,10 @@ export const CERT_TEMPLATES: CertTemplate[] = [
     consentement: true,
     extraField: { key: 'soins', label: 'Soins envisagés', type: 'text', placeholder: 'soins conservateurs et extraction' },
     build: (p, d, soins) =>
-      `Je soussigné(e), ______________________________, agissant en qualité de père, mère ou tuteur légal de :\n\n` +
+      // Le nom du parent est repris de la fiche quand il y figure ; sinon on
+      // laisse la ligne à remplir. Le texte reste modifiable : si c'est l'autre
+      // parent ou un tuteur qui se présente, le praticien corrige en un mot.
+      `Je soussigné(e), ${representantLegal(p) ?? '______________________________'}, agissant en qualité de père, mère ou tuteur légal de :\n\n` +
       `${identite(p)}\n\n` +
       `autorise le Dr. ${d.name} à pratiquer les soins suivants : ${soins || '…'}, ainsi que l'anesthésie locale qu'ils nécessitent.\n\n` +
       `J'ai été informé(e) du déroulement de ces soins, de leurs suites habituelles et de leurs alternatives, et j'ai pu poser toutes mes questions.\n\n` +

@@ -25,7 +25,7 @@ export default async function NewCertificatePage({ params, searchParams }: { par
 
   const { data: patient } = await supabase
     .from('patients')
-    .select('id, first_name, last_name, age, birth_date, cin')
+    .select('id, first_name, last_name, age, birth_date, cin, parent1_name, parent2_name')
     .eq('id', params.patientId)
     .eq('doctor_id', doctor.id)
     .single()

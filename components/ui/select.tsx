@@ -74,11 +74,17 @@ const SelectContent = React.forwardRef<
       {...props}
     >
       <SelectScrollUpButton />
+      {/* La molette doit défiler LA LISTE, pas la page derrière. Sans
+          `overflow-y-auto`, une liste longue — les types de certificat, les
+          consentements — ne se parcourait qu'avec les deux petits chevrons du
+          haut et du bas : on faisait tourner la molette et c'est l'écran qui
+          bougeait. `overscroll-contain` empêche le défilement de « déborder »
+          sur la page une fois le bas de la liste atteint. */}
       <SelectPrimitive.Viewport
         className={cn(
-          'p-1',
+          'p-1 max-h-[min(24rem,60vh)] overflow-y-auto overscroll-contain',
           position === 'popper' &&
-            'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]'
+            'w-full min-w-[var(--radix-select-trigger-width)]'
         )}
       >
         {children}

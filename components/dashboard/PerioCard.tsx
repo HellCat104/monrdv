@@ -124,11 +124,17 @@ export default function PerioCard({ patientId }: { patientId: string }) {
     const couleur = couleurPoche(typeof mm === 'number' ? mm : null)
     return (
       <div className="flex flex-col items-center gap-0.5 w-[42px] shrink-0">
-        {/* Le numéro bascule le saignement : un geste, pas une case de plus. */}
+        {/* Le numéro bascule le saignement : un geste, pas une case de plus.
+            Chaque contrôle PORTE SON NUMÉRO DE DENT : les 32 champs étaient
+            rigoureusement anonymes (ni libellé, ni title, ni aria-label), si
+            bien qu'à la tabulation — ou pour une synthèse vocale — plus rien ne
+            disait quelle dent on était en train de sonder. */}
         <button
           type="button"
           onClick={() => majDent(dent, 'bop', d?.bop !== true)}
-          title="Saignement au sondage"
+          aria-pressed={d?.bop === true}
+          aria-label={`Dent ${n} — saignement au sondage`}
+          title={`Dent ${n} — saignement au sondage`}
           className={`text-[10px] font-semibold w-full rounded px-1 ${d?.bop === true ? 'bg-red-500 text-white' : 'text-gray-400 hover:bg-gray-100'}`}
         >
           {n}
@@ -138,13 +144,16 @@ export default function PerioCard({ patientId }: { patientId: string }) {
           value={mm}
           onChange={(e) => majDent(dent, 'pdMax', e.target.value)}
           placeholder="—"
+          aria-label={`Dent ${n} — profondeur de poche en mm`}
+          title={`Dent ${n} — profondeur de poche la plus profonde, en mm`}
           className={`w-full h-8 text-center text-sm rounded border ${couleur ? COULEURS[couleur] : 'border-gray-200 text-gray-700'}`}
         />
         {mm !== '' && (
           <select
             value={d?.mob ?? ''}
             onChange={(e) => majDent(dent, 'mob', e.target.value)}
-            title="Mobilité"
+            aria-label={`Dent ${n} — mobilité`}
+            title={`Dent ${n} — mobilité`}
             className="w-full text-[10px] border border-gray-200 rounded bg-white text-gray-500"
           >
             <option value="">M</option>

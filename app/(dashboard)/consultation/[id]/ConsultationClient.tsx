@@ -10,10 +10,13 @@ import { formatDateFr, formatAge } from '@/lib/utils'
 import { PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import DentalChart from '@/components/dashboard/DentalChart'
 import FeuilleSoinsCard, { type ActeSuggere } from '@/components/dashboard/FeuilleSoinsCard'
+import LabWorksCard from '@/components/dashboard/LabWorksCard'
+import OrthoCard from '@/components/dashboard/OrthoCard'
+import PerioCard from '@/components/dashboard/PerioCard'
 import ActesDuJourCard from './ActesDuJourCard'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
-  AlertTriangle, CheckCircle2, Plus,
+  AlertTriangle, CheckCircle2, Plus, ChevronDown,
 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -113,6 +116,8 @@ export default function ConsultationClient({
   // d'encaissement comme si de rien n'était, et le praticien n'apprenait le
   // verrou qu'en se voyant refuser le montant qu'il venait de taper.
   const [actesSurDevis, setActesSurDevis] = useState(regleSurDevis)
+  // Bloc parodonte / labo / ortho : fermé par défaut, voir plus bas.
+  const [suiviOuvert, setSuiviOuvert] = useState(false)
 
   const vLabel = (k: string) => vitalDefsAll.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefsAll.find((v) => v.key === k)?.unit || ''
@@ -467,6 +472,37 @@ export default function ConsultationClient({
               </div>
             )}
           </div>
+
+          {/* Parodonte, laboratoire, orthodontie — des actes qui se font AU
+              FAUTEUIL, et qu'il fallait pourtant aller saisir dans la fiche
+              patient : on sortait de la consultation pour noter une poche ou
+              pour vérifier si la couronne était revenue du labo.
+              
+              REPLIÉS, et c'est volontaire : la plupart des séances ne touchent
+              à aucun des trois. Les déplier d'office rendrait l'écran illisible
+              pour le soin courant, alors qu'un clic suffit le jour où on en a
+              besoin. Rien n'est chargé tant que le bloc n'est pas ouvert. */}
+          {isDental && (
+            <div className="bg-white border border-gray-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setSuiviOuvert((v) => !v)}
+                className="w-full flex items-center gap-2 px-4 py-3 text-left"
+                aria-expanded={suiviOuvert}
+              >
+                <span className="text-sm font-semibold text-gray-700">Parodonte, laboratoire, orthodontie</span>
+                <span className="ml-auto text-[11px] text-gray-400">{suiviOuvert ? 'Masquer' : 'Afficher'}</span>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${suiviOuvert ? 'rotate-180' : ''}`} />
+              </button>
+              {suiviOuvert && (
+                <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
+                  <OrthoCard patientId={patient.id} />
+                  <PerioCard patientId={patient.id} />
+                  <LabWorksCard patientId={patient.id} />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Feuille de soins — seulement si le patient a une couverture.
               Les actes du jour y sont déjà inscrits : il reste à vérifier les

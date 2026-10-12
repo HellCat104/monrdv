@@ -179,7 +179,7 @@ export default async function FactureDevisPage({ params }: Props) {
 
         <div className="mt-12 pt-6 border-t border-gray-100 text-center">
           <p className="text-xs text-gray-400">
-            {docTitle === 'FACTURE' ? 'Facture' : 'Reçu'} généré le {formatDateFr(new Date())} via MonRDV
+            {docTitle === 'FACTURE' ? 'Facture générée' : 'Reçu généré'} le {formatDateFr(new Date())} via MonRDV
           </p>
         </div>
       </div>

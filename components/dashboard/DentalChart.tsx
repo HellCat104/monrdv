@@ -158,7 +158,14 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
         onClick={() => setActive(isActive ? null : key)}
         title={states.length > 0 ? `Dent ${n} — ${statesWithFacesLabel(info)}${info?.n ? ` · ${info.n}` : ''}` : `Dent ${n}`}
         style={color ? { backgroundColor: color, color: '#fff', borderColor: color } : undefined}
-        className={`relative w-9 h-11 shrink-0 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-600 transition ${isActive ? 'ring-2 ring-primary-500 ring-offset-1' : ''} ${extraite ? 'opacity-80' : ''}`}
+        // ÉLASTIQUE, et c'est le point : à 36 px fixes l'arcade mesure 700 px et
+        // se retrouvait COUPÉE dans la colonne de l'écran de consultation — le
+        // praticien voyait 18→22 et devait faire glisser pour atteindre 28, sur
+        // le schéma qu'il consulte le plus souvent. La dent occupe maintenant la
+        // place disponible, sans jamais dépasser 36 px (sinon l'arcade s'étire
+        // bêtement sur un grand écran) ni descendre sous 20 px (sinon le numéro
+        // n'est plus lisible — en dessous, le défilement reprend la main).
+        className={`relative flex-1 basis-0 min-w-[20px] max-w-[36px] h-11 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-600 transition ${isActive ? 'ring-2 ring-primary-500 ring-offset-1' : ''} ${extraite ? 'opacity-80' : ''}`}
       >
         <span className={`block leading-tight ${colors.length > 1 ? 'pb-2' : ''} ${extraite ? 'line-through' : ''}`}>{n}</span>
         {/* Les faces, en toutes petites initiales sous le numéro : « OM » se lit
@@ -190,9 +197,9 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
     const moitie = ids.length / 2
     return (
       <div className="flex justify-center">
-        <div className="flex gap-1">{ids.slice(0, moitie).map((n) => <Tooth key={n} n={n} />)}</div>
+        <div className="flex-1 flex gap-1 justify-end">{ids.slice(0, moitie).map((n) => <Tooth key={n} n={n} />)}</div>
         <div className="w-6 shrink-0 flex justify-center"><span className="border-l border-dashed border-gray-300 self-stretch" /></div>
-        <div className="flex gap-1">{ids.slice(moitie).map((n) => <Tooth key={n} n={n} />)}</div>
+        <div className="flex-1 flex gap-1 justify-start">{ids.slice(moitie).map((n) => <Tooth key={n} n={n} />)}</div>
         {lait && <span className="self-center ml-2 text-[9px] text-gray-300 shrink-0">lait</span>}
       </div>
     )
@@ -244,8 +251,10 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
         ))}
       </div>
 
+      {/* Le défilement reste, mais en dernier recours : il ne se déclenche plus
+          qu'en dessous de la largeur minimale des dents (téléphone). */}
       <div className="overflow-x-auto pb-1">
-        <div className="inline-flex flex-col gap-1.5 mx-auto">
+        <div className="flex flex-col gap-1.5 min-w-[360px]">
           {/* Vue du praticien : le côté droit du patient est à GAUCHE de l'écran.
               Les deux libellés lèvent l'hésitation devant le schéma. */}
           <div className="flex text-[10px] text-gray-400">

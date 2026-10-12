@@ -40,6 +40,7 @@ import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, P
   Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users, Ticket,
   Pencil, Wallet, AlertTriangle } from 'lucide-react'
 import { messageQuota } from '@/lib/stockage'
+import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
 
 const DOC_BUCKET = 'patient-documents'
 
@@ -235,11 +236,13 @@ export default function PatientDossier({
     const q = sibSearch.trim()
     if (q.length < 2) { setSibResults([]); return }
     const t = setTimeout(async () => {
-      const { data } = await supabase.from('patients')
+      const mots = motsRecherche(q)
+      if (mots.length === 0) { setSibResults([]); return }
+      let req = supabase.from('patients')
         .select('id, first_name, last_name, birth_date')
         .eq('doctor_id', doctorId).neq('id', patient.id)
-        .or(`first_name.ilike.%${q.replace(/[%,()]/g, '')}%,last_name.ilike.%${q.replace(/[%,()]/g, '')}%`)
-        .limit(6)
+      for (const mot of mots) req = req.or(filtreMot(mot))
+      const { data } = await req.limit(6)
       setSibResults((data ?? []).filter((p) => !siblings.some((s) => s.id === p.id)))
     }, 300)
     return () => clearTimeout(t)
@@ -250,11 +253,13 @@ export default function PatientDossier({
     const q = mergeSearch.trim()
     if (q.length < 2) { setMergeResults([]); return }
     const t = setTimeout(async () => {
-      const { data } = await supabase.from('patients')
+      const mots = motsRecherche(q)
+      if (mots.length === 0) { setMergeResults([]); return }
+      let req = supabase.from('patients')
         .select('id, first_name, last_name, phone')
         .eq('doctor_id', doctorId).neq('id', patient.id)
-        .or(`first_name.ilike.%${q.replace(/[%,()]/g, '')}%,last_name.ilike.%${q.replace(/[%,()]/g, '')}%`)
-        .limit(6)
+      for (const mot of mots) req = req.or(filtreMot(mot))
+      const { data } = await req.limit(6)
       setMergeResults(data ?? [])
     }, 300)
     return () => clearTimeout(t)

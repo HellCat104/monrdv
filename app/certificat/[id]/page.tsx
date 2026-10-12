@@ -42,6 +42,11 @@ export default async function CertificatPage({ params }: { params: { id: string 
   // à la clé du modèle (`consent_…`), ce qui évite une colonne de plus en base
   // et laisse intacts les certificats déjà émis.
   const estConsentement = String(cert.type ?? '').startsWith('consent_')
+  // Une autorisation de soins sur mineur est signée par le REPRÉSENTANT LÉGAL,
+  // jamais par l'enfant : écrire « Omar Tazi — ou son représentant légal » au
+  // dessus de la ligne invite un enfant de huit ans à signer un document qui
+  // n'a de valeur que par la signature du parent.
+  const signeParLeRepresentant = String(cert.type ?? '') === 'consent_mineur'
   const patientCert = (Array.isArray(cert.patient) ? cert.patient[0] : cert.patient) as
     { first_name?: string; last_name?: string } | null
   const nomPatient = patientCert
@@ -84,8 +89,17 @@ export default async function CertificatPage({ params }: { params: { id: string 
           <div className="mt-16 grid grid-cols-2 gap-10">
             <div>
               <p className="text-[12px] text-gray-700 mb-1">
-                {nomPatient || 'Le patient'}
-                <span className="text-gray-400"> — ou son représentant légal</span>
+                {signeParLeRepresentant ? (
+                  <>
+                    Le représentant légal
+                    {nomPatient && <span className="text-gray-400"> — de {nomPatient}</span>}
+                  </>
+                ) : (
+                  <>
+                    {nomPatient || 'Le patient'}
+                    <span className="text-gray-400"> — ou son représentant légal</span>
+                  </>
+                )}
               </p>
               <p className="text-[11px] text-gray-500 mb-12">
                 Porter la mention manuscrite « Lu et approuvé », puis dater et signer.

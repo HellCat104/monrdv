@@ -8,6 +8,7 @@ import { canAccess } from '@/lib/plan'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
 import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
+import { isDentalDoctor } from '@/lib/dental'
 
 interface Props {
   params: { id: string }
@@ -63,7 +64,13 @@ export default async function FacturePage({ params }: Props) {
   const numero = apt.invoice_no || `F-${apt.id.slice(0, 8).toUpperCase()}`
   // Sans numéro officiel, ce n'est pas une facture au sens fiscal : on parle de « reçu ».
   const docTitle = apt.invoice_no ? 'FACTURE' : 'REÇU'
-  const motif = apt.consultation_type?.name || apt.notes || 'Consultation médicale'
+  // Libellé de la prestation. Le repli était « Consultation médicale » pour
+  // tout le monde : sur la facture d'un dentiste, c'est au mieux étrange, au
+  // pire inexact quand la séance était un soin. On reste générique — le
+  // logiciel n'invente pas un acte qu'on ne lui a pas dit — mais dans le
+  // vocabulaire de la spécialité.
+  const motif = apt.consultation_type?.name || apt.notes
+    || (isDentalDoctor([doctor.specialty]) ? 'Soins dentaires' : 'Consultation médicale')
   const montant = apt.amount_paid
   // Paiement partiel : total dû vs encaissé
   const due = apt.amount_due ?? montant
@@ -156,7 +163,7 @@ export default async function FacturePage({ params }: Props) {
         {/* Pied de page */}
         <div className="mt-12 pt-6 border-t border-gray-100 text-center">
           <p className="text-xs text-gray-400">
-            {docTitle === 'FACTURE' ? 'Facture' : 'Reçu'} généré le {formatDateFr(new Date())} via MonRDV
+            {docTitle === 'FACTURE' ? 'Facture générée' : 'Reçu généré'} le {formatDateFr(new Date())} via MonRDV
           </p>
         </div>
       </div>

@@ -12,7 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { ArrowLeft, FileText, Printer } from 'lucide-react'
 
-interface Patient { id: string; first_name: string; last_name: string; age?: number | null; cin?: string | null }
+interface Patient { id: string; first_name: string; last_name: string; age?: number | null; cin?: string | null; parent1_name?: string | null; parent2_name?: string | null }
+
+
+/** Le libellé d'un consentement dans la liste : on retire « Consentement
+ *  éclairé — », déjà porté par le titre du groupe, et on remet la majuscule.
+ *  Sans elle, la liste mélangeait « Certificat d'aptitude au sport » et
+ *  « extraction dentaire » — on lisait un reste de phrase, pas un choix. */
+function sansPrefixe(titre: string): string {
+  const reste = titre.replace('Consentement éclairé — ', '')
+  return reste.charAt(0).toUpperCase() + reste.slice(1)
+}
 
 export default function NewCertificate({ doctorId, doctorName, patient, appointmentId, backHref }: {
   doctorId: string; doctorName: string; patient: Patient; appointmentId: string | null; backHref: string
@@ -24,7 +34,7 @@ export default function NewCertificate({ doctorId, doctorName, patient, appointm
     const tpl = CERT_TEMPLATES.find((t) => t.key === typeKey)
     if (!tpl) return ''
     return tpl.build(
-      { first_name: patient.first_name, last_name: patient.last_name, age: patient.age, cin: patient.cin },
+      { first_name: patient.first_name, last_name: patient.last_name, age: patient.age, cin: patient.cin, parent1_name: patient.parent1_name, parent2_name: patient.parent2_name },
       { name: doctorName },
       extra,
       extras,
@@ -108,7 +118,7 @@ export default function NewCertificate({ doctorId, doctorName, patient, appointm
               <SelectGroup>
                 <SelectLabel>Consentements éclairés</SelectLabel>
                 {CERT_TEMPLATES.filter((t) => t.consentement).map((t) => (
-                  <SelectItem key={t.key} value={t.key}>{t.title.replace('Consentement éclairé — ', '')}</SelectItem>
+                  <SelectItem key={t.key} value={t.key}>{sansPrefixe(t.title)}</SelectItem>
                 ))}
               </SelectGroup>
             </SelectContent>

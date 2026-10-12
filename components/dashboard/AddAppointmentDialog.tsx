@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import { format } from 'date-fns'
 import type { Doctor, ConsultationType, TimeSlot } from '@/types'
+import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
 
 interface AddAppointmentDialogProps {
   open: boolean
@@ -37,11 +38,11 @@ const NO_TYPE = '__none__'
 
 async function searchPatients(query: string): Promise<PatientLite[]> {
   const supabase = createClient()
-  const { data } = await supabase
-    .from('patients')
-    .select('id, first_name, last_name, phone')
-    .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,phone.ilike.%${query}%`)
-    .limit(8)
+  const mots = motsRecherche(query)
+  if (mots.length === 0) return []
+  let req = supabase.from('patients').select('id, first_name, last_name, phone')
+  for (const mot of mots) req = req.or(filtreMot(mot))
+  const { data } = await req.limit(8)
   return data ?? []
 }
 

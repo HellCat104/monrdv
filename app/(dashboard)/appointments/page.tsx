@@ -24,6 +24,7 @@ import { UserPlus } from 'lucide-react'
 import { format, startOfWeek, endOfWeek, addDays, subDays, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { getNowInMaroc } from '@/lib/utils'
+import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
 
 type ViewMode = 'day' | 'week' | 'month' | 'all'
 
@@ -124,11 +125,14 @@ export default function AppointmentsPage() {
   // ── Patient sans RDV (walk-in) ──────────────────────────────────────────
   async function searchWalkInPatients(q: string): Promise<PatientLite[]> {
     if (!doctor) return []
-    const { data } = await supabase.from('patients')
+    // Un filtre PAR MOT, combinés en ET : voir lib/recherche-patient.ts.
+    const mots = motsRecherche(q)
+    if (mots.length === 0) return []
+    let req = supabase.from('patients')
       .select('id, first_name, last_name, phone')
       .eq('doctor_id', doctor.id)
-      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,phone.ilike.%${q}%`)
-      .limit(8)
+    for (const mot of mots) req = req.or(filtreMot(mot))
+    const { data } = await req.limit(8)
     return (data ?? []) as PatientLite[]
   }
 
