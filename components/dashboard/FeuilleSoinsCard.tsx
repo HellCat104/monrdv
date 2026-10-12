@@ -76,11 +76,40 @@ export default function FeuilleSoinsCard({
       .catch(() => { /* catalogue vide : on saisit à la main */ })
   }, [])
 
+  /** Actes du plan marqués « réalisés » AUJOURD'HUI, relus à l'instant où l'on
+   *  ouvre la feuille.
+   *
+   *  POURQUOI NE PAS SE CONTENTER DE `suggestions` : elles sont calculées sur le
+   *  SERVEUR au chargement de l'écran de consultation. Or l'ordre réel est
+   *  l'inverse — le praticien soigne, coche ses actes dans « Actes du jour »,
+   *  PUIS établit la feuille. Les actes cochés depuis l'affichage de la page
+   *  manquaient donc toujours : la feuille s'ouvrait sur « Consultation · 0 DH »
+   *  et il fallait recharger l'écran pour qu'elle se remplisse — ce que
+   *  personne ne devine. */
+  async function actesDuJour(): Promise<ActeSuggere[] | null> {
+    try {
+      const res = await fetch(`/api/quotes?patient_id=${encodeURIComponent(patientId)}`)
+      if (!res.ok) return null
+      const data = (await res.json()) as { quotes?: { status?: string; items?: { tooth: string | null; label: string; unit_price: number; quantity: number; done: boolean; done_at: string | null }[] }[] }
+      const aujourdhui = new Date().toISOString().slice(0, 10)
+      const faits = (data.quotes ?? [])
+        .filter((q) => q.status !== 'refuse' && q.status !== 'annule')
+        .flatMap((q) => q.items ?? [])
+        .filter((it) => it.done && (it.done_at ?? '').slice(0, 10) === aujourdhui)
+        .map((it) => ({ tooth: it.tooth, label: it.label, amount: Number(it.unit_price) * (it.quantity || 1) }))
+      return faits.length > 0 ? faits : null
+    } catch {
+      // Lecture impossible : on garde ce que le serveur avait préparé.
+      return null
+    }
+  }
+
   /** Première ouverture : les actes du jour deviennent les lignes. */
-  function ouvrir() {
+  async function ouvrir() {
     setOuvert(true)
     if (lignes.length > 0) return
-    const depart: Ligne[] = suggestions.map((s) => {
+    const source = (await actesDuJour()) ?? suggestions
+    const depart: Ligne[] = source.map((s) => {
       const connu = actes.find((a) => a.label.toLowerCase() === s.label.toLowerCase())
       return {
         tooth: s.tooth ?? '',
