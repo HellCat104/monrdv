@@ -50,11 +50,15 @@ export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, recentVitals,
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
-  isDental = false, mutuelle = null, suggestionsFeuille = [],
+  isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false,
 }: {
   doctorId: string
   appointmentId: string
   appointmentPaid: boolean
+  /** Ce rendez-vous porte déjà un `quote_id` : son argent se saisit sur le
+   *  devis. Lu sur le rendez-vous, et non déduit des clics de la séance en
+   *  cours — sinon l'avertissement disparaissait au moindre rechargement. */
+  regleSurDevis?: boolean
   amountPaid: number | null
   amountDue?: number | null
   defaultPrice: number | null
@@ -103,7 +107,12 @@ export default function ConsultationClient({
   // (PATCH /api/quotes/[id]/items/[itemId] ne le retire pas). Le rendez-vous
   // demeure donc « réglé via le devis » ; masquer l'avertissement promettrait
   // un encaissement que le serveur refusera encore.
-  const [actesSurDevis, setActesSurDevis] = useState(false)
+  //
+  // L'état PART de ce que porte le rendez-vous : cocher un acte puis recharger
+  // l'écran (retour d'une ordonnance, F5) faisait réapparaître le formulaire
+  // d'encaissement comme si de rien n'était, et le praticien n'apprenait le
+  // verrou qu'en se voyant refuser le montant qu'il venait de taper.
+  const [actesSurDevis, setActesSurDevis] = useState(regleSurDevis)
 
   const vLabel = (k: string) => vitalDefsAll.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefsAll.find((v) => v.key === k)?.unit || ''

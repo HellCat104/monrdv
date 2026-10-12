@@ -25,7 +25,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const { data: apt } = await supabase
     .from('appointments')
-    .select('id, date, time, amount_paid, amount_due, payment_method, invoice_no, consultation_type:consultation_types(name, default_price), patient:patients(id, first_name, last_name, age, birth_date, blood_group, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
+    .select('id, date, time, amount_paid, amount_due, payment_method, invoice_no, quote_id, consultation_type:consultation_types(name, default_price), patient:patients(id, first_name, last_name, age, birth_date, blood_group, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .single()
@@ -79,6 +79,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       doctorId={doctor.id}
       appointmentId={apt.id}
       appointmentPaid={apt.amount_paid != null}
+      regleSurDevis={(apt as { quote_id?: string | null }).quote_id != null}
       amountPaid={apt.amount_paid ?? null}
       amountDue={apt.amount_due ?? null}
       // Même priorité que l'agenda : le montant déjà fixé sur le RDV prime sur le
