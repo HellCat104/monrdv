@@ -296,6 +296,15 @@ export default function PatientDossier({
 
   async function saveIdentity() {
     setSaving(true)
+    // Une étiquette TAPÉE mais pas encore validée est une étiquette voulue.
+    // Le champ ne la posait qu'à la touche Entrée ou au clic sur une
+    // proposition : taper « Parodontite » puis cliquer « Enregistrer la fiche »
+    // la perdait sans un mot. C'est le geste naturel, et la perte était
+    // silencieuse — on la récupère ici plutôt que d'exiger le bon réflexe.
+    const enAttente = normaliserEtiquette(saisieEtiquette)
+    const etiquettes = enAttente && !dejaPosee(editConditions, enAttente)
+      ? nettoyerEtiquettes([...editConditions, enAttente])
+      : nettoyerEtiquettes(editConditions)
     const updates = {
       age: ageFromBirthDate(editBirthDate) ?? (editAge ? Number(editAge) : null),
       birth_date: editBirthDate || null,
@@ -329,7 +338,7 @@ export default function PatientDossier({
       // Étiquettes : seulement si la colonne existe (v72). Écrire une clé
       // inconnue ferait échouer TOUT l'enregistrement — allergies et
       // antécédents compris — et la perte serait silencieuse pour le médecin.
-      ...(etiquettesDisponibles ? { conditions: nettoyerEtiquettes(editConditions) } : {}),
+      ...(etiquettesDisponibles ? { conditions: etiquettes } : {}),
     }
     let { error } = await supabase.from('patients').update(updates).eq('id', patient.id)
     // Ceinture et bretelles : le cache de schéma de PostgREST peut encore
@@ -354,6 +363,9 @@ export default function PatientDossier({
     if (error) { alert('L\'enregistrement a échoué. Réessayez.'); return }
     // Même règle que le trigger v59 : une autre adresse n'a pas rebondi.
     if (rebond && !memeAdresse(updates.email, rebond.adresse)) setRebond(null)
+    // L'étiquette récupérée de la saisie en cours devient une pastille : sans
+    // ça le champ garde son texte, et le praticien croit qu'elle n'est pas prise.
+    setEditConditions(etiquettes); setSaisieEtiquette('')
     setSaved(true); setTimeout(() => setSaved(false), 3000)
   }
 
