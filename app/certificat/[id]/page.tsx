@@ -92,7 +92,12 @@ export default async function CertificatPage({ params }: { params: { id: string 
                 {signeParLeRepresentant ? (
                   <>
                     Le représentant légal
-                    {nomPatient && <span className="text-gray-400"> — de {nomPatient}</span>}
+                    {nomPatient && (
+                      <span className="text-gray-400">
+                        {/* Élision devant une voyelle : « d'Omar », pas « de Omar ». */}
+                        {/^[aeiouyàâäéèêëîïôöûüh]/i.test(nomPatient) ? " d'" : ' de '}{nomPatient}
+                      </span>
+                    )}
                   </>
                 ) : (
                   <>
