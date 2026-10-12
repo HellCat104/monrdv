@@ -235,6 +235,9 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData, logo: Buffer | 
     doc.x = M; doc.moveDown(0.3)
     kv('Téléphone :', `${patient.phone ?? '—'}${patient.email ? ` · ${patient.email}` : ''}`)
     if (patient.allergies) kv('Allergies :', String(patient.allergies), C.red)
+    if (Array.isArray(patient.conditions) && patient.conditions.length > 0) {
+      kv('Pathologies :', (patient.conditions as string[]).join(' · '))
+    }
     if (patient.chronic_conditions) kv('Antécédents :', String(patient.chronic_conditions))
     if (patient.current_treatments) kv('Traitements :', String(patient.current_treatments))
     if (patient.notes) kv('Notes :', String(patient.notes))
@@ -485,6 +488,7 @@ img{max-width:100%;border:1px solid #e5e7eb;border-radius:6px;margin:6px 0}
 <h2>Patient</h2>
 <div class="block"><strong>${esc(patient.first_name)} ${esc(patient.last_name)}</strong>${patient.age != null ? ' · ' + esc(patient.age) + ' ans' : ''}<br>Téléphone : ${esc(patient.phone)}${patient.email ? ' · ' + esc(patient.email) : ''}
 ${patient.allergies ? `<br><span style="color:#dc2626"><strong>Allergies :</strong> ${esc(patient.allergies)}</span>` : ''}
+${Array.isArray(patient.conditions) && patient.conditions.length > 0 ? `<br><strong>Pathologies :</strong> ${esc((patient.conditions as string[]).join(' · '))}` : ''}
 ${patient.chronic_conditions ? `<br><strong>Antécédents :</strong> ${esc(patient.chronic_conditions)}` : ''}
 ${patient.current_treatments ? `<br><strong>Traitements :</strong> ${esc(patient.current_treatments)}` : ''}
 ${patient.notes ? `<br><strong>Notes :</strong> ${esc(patient.notes)}` : ''}</div>

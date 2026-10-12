@@ -26,13 +26,14 @@ import { organismePour } from '@/lib/organismes'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
 import { isNonPrescriber } from '@/lib/profession'
+import { nettoyerEtiquettes, normaliserEtiquette, dejaPosee, suggestions } from '@/lib/pathologies'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getInitials, formatDateFr, formatDateShort, formatDateTimeFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { withConsultationSummary } from '@/lib/consultation-summary'
-import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
+import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, RECALL_OUVERTS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
   type PaymentMethod,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef, type SessionPackage } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
@@ -107,6 +108,22 @@ export default function PatientDossier({
   const [mutuelleOther, setMutuelleOther] = useState(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
   const [editAllergies, setEditAllergies] = useState(patient.allergies ?? '')
   const [editChronic, setEditChronic] = useState(patient.chronic_conditions ?? '')
+  // Étiquettes de pathologie (v72). Elles ne doublent pas le texte libre
+  // ci-dessus : celui-ci porte la nuance (« déséquilibré depuis mars »),
+  // l'étiquette sert à RETROUVER le patient dans « tous mes diabétiques ».
+  const [editConditions, setEditConditions] = useState<string[]>(nettoyerEtiquettes(patient.conditions))
+  const [saisieEtiquette, setSaisieEtiquette] = useState('')
+  const [saisieActive, setSaisieActive] = useState(false)
+  // Étiquettes déjà posées ailleurs dans la patientèle : c'est à la deuxième
+  // fiche qu'un praticien ne doit plus retaper « Lupus » lui-même.
+  const [etiquettesConnues, setEtiquettesConnues] = useState<string[]>([])
+  // DÉGRADATION PROPRE — tant que la v72 n'est pas passée, la colonne n'existe
+  // pas. La fiche est lue en `select('*')` : la clé est alors tout simplement
+  // ABSENTE de la ligne, alors qu'elle vaut toujours un tableau une fois la
+  // migration faite (NOT NULL DEFAULT '{}'). Ce test suffit donc, sans
+  // interroger le schéma — et il évite d'afficher un sélecteur dont la saisie
+  // serait perdue au premier enregistrement.
+  const etiquettesDisponibles = Array.isArray(patient.conditions)
   const [editSurgeries, setEditSurgeries] = useState(patient.surgeries ?? '')
   const [editTreatments, setEditTreatments] = useState(patient.current_treatments ?? '')
   const [editVaccinations, setEditVaccinations] = useState(patient.vaccinations ?? '')
@@ -180,6 +197,27 @@ export default function PatientDossier({
   }, [patient.id, supabase])
   useEffect(() => { load() }, [load])
 
+  // Les étiquettes déjà employées par ce médecin, pour les proposer à la
+  // frappe. Lue seulement à l'ouverture du mode modification : la consulter à
+  // chaque dossier ouvert serait une requête sur toute la patientèle pour un
+  // écran qui, la plupart du temps, ne sert qu'à lire.
+  useEffect(() => {
+    if (!edition || !etiquettesDisponibles) return
+    let annule = false
+    supabase.from('patients').select('conditions').eq('doctor_id', doctorId)
+      .then(({ data }) => {
+        if (annule) return
+        const brutes = (data ?? []).flatMap((p) => (p.conditions ?? []) as string[])
+        // Dédoublonnage par la forme normalisée, et SANS passer par
+        // nettoyerEtiquettes : sa borne de 20 vaut pour une fiche, pas pour le
+        // vocabulaire d'un cabinet entier — elle amputerait les propositions.
+        setEtiquettesConnues(Array.from(new Set(
+          brutes.map((e) => normaliserEtiquette(e)).filter((e): e is string => !!e),
+        )))
+      })
+    return () => { annule = true }
+  }, [edition, etiquettesDisponibles, doctorId, supabase])
+
   // Frères et sœurs (même family_id)
   useEffect(() => {
     if (!familyId) { setSiblings([]); return }
@@ -239,6 +277,20 @@ export default function PatientDossier({
     if (!error) setSiblings((prev) => prev.filter((s) => s.id !== id))
   }
 
+  // Pose une étiquette sur la fiche. Tout passe par normaliserEtiquette :
+  // « hypertension arterielle » tapé à la hâte doit rejoindre la cohorte
+  // « Hypertension artérielle » déjà constituée, pas en créer une deuxième.
+  function poserEtiquette(brut: string) {
+    const e = normaliserEtiquette(brut)
+    if (!e) return
+    setSaisieEtiquette('')
+    if (dejaPosee(editConditions, e)) return
+    setEditConditions((prev) => nettoyerEtiquettes([...prev, e]))
+  }
+  function retirerEtiquette(e: string) {
+    setEditConditions((prev) => prev.filter((x) => x !== e))
+  }
+
   async function saveIdentity() {
     setSaving(true)
     const updates = {
@@ -266,8 +318,22 @@ export default function PatientDossier({
       surgeries: editSurgeries || null,
       current_treatments: editTreatments || null,
       vaccinations: editVaccinations || null,
+      // Étiquettes : seulement si la colonne existe (v72). Écrire une clé
+      // inconnue ferait échouer TOUT l'enregistrement — allergies et
+      // antécédents compris — et la perte serait silencieuse pour le médecin.
+      ...(etiquettesDisponibles ? { conditions: nettoyerEtiquettes(editConditions) } : {}),
     }
-    const { error } = await supabase.from('patients').update(updates).eq('id', patient.id)
+    let { error } = await supabase.from('patients').update(updates).eq('id', patient.id)
+    // Ceinture et bretelles : le cache de schéma de PostgREST peut encore
+    // ignorer la colonne juste après la migration (PGRST204), ou la connaître
+    // alors que la fiche avait été lue avant (42703). Plutôt que de refuser
+    // l'enregistrement entier, on réécrit sans les étiquettes et on le DIT.
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const { conditions: _ignore, ...sansEtiquettes } = updates as typeof updates & { conditions?: string[] }
+      const retry = await supabase.from('patients').update(sansEtiquettes).eq('id', patient.id)
+      error = retry.error
+      if (!error) alert('Fiche enregistrée, sauf les étiquettes de pathologie : la migration v72 n\'est pas encore passée.')
+    }
     setSaving(false)
     if (error) { alert('L\'enregistrement a échoué. Réessayez.'); return }
     // Même règle que le trigger v59 : une autre adresse n'a pas rebondi.
@@ -705,6 +771,66 @@ export default function PatientDossier({
             <div className="space-y-2.5">
               <div className="space-y-1"><Label className="text-[11px] text-gray-400">Allergies</Label><textarea value={editAllergies} onChange={(e) => setEditAllergies(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
               <div className="space-y-1"><Label className="text-[11px] text-gray-400">Maladies chroniques</Label><textarea value={editChronic} onChange={(e) => setEditChronic(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+              {/* Étiquettes — juste sous le texte libre qu'elles complètent,
+                  parce que c'est en écrivant « diabète type 2 déséquilibré »
+                  qu'on pense à poser l'étiquette qui retrouvera la fiche.
+                  Gris uni, une seule couleur : une pathologie n'est pas plus
+                  grave qu'une autre, et vingt pastilles colorées rendraient la
+                  carte illisible. */}
+              {etiquettesDisponibles && (
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-gray-400">Étiquettes de suivi</Label>
+                  {editConditions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pb-0.5">
+                      {editConditions.map((e) => (
+                        <span key={e} className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs rounded-full pl-2.5 pr-1 py-1">
+                          {e}
+                          <button type="button" onClick={() => retirerEtiquette(e)} title={`Retirer « ${e} »`} className="text-gray-400 hover:text-red-500"><X className="h-3 w-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="relative">
+                    <Input
+                      value={saisieEtiquette}
+                      onChange={(ev) => setSaisieEtiquette(ev.target.value)}
+                      onFocus={() => setSaisieActive(true)}
+                      onBlur={() => setSaisieActive(false)}
+                      // Entrée valide la saisie telle quelle : c'est ce qui
+                      // garde la liste OUVERTE. Une pathologie absente de
+                      // lib/pathologies.ts s'ajoute sans rien demander.
+                      onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.preventDefault(); poserEtiquette(saisieEtiquette) } }}
+                      placeholder="Diabète, hypertension…"
+                      className="h-9"
+                    />
+                    {saisieActive && (() => {
+                      // Huit propositions au plus : au-delà, la liste masque la
+                      // moitié du formulaire pour aider deux fois moins.
+                      const props = suggestions(saisieEtiquette, editConditions, etiquettesConnues).slice(0, 8)
+                      if (props.length === 0) return null
+                      return (
+                        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-md overflow-hidden">
+                          {props.map((p) => (
+                            // onMouseDown empêche le blur de fermer la liste
+                            // AVANT que le clic n'arrive : sans lui, cliquer
+                            // une proposition ne fait rien.
+                            <button
+                              key={p}
+                              type="button"
+                              onMouseDown={(ev) => ev.preventDefault()}
+                              onClick={() => poserEtiquette(p)}
+                              className="w-full text-left px-3 py-1.5 text-sm hover:bg-primary-50"
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                  <p className="text-[11px] text-gray-400">Pour retrouver ce patient dans « tous mes diabétiques ». Le détail clinique reste dans le champ au-dessus.</p>
+                </div>
+              )}
               <div className="space-y-1"><Label className="text-[11px] text-gray-400">Antécédents chirurgicaux</Label><textarea value={editSurgeries} onChange={(e) => setEditSurgeries(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
               <div className="space-y-1"><Label className="text-[11px] text-gray-400">Traitements de fond</Label><textarea value={editTreatments} onChange={(e) => setEditTreatments(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
               {!isPsy && (
@@ -828,13 +954,25 @@ export default function PatientDossier({
               <div className="space-y-4">
                 {/* Antécédents en lecture : on les voit sans pouvoir les
                     effacer d'un clic malheureux ; « Modifier » ouvre la fiche. */}
-                {(editAllergies || editChronic || editSurgeries || editTreatments) && (
+                {(editAllergies || editChronic || editSurgeries || editTreatments || editConditions.length > 0) && (
                   <div className={sec}>
                     <div className={secTitle}>
                       <span className="flex items-center gap-1.5"><HeartPulse className="h-4 w-4" /> Antécédents</span>
                       <button onClick={() => setEdition(true)} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">Modifier</button>
                     </div>
                     <div className="space-y-2 text-sm">
+                      {/* Les étiquettes se LISENT hors du mode modification :
+                          c'est une information clinique, pas un réglage. En
+                          tête de carte, parce qu'elles disent en trois mots ce
+                          qu'on suit chez ce patient. Rien du tout quand il n'y
+                          en a pas : pas de libellé vide, pas de place prise. */}
+                      {editConditions.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {editConditions.map((e) => (
+                            <span key={e} className="bg-gray-100 text-gray-600 text-[11px] rounded-full px-2 py-0.5">{e}</span>
+                          ))}
+                        </div>
+                      )}
                       {editChronic && <div><p className="text-[11px] text-gray-400">Maladies chroniques</p><p className="text-gray-700 whitespace-pre-wrap">{editChronic}</p></div>}
                       {editTreatments && <div><p className="text-[11px] text-gray-400">Traitements de fond</p><p className="text-gray-700 whitespace-pre-wrap">{editTreatments}</p></div>}
                       {editSurgeries && <div><p className="text-[11px] text-gray-400">Antécédents chirurgicaux</p><p className="text-gray-700 whitespace-pre-wrap">{editSurgeries}</p></div>}
@@ -858,7 +996,7 @@ export default function PatientDossier({
                 {recalls.filter((r) => r.status !== 'cancelled').map((r) => (
                   <div key={r.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-2.5 py-1.5 mb-1.5">
                     <span className="text-xs text-gray-700">{formatDateShort(r.due_date)}{r.reason ? ` — ${r.reason}` : ''}</span>
-                    {r.status === 'pending' && <button onClick={() => cancelRecall(r.id)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>}
+                    {RECALL_OUVERTS.includes(r.status) && <button onClick={() => cancelRecall(r.id)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>}
                   </div>
                 ))}
                 <div className="flex gap-1.5">

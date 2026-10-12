@@ -53,6 +53,33 @@ export function installmentsTotal(list: Pick<QuoteInstallment, 'amount'>[]): num
   return round2(list.reduce((s, e) => s + Number(e.amount ?? 0), 0))
 }
 
+// ── Avancement du plan de traitement (migration v67) ────────────────────────
+
+/** La prochaine séance à réaliser : parmi les actes NON FAITS, celle qui
+ *  porte le plus petit numéro. Les actes non planifiés ferment la marche —
+ *  ils restent à organiser, ils ne sont pas « la prochaine étape ».
+ *
+ *  C'est ce que la secrétaire doit lire au moment où le patient se lève : sans
+ *  cette ligne, elle ne peut pas proposer le rendez-vous suivant, et le patient
+ *  repart en disant « je rappellerai ».
+ *
+ *  Vit ici et non dans QuotesCard parce que l'écran de consultation s'en sert
+ *  aussi : importer la fonction depuis le composant Devis y embarquerait tout
+ *  le composant (ses 800 lignes, le schéma FDI, l'échéancier) dans le bundle
+ *  d'un écran qui n'affiche rien de tout cela. */
+export function prochaineSeanceAFaire(items: QuoteItem[]): {
+  seance: number | null; items: QuoteItem[]; total: number
+} | null {
+  const restants = items.filter((i) => !i.done)
+  if (restants.length === 0) return null
+  const numerotes = restants.filter((i) => i.session_no != null)
+  const seance = numerotes.length > 0
+    ? Math.min(...numerotes.map((i) => i.session_no as number))
+    : null
+  const lot = restants.filter((i) => (i.session_no ?? null) === seance)
+  return { seance, items: lot, total: lot.reduce((t, i) => t + itemTotal(i), 0) }
+}
+
 // ── Validité du devis (migration v58) ───────────────────────────────────────
 //
 // Décision de la propriétaire, appliquée à la lettre : un TEXTE LIBRE, saisi

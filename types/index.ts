@@ -124,6 +124,11 @@ export interface Patient {
   // Dossier médical enrichi (antécédents structurés)
   allergies?: string | null
   chronic_conditions?: string | null      // maladies chroniques
+  // Étiquettes de pathologie (v72) : elles servent à RETROUVER une cohorte
+  // (« tous mes diabétiques »), là où chronic_conditions garde la nuance
+  // clinique en texte libre. Les deux coexistent, aucune ne remplace l'autre.
+  // Facultatif : la colonne est absente tant que la v72 n'est pas passée.
+  conditions?: string[] | null
   surgeries?: string | null               // antécédents chirurgicaux
   current_treatments?: string | null      // traitements de fond
   vaccinations?: string | null            // vaccins / statut vaccinal (texte libre)
@@ -222,7 +227,13 @@ export interface CreditNote {
 }
 
 // Rappel de suivi ("revenez dans X mois")
-export type RecallStatus = 'pending' | 'sent' | 'done' | 'cancelled'
+// 'a_rappeler' (v71) : le rappel est dû mais le patient n'a pas d'adresse —
+// personne ne le préviendra à notre place, c'est au cabinet d'appeler. Il est
+// donc OUVERT, au même titre que 'pending', partout où le praticien agit.
+export type RecallStatus = 'pending' | 'a_rappeler' | 'sent' | 'done' | 'cancelled'
+
+/** Les statuts sur lesquels il reste quelque chose à faire. */
+export const RECALL_OUVERTS: RecallStatus[] = ['pending', 'a_rappeler']
 export interface Recall {
   id: string
   doctor_id: string

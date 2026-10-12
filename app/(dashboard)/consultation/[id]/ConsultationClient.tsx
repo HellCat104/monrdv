@@ -1,7 +1,7 @@
 'use client'
 
-// Poste de consultation : 3 colonnes (dossier / note+constantes / actions).
-import { useState, useEffect, useRef, useCallback } from 'react'
+// Poste de consultation : 3 colonnes (dossier / actes+note+constantes / actions).
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { formatDateFr, formatAge } from '@/lib/utils'
 import { PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import DentalChart from '@/components/dashboard/DentalChart'
 import FeuilleSoinsCard, { type ActeSuggere } from '@/components/dashboard/FeuilleSoinsCard'
+import ActesDuJourCard from './ActesDuJourCard'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
   AlertTriangle, CheckCircle2, Plus,
@@ -17,6 +18,32 @@ import {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>
+
+/**
+ * Historique replié de la colonne gauche.
+ *
+ * Les trois cartes du dossier (constantes, notes, ordonnances) affichaient
+ * chacune leurs trois dernières entrées, soit une dizaine de lignes de passé
+ * en permanence. Pendant la consultation, ce qui compte est la DERNIÈRE : le
+ * reste sert une fois sur dix, et toujours sur décision du praticien. On le
+ * laisse donc à un clic plutôt qu'à l'écran — c'est la place rendue à l'encart
+ * « Actes du jour », qui lui est utile à chaque séance.
+ *
+ * `<details>` et non un état React : l'ouverture d'un historique n'a aucune
+ * conséquence et ne mérite pas de rendu, et la carte reste dépliable même si
+ * le JavaScript n'a pas fini de charger.
+ */
+function HistoriqueReplie({ n, libelle, children }: { n: number; libelle: string; children: ReactNode }) {
+  if (n <= 0) return null
+  return (
+    <details className="mt-1">
+      <summary className="list-none cursor-pointer select-none text-[11px] text-gray-400 hover:text-primary-600">
+        + {n} {libelle}
+      </summary>
+      <div className="mt-1.5">{children}</div>
+    </details>
+  )
+}
 interface Patient { id: string; first_name: string; last_name: string; age?: number | null; birth_date?: string | null; blood_group?: string | null; phone?: string | null; cin?: string | null; mutuelle?: string | null; allergies?: string | null; chronic_conditions?: string | null; surgeries?: string | null; current_treatments?: string | null; vaccinations?: string | null }
 
 export default function ConsultationClient({
@@ -66,9 +93,52 @@ export default function ConsultationClient({
   const [payMethod, setPayMethod] = useState<string>('especes')
   const [payingNow, setPayingNow] = useState(false)
   const [finishing, setFinishing] = useState(false)
+  // Un acte du plan de traitement a été rattaché à cette séance : son argent se
+  // saisit désormais sur le devis (verrou v54). On le dit AVANT que le praticien
+  // remplisse le formulaire d'encaissement, plutôt que de le lui apprendre par
+  // un refus du serveur après avoir tapé le montant.
+  //
+  // Ne redescend jamais à false, et c'est exact : décocher un acte vide bien
+  // son `appointment_id`, mais le `quote_id` posé sur le rendez-vous y reste
+  // (PATCH /api/quotes/[id]/items/[itemId] ne le retire pas). Le rendez-vous
+  // demeure donc « réglé via le devis » ; masquer l'avertissement promettrait
+  // un encaissement que le serveur refusera encore.
+  const [actesSurDevis, setActesSurDevis] = useState(false)
 
   const vLabel = (k: string) => vitalDefsAll.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefsAll.find((v) => v.key === k)?.unit || ''
+
+  // Les notes du patient moins celle de CETTE consultation : elle est déjà
+  // ouverte au centre, la relire à gauche ferait croire à un doublon.
+  const notesPrecedentes = recentNotes.filter((n) => n.id !== noteId).slice(0, 3)
+
+  /** Une mesure sur une ligne. Extraite parce qu'elle sert deux fois : la plus
+   *  récente, visible, et les précédentes dans l'historique replié. */
+  const ligneMesure = (m: Row) => (
+    <div key={m.id} className="text-xs text-gray-600 mb-1.5">
+      <span className="text-gray-400">{formatDateFr(m.measured_at)} — </span>
+      {Object.entries((m.values ?? {}) as Record<string, number>).map(([k, val]) => `${vLabel(k)} ${val}${vUnit(k) ? ' ' + vUnit(k) : ''}`).join(' · ')}
+    </div>
+  )
+
+  const ligneNote = (n: Row) => (
+    <div key={n.id} className="text-xs text-gray-600 mb-2 border-l-2 border-gray-100 pl-2">
+      <p className="text-gray-400">{formatDateFr(n.created_at)}</p>
+      <p className="line-clamp-3 whitespace-pre-wrap">{n.note}</p>
+    </div>
+  )
+
+  const ligneOrdonnance = (p: Row) => (
+    <button
+      key={p.id}
+      onClick={() => goTo(`/ordonnance/p/${p.id}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
+      className="block w-full text-left text-xs text-gray-600 hover:text-primary-600 mb-1.5 border-l-2 border-gray-100 hover:border-primary-300 pl-2"
+      title="Modifier cette ordonnance"
+    >
+      <span className="text-gray-400">{formatDateFr(p.created_at)} · modifier</span>
+      <span className="block line-clamp-1 whitespace-pre-wrap">{p.content}</span>
+    </button>
+  )
 
   const savingRef = useRef(false)
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -218,47 +288,67 @@ export default function ConsultationClient({
           {vitals.length > 0 && (
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" /> Dernières constantes</h3>
-              {vitals.slice(0, 3).map((m) => (
-                <div key={m.id} className="text-xs text-gray-600 mb-1.5">
-                  <span className="text-gray-400">{formatDateFr(m.measured_at)} — </span>
-                  {Object.entries((m.values ?? {}) as Record<string, number>).map(([k, val]) => `${vLabel(k)} ${val}${vUnit(k) ? ' ' + vUnit(k) : ''}`).join(' · ')}
-                </div>
-              ))}
+              {ligneMesure(vitals[0])}
+              <HistoriqueReplie n={Math.min(vitals.length, 3) - 1} libelle="mesure(s) plus ancienne(s)">
+                {vitals.slice(1, 3).map((m) => ligneMesure(m))}
+              </HistoriqueReplie>
             </div>
           )}
 
-          {recentNotes.length > 0 && (
+          {notesPrecedentes.length > 0 && (
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5"><HeartPulse className="h-3.5 w-3.5" /> Notes précédentes</h3>
-              {recentNotes.filter((n) => n.id !== noteId).slice(0, 3).map((n) => (
-                <div key={n.id} className="text-xs text-gray-600 mb-2 border-l-2 border-gray-100 pl-2">
-                  <p className="text-gray-400">{formatDateFr(n.created_at)}</p>
-                  <p className="line-clamp-3 whitespace-pre-wrap">{n.note}</p>
-                </div>
-              ))}
+              {ligneNote(notesPrecedentes[0])}
+              <HistoriqueReplie n={notesPrecedentes.length - 1} libelle="note(s) plus ancienne(s)">
+                {notesPrecedentes.slice(1).map((n) => ligneNote(n))}
+              </HistoriqueReplie>
             </div>
           )}
 
           {recentPrescriptions.length > 0 && (
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Pill className="h-3.5 w-3.5" /> Ordonnances récentes</h3>
-              {recentPrescriptions.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => goTo(`/ordonnance/p/${p.id}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
-                  className="block w-full text-left text-xs text-gray-600 hover:text-primary-600 mb-1.5 border-l-2 border-gray-100 hover:border-primary-300 pl-2"
-                  title="Modifier cette ordonnance"
-                >
-                  <span className="text-gray-400">{formatDateFr(p.created_at)} · modifier</span>
-                  <span className="block line-clamp-1 whitespace-pre-wrap">{p.content}</span>
-                </button>
-              ))}
+              {ligneOrdonnance(recentPrescriptions[0])}
+              <HistoriqueReplie n={recentPrescriptions.length - 1} libelle="ordonnance(s) plus ancienne(s)">
+                {recentPrescriptions.slice(1).map((p) => ligneOrdonnance(p))}
+              </HistoriqueReplie>
             </div>
           )}
         </aside>
 
-        {/* ── Colonne centrale : note + constantes ──────────────────── */}
+        {/* ── Colonne centrale ──────────────────────────────────────────
+            ORDRE DES BLOCS, et pourquoi celui-là.
+
+            Actes du jour · Note · Constantes · Schéma dentaire · Ordonnances ·
+            Feuille de soins. UN SEUL ordre pour toutes les spécialités : deux
+            ordres, c'est deux écrans à maintenir, et un médecin à la fois
+            généraliste et dentiste (ça existe, `specialties` est une liste)
+            tomberait de toute façon dans l'un des deux au hasard.
+
+            Ce qui le rend possible : « Constantes du jour » ne s'affiche que si
+            la spécialité en déclare (la table par défaut n'en attribue AUCUNE au
+            dentiste). Le bloc remonté sert donc le généraliste, qui prend la
+            tension avant d'écrire et l'avait jusqu'ici tout en bas — quinze
+            défilements par jour ; et il s'efface chez le dentiste, chez qui le
+            schéma dentaire reste collé sous la note, là où il doit être.
+
+            « Actes du jour » passe AU-DESSUS de la note, pas entre les deux :
+            c'est le programme de la séance, qu'on lit avant d'écrire, et le
+            glisser sous la note décollerait le schéma dentaire de celle-ci. */}
         <section className="lg:col-span-5 space-y-3">
+          {/* Dentistes seulement : l'encart vient d'un plan de traitement chiffré,
+              un objet dentaire. Chez les autres spécialités il n'y a rien à
+              cocher, et on évite en plus une lecture de devis à chaque
+              consultation d'un généraliste qui n'en fait jamais. */}
+          {isDental && (
+            <ActesDuJourCard
+              patientId={patient.id}
+              appointmentId={appointmentId}
+              appointmentPaid={paid}
+              onRattachement={() => setActesSurDevis(true)}
+            />
+          )}
+
           <div className="bg-white border border-gray-100 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-gray-700">Note de consultation</h3>
@@ -287,6 +377,34 @@ export default function ConsultationClient({
             />
           </div>
 
+          {/* Constantes du jour — juste sous la note : la tension se prend au
+              début de la consultation, et les valeurs restent sous les yeux
+              pendant que la note s'écrit. Rendu seulement si la spécialité
+              déclare des constantes, ce qui est ce qui permet au schéma
+              dentaire de rester collé à la note chez le dentiste (voir
+              l'en-tête de cette colonne). */}
+          {vitalDefs.length > 0 && (
+            <div className="bg-white border border-gray-100 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Activity className="h-4 w-4 text-primary-500" /> Constantes du jour</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+                {vitalDefs.map((v) => (
+                  <div key={v.key} className="relative">
+                    <Input
+                      type="number" step={v.step ?? 'any'} inputMode="decimal"
+                      value={vitalInput[v.key] ?? ''}
+                      onChange={(e) => setVitalInput((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                      placeholder={v.label} className="pr-10 text-sm" aria-label={v.label}
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">{v.unit}</span>
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={saveVitals} disabled={savingVital}>
+                <Plus className="h-4 w-4 mr-1" /> {savingVital ? 'Enregistrement…' : 'Enregistrer les constantes'}
+              </Button>
+            </div>
+          )}
+
           {/* Schéma dentaire — le même composant que dans la fiche patient, donc
               le même enregistrement (auto, via /api/dental) et le même journal
               dent par dent. Le dentiste note ce qu'il voit pendant qu'il le voit,
@@ -300,7 +418,7 @@ export default function ConsultationClient({
 
           {/* Ordonnances de cette consultation (plusieurs possibles) */}
           <div className="bg-white border border-gray-100 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
+            <div className={`flex items-center justify-between ${consultationPrescriptions.length > 0 ? 'mb-2' : ''}`}>
               <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                 <Pill className="h-4 w-4 text-primary-500" /> Ordonnances de la consultation ({consultationPrescriptions.length})
               </h3>
@@ -311,9 +429,12 @@ export default function ConsultationClient({
                 <Plus className="h-4 w-4 mr-1" /> Nouvelle
               </Button>
             </div>
-            {consultationPrescriptions.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">Aucune ordonnance. Cliquez « Nouvelle » pour en rédiger une (vous pouvez en faire plusieurs).</p>
-            ) : (
+            {/* Pas d'ordonnance : la carte se réduit à son titre et à son
+                bouton. La phrase « Aucune ordonnance. Cliquez Nouvelle… » qui
+                tenait ici n'apprenait rien que le bouton ne dise déjà, et
+                occupait une ligne sur un écran qu'on veut lisible d'un coup
+                d'œil. Le compteur (0) dit l'état. */}
+            {consultationPrescriptions.length > 0 && (
               <div className="space-y-1.5">
                 {consultationPrescriptions.map((p, i) => (
                   <button
@@ -344,28 +465,6 @@ export default function ConsultationClient({
               mutuelle={mutuelle}
               suggestions={suggestionsFeuille}
             />
-          )}
-
-          {vitalDefs.length > 0 && (
-            <div className="bg-white border border-gray-100 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Activity className="h-4 w-4 text-primary-500" /> Constantes du jour</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
-                {vitalDefs.map((v) => (
-                  <div key={v.key} className="relative">
-                    <Input
-                      type="number" step={v.step ?? 'any'} inputMode="decimal"
-                      value={vitalInput[v.key] ?? ''}
-                      onChange={(e) => setVitalInput((prev) => ({ ...prev, [v.key]: e.target.value }))}
-                      placeholder={v.label} className="pr-10 text-sm" aria-label={v.label}
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">{v.unit}</span>
-                  </div>
-                ))}
-              </div>
-              <Button variant="outline" size="sm" onClick={saveVitals} disabled={savingVital}>
-                <Plus className="h-4 w-4 mr-1" /> {savingVital ? 'Enregistrement…' : 'Enregistrer les constantes'}
-              </Button>
-            </div>
           )}
 
         </section>
@@ -412,6 +511,16 @@ export default function ConsultationClient({
             ) : (
               <div className="border border-gray-200 rounded-lg p-3 space-y-2">
                 <p className="text-xs font-medium text-gray-600 flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5 text-green-500" /> Encaisser</p>
+                {/* Des actes du plan ont été rattachés à cette séance : le
+                    serveur refusera un encaissement ici, et il a raison — la
+                    somme serait comptée deux fois (une fois sur le devis, une
+                    fois sur le rendez-vous). Dit ici plutôt qu'en erreur après
+                    la saisie du montant. */}
+                {actesSurDevis && (
+                  <p className="text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5">
+                    Actes du plan de traitement rattachés à cette séance : le versement se saisit sur le devis, dans le dossier du patient.
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <label className="text-[11px] text-gray-500">Total dû</label>

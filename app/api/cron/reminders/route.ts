@@ -9,6 +9,10 @@ import { MAROC_TZ } from '@/lib/utils'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 
+/** 23514 = contrainte CHECK violée. Ici : la base refuse encore le statut
+ *  `a_rappeler` parce que la migration v71 n'est pas passée. */
+const CONTRAINTE_REFUSEE = '23514'
+
 export async function GET(req: NextRequest) {
   // Vérifie le secret Cron pour éviter les appels non autorisés
   const authHeader = req.headers.get('authorization')
@@ -97,7 +101,10 @@ export async function GET(req: NextRequest) {
 
   // ── Rappels de suivi ("revenez dans X mois") arrivés à échéance ───────────
   const today = format(nowMaroc, 'yyyy-MM-dd')
-  let recallSent = 0, recallSkipped = 0, recallFailed = 0
+  let recallSent = 0, recallSkipped = 0, recallFailed = 0, recallAAppeler = 0
+  // Vrai si la base a refusé `a_rappeler` : la réponse archivée par
+  // cron-job.org devient alors le rappel que la v71 reste à appliquer.
+  let v71Manquante = false
 
   const { data: recalls, error: errRecalls } = await supabase
     .from('recalls')
@@ -124,10 +131,28 @@ export async function GET(req: NextRequest) {
         const patient = rec.patient as any
         const doctor  = rec.doctor  as any
         if (!patient?.email || !doctor?.slug) {
-          // Pas d'email : on marque quand même traité pour ne pas boucler
-          const { error: skipErr } = await supabase.from('recalls')
-            .update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rec.id)
-          if (skipErr) console.error(`[cron] rappel ${rec.id} non marqué :`, skipErr.message)
+          // Aucun e-mail ne peut partir (patient sans adresse, ou médecin sans
+          // slug donc sans page de réservation à proposer). Le statut `sent`
+          // qu'on écrivait ici refermait le rappel : personne n'était prévenu
+          // et le cabinet ne le savait pas. `a_rappeler` le laisse OUVERT pour
+          // que le tableau de bord le réclame et qu'on décroche le téléphone.
+          // `sent_at` reste NULL : rien n'est parti, et le prétendre
+          // empêcherait plus tard de comprendre pourquoi.
+          const { error: aAppelerErr } = await supabase.from('recalls')
+            .update({ status: 'a_rappeler' }).eq('id', rec.id)
+          if (!aAppelerErr) {
+            recallAAppeler++
+          } else if (aAppelerErr.code === CONTRAINTE_REFUSEE) {
+            // v71 pas encore passée : on revient à l'ancien comportement.
+            // Laisser la ligne en `pending` serait pire — elle reviendrait à
+            // chaque passage et ferait grossir indéfiniment le lot du cron.
+            v71Manquante = true
+            const { error: repliErr } = await supabase.from('recalls')
+              .update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', rec.id)
+            if (repliErr) console.error(`[cron] rappel ${rec.id} non marqué :`, repliErr.message)
+          } else {
+            console.error(`[cron] rappel ${rec.id} non marqué « à appeler » :`, aAppelerErr.message)
+          }
           recallSkipped++; return
         }
         try {
@@ -157,15 +182,19 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  console.log(`[Cron recalls] ${recallSent} envoyés, ${recallSkipped} sans email, ${recallFailed} échoués`)
+  console.log(`[Cron recalls] ${recallSent} envoyés, ${recallSkipped} sans email (dont ${recallAAppeler} à appeler), ${recallFailed} échoués`)
 
   return NextResponse.json({
     reminders: { sent, skipped, failed, date: targetDate },
     recalls: {
       sent: recallSent, skipped: recallSkipped, failed: recallFailed,
+      // Les rappels sans e-mail, désormais rendus au cabinet au lieu d'être
+      // refermés en silence.
+      aAppeler: recallAAppeler,
       // Présent seulement en cas d'échec : « 0 envoyé » ne doit pas pouvoir
       // se confondre avec « aucune échéance aujourd'hui ».
       ...(errRecalls ? { erreurLecture: errRecalls.message } : {}),
+      ...(v71Manquante ? { migrationV71AAppliquer: true } : {}),
     },
   })
 }

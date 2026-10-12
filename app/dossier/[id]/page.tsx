@@ -118,6 +118,9 @@ export default async function DossierPage({ params }: Props) {
         <div className="text-sm text-gray-600">Téléphone : {patient.phone}{patient.email ? ` · ${patient.email}` : ''}</div>
         <div className="mt-3 grid grid-cols-1 gap-1.5 text-sm">
           {patient.allergies && <div><span className="text-red-600 font-medium">Allergies :</span> {patient.allergies}</div>}
+          {Array.isArray(patient.conditions) && patient.conditions.length > 0 && (
+            <div><span className="text-orange-600 font-medium">Pathologies :</span> {(patient.conditions as string[]).join(' · ')}</div>
+          )}
           {patient.chronic_conditions && <div><span className="text-orange-600 font-medium">Antécédents :</span> {patient.chronic_conditions}</div>}
           {patient.current_treatments && <div><span className="text-blue-600 font-medium">Traitements en cours :</span> {patient.current_treatments}</div>}
           {patient.notes && <div><span className="text-gray-500 font-medium">Notes :</span> {patient.notes}</div>}

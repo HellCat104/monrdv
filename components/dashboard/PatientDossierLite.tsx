@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getInitials, formatDateFr, formatDateShort, getNowInMaroc } from '@/lib/utils'
-import { STATUS_LABELS, type Patient, type AppointmentStatus, type Recall } from '@/types'
+import { STATUS_LABELS, type Patient, type AppointmentStatus, type Recall, RECALL_OUVERTS } from '@/types'
 import { ArrowLeft, Phone, Save, Check, Calendar, Wallet, BellRing, Plus, X } from 'lucide-react'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 
@@ -263,8 +263,9 @@ export default function PatientDossierLite({ initialPatient }: { initialPatient:
                 <span className="text-sm text-gray-700">
                   {formatDateShort(r.due_date)}{r.reason ? ` — ${r.reason}` : ''}
                   {r.status === 'sent' && <span className="text-xs text-green-600 ml-2">envoyé</span>}
+                  {r.status === 'a_rappeler' && <span className="text-xs text-red-500 ml-2">à appeler</span>}
                 </span>
-                {r.status === 'pending' && (
+                {RECALL_OUVERTS.includes(r.status) && (
                   <button onClick={() => cancelRecall(r.id)} className="text-gray-300 hover:text-red-500 shrink-0" title="Annuler ce rappel">
                     <X className="h-4 w-4" />
                   </button>

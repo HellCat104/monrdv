@@ -99,8 +99,30 @@ export async function POST(req: NextRequest) {
     'primary_contact', 'family_id', 'is_child'] as const) {
     if ((keep[f] == null || keep[f] === '') && merge[f] != null && merge[f] !== '') fill[f] = merge[f]
   }
+  // Les étiquettes de pathologie (v72) ne se « complètent » pas : elles
+  // s'ADDITIONNENT. La règle ci-dessus ne remplit que ce qui est vide, et un
+  // tableau vide n'est ni null ni '' — les étiquettes de la fiche supprimée
+  // auraient donc été perdues en silence, sur la fiche d'un chronique,
+  // c'est-à-dire exactement là où elles servent.
+  const etiquettes = Array.isArray((keep as Record<string, unknown>).conditions)
+    || Array.isArray((merge as Record<string, unknown>).conditions)
+    ? Array.from(new Set([
+        ...(((keep as Record<string, unknown>).conditions as string[] | undefined) ?? []),
+        ...(((merge as Record<string, unknown>).conditions as string[] | undefined) ?? []),
+      ]))
+    : null
+  if (etiquettes) fill.conditions = etiquettes
+
   if (Object.keys(fill).length > 0) {
-    await db.from('patients').update(fill).eq('id', keepId)
+    // Colonne absente (v72 pas encore passée) : on réessaie sans les
+    // étiquettes plutôt que de faire échouer toute la fusion.
+    const { error: fillErr } = await db.from('patients').update(fill).eq('id', keepId)
+    if (fillErr && (fillErr.code === '42703' || fillErr.code === 'PGRST204')) {
+      delete fill.conditions
+      if (Object.keys(fill).length > 0) await db.from('patients').update(fill).eq('id', keepId)
+    } else if (fillErr) {
+      console.error('[fusion] champs non repris :', fillErr.message)
+    }
   }
 
   // 3. Supprime la fiche en double (désormais vidée de ses liens)

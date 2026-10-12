@@ -19,6 +19,13 @@ export async function PATCH(
   const body = await req.json().catch(() => ({}))
   const updates: Record<string, unknown> = {}
 
+  // Le rendez-vous auquel cette ligne était rattachée AVANT la modification :
+  // c'est lui qu'il faudra peut-être libérer (voir la fin de la fonction).
+  const { data: avant } = await supabase
+    .from('quote_items').select('appointment_id')
+    .eq('id', params.itemId).eq('quote_id', quote.id).eq('doctor_id', doctor.id).maybeSingle()
+  const ancienRdv = (avant?.appointment_id as string | null) ?? null
+
   if (body.label !== undefined) {
     const label = String(body.label).trim().slice(0, 160)
     if (!label) return NextResponse.json({ error: 'Libellé manquant' }, { status: 400 })
@@ -122,6 +129,31 @@ export async function PATCH(
 
   await supabase.from('quotes').update({ updated_at: new Date().toISOString() })
     .eq('id', quote.id).eq('doctor_id', doctor.id)
+
+  // LIBÉRATION DU RENDEZ-VOUS
+  //
+  // Rattacher un acte pose `quote_id` sur le rendez-vous, ce qui lui interdit
+  // tout encaissement propre (trigger v54 : la même somme ne peut pas être
+  // comptée deux fois). Mais détacher le dernier acte ne retirait PAS ce
+  // `quote_id` : le rendez-vous restait « réglé via le devis » pour toujours,
+  // et le praticien se retrouvait avec une séance qu'il ne pouvait plus
+  // encaisser, sans comprendre pourquoi. On le libère donc dès qu'aucune
+  // ligne du devis ne pointe plus vers lui.
+  const nouveauRdv = (data.appointment_id as string | null) ?? null
+  if (ancienRdv && ancienRdv !== nouveauRdv) {
+    const { count } = await supabase
+      .from('quote_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('quote_id', quote.id).eq('doctor_id', doctor.id).eq('appointment_id', ancienRdv)
+    if ((count ?? 0) === 0) {
+      const { error: errLiberation } = await supabase
+        .from('appointments').update({ quote_id: null })
+        .eq('id', ancienRdv).eq('doctor_id', doctor.id).eq('quote_id', quote.id)
+      // Un échec ici ne doit pas annuler la modification de l'acte, déjà
+      // écrite : on le signale, le praticien garde un RDV verrouillé.
+      if (errLiberation) console.error('[Devis] rendez-vous non libéré :', errLiberation.message)
+    }
+  }
 
   return NextResponse.json(data)
 }

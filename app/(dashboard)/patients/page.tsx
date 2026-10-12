@@ -7,6 +7,7 @@ import DentalChart from '@/components/dashboard/DentalChart'
 import GrowthChart from '@/components/dashboard/GrowthChart'
 import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import { isDentalDoctor } from '@/lib/dental'
+import { compterEtiquettes, porteEtiquette } from '@/lib/pathologies'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
-import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE, type VitalDef, RECALL_OUVERTS } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { getInitials, formatDateShort, formatDateFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
@@ -54,6 +55,9 @@ export default function PatientsPage() {
   const [exporting, setExporting] = useState(false)
   const [doctorSpecialties, setDoctorSpecialties] = useState<string[]>([])
   const [specialtyFilter, setSpecialtyFilter] = useState<string>('all')
+  // Étiquette de pathologie à isoler (v72) — « tous mes diabétiques ».
+  // 'all' = pas de filtre, comme pour les spécialités juste au-dessus.
+  const [conditionFilter, setConditionFilter] = useState<string>('all')
   const [selectedPatient, setSelectedPatient] = useState<PatientWithStats | null>(null)
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -703,8 +707,17 @@ export default function PatientsPage() {
     }
   }
 
+  // Les étiquettes RÉELLEMENT portées par la patientèle, avec leur effectif.
+  // On ne propose que ce qui existe : dérouler vingt-sept pathologies pour en
+  // trouver les trois utilisées, c'est l'écran submergé qu'on veut éviter.
+  // DÉGRADATION PROPRE — la liste est lue en `select('*')` : tant que la v72
+  // n'est pas passée, aucune fiche ne porte `conditions`, le compte est vide,
+  // et le filtre ne s'affiche tout simplement pas.
+  const etiquettesPatientele = compterEtiquettes(patients)
+
   const filtered = patients
     .filter((p) => specialtyFilter === 'all' || p.specialties.includes(specialtyFilter))
+    .filter((p) => conditionFilter === 'all' || porteEtiquette(p.conditions, conditionFilter))
     .filter((p) => {
       if (!search) return true
       const q = search.toLowerCase()
@@ -733,7 +746,14 @@ export default function PatientsPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Patients</h1>
-          <p className="text-sm text-gray-500 mt-1">{patients.length} patient(s) enregistré(s)</p>
+          {/* Cohorte filtrée : la question posée était « combien ? » autant que
+              « lesquels ». Le total seul laissait le médecin compter les
+              cartes à l'écran. */}
+          <p className="text-sm text-gray-500 mt-1">
+            {conditionFilter === 'all'
+              ? `${patients.length} patient(s) enregistré(s)`
+              : `${filtered.length} patient(s) · ${conditionFilter}`}
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {selectionMode ? (
@@ -771,6 +791,26 @@ export default function PatientsPage() {
               <SelectItem value="all">Toutes les spécialités</SelectItem>
               {doctorSpecialties.map((s) => (
                 <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {/* Pathologie — même emplacement et même motif que le filtre de
+            spécialité : rien de nouveau à apprendre. Absent du tout quand
+            aucune fiche ne porte d'étiquette, pour ne pas montrer une case
+            vide à un praticien qui ne s'en sert pas (encore). */}
+        {etiquettesPatientele.length > 0 && (
+          <Select value={conditionFilter} onValueChange={setConditionFilter}>
+            <SelectTrigger className="w-56 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes les pathologies</SelectItem>
+              {/* L'effectif est affiché : c'est ce qui transforme la liste en
+                  information clinique (« j'ai 34 diabétiques ») au lieu d'un
+                  simple menu de filtre. */}
+              {etiquettesPatientele.map(({ etiquette, nombre }) => (
+                <SelectItem key={etiquette} value={etiquette}>{etiquette} ({nombre})</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -816,7 +856,10 @@ export default function PatientsPage() {
         <div className="text-center py-16 text-gray-400">
           <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
           <p className="text-sm">
-            {search ? 'Aucun patient trouvé' : 'Aucun patient enregistré'}
+            {/* Un filtre croisé (pathologie + recherche ou spécialité) peut ne
+                rien renvoyer : dire « aucun patient enregistré » ferait croire
+                à une patientèle vide, et à une perte de données. */}
+            {search || conditionFilter !== 'all' ? 'Aucun patient trouvé' : 'Aucun patient enregistré'}
           </p>
         </div>
       ) : (
@@ -1346,7 +1389,7 @@ export default function PatientsPage() {
               <div className="border-t border-gray-100 pt-4">
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <BellRing className="h-4 w-4 text-primary-500" />
-                  Rappels de suivi ({recalls.filter((r) => r.status === 'pending').length})
+                  Rappels de suivi ({recalls.filter((r) => RECALL_OUVERTS.includes(r.status)).length})
                 </h4>
 
                 {/* Rappels programmés */}
@@ -1359,11 +1402,16 @@ export default function PatientsPage() {
                             {formatDateShort(r.due_date)}
                             {r.reason && <span className="text-gray-500"> — {r.reason}</span>}
                           </p>
-                          <p className="text-[11px] text-gray-400">
-                            {r.status === 'sent' ? 'Rappel envoyé' : 'En attente d’envoi'}
+                          <p className={`text-[11px] ${r.status === 'a_rappeler' ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                            {/* « À appeler » : le patient n'a pas d'adresse, le
+                                rappel ne partira jamais tout seul. Le dire ici
+                                évite de croire qu'il est pris en charge. */}
+                            {r.status === 'sent' ? 'Rappel envoyé'
+                              : r.status === 'a_rappeler' ? 'À appeler — pas d’adresse e-mail'
+                              : 'En attente d’envoi'}
                           </p>
                         </div>
-                        {r.status === 'pending' && (
+                        {RECALL_OUVERTS.includes(r.status) && (
                           <button onClick={() => cancelRecall(r.id)} className="text-gray-300 hover:text-red-500 shrink-0" title="Annuler ce rappel">
                             <X className="h-4 w-4" />
                           </button>

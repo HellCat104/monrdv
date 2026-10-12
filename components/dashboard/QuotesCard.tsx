@@ -27,7 +27,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatDateShort } from '@/lib/utils'
 import { quoteTotal, quotePaid, quoteRemaining, itemTotal, installmentsTotal,
-  normaliserValidite, ligneValidite } from '@/lib/devis'
+  normaliserValidite, ligneValidite, prochaineSeanceAFaire } from '@/lib/devis'
 import { PAYMENT_METHOD_LABELS, QUOTE_STATUS_COLORS, QUOTE_STATUS_LABELS,
   type PaymentMethod, type Quote, type QuoteItem, type QuoteStatus } from '@/types'
 import { FileSpreadsheet, Plus, Trash2, Printer, Check, ChevronDown, ChevronRight, CalendarClock } from 'lucide-react'
@@ -45,26 +45,6 @@ const STATUS_CHOICES: QuoteStatus[] = ['brouillon', 'propose', 'accepte', 'refus
 // Vingt séances couvrent large, y compris un traitement orthodontique ; la
 // base pose la même borne (migration v67).
 const SEANCES = Array.from({ length: 20 }, (_, i) => i + 1)
-
-/** La prochaine séance à réaliser : parmi les actes NON FAITS, celle qui
- *  porte le plus petit numéro. Les actes non planifiés ferment la marche —
- *  ils restent à organiser, ils ne sont pas « la prochaine étape ».
- *
- *  C'est ce que la secrétaire doit lire au moment où le patient se lève : sans
- *  cette ligne, elle ne peut pas proposer le rendez-vous suivant, et le patient
- *  repart en disant « je rappellerai ». */
-export function prochaineSeanceAFaire(items: QuoteItem[]): {
-  seance: number | null; items: QuoteItem[]; total: number
-} | null {
-  const restants = items.filter((i) => !i.done)
-  if (restants.length === 0) return null
-  const numerotes = restants.filter((i) => i.session_no != null)
-  const seance = numerotes.length > 0
-    ? Math.min(...numerotes.map((i) => i.session_no as number))
-    : null
-  const lot = restants.filter((i) => (i.session_no ?? null) === seance)
-  return { seance, items: lot, total: lot.reduce((t, i) => t + itemTotal(i), 0) }
-}
 
 /** Les actes groupés par séance prévue, dans l'ordre des séances, les actes
  *  non planifiés en dernier — c'est le reste à organiser, pas le début du
