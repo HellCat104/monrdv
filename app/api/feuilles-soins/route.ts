@@ -5,7 +5,7 @@
 // dossier (lecture) une fois qu'elle existe — ce n'est pas cette route.
 import { NextRequest, NextResponse } from 'next/server'
 import { normaliserLigne, totalFeuille, nettoyerDonneesAssure, type LigneFeuille } from '@/lib/feuilles-soins'
-import { requireFeuilleDoctor, TABLE_ABSENTE, FEUILLE_NON_ACTIVEE } from '@/lib/feuilles-soins-server'
+import { requireFeuilleDoctor, TABLE_ABSENTE, LIEN_ABSENT, FEUILLE_NON_ACTIVEE } from '@/lib/feuilles-soins-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,12 +19,21 @@ export async function GET(req: NextRequest) {
   const patientId = req.nextUrl.searchParams.get('patient_id')
   if (!patientId) return NextResponse.json({ error: 'Patient manquant' }, { status: 400 })
 
-  const { data, error } = await supabase
+  const lire = (avecActes: boolean) => supabase
     .from('care_sheets')
-    .select('*, items:care_sheet_items(*)')
+    .select(avecActes ? '*, items:care_sheet_items(*)' : '*')
     .eq('doctor_id', doctor.id)
     .eq('patient_id', patientId)
     .order('care_date', { ascending: false })
+
+  let { data, error } = await lire(true)
+  // La table jointe manque (v65 à moitié passée) ou le cache de schéma n'a pas
+  // été rechargé : on relit les feuilles SANS leurs actes. Le praticien voit
+  // alors ce qu'il a établi au lieu d'un « aucune feuille » mensonger.
+  if (error && LIEN_ABSENT.includes(error.code)) {
+    console.error('[Feuille de soins] actes illisibles, lecture dégradée :', error.message)
+    ;({ data, error } = await lire(false))
+  }
 
   if (error) {
     // Sans la migration, le dossier s'affiche sans la carte plutôt que de tomber.
@@ -97,6 +106,13 @@ export async function POST(req: NextRequest) {
     // derrière nous.
     await supabase.from('care_sheets').delete().eq('id', feuille.id).eq('doctor_id', doctor.id)
     console.error('[Feuille de soins] actes non enregistrés :', errItems.message)
+    // Cas vu en production : `care_sheets` créée, `care_sheet_items` non. Le
+    // praticien recevait « Les actes n'ont pas pu être enregistrés » et
+    // recommençait en boucle ; il faut lui dire que c'est la base qu'il faut
+    // compléter, pas sa saisie.
+    if (errItems.code === TABLE_ABSENTE || LIEN_ABSENT.includes(errItems.code)) {
+      return NextResponse.json({ error: FEUILLE_NON_ACTIVEE }, { status: 503 })
+    }
     return NextResponse.json({ error: "Les actes n'ont pas pu être enregistrés" }, { status: 500 })
   }
 

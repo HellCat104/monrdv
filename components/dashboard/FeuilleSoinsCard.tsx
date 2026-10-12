@@ -53,11 +53,17 @@ export default function FeuilleSoinsCard({
   const [lignes, setLignes] = useState<Ligne[]>([])
   const [busy, setBusy] = useState(false)
   const [ouvert, setOuvert] = useState(false)
+  const [erreur, setErreur] = useState(false)
 
   const charger = useCallback(async () => {
     const res = await fetch(`/api/feuilles-soins?patient_id=${patientId}`)
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) return
+    // Une lecture qui échoue n'est pas une absence de feuille. L'encart
+    // affichait « Aucune feuille établie pour ce patient » sur une erreur 500 :
+    // le praticien en concluait que son document n'existait pas, et le
+    // réétablissait. On dit maintenant que c'est la lecture qui a échoué.
+    if (!res.ok) { setErreur(true); return }
+    setErreur(false)
     setFeuilles(data.feuilles ?? [])
     setActivee(data.activee !== false)
   }, [patientId])
@@ -209,7 +215,12 @@ export default function FeuilleSoinsCard({
         </div>
       )}
 
-      {feuilles.length === 0 ? (
+      {erreur ? (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
+          Les feuilles de ce patient n&apos;ont pas pu être lues. Rechargez la page ; si le message
+          revient, la base n&apos;est pas à jour (migration v65).
+        </p>
+      ) : feuilles.length === 0 ? (
         !ouvert && <p className="text-xs text-gray-400 italic">Aucune feuille établie pour ce patient.</p>
       ) : (
         <ul className="divide-y divide-gray-50">
