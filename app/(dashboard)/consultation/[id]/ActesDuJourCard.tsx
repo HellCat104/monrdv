@@ -66,20 +66,32 @@ export default function ActesDuJourCard({
       // cocher ferait rentrer dans le dossier des soins que le patient a
       // justement déclinés.
       if (q.status === 'refuse' || q.status === 'annule') continue
-      const suite = prochaineSeanceAFaire(q.items ?? [])
-      if (!suite) continue
+      const lignes = q.items ?? []
+      // Les actes DÉJÀ cochés au cours de ce rendez-vous. Sans eux, l'encart
+      // mentait dès que l'écran était rechargé : `prochaineSeanceAFaire` ne
+      // retient que les actes non faits, et le praticien qui revient de
+      // l'ordonnance retrouvait « 0/1 fait » sans trace du détartrage qu'il
+      // venait de poser — ni moyen de décocher un clic de trop.
+      // Le critère est le rattachement à CE rendez-vous, pas la date du jour :
+      // un acte coché lors d'une autre séance du même jour appartient à cette
+      // séance-là, pas à celle-ci.
+      const faitsIci = lignes.filter((i) => i.done && i.appointment_id === appointmentId)
+      const suite = prochaineSeanceAFaire(lignes)
+      if (!suite && faitsIci.length === 0) continue
       trouves.push({
         quoteId: q.id,
         quoteLabel: q.label ?? 'Plan de traitement',
-        seance: suite.seance,
+        // Le titre annonce ce qu'il RESTE à faire ; quand tout est fait, on
+        // retombe sur la séance des actes posés.
+        seance: suite?.seance ?? faitsIci.find((i) => i.session_no != null)?.session_no ?? null,
         // Ordre de saisie du médecin (`position`), comme dans le devis du
         // dossier : il a chiffré ses actes dans l'ordre où il les pose, et
         // /api/quotes ne garantit pas l'ordre des lignes.
-        items: suite.items.slice().sort((a, b) => a.position - b.position),
+        items: [...faitsIci, ...(suite?.items ?? [])].sort((a, b) => a.position - b.position),
       })
     }
     setLots(trouves)
-  }, [patientId])
+  }, [patientId, appointmentId])
 
   useEffect(() => { charger() }, [charger])
 
@@ -149,28 +161,34 @@ export default function ActesDuJourCard({
 
   /** Une ligne d'acte. */
   const ligne = (lot: Lot, it: QuoteItem) => (
-    <li key={it.id} className="flex items-center gap-2 px-2.5 py-1.5">
-      {/* Même pastille que dans le devis du dossier : cocher ici ou là-bas est
-          le même geste, il doit se reconnaître. */}
+    <li key={it.id}>
+      {/* TOUTE la ligne coche l'acte, pas seulement la pastille : viser une
+          case de 20 px entre deux gants, au fauteuil, est le genre de détail
+          qui fait qu'un praticien cesse d'utiliser la fonction. La pastille
+          reste dessinée — même repère que dans le devis du dossier, cocher ici
+          ou là-bas est le même geste — mais elle n'est plus la seule cible. */}
       <button
+        type="button"
         onClick={() => basculer(lot, it)}
         disabled={busyId !== null}
         title={it.done ? 'Marquer comme non réalisé' : 'Marquer comme réalisé'}
-        className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 ${it.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 text-transparent hover:border-primary-400'}`}
+        className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-lg hover:bg-primary-50/60 disabled:opacity-60"
       >
-        <Check className="h-3.5 w-3.5" />
-      </button>
-      {it.tooth && (
-        <span className="text-[11px] font-bold text-primary-700 bg-primary-50 rounded px-1.5 py-0.5 shrink-0 tabular-nums">
-          {it.tooth}
+        <span className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 ${it.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 text-transparent'}`}>
+          <Check className="h-3.5 w-3.5" />
         </span>
-      )}
-      <span className={`flex-1 text-xs truncate ${it.done ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
-        {it.label}{it.quantity > 1 ? ` × ${it.quantity}` : ''}
-      </span>
-      <span className="text-xs font-medium text-gray-800 whitespace-nowrap tabular-nums">
-        {itemTotal(it).toLocaleString('fr-FR')} DH
-      </span>
+        {it.tooth && (
+          <span className="text-[11px] font-bold text-primary-700 bg-primary-50 rounded px-1.5 py-0.5 shrink-0 tabular-nums">
+            {it.tooth}
+          </span>
+        )}
+        <span className={`flex-1 text-xs truncate ${it.done ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+          {it.label}{it.quantity > 1 ? ` × ${it.quantity}` : ''}
+        </span>
+        <span className="text-xs font-medium text-gray-800 whitespace-nowrap tabular-nums">
+          {itemTotal(it).toLocaleString('fr-FR')} DH
+        </span>
+      </button>
     </li>
   )
 
