@@ -123,6 +123,9 @@ export default function PatientDossier({
   // migration faite (NOT NULL DEFAULT '{}'). Ce test suffit donc, sans
   // interroger le schéma — et il évite d'afficher un sélecteur dont la saisie
   // serait perdue au premier enregistrement.
+  // Colonnes dont dépend l'enregistrement : présentes sur la fiche LUE, donc
+  // présentes en base. C'est le seul test fiable côté navigateur.
+  const couvertureDisponible = (patient as { insurer_data?: unknown }).insurer_data !== undefined
   const etiquettesDisponibles = Array.isArray(patient.conditions)
   const [editSurgeries, setEditSurgeries] = useState(patient.surgeries ?? '')
   const [editTreatments, setEditTreatments] = useState(patient.current_treatments ?? '')
@@ -308,10 +311,15 @@ export default function PatientDossier({
       email: editEmail.trim() || null,
       address: editAddress.trim() || null,
       mutuelle: editMutuelle.trim() || null,
-      // Couverture : seulement les cases réellement remplies.
-      insurer_data: Object.fromEntries(
-        Object.entries(assureData).map(([k, v]) => [k, (v ?? '').trim()]).filter(([, v]) => v !== ''),
-      ),
+      // Couverture (v65) : même règle que les étiquettes ci-dessous. Écrite en
+      // dur, cette clé faisait échouer TOUT l'enregistrement d'une fiche sur
+      // une base où la migration n'est pas passée — allergies comprises, et
+      // avec pour seul message « L'enregistrement a échoué ».
+      ...(couvertureDisponible ? {
+        insurer_data: Object.fromEntries(
+          Object.entries(assureData).map(([k, v]) => [k, (v ?? '').trim()]).filter(([, v]) => v !== ''),
+        ),
+      } : {}),
       notes: editNotes || null,
       allergies: editAllergies || null,
       chronic_conditions: editChronic || null,
@@ -329,10 +337,18 @@ export default function PatientDossier({
     // alors que la fiche avait été lue avant (42703). Plutôt que de refuser
     // l'enregistrement entier, on réécrit sans les étiquettes et on le DIT.
     if (error && (error.code === '42703' || error.code === 'PGRST204')) {
-      const { conditions: _ignore, ...sansEtiquettes } = updates as typeof updates & { conditions?: string[] }
-      const retry = await supabase.from('patients').update(sansEtiquettes).eq('id', patient.id)
+      // On retire les colonnes des migrations récentes — étiquettes (v72) ET
+      // couverture (v65) — plutôt que les étiquettes seules : le premier essai
+      // ne dit pas LAQUELLE manque, et réessayer avec la mauvaise échouait
+      // une seconde fois. Le dossier clinique passe, le médecin est averti.
+      const sansRecentes = { ...updates } as Record<string, unknown>
+      delete sansRecentes.conditions
+      delete sansRecentes.insurer_data
+      const retry = await supabase.from('patients').update(sansRecentes).eq('id', patient.id)
       error = retry.error
-      if (!error) alert('Fiche enregistrée, sauf les étiquettes de pathologie : la migration v72 n\'est pas encore passée.')
+      if (!error) {
+        alert("Fiche enregistrée, sauf les étiquettes de pathologie et les informations d'assuré : une migration n'est pas encore passée sur cette base.")
+      }
     }
     setSaving(false)
     if (error) { alert('L\'enregistrement a échoué. Réessayez.'); return }
