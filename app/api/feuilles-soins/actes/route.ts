@@ -4,7 +4,8 @@
 // de nomenclature. Il rend au praticien ce qu'il a déjà écrit — libellé, code
 // et dernier montant — pour qu'il ne le retape pas à chaque feuille.
 import { NextResponse } from 'next/server'
-import { requireFeuilleDoctor, TABLE_ABSENTE } from '@/lib/feuilles-soins-server'
+import { requireFeuilleDoctor } from '@/lib/feuilles-soins-server'
+import { tableAbsente } from '@/lib/migrations'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,7 @@ export async function GET() {
     .limit(MAX_LIGNES)
 
   if (error) {
-    if (error.code !== TABLE_ABSENTE) console.error('[Feuille de soins] catalogue illisible :', error.message)
+    if (!tableAbsente(error.code)) console.error('[Feuille de soins] catalogue illisible :', error.message)
     return NextResponse.json({ actes: [] })
   }
 

@@ -2,10 +2,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireLaboDoctor } from '@/lib/labo-server'
 import { nettoyerTraitement } from '@/lib/ortho'
+import { tableAbsente } from '@/lib/migrations'
 
 export const dynamic = 'force-dynamic'
 
-const TABLE_ABSENTE = '42P01'
+
 const ORTHO_NON_ACTIVE =
   "Le suivi orthodontique n'est pas encore activé sur votre base (migration v70)."
 
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
 
   if (error) {
-    if (error.code === TABLE_ABSENTE) return NextResponse.json({ traitements: [], activee: false })
+    if (tableAbsente(error.code)) return NextResponse.json({ traitements: [], activee: false })
     console.error('[Ortho] lecture impossible :', error.message)
     return NextResponse.json({ error: 'Lecture impossible' }, { status: 500 })
   }
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !data) {
-    if (error?.code === TABLE_ABSENTE) return NextResponse.json({ error: ORTHO_NON_ACTIVE }, { status: 503 })
+    if (tableAbsente(error?.code)) return NextResponse.json({ error: ORTHO_NON_ACTIVE }, { status: 503 })
     console.error('[Ortho] ouverture impossible :', error?.message)
     return NextResponse.json({ error: "Le traitement n'a pas pu être ouvert" }, { status: 500 })
   }

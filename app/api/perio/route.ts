@@ -6,10 +6,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireLaboDoctor } from '@/lib/labo-server'
 import { PERIO_MODES, type PerioMode, type PerioTeeth } from '@/lib/perio'
 import { isValidTooth } from '@/lib/dental'
+import { tableAbsente } from '@/lib/migrations'
 
 export const dynamic = 'force-dynamic'
 
-const TABLE_ABSENTE = '42P01'
+
 const PERIO_NON_ACTIVE =
   "Les relevés parodontaux ne sont pas encore activés sur votre base (migration v69)."
 
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
     .limit(30)
 
   if (error) {
-    if (error.code === TABLE_ABSENTE) return NextResponse.json({ releves: [], activee: false })
+    if (tableAbsente(error.code)) return NextResponse.json({ releves: [], activee: false })
     console.error('[Parodonte] lecture impossible :', error.message)
     return NextResponse.json({ error: 'Lecture impossible' }, { status: 500 })
   }
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !data) {
-    if (error?.code === TABLE_ABSENTE) return NextResponse.json({ error: PERIO_NON_ACTIVE }, { status: 503 })
+    if (tableAbsente(error?.code)) return NextResponse.json({ error: PERIO_NON_ACTIVE }, { status: 503 })
     console.error('[Parodonte] enregistrement impossible :', error?.message)
     return NextResponse.json({ error: "Le relevé n'a pas pu être enregistré" }, { status: 500 })
   }

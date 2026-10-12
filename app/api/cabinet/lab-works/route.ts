@@ -14,11 +14,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getStaffContext } from '@/lib/cabinet'
 import { createAdminClient } from '@/lib/supabase/server'
 import { LAB_EN_COURS, LAB_STATUTS, type LabStatut } from '@/lib/labo'
+import { tableAbsente } from '@/lib/migrations'
 
 export const dynamic = 'force-dynamic'
 
 /** 42P01 = table absente (migration v68 non passée). */
-const TABLE_ABSENTE = '42P01'
+
 
 // Colonnes renvoyées au secrétariat : ni `cost`, ni `cost_expense_id`.
 const COLONNES =
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await requete
   if (error) {
-    if (error.code === TABLE_ABSENTE) return NextResponse.json({ travaux: [], activee: false })
+    if (tableAbsente(error.code)) return NextResponse.json({ travaux: [], activee: false })
     console.error('[cabinet/lab-works] lecture impossible :', error.message)
     return NextResponse.json({ error: 'Lecture impossible' }, { status: 500 })
   }

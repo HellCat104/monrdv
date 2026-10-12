@@ -10,11 +10,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getNowInMaroc } from '@/lib/utils'
 import { format, addDays } from 'date-fns'
+import { tableAbsente } from '@/lib/migrations'
 
 export const dynamic = 'force-dynamic'
 
 /** 42P01 = table absente (base antérieure à la v7). */
-const TABLE_ABSENTE = '42P01'
+
 
 /** Rappels encore ouverts : ils attendent une action du cabinet.
  *  `a_rappeler` (v71) = le patient n'a pas d'e-mail, donc personne ne le
@@ -64,7 +65,7 @@ export async function GET() {
 
   if (error) {
     // Table absente : l'encart n'existe pas, ce n'est pas une panne.
-    if (error.code === TABLE_ABSENTE) return NextResponse.json({ rappels: [] })
+    if (tableAbsente(error.code)) return NextResponse.json({ rappels: [] })
     console.error('[Rappels] lecture impossible :', error.message)
     return NextResponse.json({ error: 'Lecture impossible' }, { status: 500 })
   }

@@ -7,6 +7,7 @@
 // serveur — et le build échoue, ce qui est la bonne nouvelle de l'histoire.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { tableAbsente, lienAbsent } from '@/lib/migrations'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
 
@@ -35,14 +36,8 @@ export async function requireFeuilleDoctor(): Promise<{ error: NextResponse } | 
   return { ctx: { supabase, doctor } }
 }
 
-/** 42P01 = table absente : la v65 n'est pas encore passée. */
-export const TABLE_ABSENTE = '42P01'
-
-/** PostgREST ne répond pas 42P01 quand c'est la table JOINTE qui manque : il
- *  répond « relation introuvable » (PGRST200), ou « lien ambigu » (PGRST201)
- *  tant que son cache de schéma n'a pas été rechargé. Vu en production sur une
- *  base où `care_sheets` existait sans `care_sheet_items` : la lecture
- *  retournait 500 et la carte affichait « aucune feuille », ce qui était faux. */
-export const LIEN_ABSENT = ['PGRST200', 'PGRST201']
+/** « La v65 n'est pas passée » : voir lib/migrations.ts, qui dit pourquoi un
+ *  seul code d'erreur ne suffisait pas. */
+export { tableAbsente, lienAbsent }
 export const FEUILLE_NON_ACTIVEE =
   "Les feuilles de soins ne sont pas encore activées sur votre base (migration v65)."

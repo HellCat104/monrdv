@@ -5,7 +5,8 @@
 // dossier (lecture) une fois qu'elle existe — ce n'est pas cette route.
 import { NextRequest, NextResponse } from 'next/server'
 import { normaliserLigne, totalFeuille, nettoyerDonneesAssure, type LigneFeuille } from '@/lib/feuilles-soins'
-import { requireFeuilleDoctor, TABLE_ABSENTE, LIEN_ABSENT, FEUILLE_NON_ACTIVEE } from '@/lib/feuilles-soins-server'
+import { requireFeuilleDoctor, FEUILLE_NON_ACTIVEE } from '@/lib/feuilles-soins-server'
+import { tableAbsente, lienAbsent } from '@/lib/migrations'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,14 +31,14 @@ export async function GET(req: NextRequest) {
   // La table jointe manque (v65 à moitié passée) ou le cache de schéma n'a pas
   // été rechargé : on relit les feuilles SANS leurs actes. Le praticien voit
   // alors ce qu'il a établi au lieu d'un « aucune feuille » mensonger.
-  if (error && LIEN_ABSENT.includes(error.code)) {
+  if (error && lienAbsent(error.code)) {
     console.error('[Feuille de soins] actes illisibles, lecture dégradée :', error.message)
     ;({ data, error } = await lire(false))
   }
 
   if (error) {
     // Sans la migration, le dossier s'affiche sans la carte plutôt que de tomber.
-    if (error.code === TABLE_ABSENTE) return NextResponse.json({ feuilles: [], activee: false })
+    if (tableAbsente(error.code)) return NextResponse.json({ feuilles: [], activee: false })
     console.error('[Feuille de soins] lecture impossible :', error.message)
     return NextResponse.json({ error: 'Lecture impossible' }, { status: 500 })
   }
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !feuille) {
-    if (error?.code === TABLE_ABSENTE) return NextResponse.json({ error: FEUILLE_NON_ACTIVEE }, { status: 503 })
+    if (tableAbsente(error?.code)) return NextResponse.json({ error: FEUILLE_NON_ACTIVEE }, { status: 503 })
     console.error('[Feuille de soins] création impossible :', error?.message)
     return NextResponse.json({ error: "La feuille n'a pas pu être créée" }, { status: 500 })
   }
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
     // praticien recevait « Les actes n'ont pas pu être enregistrés » et
     // recommençait en boucle ; il faut lui dire que c'est la base qu'il faut
     // compléter, pas sa saisie.
-    if (errItems.code === TABLE_ABSENTE || LIEN_ABSENT.includes(errItems.code)) {
+    if (tableAbsente(errItems.code) || lienAbsent(errItems.code)) {
       return NextResponse.json({ error: FEUILLE_NON_ACTIVEE }, { status: 503 })
     }
     return NextResponse.json({ error: "Les actes n'ont pas pu être enregistrés" }, { status: 500 })

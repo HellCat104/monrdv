@@ -13,13 +13,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
+import { tableAbsente } from '@/lib/migrations'
 
 export const dynamic = 'force-dynamic'
 
 // Tant que la v64 n'est pas passée, la table du journal n'existe pas. Le
 // décompte doit continuer de fonctionner : on l'écrit, on signale juste que la
 // trace n'a pas pu l'être.
-const TABLE_ABSENTE = '42P01'
+
 
 async function contexte(packageId: string) {
   const supabase = createClient()
@@ -55,7 +56,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .limit(100)
 
   if (error) {
-    if (error.code === TABLE_ABSENTE) return NextResponse.json({ uses: [], journal: false })
+    if (tableAbsente(error.code)) return NextResponse.json({ uses: [], journal: false })
     return NextResponse.json({ error: 'Journal illisible' }, { status: 500 })
   }
   return NextResponse.json({ uses: data ?? [], journal: true })
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Le compteur est à jour ; si la trace manque, le praticien doit le savoir
   // plutôt que de découvrir un journal troué le jour d'une contestation.
   const journal = !errJournal
-  if (errJournal && errJournal.code !== TABLE_ABSENTE) {
+  if (errJournal && !tableAbsente(errJournal.code)) {
     console.error('[Forfait] journal non écrit :', errJournal.message)
   }
 

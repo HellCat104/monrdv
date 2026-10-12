@@ -1,6 +1,7 @@
 // Travaux de laboratoire — liste (par patient, ou suivi du cabinet) et création.
 import { NextRequest, NextResponse } from 'next/server'
-import { requireLaboDoctor, TABLE_ABSENTE, LABO_NON_ACTIVE } from '@/lib/labo-server'
+import { requireLaboDoctor, LABO_NON_ACTIVE } from '@/lib/labo-server'
+import { tableAbsente } from '@/lib/migrations'
 import { LAB_EN_COURS, nettoyerTravail } from '@/lib/labo'
 
 export const dynamic = 'force-dynamic'
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await requete
   if (error) {
-    if (error.code === TABLE_ABSENTE) return NextResponse.json({ travaux: [], activee: false })
+    if (tableAbsente(error.code)) return NextResponse.json({ travaux: [], activee: false })
     console.error('[Laboratoire] lecture impossible :', error.message)
     return NextResponse.json({ error: 'Lecture impossible' }, { status: 500 })
   }
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !data) {
-    if (error?.code === TABLE_ABSENTE) return NextResponse.json({ error: LABO_NON_ACTIVE }, { status: 503 })
+    if (tableAbsente(error?.code)) return NextResponse.json({ error: LABO_NON_ACTIVE }, { status: 503 })
     console.error('[Laboratoire] création impossible :', error?.message)
     return NextResponse.json({ error: "Le travail n'a pas pu être enregistré" }, { status: 500 })
   }

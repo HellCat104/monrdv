@@ -2,6 +2,7 @@
 // les règles pures vivent dans lib/labo.ts, importé côté navigateur).
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { tableAbsente, lienAbsent } from '@/lib/migrations'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
 
@@ -9,7 +10,7 @@ import { canAccess } from '@/lib/plan'
 export const LABO_FONCTION = 'records' as const
 
 /** 42P01 = table absente (migration v68 non passée). */
-export const TABLE_ABSENTE = '42P01'
+export { tableAbsente, lienAbsent }
 export const LABO_NON_ACTIVE =
   "Le suivi des travaux de laboratoire n'est pas encore activé sur votre base (migration v68)."
 
