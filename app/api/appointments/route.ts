@@ -81,10 +81,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Champs obligatoires manquants' }, { status: 400 })
   }
 
+  // Canal de création du RDV (v73). Deux rôles : n'exiger l'email que là où il
+  // est le seul moyen de joindre le patient, et permettre de comparer le taux
+  // d'absence par canal — c'est cette mesure qui dira plus tard si un rappel
+  // payant rapporte ce qu'il coûte.
+  const safeChannel = ['web', 'whatsapp', 'cabinet'].includes(String(body.channel))
+    ? String(body.channel)
+    : (isPublic ? 'web' : 'cabinet')
+
   // Pour les réservations publiques (patient) :
   if (isPublic) {
-    // Email obligatoire (seul moyen d'envoyer confirmation + rappel)
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+    // Email obligatoire — SAUF sur WhatsApp, où la conversation EST le canal de
+    // confirmation : le patient n'a aucun email à saisir, et l'exiger ferait
+    // échouer toute réservation depuis le chatbot. Le rappel par email reste
+    // proposé en option à la fin du parcours, pour qui souhaite le donner.
+    if (safeChannel !== 'whatsapp' && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim()))) {
       return NextResponse.json({ error: 'Un email valide est obligatoire pour recevoir votre confirmation et votre rappel' }, { status: 400 })
     }
     // Consentement au traitement des données obligatoire (loi 09-08)
@@ -449,6 +460,7 @@ export async function POST(req: NextRequest) {
       specialty: safeSpecialty,
       duration_minutes: appointmentDuration,
       recurrence_group_id: recGroupId,
+      channel: safeChannel,
       // Trace du consentement légal (réservation publique uniquement)
       consent_at: isPublic ? new Date().toISOString() : null,
     })
@@ -475,7 +487,7 @@ export async function POST(req: NextRequest) {
       await db.from('appointments').insert({
         doctor_id, patient_id: patientId, date: format(d, 'yyyy-MM-dd'), time,
         status: 'confirmed', notes: safeNotes || null, cancel_token: generateCancelToken(),
-        consultation_type_id: safeTypeId, specialty: safeSpecialty,
+        consultation_type_id: safeTypeId, specialty: safeSpecialty, channel: safeChannel,
         duration_minutes: appointmentDuration, consent_at: null, recurrence_group_id: recGroupId,
       })
       // On ignore silencieusement les collisions (créneau déjà pris ce jour-là)

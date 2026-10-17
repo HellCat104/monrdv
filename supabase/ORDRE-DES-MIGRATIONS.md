@@ -168,6 +168,21 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      à la main. Ordre de déploiement indifférent ; la lancer AVANT d'activer le
      webhook dans Resend évite une journée de nouvelles tentatives en erreur.
 
+ 73. `migration_v73_whatsapp.sql`  
+     Migration v73 — Chatbot WhatsApp : `patients.phone_norm` (colonne générée au
+     format `wa_id` de Meta + index, sans quoi la recherche par numéro échoue en
+     SILENCE et tout patient connu passe pour un inconnu), `appointments.channel`
+     (mesurer l'absentéisme par canal), et les tables `whatsapp_conversations` /
+     `whatsapp_messages` avec RLS médecin + secrétaire. `wa_message_id` est
+     UNIQUE : c'est la garantie d'idempotence contre les rejeux de webhook de
+     Meta, qui créeraient autrement deux rendez-vous au même patient.
+     Additive et rejouable. Ne pas oublier `notify pgrst, 'reload schema';`.
+
+> ⚠️ Cette liste s'arrête à la v59 alors que le dossier contient des fichiers
+> jusqu'à la v73 : les migrations v60 à v72 n'y ont jamais été inscrites. Elles
+> existent et ont été appliquées en production, mais une base recréée à partir
+> de ce document en manquerait quatorze. À reprendre.
+
 ## Obtenir un état réellement à jour
 
 L'instantané `schema.sql` vieillit à chaque migration. Pour une image fidèle
