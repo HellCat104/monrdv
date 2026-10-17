@@ -641,8 +641,8 @@ export default function SettingsPage() {
               <Input value={doctor?.email ?? ''} disabled className="bg-gray-50 text-gray-500" />
               <p className="text-xs text-gray-400">
                 C&apos;est votre identifiant de connexion. Pour le modifier, contactez-nous à{' '}
-                <a href="mailto:asmaadouach@gmail.com?subject=Changement%20d%27email%20MonRDV" className="text-primary-500 hover:underline">
-                  asmaadouach@gmail.com
+                <a href="mailto:monrdvco@gmail.com?subject=Changement%20d%27email%20MonRDV" className="text-primary-500 hover:underline">
+                  monrdvco@gmail.com
                 </a>
               </p>
             </div>
