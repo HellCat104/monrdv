@@ -1,5 +1,6 @@
 // API : liste et création de rendez-vous
 import { NextRequest, NextResponse } from 'next/server'
+import { colonneAbsente } from '@/lib/migrations'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendAppointmentConfirmationToPatient } from '@/lib/email'
 import { inscrireEnListeAttente } from '@/lib/waitlist'
@@ -446,26 +447,39 @@ export async function POST(req: NextRequest) {
   const recGroupId = recCount > 1 ? randomUUID() : null
 
   // Crée le rendez-vous
-  const { data: appointment, error: aptError } = await db
+  const champsRdv = {
+    doctor_id,
+    patient_id: patientId,
+    date,
+    time,
+    status: 'confirmed',
+    notes: safeNotes || null,
+    cancel_token: cancelToken,
+    consultation_type_id: safeTypeId,
+    specialty: safeSpecialty,
+    duration_minutes: appointmentDuration,
+    recurrence_group_id: recGroupId,
+    // Trace du consentement légal (réservation publique uniquement)
+    consent_at: isPublic ? new Date().toISOString() : null,
+  }
+
+  // `channel` vient de la v73. C'est une donnée de MESURE, pas une donnée
+  // métier : la réservation doit aboutir même si la migration n'a pas été
+  // lancée. Sans ce repli, une colonne absente ferait échouer TOUTE création de
+  // rendez-vous — le cœur du produit — pour un champ statistique. C'est la règle
+  // de la maison (lib/migrations.ts) appliquée là où elle compte le plus.
+  let { data: appointment, error: aptError } = await db
     .from('appointments')
-    .insert({
-      doctor_id,
-      patient_id: patientId,
-      date,
-      time,
-      status: 'confirmed',
-      notes: safeNotes || null,
-      cancel_token: cancelToken,
-      consultation_type_id: safeTypeId,
-      specialty: safeSpecialty,
-      duration_minutes: appointmentDuration,
-      recurrence_group_id: recGroupId,
-      channel: safeChannel,
-      // Trace du consentement légal (réservation publique uniquement)
-      consent_at: isPublic ? new Date().toISOString() : null,
-    })
+    .insert({ ...champsRdv, channel: safeChannel })
     .select('*')
     .single()
+
+  if (aptError && colonneAbsente(aptError.code)) {
+    console.warn('[RDV] colonne channel absente (migration v73 non passée) — création sans le canal')
+    const repli = await db.from('appointments').insert(champsRdv).select('*').single()
+    appointment = repli.data
+    aptError = repli.error
+  }
 
   if (aptError || !appointment) {
     // Race condition : le créneau a été pris entre la vérification et l'insertion.
@@ -484,12 +498,18 @@ export async function POST(req: NextRequest) {
     for (let k = 1; k < recCount; k++) {
       const d = recFreq === 'monthly' ? addMonths(base, k) : addDays(base, (recFreq === 'biweekly' ? 14 : 7) * k)
       if (wh[getDayKey(d)]?.enabled === false) continue
-      await db.from('appointments').insert({
+      // Même repli que pour le RDV principal : `channel` ne doit pas empêcher
+      // la création d'une occurrence (voir plus haut).
+      const occurrence = {
         doctor_id, patient_id: patientId, date: format(d, 'yyyy-MM-dd'), time,
         status: 'confirmed', notes: safeNotes || null, cancel_token: generateCancelToken(),
-        consultation_type_id: safeTypeId, specialty: safeSpecialty, channel: safeChannel,
+        consultation_type_id: safeTypeId, specialty: safeSpecialty,
         duration_minutes: appointmentDuration, consent_at: null, recurrence_group_id: recGroupId,
-      })
+      }
+      const { error: errOcc } = await db.from('appointments').insert({ ...occurrence, channel: safeChannel })
+      if (errOcc && colonneAbsente(errOcc.code)) {
+        await db.from('appointments').insert(occurrence)
+      }
       // On ignore silencieusement les collisions (créneau déjà pris ce jour-là)
     }
   }
