@@ -129,3 +129,50 @@ export function getSpecialiteFromSlug(slug: string): string | null {
 export function getVilleFromSlug(slug: string): string | null {
   return VILLE_SLUGS[slug] ?? null
 }
+
+/**
+ * Anciens slugs de praticiens → slug courant.
+ *
+ * Le slug d'un médecin est son adresse publique : elle figure sur ses cartes de
+ * visite, dans sa bio Instagram, dans les e-mails déjà envoyés et dans l'index
+ * de Google. La corriger est parfois nécessaire — un slug qui contient déjà
+ * « dr » produit une URL du type `/dr-dr-el-alj-hassan` — mais la changer sans
+ * rien d'autre casse tous les liens existants et fait perdre l'antériorité
+ * acquise par l'ancienne adresse.
+ *
+ * Chaque entrée fait rediriger l'ancienne adresse en 308 vers la nouvelle, ce
+ * qui transmet le référencement au lieu de le perdre. La clé est le slug tel
+ * qu'il apparaît dans l'URL APRÈS le préfixe « dr- ».
+ *
+ * Le cas du « dr- » doublé est traité automatiquement dans app/[slug]/page.tsx
+ * et n'a pas besoin d'entrée ici. Cette table sert aux cas qu'aucune règle ne
+ * peut deviner sans risque : retirer un « dr » collé au prénom casserait les
+ * noms qui commencent réellement par ces lettres — Drissi, par exemple.
+ */
+export const SLUG_MEDECIN_ALIAS: Record<string, string> = {
+  // Dr Youssef Nachid — le slug portait « dr » collé au prénom, ce qui donnait
+  // l'adresse `/dr-dryoussef-nachid`. Cette entrée est posée AVANT la
+  // correction en base : tant que le slug n'a pas changé, la fiche répond
+  // normalement et la ligne ne sert à rien ; dès qu'il change, l'ancienne
+  // adresse redirige au lieu de tomber en 404. Sans danger dans les deux sens.
+  'dryoussef-nachid': 'youssef-nachid',
+  // Dr El Alj Hassan (`/dr-dr-el-alj-hassan`) n'a pas besoin d'entrée : le
+  // « dr- » doublé est traité par la règle automatique.
+}
+
+/**
+ * Nom courant d'une ville, tel que les gens le tapent réellement.
+ *
+ * On cherche « dentiste casa », pas « dentiste casablanca ». Les pages
+ * ville/spécialité n'écrivaient que la forme officielle : le mot « Casa »
+ * n'apparaissait nulle part sur le site. Google rapproche assez bien les deux,
+ * mais une page qui emploie la forme réellement recherchée part avec un
+ * avantage sur une page qui l'ignore.
+ *
+ * La table reste minuscule à dessein : on n'ajoute une entrée que là où
+ * l'abréviation est d'usage universel. Inventer des variantes pour remplir la
+ * page serait du bourrage de mots-clés, que Google sanctionne.
+ */
+export const VILLE_NOM_FAMILIER: Record<string, string> = {
+  'casablanca': 'Casa',
+}

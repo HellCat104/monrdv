@@ -117,7 +117,7 @@ const jsonLd = {
 }
 
 export default async function HomePage() {
-  const { villes, specialites } = await chargerLiensSEO()
+  const { villes, specialites, combinaisons } = await chargerLiensSEO()
 
   return (
     <>
@@ -126,7 +126,7 @@ export default async function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
       />
       <HomePageClient>
-        <MaillageSEO villes={villes} specialites={specialites} />
+        <MaillageSEO villes={villes} specialites={specialites} combinaisons={combinaisons} />
         <FAQ />
       </HomePageClient>
     </>

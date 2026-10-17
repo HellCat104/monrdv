@@ -5,19 +5,31 @@ import { SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
 // Régénéré au maximum une fois par heure (ISR) pour refléter les médecins actifs
 export const revalidate = 3600
 
+// `lastModified` est volontairement ABSENT de tout ce sitemap.
+//
+// Il valait `new Date()` pour chaque URL, et le fichier se régénère toutes les
+// heures : le sitemap affirmait donc que la totalité du site avait changé il y
+// a moins d'une heure, en permanence. C'est le signal que Google apprend à
+// ignorer — et il l'ignore alors pour TOUT le site, y compris les pages qui
+// changent réellement. Une date absente est traitée neutrement ; une date
+// systématiquement fausse décrédibilise le fichier entier.
+//
+// Rien ici ne permet de connaître la vraie date : `doctors` n'a pas de colonne
+// `updated_at`, et une fiche change surtout par ses créneaux, qui ne sont pas
+// datés non plus. Le jour où cette colonne existera, c'est elle qu'il faudra
+// mettre — pas l'heure de génération.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = (process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma').replace(/\/$/, '')
-  const now = new Date()
 
   // Pages statiques (indexables)
   const staticPages: MetadataRoute.Sitemap = [
-    { url: base, lastModified: now, changeFrequency: 'weekly', priority: 1.0 },
-    { url: `${base}/inscription`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: base, changeFrequency: 'weekly', priority: 1.0 },
+    { url: `${base}/inscription`, changeFrequency: 'monthly', priority: 0.7 },
     // /recherche n'est PAS listée : la page se déclare en noindex (ses pages de
     // résultats sont du contenu dupliqué). Une URL en noindex dans un sitemap
     // est signalée comme une erreur par la Search Console.
-    { url: `${base}/cgu`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
-    { url: `${base}/politique-confidentialite`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
+    { url: `${base}/cgu`, changeFrequency: 'yearly', priority: 0.2 },
+    { url: `${base}/politique-confidentialite`, changeFrequency: 'yearly', priority: 0.2 },
   ]
 
   let doctorPages: MetadataRoute.Sitemap = []
@@ -40,7 +52,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       // Une page par médecin (URL canonique avec préfixe dr-)
       doctorPages = doctors.map((d) => ({
         url: `${base}/dr-${d.slug}`,
-        lastModified: now,
         changeFrequency: 'weekly' as const,
         priority: 0.8,
       }))
@@ -60,7 +71,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }
       seoPages = Array.from(combos).map((c) => ({
         url: `${base}/medecin/${c}`,
-        lastModified: now,
         changeFrequency: 'weekly' as const,
         priority: 0.7,
       }))

@@ -22,9 +22,10 @@ import { Metadata } from 'next'
 import { createAdminClient } from '@/lib/supabase/server'
 import {
   getSpecialiteFromSlug, getVilleFromSlug, praticienDepuisSlug,
-  SPECIALITE_SLUGS, VILLE_SLUGS, SPECIALITE_ALIAS, VILLE_ALIAS,
+  SPECIALITE_SLUGS, VILLE_SLUGS, SPECIALITE_ALIAS, VILLE_ALIAS, VILLE_NOM_FAMILIER,
 } from '@/lib/seo-slugs'
 import { MapPin, Clock } from 'lucide-react'
+import { typeSchemaPraticien } from '@/lib/seo-schema'
 import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma').replace(/\/$/, '')
@@ -46,6 +47,12 @@ interface Praticien {
   specialties: string[] | null
   slug: string
   city: string | null
+  // L'adresse du cabinet est le seul contenu VRAIMENT propre à cette page :
+  // « Orangeraie du Souissi », « Boulevard Mohamed Taib Naciri » sont des
+  // repères que les patients cherchent par leur nom, et qui distinguent
+  // /dentiste/rabat de /dentiste/casablanca. Sans elle, les deux pages ne
+  // diffèrent que par le nom de la ville — soit un quasi-doublon.
+  address: string | null
   appointment_duration: number | null
 }
 
@@ -60,7 +67,7 @@ const tousLesPraticiens = cache(async (): Promise<Praticien[]> => {
     const supabase = createAdminClient()
     const { data, error } = await supabase
       .from('doctors')
-      .select('id, name, specialty, specialties, slug, city, appointment_duration')
+      .select('id, name, specialty, specialties, slug, city, address, appointment_duration')
       .eq('status', 'approved')
       .eq('subscription_status', 'actif')
     if (error) {
@@ -123,7 +130,23 @@ const combosPourvus = cache(async () => {
 // Elles servent deux choses : donner à la page la matière qui lui manquait pour
 // être jugée pertinente sur une requête disputée, et rendre la page éligible au
 // balisage FAQPage.
-function questions(praticien: string, ville: string) {
+function questions(praticien: string, ville: string, specialite?: string) {
+  // Questions propres au dentaire. Elles restent dans le périmètre de la
+  // plateforme — urgence, accompagnement d'un enfant, pas de clinique : la
+  // règle du fichier ne change pas. Elles existent parce qu'une page
+  // « dentiste à Casablanca » se dispute sur des requêtes plus concrètes
+  // qu'une page de médecine générale.
+  const dentaires = typeSchemaPraticien([specialite]) === 'Dentist' ? [
+    {
+      q: `Peut-on avoir un rendez-vous en urgence chez un dentiste à ${ville} ?`,
+      r: `Cela dépend du cabinet. Certains praticiens réservent des créneaux courts aux urgences : s'ils apparaissent dans leur agenda, ils sont réservables immédiatement. Si aucun créneau ne s'affiche, appelez directement le cabinet — MonRDV n'évalue pas le caractère urgent d'une situation et ne peut pas le faire à votre place.`,
+    },
+    {
+      q: `Puis-je prendre rendez-vous pour mon enfant ?`,
+      r: `Oui. Indiquez le nom de l'enfant au moment de la réservation : c'est à son nom que le rendez-vous est enregistré, et le cabinet sait ainsi qui il reçoit. Un même numéro de téléphone peut porter plusieurs membres d'une même famille.`,
+    },
+  ] : []
+
   return [
     {
       q: `Comment prendre rendez-vous avec un ${praticien} à ${ville} ?`,
@@ -149,6 +172,7 @@ function questions(praticien: string, ville: string) {
       q: `Les créneaux affichés sont-ils à jour ?`,
       r: `Oui. Chaque cabinet gère son propre agenda depuis MonRDV : congés, absences et rendez-vous pris par téléphone y figurent. Les disponibilités que vous voyez sont donc celles du praticien à l’instant où vous consultez la page.`,
     },
+    ...dentaires,
   ]
 }
 
@@ -164,8 +188,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const liste = await praticiensDe(r.specialite, r.ville)
 
   const title = `${praticien.charAt(0).toUpperCase()}${praticien.slice(1)} à ${ville} — Prendre RDV en ligne`
+  // « dentiste casa » est tapé bien plus souvent que « dentiste casablanca ».
+  const familier = VILLE_NOM_FAMILIER[r.ville]
   const description = liste.length > 0
-    ? `${liste.length} ${praticien}${liste.length > 1 ? 's' : ''} à ${ville} sur MonRDV. Consultez les créneaux disponibles et réservez en ligne en deux minutes, gratuitement, sans appeler le cabinet.`
+    ? `${liste.length} ${praticien}${liste.length > 1 ? 's' : ''} à ${ville}${familier ? ` (${familier})` : ''} sur MonRDV. Consultez les créneaux disponibles et réservez en ligne en deux minutes, gratuitement, sans appeler le cabinet.`
     : `Prenez rendez-vous avec un ${praticien} à ${ville} sur MonRDV. Réservation en ligne gratuite, confirmation immédiate.`
 
   return {
@@ -226,16 +252,25 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
       '@type': 'ListItem',
       position: i + 1,
       item: {
-        '@type': 'Physician',
+        // Même règle que la fiche du praticien : « Dentist » plutôt que
+        // « Physician » quand c'en est un (lib/seo-schema.ts).
+        '@type': typeSchemaPraticien([specialite, d.specialty]),
         name: displayName(d.name, d.specialty),
         medicalSpecialty: specialite,
         url: `${APP_URL}/dr-${d.slug}`,
-        address: { '@type': 'PostalAddress', addressLocality: ville, addressCountry: 'MA' },
+        address: {
+          '@type': 'PostalAddress',
+          addressLocality: ville,
+          addressCountry: 'MA',
+          // La rue, quand le cabinet l'a renseignée : c'est elle qui rattache
+          // le praticien à un quartier, et donc aux recherches locales.
+          ...(d.address ? { streetAddress: d.address } : {}),
+        },
       },
     })),
   } : null
 
-  const faq = questions(praticien, ville)
+  const faq = questions(praticien, ville, specialite)
   const faqJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -282,7 +317,7 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
             </h1>
             <p className="text-gray-500">
               {liste.length > 0
-                ? `${liste.length} praticien${liste.length > 1 ? 's' : ''} disponible${liste.length > 1 ? 's' : ''} — prenez rendez-vous en ligne gratuitement`
+                ? `${liste.length} praticien${liste.length > 1 ? 's' : ''} disponible${liste.length > 1 ? 's' : ''} à ${ville}${VILLE_NOM_FAMILIER[r.ville] ? ` (${VILLE_NOM_FAMILIER[r.ville]})` : ''} — prenez rendez-vous en ligne gratuitement`
                 : `Prenez rendez-vous avec un ${praticien} à ${ville} en ligne`}
             </p>
           </div>
@@ -299,7 +334,10 @@ export default async function MedecinSpecialiteVillePage({ params }: Props) {
                       <h2 className="font-semibold text-gray-900">{displayName(d.name, d.specialty)}</h2>
                       <p className="text-sm text-primary-600">{specialite}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {d.city}</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          {d.address ? `${d.address}, ${d.city}` : d.city}
+                        </span>
                         {d.appointment_duration && (
                           <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {d.appointment_duration} min</span>
                         )}

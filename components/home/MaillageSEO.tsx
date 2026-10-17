@@ -15,7 +15,7 @@
 // page vide dessert le référencement bien plus qu'elle ne le sert.
 
 import Link from 'next/link'
-import { MapPin, Stethoscope } from 'lucide-react'
+import { MapPin, Stethoscope, Search } from 'lucide-react'
 
 export interface LienSEO {
   href: string
@@ -23,7 +23,15 @@ export interface LienSEO {
   nombre: number
 }
 
-export function MaillageSEO({ villes, specialites }: { villes: LienSEO[]; specialites: LienSEO[] }) {
+export function MaillageSEO({
+  villes,
+  specialites,
+  combinaisons = [],
+}: {
+  villes: LienSEO[]
+  specialites: LienSEO[]
+  combinaisons?: LienSEO[]
+}) {
   if (villes.length === 0 && specialites.length === 0) return null
 
   return (
@@ -37,6 +45,28 @@ export function MaillageSEO({ villes, specialites }: { villes: LienSEO[]; specia
           à toute heure, sans appeler le cabinet. La confirmation est immédiate et un rappel
           vous est envoyé avant la consultation.
         </p>
+
+        {/* Les liens dont l'intitulé EST la recherche du patient : « Dentiste à
+            Casablanca ». Placés en premier et sur toute la largeur, ils sont
+            aussi les plus hauts dans le code de la page — ce qui compte pour le
+            poids qu'un lien interne transmet. */}
+        {combinaisons.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
+              <Search className="h-4 w-4 text-primary-500" /> Recherches fréquentes
+            </h3>
+            <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {combinaisons.map((c) => (
+                <li key={c.href}>
+                  <Link href={c.href} className="text-sm text-gray-700 hover:text-primary-600 hover:underline">
+                    {c.libelle}
+                    <span className="text-gray-400"> · {c.nombre}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="grid md:grid-cols-2 gap-8">
           {villes.length > 0 && (

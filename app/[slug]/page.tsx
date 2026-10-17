@@ -7,7 +7,8 @@ import { BookingPageClient } from './BookingPageClient'
 import { lienItineraire } from '@/lib/geo'
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
+import { SPECIALITE_SLUGS, VILLE_SLUGS, SLUG_MEDECIN_ALIAS } from '@/lib/seo-slugs'
+import { typeSchemaPraticien, actesBalises } from '@/lib/seo-schema'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 
@@ -61,6 +62,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       url: `${APP_URL}/${canonicalSlug}`,
       type: 'profile',
+      locale: 'fr_MA',
+      siteName: 'MonRDV',
+      // L'aperçu que verra le patient quand le lien circule sur WhatsApp — le
+      // canal par lequel il circule vraiment ici. Sans image, l'aperçu est un
+      // rectangle gris et le lien se fait nettement moins ouvrir. On n'en met
+      // une que si le praticien a une photo : une image par défaut au nom d'un
+      // médecin serait trompeuse.
+      ...(doctor.photo_url
+        ? { images: [{ url: doctor.photo_url, alt: displayName(doctor.name, doctor.specialty) }] }
+        : {}),
+    },
+    twitter: {
+      card: doctor.photo_url ? 'summary_large_image' : 'summary',
+      title,
+      description,
+      ...(doctor.photo_url ? { images: [doctor.photo_url] } : {}),
     },
   }
 }
@@ -70,7 +87,28 @@ export default async function BookingPage({ params }: Props) {
   // Réutilise le cache React — pas de 2ème requête DB
   const doctor = await getDoctor(slug)
 
-  if (!doctor) notFound()
+  // Fiche introuvable : avant de rendre un 404, on regarde si cette adresse est
+  // l'ANCIENNE adresse d'un praticien dont le slug a été corrigé. Deux cas :
+  //
+  //   — le « dr- » doublé (`/dr-dr-el-alj-hassan`), que produit un slug
+  //     contenant déjà le titre. Règle sûre, donc automatique.
+  //   — une correction nommée dans SLUG_MEDECIN_ALIAS, pour ce qu'aucune règle
+  //     ne peut deviner (retirer un « dr » collé au prénom casserait Drissi).
+  //
+  // Rediriger en 308 au lieu de renvoyer un 404 transmet à la nouvelle adresse
+  // l'antériorité de l'ancienne, et sauve les liens déjà imprimés ou partagés.
+  if (!doctor) {
+    const secours = SLUG_MEDECIN_ALIAS[slug]
+      ?? (slug.startsWith('dr-') ? slug.replace(/^dr-/, '') : null)
+    if (secours && secours !== slug) {
+      const corrige = await getDoctor(secours)
+      // La cible existe : on y envoie. Sinon on laisse le 404, qui est la
+      // bonne réponse — mieux vaut une page absente qu'une redirection vers
+      // la fiche d'un autre praticien.
+      if (corrige) permanentRedirect(`/dr-${secours}`)
+    }
+    notFound()
+  }
 
   // Une seule URL par médecin. La fiche répond historiquement à `/dr-nom` ET à
   // `/nom` : Google a indexé les deux (vues dans la Search Console), ce qui
@@ -224,7 +262,11 @@ export default async function BookingPage({ params }: Props) {
   const canonicalSlug = `dr-${slug}`
   const jsonLd = {
     '@context': 'https://schema.org',
-    '@type': 'Physician',
+    // Type le PLUS précis que l'on sache attribuer : « Dentist » pour un
+    // dentiste, et non « Physician ». C'est ce qui fait ranger le cabinet dans
+    // la bonne catégorie d'établissement local — donc sur les recherches
+    // « dentiste près de moi », majoritaires depuis un téléphone (lib/seo-schema.ts).
+    '@type': typeSchemaPraticien([doctor.specialty, ...(doctor.specialties ?? [])]),
     name: `${displayName(doctor.name, doctor.specialty)}`,
     medicalSpecialty: doctor.specialty,
     description: doctor.bio ?? `${doctor.specialty}${cityPart}. Prise de rendez-vous en ligne sur MonRDV.`,
@@ -245,7 +287,10 @@ export default async function BookingPage({ params }: Props) {
     ...(doctor.photo_url && { image: doctor.photo_url }),
     currenciesAccepted: 'MAD',
     ...(priceRange && { priceRange }),
-    availableService: {
+    // Les motifs que le praticien a lui-même déclarés : c'est la matière des
+    // recherches longues (« détartrage Casablanca »). Rien n'est deviné — sans
+    // motif déclaré, on retombe sur le libellé générique.
+    availableService: actesBalises(consultationTypes) ?? {
       '@type': 'MedicalTherapy',
       name: 'Consultation médicale',
     },

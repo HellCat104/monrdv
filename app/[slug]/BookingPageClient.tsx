@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { TimeSlots } from '@/components/booking/TimeSlots'
 import { BookingForm, MessageListeAttente, type ResultatReservation } from '@/components/booking/BookingForm'
 import { Stethoscope, MapPin, Clock, ClipboardList, Phone, Mail, Navigation } from 'lucide-react'
+import { tarifVisible } from '@/lib/tarifs'
 
 // Convertit un numéro marocain en format international pour wa.me (ex. 0612… → 212612…)
 function waNumber(raw: string): string {
@@ -340,8 +341,11 @@ export function BookingPageClient({ doctor, consultationTypes = [], categorie, w
                         </span>
                         <span className="flex items-center gap-2 shrink-0 ml-3">
                           {/* Tarif affiché seulement si le médecin le veut ET l'a
-                              renseigné : mieux vaut pas de prix qu'un « 0 DH ». */}
-                          {doctor.show_prices !== false && t.default_price != null && Number(t.default_price) > 0 && (
+                              renseigné : mieux vaut pas de prix qu'un « 0 DH ».
+                              La règle vit dans lib/tarifs.ts, partagée avec le
+                              chatbot WhatsApp : écrite deux fois, elle finirait
+                              par montrer deux prix différents selon le canal. */}
+                          {tarifVisible(doctor.show_prices, t.default_price) && (
                             <span className={`text-sm font-semibold ${selectedType?.id === t.id ? 'text-primary-700' : 'text-gray-700'}`}>
                               {Number(t.default_price).toLocaleString('fr-FR')} DH
                             </span>
