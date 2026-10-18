@@ -178,6 +178,20 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      Meta, qui créeraient autrement deux rendez-vous au même patient.
      Additive et rejouable. Ne pas oublier `notify pgrst, 'reload schema';`.
 
+ 74. `migration_v74_photos_cabinet.sql`  
+     Migration v74 — Photos du cabinet sur la fiche publique : dépôt
+     `cabinet-photos` (public en lecture, 2 Mo, JPEG seulement, écriture fermée
+     aux navigateurs par policies RESTRICTIVES comme en v57), colonne
+     `doctors.photos text[]` dont l'ORDRE est l'ordre d'affichage, et trigger
+     `protect_doctor_photos` en SECURITY INVOKER qui refuse l'écriture depuis un
+     navigateur ET vérifie le format des chemins même en service_role (5 au
+     maximum, chacun préfixé par l'identifiant de CE médecin). Le navigateur
+     redimensionne et réencode en JPEG avant l'envoi, donc le serveur ne reçoit
+     qu'un seul format. Hors du quota de 5 Go de la v63 : le maximum est connu
+     d'avance (~1,5 Mo par cabinet). Additive et rejouable ; sans elle l'encart
+     des Paramètres annonce que la fonction n'est pas activée et la fiche
+     publique s'affiche comme avant. `notify pgrst, 'reload schema';` ensuite.
+
 > ⚠️ Cette liste s'arrête à la v59 alors que le dossier contient des fichiers
 > jusqu'à la v73 : les migrations v60 à v72 n'y ont jamais été inscrites. Elles
 > existent et ont été appliquées en production, mais une base recréée à partir

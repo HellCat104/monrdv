@@ -9,6 +9,7 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import { SPECIALITE_SLUGS, VILLE_SLUGS, SLUG_MEDECIN_ALIAS } from '@/lib/seo-slugs'
 import { typeSchemaPraticien, actesBalises } from '@/lib/seo-schema'
+import { PHOTOS_BUCKET, photosValides } from '@/lib/cabinet-photos'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.monrdv.co.ma'
 
@@ -143,6 +144,19 @@ export default async function BookingPage({ params }: Props) {
     .from('doctors').select('waitlist_enabled').eq('id', doctor.id).maybeSingle()
   if (listeError) console.error('[Liste d\'attente] réglage illisible :', listeError.message)
   const waitlistEnabled = !listeError && reglageListe?.waitlist_enabled === true
+
+  // Photos du cabinet (v74) — lues À PART, pour la raison rappelée juste
+  // au-dessus : ajoutées à la projection de getDoctor, une colonne absente
+  // ferait tomber TOUTES les fiches en 404 tant que la migration n'est pas
+  // passée. Ici, une erreur masque simplement la galerie.
+  const { data: ligne, error: photosError } = await supabase
+    .from('doctors').select('photos').eq('id', doctor.id).maybeSingle()
+  if (photosError) console.error('[Photos cabinet] illisibles :', photosError.message)
+  // `photosValides` écarte tout chemin qui n'appartient pas à CE médecin :
+  // l'adresse publique n'est construite qu'à partir d'une valeur vérifiée.
+  const photosCabinet = photosValides(doctor.id, ligne?.photos).map(
+    (chemin) => supabase.storage.from(PHOTOS_BUCKET).getPublicUrl(chemin).data.publicUrl
+  )
 
   // Coordonnées GPS du cabinet (v60) — lues À PART, pour la raison exacte
   // rappelée juste au-dessus : tant que la migration n'est pas passée, ces
@@ -346,6 +360,7 @@ export default async function BookingPage({ params }: Props) {
         consultationTypes={consultationTypes ?? []}
         categorie={categorie}
         waitlistEnabled={waitlistEnabled}
+        photosCabinet={photosCabinet}
         itineraireUrl={itineraire}
       />
     </>

@@ -51,12 +51,19 @@ interface Props {
    * bouton disparaît plutôt que d'ouvrir une recherche vide.
    */
   itineraireUrl?: string | null
+  /**
+   * Photos du cabinet (v74), adresses publiques déjà construites côté serveur,
+   * dans l'ordre choisi par le médecin — la première est la mise en avant.
+   * Lues à part dans page.tsx : une colonne absente ne doit pas faire tomber
+   * la fiche.
+   */
+  photosCabinet?: string[]
 }
 
 // Étapes de réservation
 type Step = 'datetime' | 'form' | 'success'
 
-export function BookingPageClient({ doctor, consultationTypes = [], categorie, waitlistEnabled = false, itineraireUrl = null }: Props) {
+export function BookingPageClient({ doctor, consultationTypes = [], categorie, waitlistEnabled = false, itineraireUrl = null, photosCabinet = [] }: Props) {
   const [step, setStep] = useState<Step>('datetime')
   // Résultat de l'inscription en liste d'attente, relayé par le formulaire :
   // l'écran de succès ci-dessous REMPLACE celui du formulaire, il doit donc
@@ -220,6 +227,38 @@ export function BookingPageClient({ doctor, consultationTypes = [], categorie, w
               )}
             </div>
           </div>
+
+          {/* Photos du cabinet (v74).
+              Placées après la présentation et AVANT le choix du créneau : un
+              patient qui hésite regarde à quoi ressemble le cabinet, puis
+              réserve. Les mettre plus bas reviendrait à les montrer à quelqu'un
+              qui a déjà décidé.
+              `next/image` sert de l'AVIF/WebP redimensionné (next.config.js) :
+              le fichier d'origine pèse ~300 ko, le patient en charge bien
+              moins. `priority` sur la première seulement — c'est elle qui est
+              visible sans défiler. */}
+          {photosCabinet.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">Le cabinet</p>
+              <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory -mx-1 px-1">
+                {photosCabinet.map((url, i) => (
+                  <div
+                    key={url}
+                    className="relative shrink-0 snap-start overflow-hidden rounded-xl bg-gray-50 w-[72%] sm:w-56 aspect-[4/3]"
+                  >
+                    <Image
+                      src={url}
+                      alt={`${displayName(doctor.name, doctor.specialty)} — photo ${i + 1} du cabinet`}
+                      fill
+                      sizes="(max-width: 640px) 72vw, 224px"
+                      className="object-cover"
+                      priority={i === 0}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Contacter le médecin */}
           {(doctor.whatsapp || doctor.phone || doctor.public_email) && (

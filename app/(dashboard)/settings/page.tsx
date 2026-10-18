@@ -18,6 +18,7 @@ import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLE
 import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle, Paperclip } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 import { LogoCabinet } from '@/components/dashboard/LogoCabinet'
+import { PhotosCabinet } from '@/components/dashboard/PhotosCabinet'
 import ReglageBonLabo from '@/components/dashboard/ReglageBonLabo'
 import { espaceOccupe, formatOctets, QUOTA_DEFAUT_MO } from '@/lib/stockage'
 
@@ -1020,6 +1021,11 @@ export default function SettingsPage() {
             dépend en rien du bouton « Enregistrer » de cette page — un logo
             s'enregistre dès qu'il est envoyé. */}
         <LogoCabinet />
+
+        {/* Photos du cabinet (v74). Autonome pour les mêmes raisons que le
+            logo : elles s'enregistrent dès qu'elles sont envoyées, sans passer
+            par le bouton « Enregistrer » du formulaire. */}
+        <PhotosCabinet />
 
         {/* Bon de laboratoire — dentistes. Autonome, comme le logo. */}
         <ReglageBonLabo />
