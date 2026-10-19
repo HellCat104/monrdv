@@ -72,8 +72,29 @@ async function executer(entree: Entree): Promise<Resultat> {
     return { ...suite, sorties: [{ type: 'texte', texte: T.fenetreExpiree }, ...suite.sorties] }
   }
 
-  // 2. Un humain a la main : le bot n'intervient plus dans cette conversation.
-  if (conv?.escalade_le) return { sorties: [], etape: 'escalade' }
+  // 2. Un humain a la main.
+  //
+  // Le bot se tait pour ne pas parler par-dessus la secrétaire pendant qu'elle
+  // reprend le dossier. Mais se taire POUR TOUJOURS était un cul-de-sac : le
+  // patient escaladé le matin ne pouvait plus rien faire de la journée, et la
+  // seule sortie était l'expiration de la fenêtre, vingt-quatre heures plus
+  // tard. Un mot de redémarrage rouvre donc la conversation.
+  //
+  // SAUF après une urgence. Là, le bot vient d'écrire « appelez le cabinet,
+  // urgence vitale 150 » : revenir à « Que puis-je faire pour vous ? » parce
+  // que la personne a écrit « bonjour » banaliserait exactement ce qu'il ne
+  // faut pas banaliser. Pour une urgence, seule l'expiration de la fenêtre
+  // remet le bot en marche.
+  if (conv?.escalade_le) {
+    const urgence = (conv.escalade_motif ?? '').startsWith('urgence')
+    if (urgence || !texte || !recommence(texte)) {
+      return { sorties: [], etape: 'escalade' }
+    }
+    await enregistrer(waId, {
+      etape: 'accueil', contexte: {}, escalade_le: null, escalade_motif: null,
+    })
+    return etapeAccueil(waId, '', { ...conv, etape: 'accueil', contexte: {} })
+  }
 
   // 3. Urgence — à n'importe quelle étape, et avant tout le reste.
   if (texte && estUrgence(texte)) return escalader(waId, conv, 'urgence', texte)

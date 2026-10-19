@@ -104,6 +104,9 @@ interface Conversation {
   contexte: Contexte
   fenetre_fin: string | null
   escalade_le: string | null
+  /** Pourquoi un humain a repris. Lu pour distinguer une URGENCE d'une
+   *  escalade ordinaire : seule la seconde se rouvre sur un « bonjour ». */
+  escalade_motif: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +125,7 @@ async function charger(waId: string): Promise<Conversation | null> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('whatsapp_conversations')
-    .select('id, wa_id, doctor_id, patient_id, etape, contexte, fenetre_fin, escalade_le')
+    .select('id, wa_id, doctor_id, patient_id, etape, contexte, fenetre_fin, escalade_le, escalade_motif')
     .eq('wa_id', waId)
     .maybeSingle()
 
