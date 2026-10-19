@@ -58,6 +58,9 @@ export interface Entree {
   texte?: string
   /** Identifiant de la ligne de liste ou du bouton cliqué. */
   choix?: string
+  /** Identifiant Meta du message entrant. Absent depuis le simulateur : il n'y
+   *  a pas de rejeu à craindre quand c'est un humain qui clique. */
+  waMessageId?: string
 }
 
 export interface Bouton { id: string; titre: string }
@@ -153,9 +156,18 @@ function estUrgence(texte: string): boolean {
   return MOTS_URGENCE.some((m) => t.includes(m))
 }
 
+/** Le patient réclame une personne.
+ *
+ *  « cabinet » et « téléphone » ont été RETIRÉS de cette liste : ce sont les
+ *  deux mots les plus banals d'une prise de rendez-vous — « j'ai rdv au
+ *  cabinet », « c'est quoi votre téléphone ? » — et ils faisaient passer la
+ *  main pour rien, au beau milieu d'une réservation qui se passait bien.
+ *  Ne restent que des mots d'INTENTION. Ce qui échappe à cette liste n'est pas
+ *  perdu : deux incompréhensions d'affilée escaladent de toute façon. */
 function demandeUnHumain(texte: string): boolean {
   const t = texte.toLowerCase()
-  return /\b(secr[eé]taire|cabinet|quelqu.un|humain|parler|t[eé]l[eé]phon)/.test(t)
+  return /\b(secr[eé]taire|humain|une personne|quelqu.un)\b/.test(t)
+      || /\b(parler|appeler|joindre|contacter|rappelez|rappeler)\b/.test(t)
 }
 
 /** « Jeudi 16 octobre 2026 à 15h00 » — la forme lue dans le récapitulatif

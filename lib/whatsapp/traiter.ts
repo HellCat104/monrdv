@@ -26,13 +26,41 @@ import {
 
 export type { Entree, Resultat, Sortie }
 
+/**
+ * Point d'entrée public : exécute le parcours, puis consigne l'échange.
+ *
+ * Le transcript sert trois choses — déboguer le simulateur aujourd'hui, donner
+ * à la secrétaire de quoi reprendre une conversation demain, et porter
+ * l'identifiant Meta qui interdit les rejeux.
+ */
 export async function traiter(entree: Entree): Promise<Resultat> {
+  const resultat = await executer(entree)
+  const waId = normaliserTelephone(entree.waId)
+  if (waId) await journaliser(waId, entree, resultat)
+  return resultat
+}
+
+async function executer(entree: Entree): Promise<Resultat> {
   const waId = normaliserTelephone(entree.waId)
   if (!waId) return { sorties: [{ type: 'texte', texte: T.incompris }], etape: 'accueil' }
 
   const texte = (entree.texte ?? '').trim()
   const choix = entree.choix ?? ''
-  let conv = await charger(waId)
+  const conv = await charger(waId)
+
+  // REJEU DE WEBHOOK. Meta renvoie un message tant qu'il n'a pas reçu de 200
+  // assez vite. Sans ce garde, le même « Je confirme » est traité deux fois et
+  // le patient repart avec deux rendez-vous.
+  //
+  // Contrôle par lecture puis écriture, et non insertion-d'abord : insérer
+  // avant de traiter imposerait de créer la conversation en amont, ce qui
+  // compliquerait tous les chemins pour une course de quelques millisecondes —
+  // or les rejeux de Meta arrivent à plusieurs secondes d'intervalle. L'index
+  // UNIQUE sur wa_message_id reste le filet si les deux se croisaient : la
+  // seconde écriture échoue et ne crée pas de doublon.
+  if (entree.waMessageId && conv && (await dejaTraite(entree.waMessageId))) {
+    return { sorties: [], etape: conv.etape }
+  }
 
   // 1. Fenêtre de service Meta expirée : le parcours en cours ne vaut plus rien
   //    (les créneaux mémorisés ont pu être pris entre-temps).
@@ -132,12 +160,24 @@ export async function traiter(entree: Entree): Promise<Resultat> {
       return incompris(conv)
 
     case 'email': {
-      if (choix === 'pas_email') {
+      // Le message propose « ou répondez non » : il faut donc l'accepter TAPÉ,
+      // et pas seulement par le bouton. Un texte qui promet ce que le code ne
+      // fait pas enferme le patient dans une boucle.
+      if (choix === 'pas_email' || refuseEmail(texte)) {
         await enregistrer(waId, { etape: 'accueil', contexte: {} })
         return { sorties: [], etape: 'accueil' }
       }
       const email = texte.toLowerCase()
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        // Le rappel par email est FACULTATIF : au bout de deux essais on passe
+        // à autre chose plutôt que de retenir quelqu'un sur une étape dont il
+        // peut se passer. Bloquer sur un bonus serait pire que l'abandonner.
+        const essais = (conv.contexte.incomprehensions ?? 0) + 1
+        if (essais >= INCOMPREHENSIONS_MAX) {
+          await enregistrer(waId, { etape: 'accueil', contexte: {} })
+          return { sorties: [], etape: 'accueil' }
+        }
+        await enregistrer(waId, { etape: 'email', contexte: { ...conv.contexte, incomprehensions: essais } })
         return { sorties: [{ type: 'texte', texte: T.emailInvalide }], etape: 'email' }
       }
       await enregistrerEmail(conv, email)
@@ -152,8 +192,67 @@ export async function traiter(entree: Entree): Promise<Resultat> {
 
 // ---------------------------------------------------------------------------
 
+/** Ce message entrant a-t-il déjà été traité ? (rejeu de webhook Meta) */
+async function dejaTraite(waMessageId: string): Promise<boolean> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('whatsapp_messages')
+    .select('id')
+    .eq('wa_message_id', waMessageId)
+    .maybeSingle()
+  return !!data
+}
+
+/**
+ * Consigne le message reçu et les réponses envoyées.
+ *
+ * Volontairement silencieuse en cas d'échec : un transcript est une trace, pas
+ * une fonction. Si l'écriture échoue, le patient a quand même reçu sa réponse
+ * et son rendez-vous est pris — faire échouer la conversation pour une ligne
+ * de journal serait un très mauvais échange.
+ */
+async function journaliser(waId: string, entree: Entree, resultat: Resultat): Promise<Resultat> {
+  try {
+    const supabase = createAdminClient()
+    const { data: conv } = await supabase
+      .from('whatsapp_conversations').select('id').eq('wa_id', waId).maybeSingle()
+    if (!conv) return resultat
+
+    const entrant = entree.texte?.trim() || entree.choix || ''
+    const lignes: Record<string, unknown>[] = [{
+      conversation_id: conv.id,
+      wa_message_id: entree.waMessageId ?? null,
+      sens: 'entrant',
+      contenu: entrant.slice(0, 2000),
+    }]
+
+    for (const s of resultat.sorties) {
+      lignes.push({
+        conversation_id: conv.id,
+        sens: 'sortant',
+        contenu: s.texte.slice(0, 2000),
+        // Boutons et lignes de liste gardés tels quels : c'est ce qui permettra
+        // de rejouer l'écran exact qu'a vu le patient.
+        interactif: s.type === 'texte' ? null : s,
+      })
+    }
+
+    await supabase.from('whatsapp_messages').insert(lignes)
+  } catch (e) {
+    console.error('[whatsapp] transcript non écrit :', e)
+  }
+  return resultat
+}
+
 function apres(choix: string, prefixe: string): string | null {
   return choix.startsWith(prefixe) ? choix.slice(prefixe.length) || null : null
+}
+
+/** Un refus d'email tapé à la main. On ne cherche pas à tout couvrir : ce qui
+ *  n'est pas reconnu retombe sur « adresse invalide », puis sur l'abandon de
+ *  l'étape au bout de deux essais. */
+function refuseEmail(texte: string): boolean {
+  return /^\s*(non|no|nn|nope|aucun|pas d.?e?mail|j.?en ai pas|je n.?en ai pas|plus tard|merci|skip)\b/i.test(texte)
 }
 
 /** « Yasmine Alaoui » → prénom + nom. Un seul mot ne suffit pas : la fiche
@@ -344,9 +443,14 @@ async function creer(conv: Conversation): Promise<Resultat> {
   // Le jeton d'annulation n'est volontairement PAS renvoyé par la route (il ne
   // doit pas circuler vers un navigateur). Ici on est côté serveur, et sur
   // WhatsApp la conversation EST le canal de confirmation : on le relit.
+  // `patient_id` autant que le jeton : pour un patient NOUVEAU, la fiche vient
+  // d'être créée par la route, et la conversation ne la connaît pas encore. Sans
+  // la retenir ici, l'étape « voulez-vous un rappel par email ? » n'avait aucune
+  // fiche où écrire : le patient donnait son adresse, lisait « c'est
+  // enregistré », et rien ne l'était.
   const { data: apt } = await supabase
     .from('appointments')
-    .select('cancel_token')
+    .select('cancel_token, patient_id')
     .eq('id', cree.id)
     .maybeSingle()
 
@@ -381,6 +485,7 @@ async function creer(conv: Conversation): Promise<Resultat> {
 
   await enregistrer(conv.wa_id, {
     etape: etapeSuivante,
+    patient_id: apt?.patient_id ?? conv.patient_id,
     contexte: { cancelToken: token },
   })
 
