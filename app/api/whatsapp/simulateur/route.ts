@@ -65,7 +65,17 @@ export async function POST(req: NextRequest) {
       )
     }
     console.error('[simulateur whatsapp]', e)
-    return NextResponse.json({ error: 'Erreur du simulateur' }, { status: 500 })
+    // Le message RÉEL, pas « erreur du simulateur ». Cette route n'est
+    // accessible qu'au médecin connecté, et c'est un outil de mise au point :
+    // masquer la cause revient à le rendre inutile au moment précis où il
+    // servirait. Les routes publiques, elles, restent avares en détails.
+    return NextResponse.json(
+      {
+        error: e instanceof Error ? e.message : String(e),
+        pile: e instanceof Error ? (e.stack ?? '').split('\n').slice(0, 6).join('\n') : undefined,
+      },
+      { status: 500 }
+    )
   }
 }
 

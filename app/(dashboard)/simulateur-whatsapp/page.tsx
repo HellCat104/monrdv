@@ -57,7 +57,7 @@ export default function SimulateurWhatsApp() {
       const data = await r.json()
 
       if (!r.ok) {
-        setErreur(data.error ?? 'Erreur inconnue')
+        setErreur([data.error ?? 'Erreur inconnue', data.pile].filter(Boolean).join('\n'))
         return
       }
 
@@ -155,7 +155,7 @@ export default function SimulateurWhatsApp() {
 
       {erreur && (
         <Card className="border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-          {erreur}
+          <pre className="whitespace-pre-wrap break-words font-sans">{erreur}</pre>
         </Card>
       )}
 
