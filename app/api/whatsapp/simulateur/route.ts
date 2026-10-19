@@ -46,11 +46,21 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json(resultat)
   } catch (e) {
-    // La migration v73 n'est pas passée : on le dit clairement plutôt que de
-    // renvoyer une 500 opaque, c'est l'erreur la plus probable au démarrage.
+    // Table introuvable. Deux causes possibles, et le code ne peut PAS les
+    // distinguer : PostgREST répond pareil pour une table qui n'existe pas
+    // (42P01) et pour une table absente de son cache de schéma (PGRST205).
+    // Le message doit donc nommer les deux — c'est précisément la confusion
+    // qui a coûté trois semaines sur la v65, où les tables étaient bien là et
+    // où seul le `notify` manquait.
     if (e instanceof Error && e.message === 'MIGRATION_V73_ABSENTE') {
       return NextResponse.json(
-        { error: "La migration v73 n'a pas encore été exécutée dans Supabase (puis : notify pgrst, 'reload schema';)" },
+        {
+          error:
+            "Table whatsapp_conversations introuvable. Deux causes possibles — la migration v73 " +
+            "n'a pas été lancée, OU elle l'a été sans recharger le cache. Pour trancher : " +
+            "select to_regclass('public.whatsapp_conversations');  →  null = lancer la v73, " +
+            "sinon = notify pgrst, 'reload schema';",
+        },
         { status: 503 }
       )
     }
