@@ -63,6 +63,15 @@ export const T = {
     `Je n'ai pas bien saisi. Écrivez simplement votre prénom puis votre nom.\n\n` +
     `Exemple : Yasmine Alaoui`,
 
+  // -------------------------------------------------------------------- âge
+  // Demandé SEULEMENT quand la route en a besoin et qu'on ne l'a pas déjà :
+  // forfait Cabinet, et fiche sans âge ni date de naissance. Au forfait Agenda,
+  // la question ne se pose jamais — ce forfait ne collecte aucune donnée
+  // démographique, et poser la question reviendrait à la collecter quand même.
+  demanderAge: `Quel âge avez-vous ?\n\nRépondez simplement par un nombre.`,
+  demanderAgePour: (prenom: string) => `Quel âge a ${prenom} ?\n\nRépondez simplement par un nombre.`,
+  ageInvalide: `Je n'ai pas compris l'âge. Répondez par un nombre, par exemple : 34`,
+
   // ------------------------------------------------------------------ motif
   quelMotif: `Pour quel motif ?`,
   btnListeMotifs: 'Choisir le motif',

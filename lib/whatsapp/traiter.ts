@@ -18,7 +18,7 @@ import { normaliserTelephone, versNationalMaroc } from '@/lib/telephone'
 import { formatDateFr } from '@/lib/utils'
 import { T } from '@/lib/whatsapp/messages'
 import {
-  charger, enregistrer, estUrgence, demandeUnHumain, recommence, quand,
+  ageNecessaire, charger, enregistrer, estUrgence, demandeUnHumain, recommence, quand,
   etapeAccueil, etapeMotif, etapeJour, etapeHeure, etapeConfirmation,
   APP_URL, INCOMPREHENSIONS_MAX,
   type Entree, type Resultat, type Conversation, type Contexte, type Etape, type Sortie,
@@ -148,6 +148,15 @@ async function executer(entree: Entree): Promise<Resultat> {
         return { sorties: [{ type: 'texte', texte: T.identiteIncomprise }], etape: 'identite' }
       }
       const contexte: Contexte = { ...conv.contexte, ...nom }
+      return apresIdentite({ ...conv, contexte })
+    }
+
+    case 'age': {
+      const n = Number((texte.match(/\d{1,3}/) ?? [])[0])
+      if (!Number.isInteger(n) || n < 0 || n > 120) {
+        return { sorties: [{ type: 'texte', texte: T.ageInvalide }], etape: 'age' }
+      }
+      const contexte: Contexte = { ...conv.contexte, age: n }
       await enregistrer(waId, { etape: 'motif', contexte })
       return etapeMotif({ ...conv, etape: 'motif', contexte })
     }
@@ -382,6 +391,7 @@ async function rejouer(conv: Conversation): Promise<Sortie[]> {
         ? (await etapeConfirmation(conv, conv.contexte.heure)).sorties
         : (await etapeJour(conv)).sorties
       case 'identite': return [{ type: 'texte', texte: T.demanderIdentite }]
+      case 'age': return [{ type: 'texte', texte: T.demanderAge }]
       case 'email': return [{
         type: 'boutons',
         texte: T.proposerEmail,
@@ -400,7 +410,44 @@ async function rejouer(conv: Conversation): Promise<Sortie[]> {
 async function demarrerReservation(conv: Conversation): Promise<Resultat> {
   if (!conv.doctor_id) return etapeAccueil(conv.wa_id, '', conv)
   if (!conv.patient_id && !conv.contexte.prenom) return demanderIdentite(conv)
-  return etapeMotif(conv)
+  return apresIdentite(conv)
+}
+
+/**
+ * Une fois qu'on sait QUI réserve : l'âge, s'il manque et s'il est exigé.
+ *
+ * Cette étape n'existe que parce que `POST /api/appointments` refuse une
+ * réservation publique sans âge chez un médecin au forfait Cabinet. Elle est
+ * sautée dès qu'on a l'information — fiche existante — et elle n'est jamais
+ * posée au forfait Agenda, qui ne collecte pas de donnée démographique.
+ */
+async function apresIdentite(conv: Conversation): Promise<Resultat> {
+  const connu = await ageNecessaire(conv.doctor_id!, conv.patient_id)
+
+  if (connu === null && conv.contexte.age == null) {
+    const supabase = createAdminClient()
+    const { data: fiche } = conv.patient_id
+      ? await supabase.from('patients').select('first_name').eq('id', conv.patient_id).maybeSingle()
+      : { data: null }
+    const prenom = fiche?.first_name ?? conv.contexte.prenom ?? null
+
+    await enregistrer(conv.wa_id, { etape: 'age', contexte: conv.contexte })
+    return {
+      etape: 'age',
+      sorties: [{
+        type: 'texte',
+        texte: prenom ? T.demanderAgePour(prenom) : T.demanderAge,
+      }],
+    }
+  }
+
+  // Âge déjà connu : on le met en contexte pour que `creer()` l'envoie sans
+  // avoir à relire la fiche.
+  const contexte: Contexte = typeof connu === 'number'
+    ? { ...conv.contexte, age: connu }
+    : conv.contexte
+  await enregistrer(conv.wa_id, { etape: 'motif', contexte })
+  return etapeMotif({ ...conv, etape: 'motif', contexte })
 }
 
 async function demanderIdentite(conv: Conversation): Promise<Resultat> {
@@ -497,6 +544,10 @@ async function creer(conv: Conversation): Promise<Resultat> {
       date,
       time: heure,
       consultation_type_id: motifId ?? undefined,
+      // Exigé par la route pour toute réservation publique chez un médecin au
+      // forfait Cabinet. Absent au forfait Agenda, où la route l'efface de
+      // toute façon (aucune donnée démographique collectée).
+      ...(conv.contexte.age != null ? { age: conv.contexte.age } : {}),
       public: true,
       // Le bouton « Je confirme » valait consentement : la mention était
       // affichée dans le récapitulatif, avant le clic (loi 09-08).
@@ -515,7 +566,19 @@ async function creer(conv: Conversation): Promise<Resultat> {
   }
 
   if (!reponse.ok) {
-    return escalader(conv.wa_id, conv, `échec de création (${reponse.status})`, '')
+    // Le MOTIF, pas seulement le code. Un 400 « Un âge valide est obligatoire »
+    // était consigné « échec de création (400) » : il a fallu relire la route
+    // ligne à ligne pour comprendre pourquoi un rendez-vous confirmé par le
+    // patient n'arrivait jamais dans l'agenda. La raison est désormais dans
+    // `escalade_motif`, lisible en une requête.
+    const detail = await reponse.json().catch(() => null)
+    const raison = (detail as { error?: string } | null)?.error ?? ''
+    console.error('[whatsapp] création refusée :', reponse.status, raison)
+    return escalader(
+      conv.wa_id, conv,
+      `échec de création (${reponse.status}${raison ? ` — ${raison}` : ''})`,
+      ''
+    )
   }
 
   const cree = (await reponse.json()) as { id: string }

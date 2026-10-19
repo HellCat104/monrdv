@@ -21,7 +21,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { tableAbsente } from '@/lib/migrations'
 import { libelleMotif } from '@/lib/tarifs'
-import { formatDateFr } from '@/lib/utils'
+import { formatDateFr, ageFromBirthDate } from '@/lib/utils'
 import { disponibilitesSurPeriode } from '@/lib/disponibilites'
 import { resoudre } from '@/lib/whatsapp/resolution'
 import { T, MOTS_URGENCE } from '@/lib/whatsapp/messages'
@@ -45,6 +45,7 @@ export type Etape =
   | 'choix_cabinet'
   | 'choix_personne'
   | 'identite'
+  | 'age'
   | 'motif'
   | 'jour'
   | 'heure'
@@ -88,6 +89,8 @@ interface Contexte {
   creneauxProposes?: string[]
   prenom?: string
   nom?: string
+  /** Âge saisi dans la conversation, quand la fiche ne le porte pas. */
+  age?: number
   incomprehensions?: number
   /** Étape où la dernière incompréhension a eu lieu : le compteur ne vaut que
    *  pour des échecs CONSÉCUTIFS au même endroit. */
@@ -296,6 +299,42 @@ async function etapeAccueil(waId: string, texte: string, conv: Conversation | nu
   }
 }
 
+/**
+ * L'âge est-il nécessaire pour créer ce rendez-vous ?
+ *
+ * `POST /api/appointments` l'exige pour toute réservation publique chez un
+ * médecin au forfait Cabinet (`plan !== 'agenda'`) : sans lui, la création est
+ * refusée en 400 et le chatbot passait la main sans que personne comprenne
+ * pourquoi. Mais au forfait Agenda, ce même endpoint EFFACE l'âge — ce forfait
+ * ne collecte aucune donnée démographique (règle CNDP). Poser la question
+ * reviendrait donc à collecter ce qu'on s'est engagé à ne pas collecter.
+ *
+ * Et on ne la pose jamais pour rien : si la fiche porte déjà un âge ou une date
+ * de naissance, on l'a. Redemander son âge à un patient connu du cabinet est
+ * la meilleure façon d'avoir l'air d'un formulaire.
+ *
+ * @returns l'âge connu, ou null s'il faut le demander, ou undefined si ce
+ *          médecin n'en a pas besoin.
+ */
+async function ageNecessaire(
+  doctorId: string,
+  patientId: string | null
+): Promise<number | null | undefined> {
+  const supabase = createAdminClient()
+  const { data: medecin } = await supabase
+    .from('doctors').select('plan').eq('id', doctorId).maybeSingle()
+  if (!medecin || medecin.plan === 'agenda') return undefined
+
+  if (patientId) {
+    const { data: fiche } = await supabase
+      .from('patients').select('age, birth_date').eq('id', patientId).maybeSingle()
+    if (fiche?.age != null) return fiche.age
+    const calcule = ageFromBirthDate(fiche?.birth_date)
+    if (calcule != null) return calcule
+  }
+  return null
+}
+
 async function nomMedecin(doctorId: string): Promise<string> {
   const supabase = createAdminClient()
   const { data } = await supabase.from('doctors').select('name').eq('id', doctorId).maybeSingle()
@@ -447,5 +486,5 @@ async function lienPublic(doctorId: string): Promise<string> {
   return data?.slug ? `${APP_URL}/dr-${data.slug}` : APP_URL
 }
 
-export { etapeAccueil, etapeMotif, etapeJour, etapeHeure, etapeConfirmation, charger, enregistrer, estUrgence, demandeUnHumain, recommence, quand, APP_URL, JOURS_PROPOSES, CRENEAUX_PAR_JOUR, INCOMPREHENSIONS_MAX }
+export { ageNecessaire, etapeAccueil, etapeMotif, etapeJour, etapeHeure, etapeConfirmation, charger, enregistrer, estUrgence, demandeUnHumain, recommence, quand, APP_URL, JOURS_PROPOSES, CRENEAUX_PAR_JOUR, INCOMPREHENSIONS_MAX }
 export type { Contexte, Conversation }
