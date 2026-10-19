@@ -125,9 +125,13 @@ export const T = {
   fenetreExpiree:
     `Notre conversation précédente a expiré. Repartons de zéro 👋`,
 
+  // Le mot proposé ici DOIT figurer dans `demandeUnHumain` (machine.ts). Il
+  // disait « cabinet », retiré depuis de la liste parce qu'il escaladait des
+  // réservations qui se passaient bien : le message promettait donc ce que le
+  // code ne faisait plus.
   incompris:
-    `Je n'ai pas compris. Utilisez les boutons ci-dessus — ou dites-moi « cabinet » ` +
-    `pour qu'une personne du cabinet vous réponde.`,
+    `Je n'ai pas compris 🤔\n\nUtilisez les propositions ci-dessous — ou écrivez ` +
+    `« secrétaire » pour qu'une personne du cabinet vous réponde.`,
 
   // --------------------------------------------------------------- urgence
   // Aucune question clinique, aucune évaluation, aucune parole rassurante :

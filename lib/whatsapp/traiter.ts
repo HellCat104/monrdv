@@ -18,7 +18,7 @@ import { normaliserTelephone, versNationalMaroc } from '@/lib/telephone'
 import { formatDateFr } from '@/lib/utils'
 import { T } from '@/lib/whatsapp/messages'
 import {
-  charger, enregistrer, estUrgence, demandeUnHumain, quand,
+  charger, enregistrer, estUrgence, demandeUnHumain, recommence, quand,
   etapeAccueil, etapeMotif, etapeJour, etapeHeure, etapeConfirmation,
   APP_URL, INCOMPREHENSIONS_MAX,
   type Entree, type Resultat, type Conversation, type Contexte, type Etape, type Sortie,
@@ -81,6 +81,17 @@ async function executer(entree: Entree): Promise<Resultat> {
   // 4. Demande explicite d'un humain.
   if (choix === 'secretaire' || (texte && demandeUnHumain(texte))) {
     return escalader(waId, conv, 'demande du patient', texte)
+  }
+
+  // 4 bis. « bonjour » au milieu d'un parcours = quelqu'un qui revient, pas
+  // quelqu'un qu'on n'a pas compris. L'état vivant en base, un patient distrait
+  // retrouve sa conversation à « quelle heure ? » deux heures plus tard : lui
+  // répondre « je n'ai pas compris », puis le passer à la secrétaire au second
+  // essai, est l'inverse de ce qu'il faut faire. On repart de l'accueil en
+  // gardant le cabinet déjà identifié.
+  if (conv && texte && recommence(texte)) {
+    await enregistrer(waId, { etape: 'accueil', contexte: {} })
+    return etapeAccueil(waId, '', { ...conv, etape: 'accueil', contexte: {} })
   }
 
   // 5. Parcours
@@ -303,18 +314,66 @@ async function escalader(
   }
 }
 
-/** Deux incompréhensions d'affilée et un humain reprend : faire tourner un
- *  patient en rond est pire que de passer la main. */
+/**
+ * Deux incompréhensions d'affilée SUR LA MÊME ÉTAPE et un humain reprend :
+ * faire tourner un patient en rond est pire que de passer la main.
+ *
+ * Le compteur retient l'étape où l'échec a eu lieu. Sans ça, deux maladresses
+ * sans rapport — une au choix du motif, une autre vingt minutes plus tard au
+ * choix de l'heure — escaladaient une conversation qui se passait bien.
+ *
+ * Et surtout : on REMONTRE l'écran de l'étape courante. Le message disait
+ * « utilisez les boutons ci-dessus » alors qu'il n'y en avait aucun — après un
+ * rechargement de page, ou simplement plus haut dans un fil WhatsApp long, le
+ * patient n'avait plus rien à toucher. Un message d'erreur qui laisse sans
+ * issue vaut moins que pas de message.
+ */
 async function incompris(conv: Conversation): Promise<Resultat> {
-  const n = (conv.contexte.incomprehensions ?? 0) + 1
+  const memeEtape = conv.contexte.echecEtape === conv.etape
+  const n = memeEtape ? (conv.contexte.incomprehensions ?? 0) + 1 : 1
   if (n >= INCOMPREHENSIONS_MAX) {
     return escalader(conv.wa_id, conv, 'incompréhension répétée', '')
   }
-  await enregistrer(conv.wa_id, {
+
+  const contexte: Contexte = { ...conv.contexte, incomprehensions: n, echecEtape: conv.etape }
+  const rappel = await rejouer({ ...conv, contexte })
+  return {
+    sorties: [{ type: 'texte', texte: T.incompris }, ...rappel],
     etape: conv.etape,
-    contexte: { ...conv.contexte, incomprehensions: n },
-  })
-  return { sorties: [{ type: 'texte', texte: T.incompris }], etape: conv.etape }
+  }
+}
+
+/**
+ * Ré-affiche l'écran de l'étape courante, sans la faire avancer.
+ *
+ * Chaque fonction d'étape ré-enregistre le contexte qu'on lui passe : le
+ * compteur d'incompréhensions survit donc au rappel, au lieu d'être écrasé.
+ */
+async function rejouer(conv: Conversation): Promise<Sortie[]> {
+  try {
+    switch (conv.etape) {
+      case 'motif': return (await etapeMotif(conv)).sorties
+      case 'jour':  return (await etapeJour(conv)).sorties
+      case 'heure': return conv.contexte.date
+        ? (await etapeHeure(conv, conv.contexte.date)).sorties
+        : (await etapeJour(conv)).sorties
+      case 'confirmation': return conv.contexte.heure
+        ? (await etapeConfirmation(conv, conv.contexte.heure)).sorties
+        : (await etapeJour(conv)).sorties
+      case 'identite': return [{ type: 'texte', texte: T.demanderIdentite }]
+      case 'email': return [{
+        type: 'boutons',
+        texte: T.proposerEmail,
+        boutons: [{ id: 'pas_email', titre: T.btnPasDEmail }],
+      }]
+      default: return (await etapeAccueil(conv.wa_id, '', conv)).sorties
+    }
+  } catch (e) {
+    // Un rappel qui échoue ne doit pas emporter le message d'incompréhension :
+    // le patient reçoit au moins l'explication.
+    console.error('[whatsapp] rappel d\'étape impossible :', e)
+    return []
+  }
 }
 
 async function demarrerReservation(conv: Conversation): Promise<Resultat> {

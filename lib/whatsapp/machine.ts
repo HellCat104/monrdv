@@ -89,6 +89,9 @@ interface Contexte {
   prenom?: string
   nom?: string
   incomprehensions?: number
+  /** Étape où la dernière incompréhension a eu lieu : le compteur ne vaut que
+   *  pour des échecs CONSÉCUTIFS au même endroit. */
+  echecEtape?: Etape
   cancelToken?: string
 }
 
@@ -150,6 +153,25 @@ async function enregistrer(
 // ---------------------------------------------------------------------------
 // Petits utilitaires de parcours
 // ---------------------------------------------------------------------------
+
+/**
+ * Le patient (re)commence la conversation.
+ *
+ * « bonjour » au milieu d'un parcours n'est PAS une incompréhension : c'est
+ * quelqu'un qui revient. L'état vivant en base, un patient distrait retrouve sa
+ * conversation à l'étape « quelle heure ? » deux heures plus tard — et répondre
+ * « je n'ai pas compris » à sa salutation, puis le passer à la secrétaire au
+ * deuxième essai, est exactement le contraire de ce qu'il faut faire.
+ *
+ * Volontairement ANCRÉ : seule une salutation SEULE compte. « Salam Alaoui »
+ * est un nom, pas un redémarrage — et l'étape « identité » attend précisément
+ * un nom.
+ */
+function recommence(texte: string): boolean {
+  const t = texte.trim().toLowerCase()
+  if (/^(bonjour|bonsoir|salam|salam alaykoum|salut|hello|hi|coucou|re|yo)\s*[!.…?]*$/.test(t)) return true
+  return /^(recommenc|annuler|annule|menu|retour|revenir|depuis le d[eé]but|recommencer)/.test(t)
+}
 
 function estUrgence(texte: string): boolean {
   const t = texte.toLowerCase()
@@ -422,5 +444,5 @@ async function lienPublic(doctorId: string): Promise<string> {
   return data?.slug ? `${APP_URL}/dr-${data.slug}` : APP_URL
 }
 
-export { etapeAccueil, etapeMotif, etapeJour, etapeHeure, etapeConfirmation, charger, enregistrer, estUrgence, demandeUnHumain, quand, APP_URL, JOURS_PROPOSES, CRENEAUX_PAR_JOUR, INCOMPREHENSIONS_MAX }
+export { etapeAccueil, etapeMotif, etapeJour, etapeHeure, etapeConfirmation, charger, enregistrer, estUrgence, demandeUnHumain, recommence, quand, APP_URL, JOURS_PROPOSES, CRENEAUX_PAR_JOUR, INCOMPREHENSIONS_MAX }
 export type { Contexte, Conversation }
