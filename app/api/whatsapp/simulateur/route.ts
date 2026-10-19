@@ -27,9 +27,16 @@ async function medecinConnecte() {
   return data?.id ?? null
 }
 
+// « Non autorisé » tout court a fait chercher un défaut du chatbot là où il n'y
+// en avait pas : une session qui expire en plein parcours interrompt la
+// conversation sans rien expliquer. Le simulateur se consulte longtemps — bien
+// plus que la durée d'une session — il doit donc nommer ce qui arrive.
+const SESSION_EXPIREE =
+  'Session expirée — rechargez la page et reconnectez-vous. La conversation en cours est conservée.'
+
 export async function POST(req: NextRequest) {
   if (!(await medecinConnecte())) {
-    return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    return NextResponse.json({ error: SESSION_EXPIREE }, { status: 401 })
   }
 
   const body = await req.json().catch(() => ({}))
@@ -82,7 +89,7 @@ export async function POST(req: NextRequest) {
 /** Remet la conversation à zéro, pour rejouer un parcours depuis le début. */
 export async function DELETE(req: NextRequest) {
   if (!(await medecinConnecte())) {
-    return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    return NextResponse.json({ error: SESSION_EXPIREE }, { status: 401 })
   }
   const waId = normaliserTelephone(new URL(req.url).searchParams.get('waId') ?? '')
   if (!waId) return NextResponse.json({ error: 'Numéro manquant' }, { status: 400 })
