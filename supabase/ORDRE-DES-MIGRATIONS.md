@@ -168,6 +168,94 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      à la main. Ordre de déploiement indifférent ; la lancer AVANT d'activer le
      webhook dans Resend évite une journée de nouvelles tentatives en erreur.
 
+ 60. `migration_v60_coordonnees_cabinet.sql`  
+     Migration v60 — Coordonnées GPS du cabinet : `latitude`/`longitude` sur
+     `doctors`, avec une contrainte « couple complet ou rien » et des bornes
+     terrestres. Alimente le balisage schema.org `geo` de la fiche publique,
+     émis UNIQUEMENT si les coordonnées existent — c'est lui qui fait remonter
+     le cabinet sur les recherches « près de moi ». Le médecin les saisit en
+     collant un lien Google Maps, résolu par `/api/geo/resoudre`.
+
+ 61. `migration_v61_lien_carte.sql`  
+     Migration v61 — Lien de carte du cabinet, pour le bouton « Y aller » du
+     patient. Complète la v60 : quand les coordonnées exactes manquent, le lien
+     collé par le médecin sert de repli plutôt que d'ouvrir une recherche vide.
+
+ 62. `migration_v62_taille_documents.sql`  
+     Migration v62 — `patient_documents.file_size`, reprise des tailles depuis
+     `storage.objects`, et limite de 10 Mo posée sur le dépôt lui-même. Corrige
+     un défaut ancien : l'export des données du patient demandait `file_size`,
+     colonne inexistante — la requête échouait et l'inventaire des documents
+     ressortait VIDE, en silence.
+
+ 63. `migration_v63_quota_stockage.sql`  
+     Migration v63 — Quota de stockage par cabinet : `doctors.storage_limit_mb`
+     (5 Go par défaut), ajouté au verrou `protect_doctor_plan` pour qu'un
+     médecin ne relève pas sa propre limite, et trigger `verifier_quota_stockage`
+     qui lève `QUOTA_STOCKAGE` avant l'insertion. Jauge visible dans les
+     Paramètres.
+
+ 64. `migration_v64_journal_forfaits.sql`  
+     Migration v64 — Journal des séances d'un forfait (`session_package_uses`) :
+     un mouvement = une séance consommée ou rendue, datée. Corrige aussi le
+     déclencheur de la v41, qui recalculait le statut à chaque écriture et
+     faisait repasser en « terminé » un forfait ANNULÉ dont les séances étaient
+     consommées.
+
+ 65. `migration_v65_feuilles_soins.sql`  
+     Migration v65 — Feuilles de soins (CNSS/AMO, CNOPS, FAR, assurances) :
+     `care_sheets` + `care_sheet_items`, et `patients.insurer_data` en jsonb —
+     les champs demandés diffèrent selon l'organisme. L'organisme et l'assuré
+     sont RECOPIÉS sur la feuille au moment de l'établir : une feuille est une
+     pièce justificative, elle ne doit pas changer quand la fiche change.
+     **Épisode à retenir** : passée début octobre sans `notify pgrst`, les
+     tables existaient et PostgREST les ignorait — l'API répondait 500 et
+     `insurer_data` était écarté en silence. Trois semaines de confusion pour
+     une ligne manquante.
+
+ 66. `migration_v66_faces_dentaires.sql`  
+     Migration v66 — `faces_before`/`faces_after` sur `tooth_history`.
+     Facultative : sans elle, l'insertion est rejouée sans ces colonnes. Les
+     faces elles-mêmes vivent dans `dental_charts.teeth`, rien à migrer.
+
+ 67. `migration_v67_seances_devis.sql`  
+     Migration v67 — Le plan de traitement en séances : `quote_items.session_no`
+     (1 à 20). Un devis disait QUOI et COMBIEN, jamais QUAND — or un plan à
+     12 000 DH ne se décide pas sans savoir en combien de fois. À ne pas
+     confondre avec `appointment_id` (v54), qui désigne le rendez-vous RÉEL.
+
+ 68. `migration_v68_laboratoire.sql`  
+     Migration v68 — Travaux de prothèse : `lab_works` (type, dents, laboratoire,
+     teinte, envoi, retour attendu, réception, statut, coût) et
+     `doctors.lab_slip_naming`. L'enjeu n'est pas d'enregistrer, c'est de ne pas
+     découvrir le retard le jour du rendez-vous.
+
+ 69. `migration_v69_parodonte.sql`  
+     Migration v69 — Relevés parodontaux : `perio_charts`, un relevé DATÉ par
+     visite, jamais écrasé — c'est l'écart entre deux relevés qui soigne, pas
+     la dernière valeur. Même colonne jsonb pour la saisie simple (une poche par
+     dent) et le charting à 6 sites.
+
+ 70. `migration_v70_orthodontie.sql`  
+     Migration v70 — `ortho_treatments` + `ortho_visits`. L'argent reste au
+     devis (`quote_id`) et n'est jamais redéclaré ici : un traitement qui porte
+     ses propres montants finit par contredire la comptabilité.
+
+ 71. `migration_v71_rappels_a_appeler.sql`  
+     Migration v71 — Statut `a_rappeler` sur `recalls`, et la contrainte CHECK
+     qui n'existait PAS (les quatre statuts n'étaient qu'un commentaire depuis
+     la v7). Corrige un défaut réel : un rappel dont le patient n'a pas d'e-mail
+     était marqué « envoyé » pour ne pas boucler — donc personne n'était
+     prévenu, et le rappel disparaissait en silence. C'est le rendez-vous que le
+     médecin perd sans savoir qu'il l'a perdu.
+
+ 72. `migration_v72_etiquettes_pathologies.sql`  
+     Migration v72 — `patients.conditions text[]` + index GIN, pour retrouver
+     une cohorte (« tous mes diabétiques »). `chronic_conditions` est CONSERVÉ :
+     le texte libre porte la nuance clinique, l'étiquette sert à RETROUVER.
+     Aucune étiquette n'est devinée depuis l'ancien texte — une étiquette fausse
+     sur une fiche médicale est pire qu'une étiquette absente.
+
  73. `migration_v73_whatsapp.sql`  
      Migration v73 — Chatbot WhatsApp : `patients.phone_norm` (colonne générée au
      format `wa_id` de Meta + index, sans quoi la recherche par numéro échoue en
@@ -202,10 +290,21 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      l'encart du tableau de bord n'apparaît simplement pas.
      `notify pgrst, 'reload schema';` ensuite.
 
-> ⚠️ Cette liste s'arrête à la v59 alors que le dossier contient des fichiers
-> jusqu'à la v73 : les migrations v60 à v72 n'y ont jamais été inscrites. Elles
-> existent et ont été appliquées en production, mais une base recréée à partir
-> de ce document en manquerait quatorze. À reprendre.
+
+## Toute nouvelle table arrive avec ses droits
+
+Depuis le **30 octobre 2026**, Supabase n'accorde plus automatiquement l'accès
+à l'API aux tables créées dans `public`. Une table sans `GRANT` répond
+« permission denied », quelles que soient ses politiques RLS : le droit ouvre
+la porte, la politique filtre les lignes — il faut les deux.
+
+Les tables existantes ne sont pas concernées, elles gardent leurs droits.
+
+Pour les suivantes, les `GRANT` s'écrivent **dans la migration qui crée la
+table**. Et on ne recopie pas un modèle tout fait : les v15, v37 et v51 ont
+justement RETIRÉ des droits sur `doctors` pour fermer une fuite (e-mail, CNOM,
+INPE, ICE lisibles par tout compte connecté). Chaque table reçoit ce dont elle
+a besoin, et rien de plus.
 
 ## Obtenir un état réellement à jour
 
