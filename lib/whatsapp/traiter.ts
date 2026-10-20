@@ -346,6 +346,24 @@ async function escalader(
     if (data?.email) medecin = { email: data.email, name: data.name }
   }
 
+  // AUCUN CABINET IDENTIFIÉ : personne ne peut recevoir cette escalade.
+  //
+  // L'encart du tableau de bord et l'email sont rattachés à un médecin. Une
+  // conversation sans `doctor_id` produisait donc une escalade qu'AUCUN écran
+  // n'affiche et qu'aucun email n'annonce — pendant qu'on disait au patient
+  // qu'une personne lui répondrait. Mieux vaut ne rien promettre et donner le
+  // moyen de joindre quelqu'un.
+  if (!conv?.doctor_id) {
+    await enregistrer(waId, { etape: 'accueil', contexte: {} })
+    return {
+      etape: 'accueil',
+      sorties: [{
+        type: 'texte',
+        texte: urgence ? T.urgence(null, false) : T.escaladeSansCabinet(APP_URL),
+      }],
+    }
+  }
+
   await enregistrer(waId, {
     etape: 'escalade',
     escalade_le: new Date().toISOString(),
@@ -385,7 +403,7 @@ async function escalader(
   return {
     etape: 'escalade',
     escalade: motif,
-    sorties: [{ type: 'texte', texte: urgence ? T.urgence(tel) : T.escalade }],
+    sorties: [{ type: 'texte', texte: urgence ? T.urgence(tel, true) : T.escalade }],
   }
 }
 

@@ -149,14 +149,25 @@ export const T = {
   // --------------------------------------------------------------- urgence
   // Aucune question clinique, aucune évaluation, aucune parole rassurante :
   // le chatbot n'est pas qualifié et ne doit pas en donner l'impression.
-  urgence: (telCabinet: string | null) =>
+  // « Je préviens le cabinet » ne se dit QUE si un cabinet est identifié.
+  // Sans lui, il n'y a personne à prévenir : l'écrire serait un mensonge, et
+  // sur le chemin de l'urgence c'est le pire endroit pour en faire un.
+  urgence: (telCabinet: string | null, cabinetConnu: boolean) =>
     `⚠️ Je ne peux pas évaluer une urgence médicale.\n\n` +
     (telCabinet ? `📞 Appelez le cabinet : ${telCabinet}\n` : '') +
     `🚑 Urgence vitale : 150\n\n` +
-    `Je préviens le cabinet immédiatement.`,
+    (cabinetConnu
+      ? `Je préviens le cabinet immédiatement.`
+      : `Appelez directement votre cabinet : je ne sais pas encore de quel praticien il s'agit.`),
 
   // --------------------------------------------------------------- escalade
   escalade:
     `Je transmets votre message au cabinet 📩\n` +
     `Une personne vous répondra dans la journée.`,
+
+  // Aucun cabinet identifié : personne ne recevra ce message. On ne promet
+  // donc pas de réponse — on donne le moyen d'en obtenir une.
+  escaladeSansCabinet: (lien: string) =>
+    `Je ne sais pas encore à quel cabinet vous écrivez 🤔\n\n` +
+    `Retrouvez votre praticien et son numéro ici :\n${lien}`,
 }
