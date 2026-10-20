@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import SuiviLabo from '@/components/dashboard/SuiviLabo'
 import RappelsDus from '@/components/dashboard/RappelsDus'
+import ConversationsAReprendre from '@/components/dashboard/ConversationsAReprendre'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
@@ -127,6 +128,10 @@ export default async function DashboardPage() {
           quand il n'y a rien à faire, donc aucun espace perdu le reste du
           temps. Les rappels passent devant — un « revoir dans 6 mois » oublié
           est un patient qui ne revient pas, pas un travail qui attend. */}
+      {/* WhatsApp en premier : une personne ATTEND une réponse maintenant,
+          là où un rappel de suivi porte sur les mois à venir. L'encart rend
+          null quand rien n'attend, donc il ne coûte rien le reste du temps. */}
+      <ConversationsAReprendre />
       <RappelsDus />
       <SuiviLabo />
 

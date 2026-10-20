@@ -110,6 +110,10 @@ interface Conversation {
   /** Pourquoi un humain a repris. Lu pour distinguer une URGENCE d'une
    *  escalade ordinaire : seule la seconde se rouvre sur un « bonjour ». */
   escalade_motif: string | null
+  /** Date à laquelle le cabinet a repris la conversation (v75). L'escalade
+   *  n'est OUVERTE que si `escalade_le` est renseignée et celle-ci vide — on
+   *  conserve ainsi l'historique au lieu d'effacer. */
+  escalade_traitee_le: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +132,7 @@ async function charger(waId: string): Promise<Conversation | null> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('whatsapp_conversations')
-    .select('id, wa_id, doctor_id, patient_id, etape, contexte, fenetre_fin, escalade_le, escalade_motif')
+    .select('id, wa_id, doctor_id, patient_id, etape, contexte, fenetre_fin, escalade_le, escalade_motif, escalade_traitee_le')
     .eq('wa_id', waId)
     .maybeSingle()
 
@@ -145,6 +149,7 @@ async function enregistrer(
   maj: Partial<Pick<Conversation, 'doctor_id' | 'patient_id' | 'etape' | 'escalade_le'>> & {
     contexte?: Contexte
     escalade_motif?: string | null
+    escalade_traitee_le?: string | null
   }
 ): Promise<void> {
   const supabase = createAdminClient()

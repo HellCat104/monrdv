@@ -192,6 +192,16 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      des Paramètres annonce que la fonction n'est pas activée et la fiche
      publique s'affiche comme avant. `notify pgrst, 'reload schema';` ensuite.
 
+ 75. `migration_v75_escalade_traitee.sql`  
+     Migration v75 — `whatsapp_conversations.escalade_traitee_le` : une escalade
+     traitée se referme SANS s'effacer. « Ouverte » devient « escalade_le
+     renseignée ET escalade_traitee_le vide », même logique que `recalls.status`
+     (v71). Effacer aurait fait perdre le compte des passages de main et leurs
+     causes — justement la mesure qui dira si le chatbot s'améliore. Index
+     partiel dédié aux escalades ouvertes. Additive et rejouable ; sans elle
+     l'encart du tableau de bord n'apparaît simplement pas.
+     `notify pgrst, 'reload schema';` ensuite.
+
 > ⚠️ Cette liste s'arrête à la v59 alors que le dossier contient des fichiers
 > jusqu'à la v73 : les migrations v60 à v72 n'y ont jamais été inscrites. Elles
 > existent et ont été appliquées en production, mais une base recréée à partir

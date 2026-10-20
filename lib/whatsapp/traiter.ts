@@ -86,13 +86,17 @@ async function executer(entree: Entree): Promise<Resultat> {
   // que la personne a écrit « bonjour » banaliserait exactement ce qu'il ne
   // faut pas banaliser. Pour une urgence, seule l'expiration de la fenêtre
   // remet le bot en marche.
-  if (conv?.escalade_le) {
+  // Ouverte = signalée ET pas encore reprise par le cabinet (v75). Sans le
+  // second terme, une escalade traitée aurait fait taire le bot pour toujours.
+  if (conv?.escalade_le && !conv.escalade_traitee_le) {
     const urgence = (conv.escalade_motif ?? '').startsWith('urgence')
     if (urgence || !texte || !recommence(texte)) {
       return { sorties: [], etape: 'escalade' }
     }
+    // Le patient reprend la main lui-même : l'escalade se referme, mais on
+    // garde sa trace pour la statistique.
     await enregistrer(waId, {
-      etape: 'accueil', contexte: {}, escalade_le: null, escalade_motif: null,
+      etape: 'accueil', contexte: {}, escalade_traitee_le: new Date().toISOString(),
     })
     return etapeAccueil(waId, '', { ...conv, etape: 'accueil', contexte: {} })
   }
@@ -346,6 +350,9 @@ async function escalader(
     etape: 'escalade',
     escalade_le: new Date().toISOString(),
     escalade_motif: detail,
+    // Une nouvelle escalade rouvre le dossier, même si la précédente avait été
+    // traitée : sinon elle n'apparaîtrait jamais dans l'encart du cabinet.
+    escalade_traitee_le: null,
   })
 
   // PRÉVENIR LE CABINET, POUR DE VRAI.
