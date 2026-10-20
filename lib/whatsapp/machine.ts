@@ -23,7 +23,7 @@ import { tableAbsente } from '@/lib/migrations'
 import { libelleMotif } from '@/lib/tarifs'
 import { formatDateFr, ageFromBirthDate } from '@/lib/utils'
 import { disponibilitesSurPeriode } from '@/lib/disponibilites'
-import { resoudre } from '@/lib/whatsapp/resolution'
+import { resoudre, cabinetDepuisTexte } from '@/lib/whatsapp/resolution'
 import { T, MOTS_URGENCE } from '@/lib/whatsapp/messages'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -226,6 +226,21 @@ function tronquer(s: string, max: number): string {
 // ---------------------------------------------------------------------------
 
 async function etapeAccueil(waId: string, texte: string, conv: Conversation | null): Promise<Resultat> {
+  // Personne DÉJÀ choisie dans cette conversation : on ne la redemande pas, on
+  // montre le menu.
+  //
+  // Sans ce court-circuit, un numéro partagé par une famille ne voyait jamais
+  // le menu : « bonjour » → « c'est pour qui ? » → et le choix enchaînait
+  // directement sur la réservation. « Mon prochain RDV » et « Parler au
+  // cabinet » étaient donc inatteignables pour ces patients — alors qu'un
+  // numéro partagé est le cas le plus courant en cabinet dentaire.
+  //
+  // Un texte porteur d'un slug (lien wa.me) reprend la main : il peut désigner
+  // un AUTRE cabinet, et doit donc relancer la résolution.
+  if (conv?.doctor_id && conv.patient_id && !(await cabinetDepuisTexte(texte))) {
+    return menuAccueil(conv.doctor_id, conv.patient_id, waId, conv)
+  }
+
   const resolution = await resoudre(waId, texte, conv?.doctor_id ?? null)
 
   if (resolution.type === 'inconnu') {
@@ -277,6 +292,16 @@ async function etapeAccueil(waId: string, texte: string, conv: Conversation | nu
 
   // Cabinet et personne connus (ou cabinet connu, patient à créer).
   const { doctorId, patientId } = resolution
+  return menuAccueil(doctorId, patientId, waId, conv)
+}
+
+/** Le menu : salutation nominative et les actions possibles. */
+async function menuAccueil(
+  doctorId: string,
+  patientId: string | null,
+  waId: string,
+  conv: Conversation | null
+): Promise<Resultat> {
   const supabase = createAdminClient()
   const [{ data: medecin }, { data: fiche }] = await Promise.all([
     supabase.from('doctors').select('name, city').eq('id', doctorId).maybeSingle(),

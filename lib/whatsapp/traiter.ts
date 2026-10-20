@@ -137,8 +137,12 @@ async function executer(entree: Entree): Promise<Resultat> {
       if (choix === 'pers:autre') return demanderIdentite(conv)
       const id = apres(choix, 'pers:')
       if (!id) return incompris(conv)
-      await enregistrer(waId, { patient_id: id, etape: 'motif', contexte: {} })
-      return etapeMotif({ ...conv, patient_id: id, etape: 'motif', contexte: {} })
+      // Choisir QUI ne veut pas dire vouloir réserver : on revient au menu.
+      // Enchaîner sur la réservation privait ces patients — ceux dont le
+      // numéro est partagé, c'est-à-dire la majorité en cabinet dentaire — de
+      // « Mon prochain RDV » et de « Parler au cabinet ».
+      await enregistrer(waId, { patient_id: id, etape: 'accueil', contexte: {} })
+      return etapeAccueil(waId, '', { ...conv, patient_id: id, etape: 'accueil', contexte: {} })
     }
 
     case 'identite': {
