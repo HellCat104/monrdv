@@ -36,3 +36,19 @@ export function libelleMotif(motif: MotifTarifable, showPrices: boolean | null |
     ? `${base} — ${Math.round(Number(motif.default_price))} Dh`
     : base
 }
+
+/**
+ * La durée et le tarif SEULS : « 45 min — 300 Dh ».
+ *
+ * Une ligne de liste WhatsApp a un titre de 24 caractères et une description de
+ * 72. Mettre le libellé complet dans les deux donnait « Certificat médical —
+ * 15… » en titre : le nom du motif coupé net, dans le seul champ que le patient
+ * revoit ensuite dans sa propre bulle de réponse. Le NOM va donc au titre, et
+ * ce détail à la description.
+ */
+export function detailMotif(motif: MotifTarifable, showPrices: boolean | null | undefined): string {
+  const duree = `${motif.duration_minutes} min`
+  return tarifVisible(showPrices, motif.default_price)
+    ? `${duree} — ${Math.round(Number(motif.default_price))} Dh`
+    : duree
+}

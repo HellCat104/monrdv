@@ -20,7 +20,7 @@
 
 import { createAdminClient } from '@/lib/supabase/server'
 import { tableAbsente } from '@/lib/migrations'
-import { libelleMotif } from '@/lib/tarifs'
+import { detailMotif } from '@/lib/tarifs'
 import { formatDateFr, ageFromBirthDate } from '@/lib/utils'
 import { disponibilitesSurPeriode } from '@/lib/disponibilites'
 import { resoudre, cabinetDepuisTexte } from '@/lib/whatsapp/resolution'
@@ -442,10 +442,13 @@ async function etapeMotif(conv: Conversation): Promise<Resultat> {
       bouton: T.btnListeMotifs,
       // Le prix suit EXACTEMENT le réglage du médecin dans MonRDV (lib/tarifs.ts),
       // il n'y a pas de second interrupteur pour WhatsApp.
+      // Le NOM au titre, la durée et le tarif à la description. Le titre est
+      // aussi ce que le patient revoit dans sa propre bulle après avoir
+      // choisi : un nom coupé net y resterait affiché.
       lignes: liste.slice(0, 10).map((m) => ({
         id: `motif:${m.id}`,
-        titre: tronquer(libelleMotif(m, medecin?.show_prices), 24),
-        description: tronquer(libelleMotif(m, medecin?.show_prices), 72),
+        titre: tronquer(m.name, 24),
+        description: tronquer(detailMotif(m, medecin?.show_prices), 72),
       })),
     }],
   }
@@ -453,7 +456,10 @@ async function etapeMotif(conv: Conversation): Promise<Resultat> {
 
 async function etapeJour(conv: Conversation): Promise<Resultat> {
   const dispo = await disponibilitesSurPeriode(conv.doctor_id!, JOURS_PROPOSES, conv.contexte.motifId)
-  const lienMedecin = await lienPublic(conv.doctor_id!)
+  // Le lien se construit depuis la fiche DÉJÀ chargée : `lienPublic` relisait
+  // la table `doctors` pour la seule colonne `slug`, juste après que
+  // `disponibilitesSurPeriode` venait de la lire.
+  const lienMedecin = dispo?.medecin.slug ? `${APP_URL}/dr-${dispo.medecin.slug}` : APP_URL
 
   if (!dispo || dispo.jours.length === 0) {
     await enregistrer(conv.wa_id, { etape: 'accueil', contexte: {} })
@@ -551,11 +557,6 @@ async function etapeConfirmation(conv: Conversation, heure: string): Promise<Res
   }
 }
 
-async function lienPublic(doctorId: string): Promise<string> {
-  const supabase = createAdminClient()
-  const { data } = await supabase.from('doctors').select('slug').eq('id', doctorId).maybeSingle()
-  return data?.slug ? `${APP_URL}/dr-${data.slug}` : APP_URL
-}
 
 export { ageNecessaire, etapeAccueil, etapeMotif, etapeJour, etapeHeure, etapeConfirmation, charger, enregistrer, estUrgence, demandeUnHumain, recommence, quand, APP_URL, JOURS_PROPOSES, CRENEAUX_PAR_JOUR, INCOMPREHENSIONS_MAX }
 export type { Contexte, Conversation }

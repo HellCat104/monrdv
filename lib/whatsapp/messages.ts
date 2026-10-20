@@ -4,6 +4,11 @@
 // ils portent la voix de MonRDV, pas la mienne. Ils sont ici pour être corrigés
 // sans toucher à la machine à états.
 //
+// MISE EN FORME : WhatsApp n'est PAS du Markdown. Le gras s'écrit avec UN seul
+// astérisque — *comme ceci* — et `**deux**` laisse les astérisques visibles à
+// l'écran du patient. Italique : _texte_. Barré : ~texte~. Le simulateur, lui,
+// affiche le texte brut : il ne révèle donc jamais ce genre de défaut.
+//
 // CONTRAINTES WHATSAPP, non négociables (Meta tronque sans avertir) :
 //   bouton       — 3 maximum, titre ≤ 20 caractères
 //   liste        — 10 lignes maximum, titre de ligne ≤ 24, description ≤ 72
@@ -60,7 +65,7 @@ export const T = {
   ligneAutrePersonne: 'Quelqu’un d’autre',
 
   demanderIdentite:
-    `Pour créer votre fiche, indiquez-moi votre **prénom et nom**.\n\n` +
+    `Pour créer votre fiche, indiquez-moi votre *prénom et nom*.\n\n` +
     `Exemple : Yasmine Alaoui`,
 
   identiteIncomprise:

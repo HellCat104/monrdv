@@ -190,8 +190,7 @@ async function executer(entree: Entree): Promise<Resultat> {
 
     case 'jour': {
       if (choix === 'plus_tard') {
-        const lien = await lienMedecin(conv.doctor_id!)
-        const nom = await nomDu(conv.doctor_id!)
+        const { nom, lien } = await fichePublique(conv.doctor_id!)
         return { sorties: [{ type: 'texte', texte: T.plusTard(nom, lien) }], etape: 'jour' }
       }
       const date = apres(choix, 'jour:')
@@ -315,16 +314,20 @@ function decouperNom(texte: string): { prenom: string; nom: string } | null {
   return { prenom: mots[0].slice(0, 100), nom: mots.slice(1).join(' ').slice(0, 100) }
 }
 
-async function nomDu(doctorId: string): Promise<string> {
+/** Nom et adresse publique du praticien, en UNE lecture.
+ *
+ *  C'étaient deux fonctions, appelées l'une après l'autre sur la même ligne de
+ *  `doctors` : deux allers-retours vers la base pour deux colonnes voisines.
+ *  Invisible tant que les fonctions tournaient à Washington et que tout était
+ *  lent ; voyant une fois le reste corrigé. */
+async function fichePublique(doctorId: string): Promise<{ nom: string; lien: string }> {
   const supabase = createAdminClient()
-  const { data } = await supabase.from('doctors').select('name').eq('id', doctorId).maybeSingle()
-  return data?.name ?? ''
-}
-
-async function lienMedecin(doctorId: string): Promise<string> {
-  const supabase = createAdminClient()
-  const { data } = await supabase.from('doctors').select('slug').eq('id', doctorId).maybeSingle()
-  return data?.slug ? `${APP_URL}/dr-${data.slug}` : APP_URL
+  const { data } = await supabase
+    .from('doctors').select('name, slug').eq('id', doctorId).maybeSingle()
+  return {
+    nom: data?.name ?? '',
+    lien: data?.slug ? `${APP_URL}/dr-${data.slug}` : APP_URL,
+  }
 }
 
 async function escalader(

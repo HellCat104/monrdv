@@ -44,6 +44,10 @@ export interface Disponibilites {
   medecin: {
     id: string
     name: string
+    /** Sert à construire le lien vers la page publique. Renvoyé ICI plutôt que
+     *  relu par l'appelant : la fiche médecin vient déjà d'être chargée, et
+     *  l'étape « quel jour ? » la relisait aussitôt pour cette seule colonne. */
+    slug: string | null
     city: string | null
     address: string | null
     show_prices: boolean
@@ -77,7 +81,7 @@ export async function disponibilitesSurPeriode(
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, city, address, show_prices, working_hours, appointment_duration, status, subscription_status, booking_lead_hours')
+    .select('id, name, slug, city, address, show_prices, working_hours, appointment_duration, status, subscription_status, booking_lead_hours')
     .eq('id', doctorId)
     .single()
 
@@ -188,6 +192,7 @@ export async function disponibilitesSurPeriode(
     medecin: {
       id: doctor.id,
       name: doctor.name,
+      slug: doctor.slug ?? null,
       city: doctor.city,
       address: doctor.address,
       show_prices: doctor.show_prices !== false,
