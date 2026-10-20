@@ -148,7 +148,8 @@ async function executer(entree: Entree): Promise<Resultat> {
         return { sorties: [{ type: 'texte', texte: T.identiteIncomprise }], etape: 'identite' }
       }
       const contexte: Contexte = { ...conv.contexte, ...nom }
-      return apresIdentite({ ...conv, contexte })
+      await enregistrer(waId, { etape: 'motif', contexte })
+      return etapeMotif({ ...conv, etape: 'motif', contexte })
     }
 
     case 'age': {
@@ -410,44 +411,9 @@ async function rejouer(conv: Conversation): Promise<Sortie[]> {
 async function demarrerReservation(conv: Conversation): Promise<Resultat> {
   if (!conv.doctor_id) return etapeAccueil(conv.wa_id, '', conv)
   if (!conv.patient_id && !conv.contexte.prenom) return demanderIdentite(conv)
-  return apresIdentite(conv)
-}
-
-/**
- * Une fois qu'on sait QUI réserve : l'âge, s'il manque et s'il est exigé.
- *
- * Cette étape n'existe que parce que `POST /api/appointments` refuse une
- * réservation publique sans âge chez un médecin au forfait Cabinet. Elle est
- * sautée dès qu'on a l'information — fiche existante — et elle n'est jamais
- * posée au forfait Agenda, qui ne collecte pas de donnée démographique.
- */
-async function apresIdentite(conv: Conversation): Promise<Resultat> {
-  const connu = await ageNecessaire(conv.doctor_id!, conv.patient_id)
-
-  if (connu === null && conv.contexte.age == null) {
-    const supabase = createAdminClient()
-    const { data: fiche } = conv.patient_id
-      ? await supabase.from('patients').select('first_name').eq('id', conv.patient_id).maybeSingle()
-      : { data: null }
-    const prenom = fiche?.first_name ?? conv.contexte.prenom ?? null
-
-    await enregistrer(conv.wa_id, { etape: 'age', contexte: conv.contexte })
-    return {
-      etape: 'age',
-      sorties: [{
-        type: 'texte',
-        texte: prenom ? T.demanderAgePour(prenom) : T.demanderAge,
-      }],
-    }
-  }
-
-  // Âge déjà connu : on le met en contexte pour que `creer()` l'envoie sans
-  // avoir à relire la fiche.
-  const contexte: Contexte = typeof connu === 'number'
-    ? { ...conv.contexte, age: connu }
-    : conv.contexte
-  await enregistrer(conv.wa_id, { etape: 'motif', contexte })
-  return etapeMotif({ ...conv, etape: 'motif', contexte })
+  // L'âge est désormais exigé par etapeMotif elle-même : aucun chemin ne peut
+  // plus l'éviter, pas même celui de la famille.
+  return etapeMotif(conv)
 }
 
 async function demanderIdentite(conv: Conversation): Promise<Resultat> {

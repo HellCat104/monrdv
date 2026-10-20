@@ -356,6 +356,34 @@ async function nomMedecin(doctorId: string): Promise<string> {
 
 async function etapeMotif(conv: Conversation): Promise<Resultat> {
   const supabase = createAdminClient()
+
+  // GARDE STRUCTURELLE : l'âge se résout ICI, à l'entrée des motifs, et non
+  // chez chacun des appelants.
+  //
+  // Elle y était avant, côté traiter.ts, appelée par deux chemins sur trois :
+  // celui de la famille (« le rendez-vous est pour qui ? ») filait droit vers
+  // les motifs, l'âge n'était jamais demandé, et la création échouait en 400
+  // sans que rien ne l'explique au patient. C'était la troisième fois qu'un
+  // chemin contournait une étape obligatoire — alors on supprime la
+  // possibilité de contourner plutôt que de corriger le chemin fautif.
+  const ageConnu = await ageNecessaire(conv.doctor_id!, conv.patient_id)
+  if (ageConnu === null && conv.contexte.age == null) {
+    const { data: fichePour } = conv.patient_id
+      ? await supabase.from('patients').select('first_name').eq('id', conv.patient_id).maybeSingle()
+      : { data: null }
+    const prenom = fichePour?.first_name ?? conv.contexte.prenom ?? null
+
+    await enregistrer(conv.wa_id, { etape: 'age', contexte: conv.contexte })
+    return {
+      etape: 'age',
+      sorties: [{ type: 'texte', texte: prenom ? T.demanderAgePour(prenom) : T.demanderAge }],
+    }
+  }
+  // Âge déjà connu : on le met en contexte pour que la création l'envoie sans
+  // relire la fiche.
+  if (typeof ageConnu === 'number' && conv.contexte.age == null) {
+    conv = { ...conv, contexte: { ...conv.contexte, age: ageConnu } }
+  }
   const [{ data: motifs }, { data: medecin }] = await Promise.all([
     supabase
       .from('consultation_types')
