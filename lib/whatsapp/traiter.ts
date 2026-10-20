@@ -14,7 +14,8 @@
 // milieu du choix d'un créneau ne doit pas recevoir une liste d'horaires.
 
 import { createAdminClient } from '@/lib/supabase/server'
-import { normaliserTelephone, versNationalMaroc } from '@/lib/telephone'
+import { normaliserTelephone, versNationalMaroc, afficherTelephone } from '@/lib/telephone'
+import { sendEscaladeWhatsAppToDoctor } from '@/lib/email'
 import { formatDateFr } from '@/lib/utils'
 import { T } from '@/lib/whatsapp/messages'
 import {
@@ -329,18 +330,50 @@ async function escalader(
   texte: string
 ): Promise<Resultat> {
   const urgence = motif === 'urgence'
+  const detail = `${motif}${texte ? ` — « ${texte.slice(0, 200)} »` : ''}`
+
+  const supabase = createAdminClient()
   let tel: string | null = null
+  let medecin: { email: string; name: string } | null = null
   if (conv?.doctor_id) {
-    const supabase = createAdminClient()
-    const { data } = await supabase.from('doctors').select('phone').eq('id', conv.doctor_id).maybeSingle()
+    const { data } = await supabase
+      .from('doctors').select('phone, email, name').eq('id', conv.doctor_id).maybeSingle()
     tel = data?.phone ?? null
+    if (data?.email) medecin = { email: data.email, name: data.name }
   }
 
   await enregistrer(waId, {
     etape: 'escalade',
     escalade_le: new Date().toISOString(),
-    escalade_motif: `${motif}${texte ? ` — « ${texte.slice(0, 200)} »` : ''}`,
+    escalade_motif: detail,
   })
+
+  // PRÉVENIR LE CABINET, POUR DE VRAI.
+  //
+  // Le bot vient d'écrire « je transmets votre message au cabinet » — et pour
+  // une urgence « je préviens le cabinet immédiatement ». Tant que l'escalade
+  // n'était qu'une ligne en base, dans une table qu'aucun écran n'affiche, ces
+  // deux phrases étaient fausses : personne n'attendait le patient.
+  //
+  // L'envoi n'est pas attendu par la réponse et son échec ne la fait pas
+  // tomber : le patient a droit à son message quoi qu'il arrive. L'escalade
+  // reste inscrite en base, donc rien n'est perdu si l'email échoue.
+  if (medecin) {
+    let nomPatient: string | null = null
+    if (conv?.patient_id) {
+      const { data: fiche } = await supabase
+        .from('patients').select('first_name, last_name').eq('id', conv.patient_id).maybeSingle()
+      if (fiche) nomPatient = `${fiche.first_name} ${fiche.last_name}`.trim()
+    }
+    void sendEscaladeWhatsAppToDoctor({
+      doctorEmail: medecin.email,
+      doctorName: medecin.name,
+      patientName: nomPatient,
+      patientPhone: afficherTelephone(waId),
+      motif: detail,
+      urgence,
+    }).catch((e) => console.error('[whatsapp] alerte cabinet non envoyée :', e))
+  }
 
   return {
     etape: 'escalade',

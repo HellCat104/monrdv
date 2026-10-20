@@ -50,8 +50,12 @@ export const T = {
   quelCabinet: `Chez quel praticien souhaitez-vous un rendez-vous ?`,
   btnListeCabinets: 'Voir les cabinets',
 
+  // « Cabinet X — le rendez-vous est pour qui ? » sonnait comme un guichet.
+  // Un patient qui écrit à son dentiste n'attend pas un formulaire : on salue,
+  // on dit où il est tombé, puis on pose la question.
   quellePersonne: (medecin: string) =>
-    `Cabinet ${medecin} — le rendez-vous est pour qui ?`,
+    `Bonjour 👋\n\nVous êtes bien au cabinet ${medecin}.\n\n` +
+    `Ce numéro est partagé par plusieurs personnes — pour qui est le rendez-vous ?`,
   btnListePersonnes: 'Choisir',
   ligneAutrePersonne: 'Quelqu’un d’autre',
 

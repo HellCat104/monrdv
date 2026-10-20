@@ -499,6 +499,60 @@ export async function sendCancellationEmailToDoctor(params: {
   })
 }
 
+/**
+ * Un patient attend une réponse humaine sur WhatsApp.
+ *
+ * Le chatbot écrit « je transmets votre message au cabinet », et pour une
+ * urgence « je préviens le cabinet immédiatement ». Sans cet email, ces deux
+ * phrases étaient fausses : l'escalade n'était inscrite qu'en base, dans une
+ * table qu'aucun écran n'affiche. Un patient pouvait écrire « je saigne »,
+ * lire que le cabinet était prévenu, et n'être attendu par personne.
+ *
+ * L'urgence prend un objet distinct et une couleur distincte : dans une boîte
+ * de réception, c'est la ligne qui doit sauter aux yeux.
+ */
+export async function sendEscaladeWhatsAppToDoctor(params: {
+  doctorEmail: string
+  doctorName: string
+  patientName: string | null
+  patientPhone: string
+  motif: string
+  urgence: boolean
+}): Promise<boolean> {
+  const couleur = params.urgence ? '#dc2626' : '#0EA5E9'
+  const titre = params.urgence
+    ? 'Urgence signalée sur WhatsApp 🚨'
+    : 'Un patient attend une réponse 📩'
+
+  return envoyerVerifie('escalade whatsapp (médecin)', {
+    to: params.doctorEmail,
+    subject: params.urgence
+      ? `🚨 URGENCE WhatsApp — ${params.patientPhone}`
+      : `📩 Message WhatsApp à traiter — ${params.patientPhone}`,
+    html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: ${couleur}; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 22px;">${titre}</h1>
+          </div>
+          <div style="background: white; padding: 32px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="color: #374151;">Bonjour Dr. ${h(params.doctorName)},</p>
+            <p style="color: #374151;">
+              L'assistant WhatsApp a passé la main : il a répondu au patient qu'une
+              personne du cabinet le recontacterait.
+            </p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr style="background: #f9fafb;"><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Patient</td><td style="padding: 10px 14px;">${h(params.patientName ?? 'non identifié')}</td></tr>
+              <tr><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Téléphone</td><td style="padding: 10px 14px;">${h(params.patientPhone)}</td></tr>
+              <tr style="background: #f9fafb;"><td style="padding: 10px 14px; font-weight: bold; color: #374151;">Raison</td><td style="padding: 10px 14px;">${h(params.motif)}</td></tr>
+            </table>
+            ${params.urgence ? `<p style="color: #dc2626; font-weight: bold;">Le patient a été invité à appeler le cabinet, et le 150 en cas d'urgence vitale. L'assistant n'évalue aucune situation médicale.</p>` : ''}
+            <p style="color: #9ca3af; font-size: 12px; text-align: center;">MonRDV — Prise de rendez-vous médicaux au Maroc</p>
+          </div>
+        </div>
+      `,
+  })
+}
+
 // Email de notification à l'admin quand un nouveau médecin s'inscrit
 export async function sendAdminNotificationEmail(params: {
   doctorName: string
