@@ -148,12 +148,25 @@ async function enregistrer(
   }
 ): Promise<void> {
   const supabase = createAdminClient()
-  await supabase
+  const { error } = await supabase
     .from('whatsapp_conversations')
     .upsert(
       { wa_id: waId, ...maj, fenetre_fin: fenetreFin(), maj_le: new Date().toISOString() },
       { onConflict: 'wa_id' }
     )
+
+  // Cette fonction écrit TOUT l'état du chatbot. Elle ne vérifiait pas son
+  // erreur : une écriture refusée passait inaperçue, le bot répondait comme si
+  // de rien n'était, et l'état restait à l'étape précédente. C'est ainsi qu'une
+  // escalade a été annoncée au patient sans jamais être enregistrée — donc sans
+  // que personne au cabinet ne soit prévenu.
+  //
+  // On LÈVE plutôt que de continuer : mieux vaut un message d'erreur, et un
+  // rejeu par Meta, qu'une conversation qui affirme ce qui n'a pas eu lieu.
+  if (error) {
+    console.error('[whatsapp] état non enregistré :', error.code, error.message, maj)
+    throw new Error(`État non enregistré (${error.code ?? 'sans code'}) : ${error.message}`)
+  }
 }
 
 // ---------------------------------------------------------------------------
