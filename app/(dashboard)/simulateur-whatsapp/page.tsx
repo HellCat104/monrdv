@@ -14,7 +14,7 @@
 // réels de Meta (3 boutons, 10 lignes, 24 caractères), sinon le simulateur
 // validerait des écrans que WhatsApp tronquerait.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -42,6 +42,17 @@ export default function SimulateurWhatsApp() {
   const [etape, setEtape] = useState<string>('—')
   const [erreur, setErreur] = useState<string | null>(null)
   const [enCours, setEnCours] = useState(false)
+  // Slug du médecin connecté : c'est SON lien wa.me qu'on imite. Écrit en dur,
+  // il ne correspondait à aucun médecin et le parcours « arrivée par lien »
+  // retombait silencieusement sur « praticien inconnu ».
+  const [medecin, setMedecin] = useState<{ slug: string; nom: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/whatsapp/simulateur')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.slug && setMedecin({ slug: d.slug, nom: d.nom }))
+      .catch(() => {})
+  }, [])
 
   async function envoyer(payload: { texte?: string; choix?: string }, libelleAffiche: string) {
     setEnCours(true)
@@ -134,8 +145,12 @@ export default function SimulateurWhatsApp() {
           <Button
             size="sm"
             variant="secondary"
-            disabled={enCours}
-            onClick={() => envoyer({ texte: 'RDV dr-benali' }, 'RDV dr-benali (lien wa.me)')}
+            disabled={enCours || !medecin}
+            title={medecin ? `Imite le lien wa.me de ${medecin.nom}` : 'Chargement du praticien…'}
+            onClick={() =>
+              medecin &&
+              envoyer({ texte: `RDV dr-${medecin.slug}` }, `RDV dr-${medecin.slug} (lien wa.me)`)
+            }
           >
             Arrivée par lien
           </Button>

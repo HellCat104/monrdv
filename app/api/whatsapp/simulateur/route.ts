@@ -21,10 +21,24 @@ async function medecinConnecte() {
   if (!user) return null
   const { data } = await supabase
     .from('doctors')
-    .select('id')
+    .select('id, slug, name')
     .eq('email', user.email)
     .maybeSingle()
-  return data?.id ?? null
+  return data ?? null
+}
+
+/**
+ * Le médecin connecté, pour que le simulateur sache quel lien wa.me imiter.
+ *
+ * Le bouton « Arrivée par lien » envoyait un slug écrit en dur (`dr-benali`)
+ * qui ne correspondait à aucun médecin : il ne résolvait rien et retombait sur
+ * le parcours « praticien inconnu », rendant intestable le parcours d'un
+ * nouveau patient arrivé par lien. Le slug vient maintenant de la base.
+ */
+export async function GET() {
+  const medecin = await medecinConnecte()
+  if (!medecin) return NextResponse.json({ error: SESSION_EXPIREE }, { status: 401 })
+  return NextResponse.json({ slug: medecin.slug, nom: medecin.name })
 }
 
 // « Non autorisé » tout court a fait chercher un défaut du chatbot là où il n'y
