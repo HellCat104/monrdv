@@ -36,6 +36,12 @@ interface Props {
    *  d'origine, inchangé. Lu par getCabinetLogoUrl dans chacune des trois
    *  pages qui montent cet éditeur. */
   logoUrl?: string | null
+  /** Renouvellement : date de l'ordonnance dont le texte a été recopié.
+   *  Sert UNIQUEMENT à le dire au praticien — l'écran est pour le reste un
+   *  écran de création ordinaire, et c'est bien une ordonnance neuve qui
+   *  sera enregistrée. Un médecin qui voit son texte déjà rempli doit savoir
+   *  d'où il vient, sinon il peut croire qu'il modifie l'ancienne. */
+  repriseDu?: string | null
 }
 
 // Message affiché tant que l'échec n'est pas réparé. Il dit ce qui est perdu
@@ -47,6 +53,7 @@ const ECHEC_ENREGISTREMENT =
 export function OrdonnanceEditor({
   doctor, patient, appointmentId, appointmentDate, existingId, existingContent,
   favorites: initialFavorites, recentLines, backHref = '/appointments', logoUrl = null,
+  repriseDu = null,
 }: Props) {
   const [content, setContent] = useState(existingContent)
   const [prescriptionId, setPrescriptionId] = useState<string | null>(existingId)
@@ -162,6 +169,20 @@ export function OrdonnanceEditor({
           </Button>
         </div>
       </div>
+
+      {/* Renouvellement : le texte vient d'une ordonnance passée. On le dit,
+          et on dit surtout ce qui va se passer — « une nouvelle ordonnance
+          sera enregistrée » —, parce qu'un champ pré-rempli ressemble à une
+          modification. Jamais imprimé : le patient n'a rien à y lire. */}
+      {repriseDu && (
+        <div className="max-w-5xl mx-auto mb-4 flex items-start gap-2 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-4 py-3 text-sm print:hidden">
+          <History className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            Texte repris de l&apos;ordonnance du <strong>{formatDateFr(repriseDu)}</strong>. Modifiez-le si besoin :
+            une <strong>nouvelle</strong> ordonnance sera enregistrée, l&apos;ancienne reste dans le dossier.
+          </span>
+        </div>
+      )}
 
       {/* Échec d'enregistrement — reste affiché jusqu'au prochain essai
           réussi (pas de disparition automatique : un message d'échec qui

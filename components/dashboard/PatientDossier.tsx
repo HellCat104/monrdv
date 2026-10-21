@@ -533,12 +533,22 @@ export default function PatientDossier({
     setAppts((prev) => prev.map((a) => a.id === id ? { ...a, attendance } : a))
   }
 
-  async function renewPrescription(p: Prescription) {
-    const { data, error } = await supabase.from('prescriptions')
-      .insert({ doctor_id: doctorId, patient_id: patient.id, appointment_id: null, content: p.content }).select('*').single()
-    if (error || !data) { alert('Échec du renouvellement'); return }
-    setPrescriptions((prev) => [data, ...prev])
-    window.open(`/ordonnance/p/${data.id}`, '_blank')
+  // Renouvellement : on OUVRE l'éditeur pré-rempli, on n'enregistre rien.
+  //
+  // Avant, le clic insérait la copie immédiatement, puis ouvrait l'ordonnance
+  // créée. Deux conséquences : un médecin qui cliquait par erreur, ou qui
+  // refermait l'onglet après avoir vu qu'il fallait changer la posologie,
+  // laissait dans le dossier du patient une ordonnance qu'il n'avait ni relue
+  // ni remise — et le dossier est ce qu'on produit en cas de litige. Ensuite,
+  // la copie était toujours « hors RDV », donc invisible dans les ordonnances
+  // de la consultation en cours.
+  //
+  // L'éditeur enregistre quand le praticien clique « Enregistrer », comme pour
+  // n'importe quelle ordonnance. Même chemin que le bouton « Renouveler » de
+  // l'écran de consultation : un seul comportement à connaître.
+  function renewPrescription(p: Prescription) {
+    const back = encodeURIComponent(`/patients/${patient.id}`)
+    window.open(`/ordonnance/patient/${patient.id}?reprendre=${p.id}&back=${back}`, '_blank')
   }
 
   async function uploadDocument(e: React.ChangeEvent<HTMLInputElement>) {
@@ -968,7 +978,7 @@ export default function PatientDossier({
                       <button onClick={() => window.open(`/ordonnance/p/${p.id}`, '_blank')} className="text-gray-700 hover:text-primary-600 truncate text-left flex-1">
                         <span className="text-gray-400">{formatDateShort(p.created_at)} · </span>{(p.content ?? '').split('\n').filter(Boolean)[0] || 'Ordonnance'}
                       </button>
-                      <button onClick={() => renewPrescription(p)} title="Renouveler" className="text-primary-500 hover:text-primary-700 shrink-0"><RefreshCw className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => renewPrescription(p)} title="Repartir de cette ordonnance pour en écrire une nouvelle" className="text-primary-500 hover:text-primary-700 shrink-0"><RefreshCw className="h-3.5 w-3.5" /></button>
                     </li>
                   ))}
                 </ul>

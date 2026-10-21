@@ -16,7 +16,7 @@ import PerioCard from '@/components/dashboard/PerioCard'
 import ActesDuJourCard from './ActesDuJourCard'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
-  AlertTriangle, CheckCircle2, Plus, ChevronDown,
+  AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw,
 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,6 +88,12 @@ export default function ConsultationClient({
   const [noteId, setNoteId] = useState<string | null>(existingNoteId)
   const [noteState, setNoteState] = useState<'idle' | 'saving' | 'saved'>('idle')
 
+  // Ordonnance à reconduire : la plus récente du patient qui n'a PAS été
+  // écrite pendant cette consultation. `recentPrescriptions` est trié du plus
+  // récent au plus ancien et inclut celles du jour, d'où le filtre.
+  const idsDuJour = new Set(consultationPrescriptions.map((p) => p.id))
+  const derniereOrdonnanceAnterieure = recentPrescriptions.find((p) => !idsDuJour.has(p.id)) ?? null
+
   const [vitalInput, setVitalInput] = useState<Record<string, string>>({})
   const [vitals, setVitals] = useState<Row[]>(recentVitals)
   const [savingVital, setSavingVital] = useState(false)
@@ -142,16 +148,34 @@ export default function ConsultationClient({
     </div>
   )
 
+  // Renouvellement : on recopie le texte dans une ordonnance NEUVE rattachée à
+  // la consultation en cours. `reprendre` suffit à forcer la création côté
+  // serveur, `new=1` est là pour que l'URL se lise seule.
+  const lienRenouveler = (prescriptionId: string) =>
+    `/ordonnance/${appointmentId}?new=1&reprendre=${prescriptionId}` +
+    `&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`
+
   const ligneOrdonnance = (p: Row) => (
-    <button
-      key={p.id}
-      onClick={() => goTo(`/ordonnance/p/${p.id}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
-      className="block w-full text-left text-xs text-gray-600 hover:text-primary-600 mb-1.5 border-l-2 border-gray-100 hover:border-primary-300 pl-2"
-      title="Modifier cette ordonnance"
-    >
-      <span className="text-gray-400">{formatDateFr(p.created_at)} · modifier</span>
-      <span className="block line-clamp-1 whitespace-pre-wrap">{p.content}</span>
-    </button>
+    <div key={p.id} className="mb-1.5 border-l-2 border-gray-100 hover:border-primary-300 pl-2 group">
+      <button
+        onClick={() => goTo(`/ordonnance/p/${p.id}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
+        className="block w-full text-left text-xs text-gray-600 hover:text-primary-600"
+        title="Modifier cette ordonnance"
+      >
+        <span className="text-gray-400">{formatDateFr(p.created_at)} · modifier</span>
+        <span className="block line-clamp-1 whitespace-pre-wrap">{p.content}</span>
+      </button>
+      {/* Renouveler CELLE-CI, et pas seulement la dernière : un chronique a
+          souvent deux ordonnances qui alternent (traitement de fond, épisode
+          aigu), et la plus récente n'est pas toujours celle qu'on reconduit. */}
+      <button
+        onClick={() => goTo(lienRenouveler(p.id))}
+        className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary-600 hover:text-primary-700 hover:underline"
+        title="Repartir de cette ordonnance pour en écrire une nouvelle"
+      >
+        <RotateCcw className="h-3 w-3" /> Renouveler
+      </button>
+    </div>
   )
 
   const savingRef = useRef(false)
@@ -441,12 +465,26 @@ export default function ConsultationClient({
               <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                 <Pill className="h-4 w-4 text-primary-500" /> Ordonnances de la consultation ({consultationPrescriptions.length})
               </h3>
-              <Button
-                variant="outline" size="sm"
-                onClick={() => goTo(`/ordonnance/${appointmentId}?new=1&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
-              >
-                <Plus className="h-4 w-4 mr-1" /> Nouvelle
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* La dernière ordonnance du patient, hors celles écrites
+                    aujourd'hui : sans ce filtre, « Renouveler la dernière »
+                    recopierait l'ordonnance qu'on vient tout juste de rédiger. */}
+                {derniereOrdonnanceAnterieure && (
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => goTo(lienRenouveler(derniereOrdonnanceAnterieure.id))}
+                    title={`Repartir de l'ordonnance du ${formatDateFr(derniereOrdonnanceAnterieure.created_at)}`}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" /> Renouveler la dernière
+                  </Button>
+                )}
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => goTo(`/ordonnance/${appointmentId}?new=1&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Nouvelle
+                </Button>
+              </div>
             </div>
             {/* Pas d'ordonnance : la carte se réduit à son titre et à son
                 bouton. La phrase « Aucune ordonnance. Cliquez Nouvelle… » qui

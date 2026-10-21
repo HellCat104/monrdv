@@ -23,3 +23,35 @@ export async function getRecentPrescriptionLines(supabase: any, doctorId: string
     .slice(0, 10)
     .map(([line]) => line)
 }
+
+// Ordonnance dont on repart pour en écrire une nouvelle (« Renouveler »).
+//
+// Le geste le plus répété chez un généraliste : un patient chronique revient et
+// repart avec les mêmes lignes. Jusqu'ici il fallait tout retaper, parce que les
+// ordonnances récentes n'étaient qu'une liste à consulter.
+//
+// On RECOPIE le texte dans une ordonnance NEUVE — on ne modifie jamais
+// l'ancienne : une ordonnance remise au patient est un document délivré, et le
+// dossier doit garder la trace des deux délivrances.
+//
+// Le patient est vérifié en plus du médecin : l'identifiant vient de l'URL, et
+// rien n'empêcherait sans cela de reprendre l'ordonnance d'un autre patient du
+// même cabinet dans le dossier de celui-ci.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getOrdonnanceAReprendre(
+  supabase: any,
+  doctorId: string,
+  patientId: string,
+  prescriptionId?: string | null,
+): Promise<{ content: string; created_at: string } | null> {
+  if (!prescriptionId) return null
+  const { data } = await supabase
+    .from('prescriptions')
+    .select('content, created_at')
+    .eq('id', prescriptionId)
+    .eq('doctor_id', doctorId)
+    .eq('patient_id', patientId)
+    .maybeSingle()
+  if (!data?.content) return null
+  return { content: String(data.content), created_at: String(data.created_at) }
+}

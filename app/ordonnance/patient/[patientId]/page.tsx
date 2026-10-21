@@ -3,7 +3,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
-import { getRecentPrescriptionLines } from '@/lib/ordonnance'
+import { getOrdonnanceAReprendre, getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE } from '@/lib/document-entete'
 import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
@@ -17,7 +17,7 @@ function safeBack(back?: string): string | undefined {
 
 interface Props {
   params: { patientId: string }
-  searchParams: { back?: string }
+  searchParams: { back?: string; reprendre?: string }
 }
 
 export const dynamic = 'force-dynamic'
@@ -48,9 +48,11 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
 
   const favorites = ((doctor.prescription_favorites as string[] | null) ?? []).filter((f) => typeof f === 'string')
   // Logo lu à part de la fiche : sans la migration v57, pas de logo, pas de 404.
-  const [recentLines, logoUrl] = await Promise.all([
+  const [recentLines, logoUrl, reprise] = await Promise.all([
     getRecentPrescriptionLines(supabase, doctor.id, favorites),
     getCabinetLogoUrl(supabase, doctor.id),
+    // ?reprendre=<id> → renouvellement depuis la fiche patient, hors RDV
+    getOrdonnanceAReprendre(supabase, doctor.id, patient.id, searchParams.reprendre),
   ])
 
   return (
@@ -60,7 +62,8 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
       appointmentId={null}
       appointmentDate={format(new Date(), 'yyyy-MM-dd')}
       existingId={null}
-      existingContent=""
+      existingContent={reprise?.content ?? ''}
+      repriseDu={reprise?.created_at ?? null}
       favorites={favorites}
       recentLines={recentLines}
       backHref={safeBack(searchParams.back)}

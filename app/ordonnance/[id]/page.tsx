@@ -2,7 +2,7 @@
 // Accessible uniquement par le médecin propriétaire du RDV.
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getRecentPrescriptionLines } from '@/lib/ordonnance'
+import { getOrdonnanceAReprendre, getRecentPrescriptionLines } from '@/lib/ordonnance'
 import { OrdonnanceEditor } from './OrdonnanceEditor'
 import { canAccess } from '@/lib/plan'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
@@ -10,7 +10,7 @@ import { COLONNES_EN_TETE } from '@/lib/document-entete'
 
 interface Props {
   params: { id: string }
-  searchParams: { back?: string; new?: string }
+  searchParams: { back?: string; new?: string; reprendre?: string }
 }
 
 export const dynamic = 'force-dynamic'
@@ -45,9 +45,14 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
 
   const patient = Array.isArray(apt.patient) ? apt.patient[0] : apt.patient
 
+  // ?reprendre=<id> → renouvellement : on recopie le texte d'une ordonnance
+  // passée dans une ordonnance NEUVE. Donc forcément une création, jamais la
+  // reprise de celle du RDV — sans quoi on écraserait l'ordonnance du jour.
+  const reprise = await getOrdonnanceAReprendre(supabase, doctor.id, patient.id, searchParams.reprendre)
+
   // ?new=1 → forcer une NOUVELLE ordonnance (plusieurs par consultation).
   // Sinon, on édite la plus récente de ce RDV.
-  const forceNew = searchParams.new === '1'
+  const forceNew = searchParams.new === '1' || !!reprise
   const { data: existing } = forceNew
     ? { data: null }
     : await supabase
@@ -74,7 +79,8 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
       appointmentId={apt.id}
       appointmentDate={apt.date}
       existingId={existing?.id ?? null}
-      existingContent={existing?.content ?? ''}
+      existingContent={reprise?.content ?? existing?.content ?? ''}
+      repriseDu={reprise?.created_at ?? null}
       favorites={favorites}
       recentLines={recentLines}
       backHref={safeBack(searchParams.back)}
