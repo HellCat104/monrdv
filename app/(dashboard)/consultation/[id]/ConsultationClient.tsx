@@ -498,9 +498,9 @@ export default function ConsultationClient({
 
           {/* Ordonnances de cette consultation (plusieurs possibles) */}
           <div className="bg-white border border-gray-100 rounded-xl p-4">
-            <div className={`flex items-center justify-between ${consultationPrescriptions.length > 0 ? 'mb-2' : ''}`}>
+            <div className={`flex items-center justify-between gap-2 flex-wrap ${consultationPrescriptions.length > 0 ? 'mb-2' : ''}`}>
               <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                <Pill className="h-4 w-4 text-primary-500" /> Ordonnances de la consultation ({consultationPrescriptions.length})
+                <Pill className="h-4 w-4 shrink-0 text-primary-500" /> Ordonnances de la consultation ({consultationPrescriptions.length})
               </h3>
               <div className="flex items-center gap-2">
                 {/* La dernière ordonnance du patient, hors celles écrites
@@ -512,7 +512,7 @@ export default function ConsultationClient({
                     onClick={() => goTo(lienRenouveler(derniereOrdonnanceAnterieure.id))}
                     title={`Repartir de l'ordonnance du ${formatDateFr(derniereOrdonnanceAnterieure.created_at)}`}
                   >
-                    <RotateCcw className="h-4 w-4 mr-1" /> Renouveler la dernière
+                    <RotateCcw className="h-4 w-4 mr-1" /> Renouveler
                   </Button>
                 )}
                 <Button

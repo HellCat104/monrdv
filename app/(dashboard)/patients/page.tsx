@@ -1015,7 +1015,7 @@ export default function PatientsPage() {
             {/* Un filtre croisé (pathologie + recherche ou spécialité) peut ne
                 rien renvoyer : dire « aucun patient enregistré » ferait croire
                 à une patientèle vide, et à une perte de données. */}
-            {search || conditionFilter !== 'all' ? 'Aucun patient trouvé' : 'Aucun patient enregistré'}
+            {search || conditionFilter !== 'all' || suiviFilter !== 'all' ? 'Aucun patient trouvé' : 'Aucun patient enregistré'}
           </p>
         </div>
       ) : (
