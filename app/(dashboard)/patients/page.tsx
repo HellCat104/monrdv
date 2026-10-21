@@ -25,9 +25,40 @@ import { messageQuota } from '@/lib/stockage'
 
 const DOC_BUCKET = 'patient-documents'
 
+/** Date du jour au Maroc, au format des colonnes `date` (YYYY-MM-DD).
+ *  `toISOString()` renverrait la date UTC, qui peut être la veille. */
+function jourMaroc(): string {
+  const d = getNowInMaroc()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Nombre de mois entiers écoulés depuis une date (YYYY-MM-DD). */
+function moisDepuis(jour: string): number {
+  const d = getNowInMaroc()
+  const [a, m, j] = jour.split('-').map(Number)
+  let mois = (d.getFullYear() - a) * 12 + (d.getMonth() + 1 - m)
+  if (d.getDate() < j) mois -= 1
+  return Math.max(mois, 0)
+}
+
+/** Jour situé `mois` mois avant aujourd'hui, même format. */
+function jourMoinsMois(mois: number): string {
+  const d = getNowInMaroc()
+  d.setMonth(d.getMonth() - mois)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 interface PatientWithStats extends Patient {
   appointment_count: number
   last_appointment_date: string | null
+  /** Dernier RDV PASSÉ et non annulé — « vu pour la dernière fois ».
+   *  `last_appointment_date` est le dernier RDV tout court : il compte les RDV
+   *  à venir et les annulations, ce qui ferait passer pour suivi un patient
+   *  qu'on n'a pas vu depuis deux ans. */
+  derniere_visite: string | null
+  /** Premier RDV à venir et non annulé. Un patient déjà reprogrammé n'a pas
+   *  à remonter dans « pas vu depuis » : il est attendu. */
+  prochain_rdv: string | null
   present_count: number
   absent_count: number
   late_count: number
@@ -58,6 +89,15 @@ export default function PatientsPage() {
   // Étiquette de pathologie à isoler (v72) — « tous mes diabétiques ».
   // 'all' = pas de filtre, comme pour les spécialités juste au-dessus.
   const [conditionFilter, setConditionFilter] = useState<string>('all')
+  // « Pas vu depuis » : ce qui transforme une cohorte en liste de travail.
+  // Retrouver ses 34 diabétiques ne dit pas lesquels ont décroché.
+  const [suiviFilter, setSuiviFilter] = useState<'all' | '6' | '12' | '24'>('all')
+  // Rappels de suivi créés d'un coup sur les patients sélectionnés
+  const [rappelGroupeOpen, setRappelGroupeOpen] = useState(false)
+  const [rappelGroupeDate, setRappelGroupeDate] = useState('')
+  const [rappelGroupeMotif, setRappelGroupeMotif] = useState('')
+  const [rappelGroupeEnCours, setRappelGroupeEnCours] = useState(false)
+  const [rappelGroupeResultat, setRappelGroupeResultat] = useState<string | null>(null)
   const [selectedPatient, setSelectedPatient] = useState<PatientWithStats | null>(null)
   const [patientAppointments, setPatientAppointments] = useState<Appointment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -155,13 +195,19 @@ export default function PatientsPage() {
       .eq('doctor_id', doctor.id)
       .order('created_at', { ascending: false })
 
+    const aujourdhuiStr = jourMaroc()
     const enriched: PatientWithStats[] = (pts ?? []).map((p: any) => {
       const apts = p.appointments ?? []
       const sorted = [...apts].sort((a: any, b: any) => b.date.localeCompare(a.date))
+      const actifs = sorted.filter((a: any) => a.status !== 'cancelled')
       return {
         ...p,
         appointment_count: apts.length,
         last_appointment_date: sorted[0]?.date ?? null,
+        derniere_visite: actifs.find((a: any) => a.date <= aujourdhuiStr)?.date ?? null,
+        // `actifs` est trié du plus récent au plus ancien : le prochain RDV est
+        // donc le DERNIER des RDV futurs de la liste.
+        prochain_rdv: [...actifs].reverse().find((a: any) => a.date > aujourdhuiStr)?.date ?? null,
         present_count: apts.filter((a: any) => a.attendance === 'present').length,
         absent_count: apts.filter((a: any) => a.attendance === 'absent').length,
         late_count: apts.filter((a: any) => a.attendance === 'late').length,
@@ -661,6 +707,46 @@ export default function PatientsPage() {
     setSelectedIds(new Set())
   }
 
+  // Toute la cohorte affichée, d'un clic. Sans ça, « mes 34 diabétiques non
+  // revus depuis un an » demande 34 clics : la cohorte resterait un outil de
+  // lecture, jamais de travail.
+  function selectAllFiltered(ids: string[]) {
+    setSelectedIds(new Set(ids))
+  }
+
+  // Rappels de suivi posés sur tous les patients sélectionnés.
+  //
+  // On n'envoie RIEN au patient ici : on inscrit un rappel dans MonRDV, celui
+  // que le médecin voit remonter sur son tableau de bord à échéance et qu'il
+  // traite en appelant. C'est volontaire — un message sortant automatique vers
+  // des dizaines de patients n'est pas la même promesse, ni le même consentement.
+  async function creerRappelsGroupes() {
+    if (!doctorId || selectedIds.size === 0 || !rappelGroupeDate) return
+    setRappelGroupeEnCours(true)
+    setRappelGroupeResultat(null)
+    const ids = Array.from(selectedIds)
+    const { data, error } = await supabase
+      .from('recalls')
+      .insert(ids.map((patient_id) => ({
+        doctor_id: doctorId,
+        patient_id,
+        due_date: rappelGroupeDate,
+        reason: rappelGroupeMotif.trim() || null,
+      })))
+      .select('id')
+    setRappelGroupeEnCours(false)
+    // Un insert groupé refusé l'est en entier : on le dit, plutôt que de
+    // laisser croire à un succès partiel.
+    if (error || !data) {
+      setRappelGroupeResultat(`Aucun rappel créé. ${error?.message ?? 'Réessayez.'}`)
+      return
+    }
+    setRappelGroupeResultat(`${data.length} rappel(s) créé(s) pour le ${formatDateFr(rappelGroupeDate)}.`)
+    setRappelGroupeOpen(false)
+    setRappelGroupeMotif('')
+    exitSelection()
+  }
+
   // Export "liste d'infos" : un CSV des patients sélectionnés (ouvrable dans Excel)
   function exportSelectedList() {
     const sel = patients.filter((p) => selectedIds.has(p.id))
@@ -718,6 +804,16 @@ export default function PatientsPage() {
   const filtered = patients
     .filter((p) => specialtyFilter === 'all' || p.specialties.includes(specialtyFilter))
     .filter((p) => conditionFilter === 'all' || porteEtiquette(p.conditions, conditionFilter))
+    // Pas vu depuis N mois. Deux exclusions volontaires : le patient qui a
+    // déjà un RDV à venir (il est attendu, le relancer serait absurde) et
+    // celui qui n'est jamais venu (une fiche créée sans suite n'est pas un
+    // suivi interrompu — c'est un autre problème, et un autre message).
+    .filter((p) => {
+      if (suiviFilter === 'all') return true
+      if (p.prochain_rdv) return false
+      if (!p.derniere_visite) return false
+      return p.derniere_visite < jourMoinsMois(Number(suiviFilter))
+    })
     .filter((p) => {
       if (!search) return true
       const q = search.toLowerCase()
@@ -750,10 +846,21 @@ export default function PatientsPage() {
               « lesquels ». Le total seul laissait le médecin compter les
               cartes à l'écran. */}
           <p className="text-sm text-gray-500 mt-1">
-            {conditionFilter === 'all'
+            {conditionFilter === 'all' && suiviFilter === 'all'
               ? `${patients.length} patient(s) enregistré(s)`
-              : `${filtered.length} patient(s) · ${conditionFilter}`}
+              : [
+                  `${filtered.length} patient(s)`,
+                  conditionFilter !== 'all' ? conditionFilter : null,
+                  suiviFilter !== 'all' ? `pas vus depuis ${suiviFilter} mois` : null,
+                ].filter(Boolean).join(' · ')}
           </p>
+          {/* Ce que le filtre écarte, dit une fois : sinon un médecin qui
+              compte ses dossiers trouve le total faux et doute de la liste. */}
+          {suiviFilter !== 'all' && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              Les patients qui ont déjà un rendez-vous à venir ne sont pas comptés.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {selectionMode ? (
@@ -815,6 +922,19 @@ export default function PatientsPage() {
             </SelectContent>
           </Select>
         )}
+        {/* Pas vu depuis — placé APRÈS la pathologie, parce qu'il se lit dans
+            cet ordre : « mes diabétiques », puis « lesquels ont décroché ». */}
+        <Select value={suiviFilter} onValueChange={(v) => setSuiviFilter(v as typeof suiviFilter)}>
+          <SelectTrigger className="w-52 shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Vus ou non, peu importe</SelectItem>
+            <SelectItem value="6">Pas vus depuis 6 mois</SelectItem>
+            <SelectItem value="12">Pas vus depuis 1 an</SelectItem>
+            <SelectItem value="24">Pas vus depuis 2 ans</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
           <SelectTrigger className="w-48 shrink-0">
             <SelectValue />
@@ -830,8 +950,35 @@ export default function PatientsPage() {
       {/* Barre d'actions groupées (mode sélection) */}
       {selectionMode && (
         <div className="flex items-center justify-between gap-3 flex-wrap bg-primary-50 border border-primary-100 rounded-xl px-4 py-2.5">
-          <span className="text-sm font-medium text-primary-700">{selectedIds.size} patient(s) sélectionné(s)</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-primary-700">{selectedIds.size} patient(s) sélectionné(s)</span>
+            {/* « Les {n} affichés », et pas « tous » : avec un filtre actif, la
+                sélection ne porte que sur la cohorte à l'écran, et le libellé
+                doit le dire avant le clic. */}
+            {selectedIds.size < filtered.length && (
+              <button
+                onClick={() => selectAllFiltered(filtered.map((p) => p.id))}
+                className="text-xs font-medium text-primary-600 hover:text-primary-800 hover:underline"
+              >
+                Sélectionner les {filtered.length} affichés
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline" size="sm"
+              onClick={() => {
+                // Motif pré-rempli depuis la pathologie filtrée : c'est la
+                // raison de la convocation dans 9 cas sur 10.
+                setRappelGroupeMotif(conditionFilter !== 'all' ? `Suivi ${conditionFilter}` : '')
+                setRappelGroupeDate(jourMaroc())
+                setRappelGroupeResultat(null)
+                setRappelGroupeOpen(true)
+              }}
+              disabled={selectedIds.size === 0}
+            >
+              <BellRing className="h-4 w-4 mr-1.5" /> Créer un rappel de suivi
+            </Button>
             <Button variant="outline" size="sm" onClick={exportSelectedList} disabled={selectedIds.size === 0}>
               <Download className="h-4 w-4 mr-1.5" /> Exporter la liste (Excel)
             </Button>
@@ -842,6 +989,15 @@ export default function PatientsPage() {
               Annuler
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Résultat de la création groupée — hors de la fenêtre, qui est fermée
+          à ce moment-là. Reste jusqu'au prochain essai. */}
+      {rappelGroupeResultat && (
+        <div role="status" className="flex items-start justify-between gap-3 bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-2.5 text-sm">
+          <span className="flex items-start gap-2"><Check className="h-4 w-4 mt-0.5 shrink-0" />{rappelGroupeResultat}</span>
+          <button onClick={() => setRappelGroupeResultat(null)} className="text-green-400 hover:text-green-700 shrink-0"><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -902,6 +1058,15 @@ export default function PatientsPage() {
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
                           Dernier RDV : {formatDateShort(patient.last_appointment_date)}
+                        </span>
+                      )}
+                      {/* Quand on travaille une cohorte de décrochés, chaque
+                          carte doit dire POURQUOI elle est là. « Dernier RDV »
+                          ne suffit pas : il faut compter les mois de tête. */}
+                      {suiviFilter !== 'all' && patient.derniere_visite && (
+                        <span className="flex items-center gap-1 text-amber-600 font-medium">
+                          <Clock className="h-3 w-3" />
+                          Pas vu depuis {moisDepuis(patient.derniere_visite)} mois
                         </span>
                       )}
                       {/* Rebond (v59) : repérable dès la liste, sans ouvrir
@@ -1097,8 +1262,7 @@ export default function PatientsPage() {
             <div className="space-y-4">
               {/* Fiche de synthèse « en 10 secondes » — psychiatrie */}
               {isPsychiatricDoctor(doctorSpecialties) && (() => {
-                const now = getNowInMaroc()
-                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+                const todayStr = jourMaroc()
                 const nextApt = patientAppointments
                   .filter((a) => a.date >= todayStr && a.status !== 'cancelled')
                   .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0]
@@ -2004,6 +2168,57 @@ export default function PatientsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Rappels de suivi sur une cohorte */}
+      <Dialog open={rappelGroupeOpen} onOpenChange={setRappelGroupeOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BellRing className="h-5 w-5 text-primary-500" /> Rappel de suivi pour {selectedIds.size} patient(s)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Ce que ça fait, et surtout ce que ça NE fait pas. Un médecin qui
+                clique « rappel » sur trente patients peut croire qu'un message
+                part tout seul : la phrase lève le doute avant le clic. */}
+            <p className="text-sm text-gray-600">
+              Un rappel s&apos;inscrira dans MonRDV pour chacun d&apos;eux. Il remontera sur votre
+              tableau de bord à l&apos;échéance, avec leur numéro, pour que vous les appeliez.
+              <strong> Aucun message n&apos;est envoyé aux patients.</strong>
+            </p>
+            <div>
+              <Label htmlFor="rappel-groupe-date">À rappeler le</Label>
+              <Input
+                id="rappel-groupe-date"
+                type="date"
+                value={rappelGroupeDate}
+                onChange={(e) => setRappelGroupeDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="rappel-groupe-motif">Motif (facultatif)</Label>
+              <Input
+                id="rappel-groupe-motif"
+                value={rappelGroupeMotif}
+                onChange={(e) => setRappelGroupeMotif(e.target.value)}
+                placeholder="Bilan trimestriel, contrôle tension…"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setRappelGroupeOpen(false)} className="flex-1">
+                Annuler
+              </Button>
+              <Button
+                onClick={creerRappelsGroupes}
+                disabled={rappelGroupeEnCours || !rappelGroupeDate || selectedIds.size === 0}
+                className="flex-1"
+              >
+                {rappelGroupeEnCours ? 'Création…' : `Créer ${selectedIds.size} rappel(s)`}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
