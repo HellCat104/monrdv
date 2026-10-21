@@ -23,7 +23,7 @@ import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDia
 import { UserPlus } from 'lucide-react'
 import { format, startOfWeek, endOfWeek, addDays, subDays, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { getNowInMaroc } from '@/lib/utils'
+import { getNowInMaroc, ageFromBirthDate } from '@/lib/utils'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
 
 type ViewMode = 'day' | 'week' | 'month' | 'all'
@@ -136,12 +136,30 @@ export default function AppointmentsPage() {
     return (data ?? []) as PatientLite[]
   }
 
-  async function addWalkIn(arg: { patientId?: string; newPatient?: { first_name: string; last_name: string; phone: string } }) {
+  async function addWalkIn(arg: {
+    patientId?: string
+    newPatient?: { first_name: string; last_name: string; phone: string; birth_date?: string }
+    consultationTypeId?: string
+    durationMinutes?: number
+  }) {
     if (!doctor) throw new Error('Médecin introuvable')
     let patientId = arg.patientId
     if (!patientId && arg.newPatient) {
+      // La date de naissance était COLLECTÉE par la fenêtre — qui affiche même
+      // l'âge calculé pendant la frappe — puis jetée ici : la fiche créée au
+      // comptoir n'avait jamais d'âge, et ses ordonnances partaient sans.
       const { data, error } = await supabase.from('patients')
-        .insert({ doctor_id: doctor.id, first_name: arg.newPatient.first_name, last_name: arg.newPatient.last_name, phone: arg.newPatient.phone })
+        .insert({
+          doctor_id: doctor.id,
+          first_name: arg.newPatient.first_name,
+          last_name: arg.newPatient.last_name,
+          phone: arg.newPatient.phone,
+          birth_date: arg.newPatient.birth_date || null,
+          // `age` est écrit EN PLUS, comme partout ailleurs (fiche patient,
+          // routes secrétaire) : c'est cette colonne que lisent l'ordonnance
+          // et le certificat, pas la date de naissance.
+          age: ageFromBirthDate(arg.newPatient.birth_date),
+        })
         .select('id').single()
       if (error || !data) throw new Error('Échec de la création du patient')
       patientId = data.id
@@ -158,7 +176,13 @@ export default function AppointmentsPage() {
       walk_in: true,
       queue_status: 'arrive',
       attendance: 'present',
-      duration_minutes: doctor.appointment_duration ?? 30,
+      // Motif de la visite : il porte la durée ET le tarif. Sans lui, la
+      // consultation s'ouvrait avec « Total dû : 0 » et le praticien retapait
+      // son prix à chaque patient du comptoir. Le montant n'est PAS écrit ici :
+      // l'écran de consultation le pré-remplit depuis le motif, comme pour un
+      // rendez-vous pris en ligne — une seule source de vérité pour le prix.
+      consultation_type_id: arg.consultationTypeId ?? null,
+      duration_minutes: arg.durationMinutes ?? doctor.appointment_duration ?? 30,
     })
     if (error) throw new Error('Échec de l\'ajout à la file')
     // Bascule sur aujourd'hui pour voir le patient ajouté
@@ -546,7 +570,7 @@ export default function AppointmentsPage() {
       )}
 
       {/* Dialog : patient sans RDV */}
-      <WalkInDialog open={walkInOpen} onOpenChange={setWalkInOpen} onSearch={searchWalkInPatients} onSubmit={addWalkIn} />
+      <WalkInDialog open={walkInOpen} onOpenChange={setWalkInOpen} onSearch={searchWalkInPatients} onSubmit={addWalkIn} doctorId={doctor?.id ?? null} />
 
       {/* Dialog : bloquer un créneau */}
       <Dialog open={blockOpen} onOpenChange={setBlockOpen}>

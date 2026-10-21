@@ -5,6 +5,9 @@
 // ajouté directement à la file du jour, sans réserver de créneau.
 import { useState, useEffect } from 'react'
 import { formatAge } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { ConsultationType } from '@/types'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,13 +16,22 @@ import { Search, UserPlus, Check } from 'lucide-react'
 
 export interface PatientLite { id: string; first_name: string; last_name: string; phone: string }
 
+// Valeur « sans motif » du menu : durée de base du médecin, aucun tarif.
+const SANS_MOTIF = '__none__'
+
 export function WalkInDialog({
-  open, onOpenChange, onSearch, onSubmit,
+  open, onOpenChange, onSearch, onSubmit, doctorId,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   onSearch: (query: string) => Promise<PatientLite[]>
-  onSubmit: (arg: { patientId?: string; newPatient?: { first_name: string; last_name: string; phone: string; birth_date?: string } }) => Promise<void>
+  onSubmit: (arg: {
+    patientId?: string
+    newPatient?: { first_name: string; last_name: string; phone: string; birth_date?: string }
+    consultationTypeId?: string
+    durationMinutes?: number
+  }) => Promise<void>
+  doctorId?: string | null
 }) {
   const [mode, setMode] = useState<'existing' | 'new'>('existing')
   const [query, setQuery] = useState('')
@@ -28,11 +40,28 @@ export function WalkInDialog({
   const [np, setNp] = useState({ first_name: '', last_name: '', phone: '', birth_date: '' })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  // Motif de la visite — donc son tarif. Sans lui, le patient du comptoir
+  // arrivait en consultation avec « Total dû : 0 » et le praticien retapait
+  // son prix à chaque patient, alors qu'il est déjà dans ses paramètres.
+  const [types, setTypes] = useState<ConsultationType[]>([])
+  const [typeId, setTypeId] = useState<string>(SANS_MOTIF)
 
   // Réinitialise à l'ouverture
   useEffect(() => {
-    if (open) { setMode('existing'); setQuery(''); setResults([]); setSelected(null); setNp({ first_name: '', last_name: '', phone: '', birth_date: '' }); setError('') }
+    if (open) { setMode('existing'); setQuery(''); setResults([]); setSelected(null); setNp({ first_name: '', last_name: '', phone: '', birth_date: '' }); setTypeId(SANS_MOTIF); setError('') }
   }, [open])
+
+  // Motifs actifs du médecin, chargés une fois à la première ouverture.
+  useEffect(() => {
+    if (!open || !doctorId || types.length > 0) return
+    createClient()
+      .from('consultation_types')
+      .select('*')
+      .eq('doctor_id', doctorId)
+      .eq('active', true)
+      .order('name')
+      .then(({ data }) => setTypes((data ?? []) as ConsultationType[]))
+  }, [open, doctorId, types.length])
 
   // Recherche (debounce léger)
   useEffect(() => {
@@ -47,7 +76,14 @@ export function WalkInDialog({
     if (mode === 'new' && (!np.first_name.trim() || !np.last_name.trim() || !np.phone.trim())) { setError('Prénom, nom et téléphone requis.'); return }
     setSubmitting(true)
     try {
-      await onSubmit(mode === 'existing' ? { patientId: selected!.id } : { newPatient: { first_name: np.first_name.trim(), last_name: np.last_name.trim(), phone: np.phone.trim(), birth_date: np.birth_date || undefined } })
+      const motif = types.find((t) => t.id === typeId)
+      await onSubmit({
+        ...(mode === 'existing'
+          ? { patientId: selected!.id }
+          : { newPatient: { first_name: np.first_name.trim(), last_name: np.last_name.trim(), phone: np.phone.trim(), birth_date: np.birth_date || undefined } }),
+        consultationTypeId: motif?.id,
+        durationMinutes: motif?.duration_minutes,
+      })
       onOpenChange(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Échec de l\'ajout.')
@@ -107,6 +143,28 @@ export function WalkInDialog({
               <Input type="date" max={new Date().toISOString().slice(0, 10)} value={np.birth_date} onChange={(e) => setNp({ ...np, birth_date: e.target.value })} />
               {formatAge(np.birth_date) && <p className="text-xs font-medium text-primary-600">👶 {formatAge(np.birth_date)}</p>}
             </div>
+          </div>
+        )}
+
+        {/* Sous les deux modes : le motif qualifie la visite, pas le patient.
+            Masqué quand le praticien n'a déclaré aucun motif — lui montrer un
+            menu vide ne lui apprendrait rien. */}
+        {types.length > 0 && (
+          <div className="space-y-1.5">
+            <Label>Motif de la consultation</Label>
+            <Select value={typeId} onValueChange={setTypeId}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SANS_MOTIF}>Sans motif précis</SelectItem>
+                {types.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                    {t.default_price != null && Number(t.default_price) > 0 ? ` — ${t.default_price} Dh` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-gray-400">Le tarif et la durée suivent le motif choisi.</p>
           </div>
         )}
 
