@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { allVitalDefs, resolveEnabledVitals, isPsychiatricDoctor, type VitalDef } from '@/types'
 import { canAccess } from '@/lib/plan'
+import { colonneAbsente } from '@/lib/migrations'
 import { isDentalDoctor } from '@/lib/dental'
 import ConsultationClient from './ConsultationClient'
 
@@ -25,7 +26,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const { data: apt } = await supabase
     .from('appointments')
-    .select('id, date, time, amount_paid, amount_due, payment_method, invoice_no, quote_id, consultation_type:consultation_types(id, name, default_price), patient:patients(id, first_name, last_name, age, birth_date, blood_group, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
+    .select('id, date, time, queue_status, amount_paid, amount_due, payment_method, invoice_no, quote_id, consultation_type:consultation_types(id, name, default_price), patient:patients(id, first_name, last_name, age, birth_date, blood_group, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .single()
@@ -75,6 +76,18 @@ export default async function ConsultationPage({ params }: { params: { id: strin
         amount: Number(apt.amount_due ?? consultationType?.default_price ?? 0),
       }]
 
+  // Colonnes de la v76, lues À PART du rendez-vous : les mettre dans le select
+  // principal ferait tomber TOUT l'écran de consultation tant que la migration
+  // n'est pas passée. Règle de la maison — une fonctionnalité sans sa migration
+  // se désactive, elle ne casse rien.
+  const { data: v76Row, error: v76Err } = await supabase
+    .from('appointments')
+    .select('reprogrammer_jours')
+    .eq('id', apt.id)
+    .maybeSingle()
+  const v76 = !colonneAbsente(v76Err?.code)
+  const reprogrammerJours = (v76Row as { reprogrammer_jours?: number | null } | null)?.reprogrammer_jours ?? null
+
   const vitalDefsAll = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabled = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
   const vitalDefs = vitalDefsAll.filter((v) => enabled.includes(v.key))
@@ -97,6 +110,9 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       recentVitals={vitalsRes.data ?? []}
       consultationCertificates={thisAptCertRes.data ?? []}
       consultationTypeId={consultationType?.id ?? null}
+      queueStatus={(apt as { queue_status?: string | null }).queue_status ?? null}
+      reprogrammerJours={reprogrammerJours}
+      v76={v76}
       existingNoteId={existingNote?.id ?? null}
       existingNote={existingNote?.note ?? ''}
       noteSigned={!!existingNote?.signed_at}

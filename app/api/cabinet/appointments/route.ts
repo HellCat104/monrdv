@@ -74,6 +74,44 @@ export async function GET(req: NextRequest) {
     appointments = appointments.map((a) => ({ ...a, notes: null, consultation_type: [] }))
   }
 
+  // ── Ce qui vient du cabinet vers l'accueil (v76) ──────────────────────
+  //
+  // Lu À PART du rendez-vous, et pas ajouté au select principal : tant que la
+  // migration n'est pas passée, ces colonnes n'existent pas et l'agenda entier
+  // de la secrétaire tomberait en erreur. Règle de la maison — pas de
+  // migration, pas de fonctionnalité, mais jamais d'écran cassé.
+  const ids = appointments.map((a) => (a as { id: string }).id)
+  if (ids.length > 0 && ids.length <= 300) {
+    const [fileRes, ordRes, certRes] = await Promise.all([
+      admin.from('appointments')
+        .select('id, queue_arrived_at, queue_started_at, reprogrammer_jours, appel_suivant_le')
+        .in('id', ids),
+      // Documents à remettre : on ne renvoie QUE des compteurs. La secrétaire
+      // doit savoir qu'il y a quelque chose à imprimer ; elle n'a pas à lire
+      // le contenu d'une ordonnance pour ça.
+      admin.from('prescriptions').select('appointment_id').in('appointment_id', ids),
+      admin.from('certificates').select('appointment_id').in('appointment_id', ids),
+    ])
+
+    const file = new Map<string, Record<string, unknown>>()
+    for (const r of (fileRes.data ?? []) as { id: string }[]) file.set(r.id, r)
+
+    const compte = (lignes: { appointment_id?: string | null }[] | null) => {
+      const m = new Map<string, number>()
+      for (const l of lignes ?? []) {
+        if (l.appointment_id) m.set(l.appointment_id, (m.get(l.appointment_id) ?? 0) + 1)
+      }
+      return m
+    }
+    const nbOrd = compte(ordRes.data as { appointment_id?: string | null }[] | null)
+    const nbCert = compte(certRes.data as { appointment_id?: string | null }[] | null)
+
+    appointments = appointments.map((a) => {
+      const id = (a as { id: string }).id
+      return { ...a, ...(file.get(id) ?? {}), documents_a_remettre: (nbOrd.get(id) ?? 0) + (nbCert.get(id) ?? 0) }
+    })
+  }
+
   return NextResponse.json({
     appointments,
     consultationTypes: ctx.confidential ? [] : (typesRes.data ?? []),
@@ -320,6 +358,21 @@ export async function PATCH(req: NextRequest) {
     const allowed = ['present', 'absent', 'late', null]
     if (!allowed.includes(body.attendance)) return NextResponse.json({ error: 'Valeur de présence invalide' }, { status: 400 })
     patch.attendance = body.attendance
+  }
+
+  // Consignes du médecin : la secrétaire les SOLDE, elle ne les crée pas.
+  // Même permission que la salle d'attente — c'est le poste d'accueil qui
+  // reprogramme et qui fait entrer. Seule la valeur `null` est acceptée : rien
+  // ici ne doit permettre de s'auto-attribuer une consigne.
+  if ('reprogrammer_jours' in body) {
+    if (!ctx.permissions.mark_attendance) return NextResponse.json({ error: 'Permission manquante (accueil)' }, { status: 403 })
+    if (body.reprogrammer_jours !== null) return NextResponse.json({ error: 'Seul le médecin fixe un délai de reprogrammation.' }, { status: 400 })
+    patch.reprogrammer_jours = null
+  }
+  if ('appel_suivant_le' in body) {
+    if (!ctx.permissions.mark_attendance) return NextResponse.json({ error: 'Permission manquante (accueil)' }, { status: 403 })
+    if (body.appel_suivant_le !== null) return NextResponse.json({ error: 'Seul le médecin appelle le patient suivant.' }, { status: 400 })
+    patch.appel_suivant_le = null
   }
 
   // Salle d'attente : arrivé / en consultation / parti

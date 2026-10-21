@@ -17,7 +17,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import type { Appointment, Doctor, AppointmentStatus, AppointmentAttendance } from '@/types'
-import { Plus, Search, Calendar, Ban, X, FileText } from 'lucide-react'
+import { Plus, Search, Calendar, Ban, X, FileText, Armchair } from 'lucide-react'
 import DaySheet from '@/components/shared/DaySheet'
 import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
 import { UserPlus } from 'lucide-react'
@@ -25,6 +25,15 @@ import { format, startOfWeek, endOfWeek, addDays, subDays, startOfMonth, endOfMo
 import { fr } from 'date-fns/locale'
 import { getNowInMaroc, ageFromBirthDate } from '@/lib/utils'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
+
+/** Minutes écoulées depuis un horodatage. null si la v76 n'est pas passée —
+ *  l'écran affiche alors le nom sans durée, au lieu d'un « 0 min » faux. */
+function minutesDepuis(iso?: string | null): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (isNaN(t)) return null
+  return Math.max(0, Math.round((Date.now() - t) / 60000))
+}
 
 type ViewMode = 'day' | 'week' | 'month' | 'all'
 
@@ -72,9 +81,12 @@ export default function AppointmentsPage() {
   }, [])
 
   // Charge les rendez-vous selon la vue
-  const loadAppointments = useCallback(async () => {
+  const loadAppointments = useCallback(async (silencieux = false) => {
     if (!doctor) return
-    setLoading(true)
+    // Le rafraîchissement automatique ne remet PAS les squelettes de
+    // chargement : un écran qui clignote toutes les quarante-cinq secondes
+    // pendant qu'on le lit, on finit par ne plus le regarder.
+    if (!silencieux) setLoading(true)
 
     try {
       let query = supabase
@@ -121,6 +133,20 @@ export default function AppointmentsPage() {
   useEffect(() => {
     loadAppointments()
   }, [loadAppointments])
+
+  // ── La salle d'attente bouge sans nous ────────────────────────────────
+  //
+  // La secrétaire pointe les arrivées depuis son poste. Sans ce
+  // rafraîchissement, le médecin ne l'apprend qu'en rechargeant la page —
+  // autant ne rien afficher. Seulement sur la vue du JOUR : personne n'attend
+  // dans une salle d'attente du mois prochain.
+  useEffect(() => {
+    if (!doctor || viewMode !== 'day') return
+    const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
+    if (!aujourdhui) return
+    const t = setInterval(() => loadAppointments(true), 45000)
+    return () => clearInterval(t)
+  }, [doctor, viewMode, currentDate, loadAppointments])
 
   // ── Patient sans RDV (walk-in) ──────────────────────────────────────────
   async function searchWalkInPatients(q: string): Promise<PatientLite[]> {
@@ -345,6 +371,15 @@ export default function AppointmentsPage() {
     }
   }
 
+  // Patients physiquement présents et pas encore reçus. On ne garde que les
+  // rendez-vous d'AUJOURD'HUI : un « arrivé » oublié hier ne doit pas gonfler
+  // le compte de ce matin. Triés par ordre d'arrivée, pas par heure de
+  // rendez-vous — c'est l'ordre de la salle d'attente.
+  const jourMaroc = format(getNowInMaroc(), 'yyyy-MM-dd')
+  const enAttente = appointments
+    .filter((a) => a.date === jourMaroc && a.status !== 'cancelled' && a.queue_status === 'arrive')
+    .sort((a, b) => (a.queue_arrived_at ?? '').localeCompare(b.queue_arrived_at ?? ''))
+
   const dateLabel = viewMode === 'day'
     ? format(currentDate, 'EEEE d MMMM yyyy', { locale: fr })
     : viewMode === 'month'
@@ -369,6 +404,31 @@ export default function AppointmentsPage() {
 
   return (
     <div className="space-y-6">
+      {/* ── Qui attend, maintenant ────────────────────────────────────────
+          L'information venait déjà du poste de la secrétaire — elle arrivait
+          sous la forme d'une pastille « Présent », qui dit « est venu » et non
+          « attend ». Elle reste d'ailleurs après la consultation. Ce bandeau
+          répond à la seule question du moment, et disparaît quand la salle est
+          vide : une carte qui affiche « 0 patient » finit par ne plus être lue.
+          Il ne s'affiche qu'aujourd'hui, et compte à partir des heures posées
+          par la base (v76). Sans la migration, aucune heure, donc rien. */}
+      {enAttente.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
+          <Armchair className="h-5 w-5 text-blue-600 shrink-0" />
+          <span className="text-sm font-semibold text-blue-800">
+            {enAttente.length} patient{enAttente.length > 1 ? 's' : ''} en salle d&apos;attente
+          </span>
+          <span className="text-sm text-blue-700 min-w-0">
+            {enAttente.slice(0, 3).map((a) => {
+              const nom = a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'
+              const min = minutesDepuis(a.queue_arrived_at)
+              return min == null ? nom : `${nom} (${min} min)`
+            }).join(' · ')}
+            {enAttente.length > 3 && ` · +${enAttente.length - 3}`}
+          </span>
+        </div>
+      )}
+
       {/* En-tête */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>

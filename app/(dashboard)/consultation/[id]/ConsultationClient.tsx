@@ -16,7 +16,7 @@ import PerioCard from '@/components/dashboard/PerioCard'
 import ActesDuJourCard from './ActesDuJourCard'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
-  AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw, CalendarPlus,
+  AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw, CalendarPlus, CalendarClock, BellRing,
 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,7 +52,7 @@ interface Patient { id: string; first_name: string; last_name: string; age?: num
 export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, consultationCertificates, recentVitals,
-  consultationTypeId = null,
+  consultationTypeId = null, queueStatus = null, reprogrammerJours = null, v76 = false,
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
   isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false,
 }: {
@@ -73,6 +73,14 @@ export default function ConsultationClient({
   consultationCertificates: Row[]
   /** Motif du RDV en cours : repris par défaut pour le rendez-vous suivant. */
   consultationTypeId?: string | null
+  /** État de file à l'ouverture : sert à ne prévenir l'accueil qu'une fois. */
+  queueStatus?: string | null
+  /** Délai déjà demandé à l'accueil, s'il y en a un (v76). */
+  reprogrammerJours?: number | null
+  /** La migration v76 est passée. Sinon les deux liens vers l'accueil
+   *  n'existent pas — la règle de la maison : pas de migration, pas de
+   *  fonctionnalité, mais jamais d'erreur. */
+  v76?: boolean
   consultationPrescriptions: Row[]
   recentVitals: Row[]
   existingNoteId: string | null
@@ -288,6 +296,58 @@ export default function ConsultationClient({
     } finally {
       setRdvEnCours(false)
     }
+  }
+
+  // ── Ouvrir la consultation le dit à l'accueil ─────────────────────────
+  //
+  // La secrétaire cochait « En consultation » à la main, en devinant, pendant
+  // que le médecin travaillait déjà. Son tableau mentait donc la moitié du
+  // temps. L'ouverture de cet écran EST l'entrée en consultation : autant que
+  // ce soit elle qui le dise.
+  //
+  // Une seule fois, et jamais sur un rendez-vous déjà clôturé — rouvrir un
+  // dossier pour relire une note ne doit pas remettre le patient dans la file.
+  // L'heure est posée par la base (déclencheur v76), pas ici.
+  const fileSignalee = useRef(false)
+  useEffect(() => {
+    if (fileSignalee.current) return
+    if (queueStatus === 'en_consultation' || queueStatus === 'parti') return
+    fileSignalee.current = true
+    supabase
+      .from('appointments')
+      .update({ queue_status: 'en_consultation' })
+      .eq('id', appointmentId)
+      .then(({ error }) => {
+        // Échec sans conséquence clinique : l'accueil garde l'état précédent.
+        if (error) console.error('[Consultation] file d\'attente non mise à jour :', error.message)
+      })
+  }, [appointmentId, queueStatus, supabase])
+
+  // ── Ce que le médecin transmet à l'accueil ────────────────────────────
+  const [reprog, setReprog] = useState<number | null>(reprogrammerJours)
+  const [reprogOuvert, setReprogOuvert] = useState(false)
+  const [appelEnvoye, setAppelEnvoye] = useState(false)
+
+  async function demanderReprogrammation(jours: number | null) {
+    const { error } = await supabase
+      .from('appointments')
+      .update({ reprogrammer_jours: jours })
+      .eq('id', appointmentId)
+    if (error) { alert("La consigne n'a pas pu être transmise à l'accueil."); return }
+    setReprog(jours)
+    setReprogOuvert(false)
+  }
+
+  async function appelerSuivant() {
+    const { error } = await supabase
+      .from('appointments')
+      .update({ appel_suivant_le: new Date().toISOString() })
+      .eq('id', appointmentId)
+    if (error) { alert("L'appel n'a pas pu être envoyé à l'accueil."); return }
+    setAppelEnvoye(true)
+    // Le signal est fugace côté accueil ; ici on relâche le bouton au bout
+    // d'un moment pour qu'un second appel reste possible.
+    setTimeout(() => setAppelEnvoye(false), 60000)
   }
 
   const savingRef = useRef(false)
@@ -729,6 +789,53 @@ export default function ConsultationClient({
             <button onClick={() => goTo(`/certificat/nouveau/${patient.id}?apt=${appointmentId}&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
               <FileText className="h-4 w-4 text-primary-500" /> Certificat
             </button>
+
+            {/* ── Vers l'accueil ─────────────────────────────────────────
+                Deux consignes qui se perdaient entre la porte du bureau et le
+                comptoir. Elles n'existent qu'avec la v76 : sans la migration,
+                les boutons ne s'affichent pas, et rien ne tombe en erreur. */}
+            {v76 && (
+              <>
+                <button
+                  onClick={appelerSuivant}
+                  disabled={appelEnvoye}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-sm transition-colors ${appelEnvoye ? 'border-green-200 bg-green-50 text-green-700' : 'border-gray-200 text-gray-700 hover:border-primary-300 hover:bg-primary-50'}`}
+                >
+                  {appelEnvoye
+                    ? <><Check className="h-4 w-4" /> L&apos;accueil est prévenu</>
+                    : <><BellRing className="h-4 w-4 text-primary-500" /> Faites entrer le suivant</>}
+                </button>
+
+                {reprog ? (
+                  <div className="px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 flex items-start gap-2">
+                    <CalendarClock className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span className="flex-1">
+                      L&apos;accueil doit le revoir dans <strong>{reprog} jours</strong>.
+                      <button onClick={() => demanderReprogrammation(null)} className="block text-[11px] underline hover:no-underline mt-0.5">
+                        Retirer la consigne
+                      </button>
+                    </span>
+                  </div>
+                ) : reprogOuvert ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-gray-700">L&apos;accueil le reprogramme dans…</p>
+                    <div className="flex flex-wrap gap-1">
+                      {([['1 sem.', 7], ['2 sem.', 14], ['1 mois', 30], ['3 mois', 90], ['6 mois', 180]] as const).map(([label, n]) => (
+                        <button key={n} onClick={() => demanderReprogrammation(n)}
+                          className="text-[11px] px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-600 hover:border-amber-400">
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => setReprogOuvert(false)} className="text-[11px] text-gray-400 hover:text-gray-600">Annuler</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setReprogOuvert(true)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+                    <CalendarClock className="h-4 w-4 text-primary-500" /> Faire reprogrammer à l&apos;accueil
+                  </button>
+                )}
+              </>
+            )}
 
             {/* Prochain rendez-vous — pris ici, sans quitter la consultation */}
             {rdvCree ? (

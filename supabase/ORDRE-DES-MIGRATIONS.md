@@ -290,6 +290,21 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      l'encart du tableau de bord n'apparaît simplement pas.
      `notify pgrst, 'reload schema';` ensuite.
 
+ 76. `migration_v76_salle_attente_partagee.sql`  
+     Migration v76 — la salle d'attente parle dans les deux sens. Quatre
+     colonnes sur `appointments` : `queue_arrived_at` et `queue_started_at`,
+     posées par le DÉCLENCHEUR `trg_horodate_file` et jamais par l'application
+     (quatre chemins écrivent `queue_status` ; un seul oubli rendrait la durée
+     d'attente affichée fausse, ce qui est pire que de ne rien afficher) ;
+     `reprogrammer_jours`, borné à 730 jours, par lequel le médecin demande à
+     l'accueil de redonner un rendez-vous ; `appel_suivant_le`, signal fugace
+     « faites entrer le suivant », effacé d'un clic et ignoré passé un quart
+     d'heure. Le déclencheur gère l'INSERT à part : le patient sans rendez-vous
+     naît directement « arrivé ». Deux index partiels. Aucun GRANT à écrire —
+     colonnes sur une table existante. Additive et rejouable ; sans elle les
+     encarts ne s'affichent simplement pas.
+     `notify pgrst, 'reload schema';` ensuite.
+
 
 ## Toute nouvelle table arrive avec ses droits
 

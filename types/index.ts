@@ -335,6 +335,18 @@ export interface Appointment {
   consent_at?: string | null
   walk_in?: boolean | null      // patient sans RDV ajouté à la file du jour
   queue_status?: string | null  // salle d'attente : arrive | en_consultation | parti
+  /** Heures posées par la BASE (déclencheur trg_horodate_file, v76), jamais par
+   *  l'application : quatre chemins écrivent `queue_status`, un seul oubli
+   *  rendrait la durée d'attente affichée fausse. Absentes tant que la v76
+   *  n'est pas passée. */
+  queue_arrived_at?: string | null
+  queue_started_at?: string | null
+  /** Le médecin demande à l'accueil de reprogrammer dans N jours (v76).
+   *  NULL = rien à faire. Effacé par la secrétaire une fois le RDV donné. */
+  reprogrammer_jours?: number | null
+  /** « Faites entrer le suivant » (v76). Signal fugace : effacé d'un clic, et
+   *  ignoré par l'écran passé un quart d'heure. */
+  appel_suivant_le?: string | null
   // Résumé de consultation (chargés pour l'agenda sur les RDV clôturés)
   consultation_summary?: string | null                              // note de consultation
   consultation_prescriptions?: { id: string; content: string }[]    // ordonnances du RDV

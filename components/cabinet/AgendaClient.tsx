@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getNowInMaroc, formatTime, formatAge } from '@/lib/utils'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban } from 'lucide-react'
+import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing } from 'lucide-react'
 import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
 import DaySheet from '@/components/shared/DaySheet'
 import { PatientPicker, type PatientChoice } from '@/components/shared/PatientPicker'
@@ -20,11 +20,26 @@ import { FileText, UserPlus } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
+
+/** Minutes écoulées depuis un horodatage. null tant que la v76 n'est pas
+ *  passée : l'écran n'affiche alors aucune durée, plutôt qu'un « 0 min » faux. */
+function minutesDepuis(iso?: string | null): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (isNaN(t)) return null
+  return Math.max(0, Math.round((Date.now() - t) / 60000))
+}
+
+/** Un appel « faites entrer le suivant » est FUGACE : passé un quart d'heure,
+ *  c'est un appel oublié, et un bandeau qui clignote jusqu'au soir ne se lit
+ *  plus. L'écran l'ignore ; la colonne, elle, garde la trace. */
+const APPEL_VALIDE_MIN = 15
 interface CType { id: string; name: string; duration_minutes: number | null; default_price: number | null }
 const NO_TYPE = '__none__'
 
 export default function AgendaClient({ permissions, doctorName = 'Cabinet médical' }: { permissions: StaffPermissions; doctorName?: string }) {
   const [date, setDate] = useState(() => format(getNowInMaroc(), 'yyyy-MM-dd'))
+  const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [patientCache, setPatientCache] = useState<PatientLite[] | null>(null)
@@ -77,8 +92,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState('')
 
-  const load = useCallback(async (d: string) => {
-    setLoading(true)
+  const load = useCallback(async (d: string, silencieux = false) => {
+    // Le rafraîchissement automatique ne remet pas les squelettes : un écran
+    // qui clignote pendant qu'on le lit finit par ne plus être regardé.
+    if (!silencieux) setLoading(true)
     setError('')
     try {
       const res = await fetch(`/api/cabinet/appointments?date=${d}`)
@@ -89,11 +106,20 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     } catch {
       setError('Erreur réseau.')
     } finally {
-      setLoading(false)
+      if (!silencieux) setLoading(false)
     }
   }, [])
 
   useEffect(() => { load(date) }, [date, load])
+
+  // L'agenda du jour bouge sans elle : le médecin ouvre un dossier, demande un
+  // patient, laisse une consigne. Trente secondes — c'est le poste d'accueil,
+  // la minute de retard s'y voit tout de suite.
+  useEffect(() => {
+    if (date !== aujourdhui) return
+    const t = setInterval(() => load(date, true), 30000)
+    return () => clearInterval(t)
+  }, [date, aujourdhui, load])
 
   // Vue semaine : lundi -> dimanche contenant la date courante
   const weekDays = eachDayOfInterval({
@@ -285,8 +311,33 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const active = appts.filter((a) => a.status !== 'cancelled')
   const cancelled = appts.filter((a) => a.status === 'cancelled')
 
+  // Le médecin réclame le patient suivant. On ne retient que les appels
+  // récents : un appel d'il y a une heure n'est plus une demande, c'est du
+  // bruit — et un bandeau rouge permanent cesse d'être vu.
+  const appels = appts.filter((a) => {
+    const m = minutesDepuis(a.appel_suivant_le)
+    return m != null && m <= APPEL_VALIDE_MIN
+  })
+
   return (
     <div className="space-y-4">
+      {/* « Faites entrer le suivant » — en haut, au-dessus de tout : c'est la
+          seule information de cet écran qui demande un geste dans la minute. */}
+      {appels.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap bg-primary-500 text-white rounded-xl px-4 py-3">
+          <BellRing className="h-5 w-5 shrink-0" />
+          <span className="text-sm font-semibold flex-1 min-w-0">
+            Le médecin demande le patient suivant.
+          </span>
+          <button
+            onClick={() => appels.forEach((a) => patchRdv(a.id, { appel_suivant_le: null }))}
+            className="text-xs font-semibold bg-white/20 hover:bg-white/30 rounded-lg px-3 py-1.5 transition"
+          >
+            C&apos;est fait
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
           <Calendar className="h-5 w-5 text-primary-500" /> Agenda
@@ -394,9 +445,46 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
             <div key={a.id} className="flex items-center gap-3 p-3.5 flex-wrap">
               <div className="text-sm font-semibold text-gray-900 w-14 shrink-0">{formatTime(a.time)}</div>
               <div className="flex-1 min-w-[160px]">
-                <p className="font-medium text-gray-900 truncate flex items-center gap-1.5">
-                  {a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}
+                {/* Les consignes du cabinet se lisent À CÔTÉ DU NOM, pas en
+                    bas de ligne : la secrétaire parcourt sa colonne de noms,
+                    c'est là que son œil passe. Chaque mention porte son propre
+                    geste, et disparaît une fois le geste fait. */}
+                <p className="font-medium text-gray-900 flex items-center gap-1.5 flex-wrap">
+                  <span className="truncate">{a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}</span>
                   {a.walk_in && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Sans RDV</span>}
+
+                  {/* Attend depuis… — la durée, pas seulement le fait */}
+                  {a.queue_status === 'arrive' && minutesDepuis(a.queue_arrived_at) != null && (
+                    <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                      Attend depuis {minutesDepuis(a.queue_arrived_at)} min
+                    </span>
+                  )}
+
+                  {/* Le médecin a ouvert le dossier : il est avec lui */}
+                  {a.queue_status === 'en_consultation' && (
+                    <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                      En consultation{minutesDepuis(a.queue_started_at) != null ? ` · ${minutesDepuis(a.queue_started_at)} min` : ''}
+                    </span>
+                  )}
+
+                  {/* À reprogrammer : la consigne se solde ici même */}
+                  {a.reprogrammer_jours != null && (
+                    <button
+                      onClick={() => patchRdv(a.id, { reprogrammer_jours: null })}
+                      title="Marquer la consigne comme traitée"
+                      className="text-[10px] font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap"
+                    >
+                      À revoir dans {a.reprogrammer_jours} j · fait ?
+                    </button>
+                  )}
+
+                  {/* Documents à remettre — un COMPTE, jamais le contenu : il
+                      n'y a pas besoin de lire une ordonnance pour l'imprimer. */}
+                  {typeof a.documents_a_remettre === 'number' && a.documents_a_remettre > 0 && (
+                    <span className="text-[10px] font-semibold bg-primary-50 text-primary-700 border border-primary-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                      {a.documents_a_remettre} document{a.documents_a_remettre > 1 ? 's' : ''} à remettre
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
                   {a.consultation_type?.name || a.notes || 'Consultation'}
