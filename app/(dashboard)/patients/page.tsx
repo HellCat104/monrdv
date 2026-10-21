@@ -32,6 +32,11 @@ function jourMaroc(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** Libellé d'une durée de suivi, identique à celui du menu déroulant :
+ *  le sous-titre disait « pas vus depuis 24 mois » là où le filtre affichait
+ *  « 2 ans ». Deux formulations pour un même réglage font douter du compte. */
+const LIBELLE_SUIVI: Record<string, string> = { '6': '6 mois', '12': '1 an', '24': '2 ans' }
+
 /** Nombre de mois entiers écoulés depuis une date (YYYY-MM-DD). */
 function moisDepuis(jour: string): number {
   const d = getNowInMaroc()
@@ -851,7 +856,7 @@ export default function PatientsPage() {
               : [
                   `${filtered.length} patient(s)`,
                   conditionFilter !== 'all' ? conditionFilter : null,
-                  suiviFilter !== 'all' ? `pas vus depuis ${suiviFilter} mois` : null,
+                  suiviFilter !== 'all' ? `pas vus depuis ${LIBELLE_SUIVI[suiviFilter]}` : null,
                 ].filter(Boolean).join(' · ')}
           </p>
           {/* Ce que le filtre écarte, dit une fois : sinon un médecin qui
