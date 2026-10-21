@@ -98,6 +98,28 @@ export default function ConsultationClient({
   const [vitals, setVitals] = useState<Row[]>(recentVitals)
   const [savingVital, setSavingVital] = useState(false)
 
+  // Dernière valeur connue POUR CHAQUE constante, avec sa date.
+  //
+  // Pas simplement `vitals[0]` : d'une visite à l'autre on ne relève pas les
+  // mêmes constantes, et la dernière mesure peut ne contenir que le poids. On
+  // descend donc l'historique jusqu'à trouver une valeur pour chaque clé.
+  //
+  // On NE préremplit PAS les champs, et ce n'est pas un oubli : une constante
+  // enregistrée dit « mesurée aujourd'hui ». Recopier d'office une tension
+  // vieille de trois mois écrirait dans le dossier une mesure qui n'a pas eu
+  // lieu. La valeur est donc montrée à côté du champ — ce qui donne en plus la
+  // comparaison qu'on cherche (« il était à 78 ») — et c'est le praticien qui
+  // la reprend, d'un clic, quand elle tient encore : la taille d'un adulte,
+  // typiquement.
+  const dernieresValeurs: Record<string, { valeur: number; date: string }> = {}
+  for (const m of vitals) {
+    for (const [cle, valeur] of Object.entries((m.values ?? {}) as Record<string, number>)) {
+      if (dernieresValeurs[cle] == null && typeof valeur === 'number') {
+        dernieresValeurs[cle] = { valeur, date: m.measured_at }
+      }
+    }
+  }
+
   const [paid, setPaid] = useState(appointmentPaid)
   const [paidAmount, setPaidAmount] = useState<number | null>(amountPaid)
   const [paidDue, setPaidDue] = useState<number | null>(amountDue ?? null)
@@ -430,17 +452,32 @@ export default function ConsultationClient({
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Activity className="h-4 w-4 text-primary-500" /> Constantes du jour</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
-                {vitalDefs.map((v) => (
-                  <div key={v.key} className="relative">
-                    <Input
-                      type="number" step={v.step ?? 'any'} inputMode="decimal"
-                      value={vitalInput[v.key] ?? ''}
-                      onChange={(e) => setVitalInput((prev) => ({ ...prev, [v.key]: e.target.value }))}
-                      placeholder={v.label} className="pr-10 text-sm" aria-label={v.label}
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">{v.unit}</span>
-                  </div>
-                ))}
+                {vitalDefs.map((v) => {
+                  const precedent = dernieresValeurs[v.key]
+                  return (
+                    <div key={v.key}>
+                      <div className="relative">
+                        <Input
+                          type="number" step={v.step ?? 'any'} inputMode="decimal"
+                          value={vitalInput[v.key] ?? ''}
+                          onChange={(e) => setVitalInput((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                          placeholder={v.label} className="pr-10 text-sm" aria-label={v.label}
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">{v.unit}</span>
+                      </div>
+                      {precedent && (
+                        <button
+                          type="button"
+                          onClick={() => setVitalInput((prev) => ({ ...prev, [v.key]: String(precedent.valeur) }))}
+                          className="mt-0.5 text-[10px] text-gray-400 hover:text-primary-600 hover:underline"
+                          title={`${v.label} : ${precedent.valeur} ${v.unit} le ${formatDateFr(precedent.date)} — cliquer pour reprendre cette valeur`}
+                        >
+                          dernière : {precedent.valeur}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
               <Button variant="outline" size="sm" onClick={saveVitals} disabled={savingVital}>
                 <Plus className="h-4 w-4 mr-1" /> {savingVital ? 'Enregistrement…' : 'Enregistrer les constantes'}
