@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { formatDateFr, formatAge } from '@/lib/utils'
-import { PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
+import { formatDateFr, formatAge, getNowInMaroc } from '@/lib/utils'
+import { NOTE_TEMPLATE, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import DentalChart from '@/components/dashboard/DentalChart'
 import FeuilleSoinsCard, { type ActeSuggere } from '@/components/dashboard/FeuilleSoinsCard'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
@@ -16,7 +16,7 @@ import PerioCard from '@/components/dashboard/PerioCard'
 import ActesDuJourCard from './ActesDuJourCard'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
-  AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw,
+  AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw, CalendarPlus,
 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,7 +51,8 @@ interface Patient { id: string; first_name: string; last_name: string; age?: num
 
 export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
-  patient, recentNotes, recentPrescriptions, consultationPrescriptions, recentVitals,
+  patient, recentNotes, recentPrescriptions, consultationPrescriptions, consultationCertificates, recentVitals,
+  consultationTypeId = null,
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
   isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false,
 }: {
@@ -68,6 +69,10 @@ export default function ConsultationClient({
   patient: Patient
   recentNotes: Row[]
   recentPrescriptions: Row[]
+  /** Certificats établis pendant CETTE consultation (titre + motif + date). */
+  consultationCertificates: Row[]
+  /** Motif du RDV en cours : repris par défaut pour le rendez-vous suivant. */
+  consultationTypeId?: string | null
   consultationPrescriptions: Row[]
   recentVitals: Row[]
   existingNoteId: string | null
@@ -83,8 +88,19 @@ export default function ConsultationClient({
   const supabase = createClient()
   const router = useRouter()
 
-  // Psychiatrie : une note vierge démarre pré-structurée (Motif/Histoire/…)
-  const [note, setNote] = useState(existingNote || (isPsy ? PSY_NOTE_TEMPLATE : ''))
+  // Trame de la note vierge, selon la profession.
+  //
+  // Le psychiatre avait déjà la sienne. Le généraliste et les spécialités
+  // cliniques retapaient « Motif / Examen / Diagnostic / Conduite à tenir » à
+  // chaque consultation. Le dentiste n'en reçoit pas : sa note accompagne le
+  // schéma dentaire et les actes du jour, elle ne suit pas ce plan-là.
+  //
+  // Pré-remplir ne coûte rien : une trame non modifiée n'est jamais
+  // enregistrée (voir saveNote), donc une consultation sans note ne laisse pas
+  // quatre titres vides dans le dossier.
+  const trameNote = isPsy ? PSY_NOTE_TEMPLATE : isDental ? '' : NOTE_TEMPLATE
+  const estTrameVierge = (t: string) => t === PSY_NOTE_TEMPLATE || t === NOTE_TEMPLATE
+  const [note, setNote] = useState(existingNote || trameNote)
   const [noteId, setNoteId] = useState<string | null>(existingNoteId)
   const [noteState, setNoteState] = useState<'idle' | 'saving' | 'saved'>('idle')
 
@@ -200,13 +216,87 @@ export default function ConsultationClient({
     </div>
   )
 
+  // ── Prochain rendez-vous, pris depuis la consultation ──────────────────
+  //
+  // « Revenez dans dix jours » est la dernière phrase d'une consultation sur
+  // deux. Il fallait clôturer, retourner à l'agenda, retrouver la date et
+  // créer le rendez-vous — donc, le plus souvent, ne rien faire et compter sur
+  // le patient pour rappeler. Les délais proposés sont ceux qu'un praticien
+  // prononce ; la date reste modifiable pour tout le reste.
+  //
+  // On passe par /api/appointments, comme l'agenda : les créneaux, les
+  // chevauchements et les jours fermés y sont vérifiés. Créer la ligne
+  // directement en base ici aurait permis de poser deux patients à la même
+  // heure.
+  const [rdvOuvert, setRdvOuvert] = useState(false)
+  const [rdvDate, setRdvDate] = useState('')
+  const [rdvHeure, setRdvHeure] = useState('')
+  const [rdvCreneaux, setRdvCreneaux] = useState<string[]>([])
+  const [rdvChargement, setRdvChargement] = useState(false)
+  const [rdvEnCours, setRdvEnCours] = useState(false)
+  const [rdvErreur, setRdvErreur] = useState('')
+  const [rdvCree, setRdvCree] = useState<string | null>(null)
+
+  function dansJours(n: number): string {
+    const d = getNowInMaroc()
+    d.setDate(d.getDate() + n)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  // Créneaux libres du jour choisi. Une journée fermée renvoie une liste vide,
+  // ce que l'écran dit explicitement au lieu de laisser un menu vide.
+  useEffect(() => {
+    if (!rdvOuvert || !rdvDate) { setRdvCreneaux([]); return }
+    setRdvChargement(true)
+    setRdvHeure('')
+    const motif = consultationTypeId ? `&consultation_type_id=${consultationTypeId}` : ''
+    fetch(`/api/slots?doctor_id=${doctorId}&date=${rdvDate}${motif}`)
+      .then((r) => (r.ok ? r.json() : { slots: [] }))
+      .then((d: { slots?: { time: string; available: boolean }[] }) => {
+        setRdvCreneaux((d.slots ?? []).filter((s) => s.available).map((s) => s.time))
+      })
+      .catch(() => setRdvCreneaux([]))
+      .finally(() => setRdvChargement(false))
+  }, [rdvOuvert, rdvDate, doctorId, consultationTypeId])
+
+  async function creerProchainRdv() {
+    if (!rdvDate || !rdvHeure) { setRdvErreur('Choisissez une date et une heure.'); return }
+    setRdvEnCours(true)
+    setRdvErreur('')
+    try {
+      const res = await fetch('/api/appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctor_id: doctorId,
+          patient_id: patient.id,
+          date: rdvDate,
+          time: rdvHeure,
+          consultation_type_id: consultationTypeId ?? undefined,
+          public: false,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({} as { error?: string }))
+        throw new Error(d.error || `Création impossible (${res.status})`)
+      }
+      setRdvCree(`${formatDateFr(rdvDate)} à ${rdvHeure}`)
+      setRdvOuvert(false)
+      setRdvDate(''); setRdvHeure('')
+    } catch (e) {
+      setRdvErreur(e instanceof Error ? e.message : 'Création impossible.')
+    } finally {
+      setRdvEnCours(false)
+    }
+  }
+
   const savingRef = useRef(false)
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const saveNote = useCallback(async () => {
     // Rien à enregistrer si vide, si c'est le modèle non modifié, ou si la note
     // est signée (verrouillée en base : l'écriture échouerait silencieusement).
-    if (noteSigned || !note.trim() || note === PSY_NOTE_TEMPLATE || savingRef.current) return
+    if (noteSigned || !note.trim() || estTrameVierge(note) || savingRef.current) return
     savingRef.current = true
     setNoteState('saving')
     try {
@@ -228,7 +318,7 @@ export default function ConsultationClient({
 
   // Enregistrement automatique : 1,5 s après la dernière frappe → rien n'est perdu
   useEffect(() => {
-    if (!note.trim() || note === PSY_NOTE_TEMPLATE) return
+    if (!note.trim() || estTrameVierge(note)) return
     if (noteTimer.current) clearTimeout(noteTimer.current)
     noteTimer.current = setTimeout(() => { saveNote() }, 1500)
     return () => { if (noteTimer.current) clearTimeout(noteTimer.current) }
@@ -420,13 +510,15 @@ export default function ConsultationClient({
               <div className="flex items-center gap-2">
                 {noteSigned && <span className="text-xs text-gray-500 flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Signée · verrouillée</span>}
                 {!noteSigned && noteState === 'saved' && <span className="text-xs text-green-600 flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Enregistrée</span>}
-                {!noteSigned && isPsy && !note.trim() && (
-                  <Button variant="outline" size="sm" onClick={() => setNote(PSY_NOTE_TEMPLATE)}>
+                {/* Remettre la trame après l'avoir effacée, pour qui en veut
+                    une — donc pas chez le dentiste, qui n'en a pas. */}
+                {!noteSigned && trameNote && !note.trim() && (
+                  <Button variant="outline" size="sm" onClick={() => setNote(trameNote)}>
                     <FileText className="h-4 w-4 mr-1" /> Modèle
                   </Button>
                 )}
                 {!noteSigned && (
-                  <Button variant="outline" size="sm" onClick={saveNote} disabled={noteState === 'saving' || !note.trim() || note === PSY_NOTE_TEMPLATE}>
+                  <Button variant="outline" size="sm" onClick={saveNote} disabled={noteState === 'saving' || !note.trim() || estTrameVierge(note)}>
                     <Save className="h-4 w-4 mr-1" /> {noteState === 'saving' ? '…' : 'Enregistrer'}
                   </Button>
                 )}
@@ -548,6 +640,37 @@ export default function ConsultationClient({
             )}
           </div>
 
+          {/* Certificats établis pendant cette consultation.
+              La carte n'existe QUE s'il y en a : un généraliste en établit
+              plusieurs par jour, mais pas à chaque patient, et une carte vide
+              de plus sur l'écran de consultation ne dit rien. Le bouton
+              « Certificat » du panneau de droite reste le chemin pour en
+              créer un — on n'en ajoute pas un deuxième. */}
+          {consultationCertificates.length > 0 && (
+            <div className="bg-white border border-gray-100 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5 mb-2">
+                <FileText className="h-4 w-4 text-primary-500" /> Certificats de la consultation ({consultationCertificates.length})
+              </h3>
+              <div className="space-y-1.5">
+                {consultationCertificates.map((c, i) => (
+                  <button
+                    key={c.id}
+                    onClick={() => goTo(`/certificat/${c.id}`)}
+                    className="w-full text-left flex items-start gap-2 rounded-lg border border-gray-100 hover:border-primary-300 hover:bg-primary-50/40 p-2.5 transition-colors"
+                    title="Ouvrir ce certificat pour le relire ou l'imprimer"
+                  >
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary-100 text-primary-600 text-[11px] font-semibold flex items-center justify-center mt-0.5">{i + 1}</span>
+                    <span className="min-w-0">
+                      <span className="block text-xs text-gray-800">{c.title}</span>
+                      {c.motif && <span className="block text-[11px] text-gray-500">{c.motif}</span>}
+                      <span className="block text-[11px] text-primary-500 mt-0.5">Ouvrir / imprimer</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Parodonte, laboratoire, orthodontie — des actes qui se font AU
               FAUTEUIL, et qu'il fallait pourtant aller saisir dans la fiche
               patient : on sortait de la consultation pour noter une poche ou
@@ -606,6 +729,67 @@ export default function ConsultationClient({
             <button onClick={() => goTo(`/certificat/nouveau/${patient.id}?apt=${appointmentId}&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
               <FileText className="h-4 w-4 text-primary-500" /> Certificat
             </button>
+
+            {/* Prochain rendez-vous — pris ici, sans quitter la consultation */}
+            {rdvCree ? (
+              <div className="px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800 flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>Prochain RDV : <strong>{rdvCree}</strong></span>
+              </div>
+            ) : !rdvOuvert ? (
+              <button onClick={() => { setRdvOuvert(true); setRdvErreur('') }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+                <CalendarPlus className="h-4 w-4 text-primary-500" /> Prochain rendez-vous
+              </button>
+            ) : (
+              <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3 space-y-2">
+                <p className="text-xs font-semibold text-gray-700">Revoir {patient.first_name} dans…</p>
+                {/* Les délais qu'un praticien prononce. La date reste libre
+                    juste en dessous pour tous les autres cas. */}
+                <div className="flex flex-wrap gap-1">
+                  {([['1 sem.', 7], ['2 sem.', 14], ['1 mois', 30], ['3 mois', 90], ['6 mois', 180]] as const).map(([label, n]) => (
+                    <button
+                      key={n}
+                      onClick={() => setRdvDate(dansJours(n))}
+                      className={`text-[11px] px-2 py-1 rounded-md border transition ${rdvDate === dansJours(n) ? 'bg-primary-500 border-primary-500 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-primary-300'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <Input type="date" value={rdvDate} min={dansJours(0)} onChange={(e) => setRdvDate(e.target.value)} className="text-sm" />
+
+                {rdvDate && (
+                  rdvChargement ? (
+                    <p className="text-[11px] text-gray-400">Recherche des créneaux…</p>
+                  ) : rdvCreneaux.length === 0 ? (
+                    <p className="text-[11px] text-amber-700">Aucun créneau libre ce jour-là. Choisissez une autre date.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                      {rdvCreneaux.map((h) => (
+                        <button
+                          key={h}
+                          onClick={() => setRdvHeure(h)}
+                          className={`text-[11px] px-2 py-1 rounded-md border transition ${rdvHeure === h ? 'bg-primary-500 border-primary-500 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-primary-300'}`}
+                        >
+                          {h}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                )}
+
+                {rdvErreur && <p role="alert" className="text-[11px] text-red-600">{rdvErreur}</p>}
+
+                <div className="flex gap-1.5">
+                  <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => { setRdvOuvert(false); setRdvErreur('') }}>
+                    Annuler
+                  </Button>
+                  <Button size="sm" className="flex-1 text-xs" onClick={creerProchainRdv} disabled={rdvEnCours || !rdvDate || !rdvHeure}>
+                    {rdvEnCours ? '…' : 'Donner le RDV'}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {paid ? (
               <>

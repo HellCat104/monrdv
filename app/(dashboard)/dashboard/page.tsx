@@ -7,6 +7,7 @@ import ConversationsAReprendre from '@/components/dashboard/ConversationsARepren
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
+import { isDentalDoctor } from '@/lib/dental'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
@@ -77,6 +78,7 @@ export default async function DashboardPage() {
     : [todayAppointments ?? [], upcomingAppointments ?? []]
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
+  const estDentiste = isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])
 
   // Calcul jours restants d'abonnement
   let daysLeft: number | null = null
@@ -144,7 +146,11 @@ export default async function DashboardPage() {
           null quand rien n'attend, donc il ne coûte rien le reste du temps. */}
       <ConversationsAReprendre />
       <RappelsDus />
-      <SuiviLabo />
+      {/* Laboratoire : couronnes, bridges, prothèses — un objet de cabinet
+          dentaire. La carte ne s'affichait déjà que s'il y avait un travail en
+          cours, mais rien n'empêchait un généraliste de la voir. On la réserve
+          désormais aux praticiens que ça concerne. */}
+      {estDentiste && <SuiviLabo />}
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* RDV du jour */}

@@ -25,7 +25,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const { data: apt } = await supabase
     .from('appointments')
-    .select('id, date, time, amount_paid, amount_due, payment_method, invoice_no, quote_id, consultation_type:consultation_types(name, default_price), patient:patients(id, first_name, last_name, age, birth_date, blood_group, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
+    .select('id, date, time, amount_paid, amount_due, payment_method, invoice_no, quote_id, consultation_type:consultation_types(id, name, default_price), patient:patients(id, first_name, last_name, age, birth_date, blood_group, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .single()
@@ -35,12 +35,17 @@ export default async function ConsultationPage({ params }: { params: { id: strin
   const consultationType = Array.isArray(apt.consultation_type) ? apt.consultation_type[0] : apt.consultation_type
 
   // Données médicales pour le panneau gauche
-  const [notesRes, presRes, vitalsRes, thisAptPresRes, thisAptNoteRes] = await Promise.all([
+  const [notesRes, presRes, vitalsRes, thisAptPresRes, thisAptCertRes, thisAptNoteRes] = await Promise.all([
     supabase.from('consultation_notes').select('id, note, created_at, appointment_id').eq('patient_id', patient.id).order('created_at', { ascending: false }).limit(5),
     supabase.from('prescriptions').select('id, content, created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }).limit(3),
     supabase.from('vital_signs').select('id, values, measured_at').eq('patient_id', patient.id).order('measured_at', { ascending: false }).limit(3),
     // Ordonnances rédigées PENDANT cette consultation (ce RDV)
     supabase.from('prescriptions').select('id, content, created_at').eq('appointment_id', apt.id).order('created_at', { ascending: true }),
+    // Certificats établis PENDANT cette consultation. Ils étaient enregistrés
+    // avec le rendez-vous depuis toujours, mais rien ne les affichait : on
+    // créait un arrêt de travail et l'écran restait identique, sans moyen de
+    // le relire ni de le réimprimer sans sortir de la consultation.
+    supabase.from('certificates').select('id, title, motif, created_at').eq('appointment_id', apt.id).order('created_at', { ascending: true }),
     // Note de CE rdv, cherchée directement par appointment_id (et non parmi les 5
     // dernières notes du patient : un chronique en cumule plus, on créait un doublon).
     supabase.from('consultation_notes').select('id, note, signed_at').eq('appointment_id', apt.id).order('created_at', { ascending: true }).limit(1).maybeSingle(),
@@ -90,6 +95,8 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       recentPrescriptions={presRes.data ?? []}
       consultationPrescriptions={thisAptPresRes.data ?? []}
       recentVitals={vitalsRes.data ?? []}
+      consultationCertificates={thisAptCertRes.data ?? []}
+      consultationTypeId={consultationType?.id ?? null}
       existingNoteId={existingNote?.id ?? null}
       existingNote={existingNote?.note ?? ''}
       noteSigned={!!existingNote?.signed_at}

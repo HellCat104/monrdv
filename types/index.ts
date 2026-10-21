@@ -784,6 +784,24 @@ export function isPsychiatricDoctor(specialties: (string | null | undefined)[]):
 }
 
 // Modèle de note structuré (psychiatrie) — pré-remplit une note vierge
+// Trame de note pour la médecine générale et les spécialités cliniques.
+//
+// Le psychiatre avait la sienne depuis longtemps ; les autres retapaient les
+// mêmes quatre en-têtes à chaque consultation — trente fois par jour chez un
+// généraliste. L'ordre est celui du raisonnement clinique, et c'est aussi
+// celui qu'un confrère ou un expert s'attend à lire dans un dossier.
+//
+// Comme la trame psy, elle n'est PAS enregistrée tant qu'elle n'a pas été
+// modifiée : une consultation sans note ne doit pas laisser quatre titres
+// vides dans le dossier du patient.
+export const NOTE_TEMPLATE = `Motif :
+
+Examen clinique :
+
+Diagnostic :
+
+Conduite à tenir : `
+
 export const PSY_NOTE_TEMPLATE = `Motif :
 
 Histoire :
