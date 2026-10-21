@@ -479,8 +479,15 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                   )}
 
                   {/* Documents à remettre — un COMPTE, jamais le contenu : il
-                      n'y a pas besoin de lire une ordonnance pour l'imprimer. */}
-                  {typeof a.documents_a_remettre === 'number' && a.documents_a_remettre > 0 && (
+                      n'y a pas besoin de lire une ordonnance pour l'imprimer.
+
+                      SEULEMENT TANT QUE LE PATIENT EST LÀ. « À remettre » est
+                      une chose à faire maintenant : sur quelqu'un qui est parti
+                      — ou qui n'a jamais été pointé à l'accueil — la mention
+                      affirme un travail en attente qui n'existe pas, et un
+                      badge qui ment finit par ne plus être lu du tout. */}
+                  {(a.queue_status === 'arrive' || a.queue_status === 'en_consultation')
+                    && typeof a.documents_a_remettre === 'number' && a.documents_a_remettre > 0 && (
                     <span className="text-[10px] font-semibold bg-primary-50 text-primary-700 border border-primary-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
                       {a.documents_a_remettre} document{a.documents_a_remettre > 1 ? 's' : ''} à remettre
                     </span>
