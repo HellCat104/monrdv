@@ -8,7 +8,7 @@ import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, Users, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Calendar, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
       .order('time', { ascending: true }),
     // Stats du mois
     supabase.from('appointments')
-      .select('status, attendance')
+      .select('status')
       .eq('doctor_id', doctor.id).gte('date', firstOfMonth).lte('date', today),
     // Prochains RDV
     supabase.from('appointments')
@@ -64,10 +64,6 @@ export default async function DashboardPage() {
 
   const monthTotal = monthAppointments?.length ?? 0
   const monthCancelled = monthAppointments?.filter((a) => a.status === 'cancelled').length ?? 0
-  // Absentéisme = patients réellement non venus (pointage), pas les annulations —
-  // c'est la définition utilisée dans les Statistiques, on s'aligne dessus.
-  const monthAbsent = monthAppointments?.filter((a) => a.attendance === 'absent').length ?? 0
-  const absenceRate = monthTotal > 0 ? Math.round((monthAbsent / monthTotal) * 100) : 0
 
 
   // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »).
@@ -124,48 +120,6 @@ export default async function DashboardPage() {
         </Link>
       )}
 
-      {/* Rappels de suivi puis laboratoire : deux encarts qui rendent null
-          quand il n'y a rien à faire, donc aucun espace perdu le reste du
-          temps. Les rappels passent devant — un « revoir dans 6 mois » oublié
-          est un patient qui ne revient pas, pas un travail qui attend. */}
-      {/* WhatsApp en premier : une personne ATTEND une réponse maintenant,
-          là où un rappel de suivi porte sur les mois à venir. L'encart rend
-          null quand rien n'attend, donc il ne coûte rien le reste du temps. */}
-      <ConversationsAReprendre />
-      <RappelsDus />
-      <SuiviLabo />
-
-      {/* Statistiques */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="RDV aujourd'hui"
-          value={todayAppointments?.length ?? 0}
-          subtitle={`${todayAppointments?.filter((a) => a.status === 'confirmed').length ?? 0} confirmés`}
-          icon={Calendar}
-          color="blue"
-        />
-        <StatsCard
-          title="Total ce mois"
-          value={monthTotal}
-          subtitle="rendez-vous"
-          icon={CheckCircle}
-          color="green"
-        />
-        <StatsCard
-          title="Annulés ce mois"
-          value={monthCancelled}
-          icon={TrendingDown}
-          color="orange"
-        />
-        <StatsCard
-          title="Patients absents"
-          value={`${absenceRate}%`}
-          subtitle={monthTotal > 0 ? `${monthAbsent} sur ${monthTotal} RDV ce mois` : 'aucun RDV'}
-          icon={Users}
-          color={absenceRate > 20 ? 'red' : 'green'}
-        />
-      </div>
-
       {/* Bandeau abonnement — visible uniquement si date_expiration définie */}
       {daysLeft !== null && (
         <div className={`text-sm font-medium px-4 py-2 rounded-lg border ${
@@ -180,6 +134,17 @@ export default async function DashboardPage() {
             : `⏳ Il vous reste ${daysLeft} jour${daysLeft > 1 ? 's' : ''} d'abonnement.`}
         </div>
       )}
+
+      {/* Rappels de suivi puis laboratoire : deux encarts qui rendent null
+          quand il n'y a rien à faire, donc aucun espace perdu le reste du
+          temps. Les rappels passent devant — un « revoir dans 6 mois » oublié
+          est un patient qui ne revient pas, pas un travail qui attend. */}
+      {/* WhatsApp en premier : une personne ATTEND une réponse maintenant,
+          là où un rappel de suivi porte sur les mois à venir. L'encart rend
+          null quand rien n'attend, donc il ne coûte rien le reste du temps. */}
+      <ConversationsAReprendre />
+      <RappelsDus />
+      <SuiviLabo />
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* RDV du jour */}
@@ -208,6 +173,44 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Statistiques du mois — EN BAS, et c'est le changement.
+          Elles occupaient la place d'honneur, au-dessus de la journée : à 9h,
+          un médecin veut savoir qui il voit, pas son total mensuel. Ce sont
+          des chiffres qu'on consulte, pas des chiffres qui déclenchent un
+          geste — et la page Statistiques existe pour les creuser.
+
+          Le taux d'absentéisme a quitté cet écran : c'est un indicateur de
+          pilotage mensuel, déjà présent dans Statistiques (présences,
+          absences, taux), et il n'apprenait rien d'actionnable le matin. */}
+      <div className="grid grid-cols-3 gap-4">
+        <StatsCard
+          title="RDV aujourd'hui"
+          value={todayAppointments?.length ?? 0}
+          subtitle={`${todayAppointments?.filter((a) => a.status === 'confirmed').length ?? 0} confirmés`}
+          icon={Calendar}
+          color="blue"
+        />
+        <StatsCard
+          title="Total ce mois"
+          value={monthTotal}
+          subtitle="rendez-vous"
+          icon={CheckCircle}
+          color="green"
+        />
+        <StatsCard
+          title="Annulés ce mois"
+          value={monthCancelled}
+          icon={TrendingDown}
+          color="orange"
+        />
+      </div>
+
+      {/* Lien vers le détail : les chiffres du mois posent toujours la même
+          question suivante (« et par rapport au mois dernier ? »). */}
+      <Link href="/statistiques" className="block text-center text-sm text-primary-600 hover:text-primary-700 hover:underline">
+        Voir toutes les statistiques →
+      </Link>
     </div>
   )
 }
