@@ -151,6 +151,9 @@ export default function PatientDossier({
   const [soldeMode, setSoldeMode] = useState<PaymentMethod>('especes')
   const [soldeEnCours, setSoldeEnCours] = useState(false)
 
+  // Forfait de séances : déplié à la demande quand le patient n'en a aucun
+  // (voir le commentaire devant le bloc, dans l'onglet Paiements).
+  const [forfaitDeplie, setForfaitDeplie] = useState(false)
   // Journal des séances : un seul forfait déplié à la fois.
   const [journalOuvert, setJournalOuvert] = useState<string | null>(null)
   const [journal, setJournal] = useState<{ id: string; delta: number; used_at: string; note: string | null }[]>([])
@@ -1197,7 +1200,28 @@ export default function PatientDossier({
                 mutuelle={editMutuelle}
               />
             )}
-            {/* Forfaits de séances prépayées */}
+            {/* Forfaits de séances prépayées.
+
+                Même règle que le devis juste au-dessus : tant qu'il n'y a rien
+                dedans, le bloc se réduit à une ligne. Dix séances de
+                rééducation payées d'avance, un suivi psychologique réglé en
+                bloc — c'est réel chez le kinésithérapeute et le psychologue,
+                et ça n'existe pas chez un généraliste, payé à la consultation.
+                Lui montrer un formulaire ouvert à chaque fiche patient, c'est
+                lui faire lire trois fois par jour une proposition qu'il
+                déclinera toujours.
+
+                Pas d'exception pour le dentiste ici, contrairement au devis :
+                le forfait n'est pas son outil, le devis l'est. */}
+            {packages.filter((p) => p.status !== 'annule').length === 0 && !forfaitDeplie ? (
+              <button
+                type="button"
+                onClick={() => setForfaitDeplie(true)}
+                className="w-full flex items-center gap-1.5 text-left text-xs text-gray-400 hover:text-primary-600 border border-dashed border-gray-200 hover:border-primary-200 rounded-xl px-4 py-2.5 transition-colors"
+              >
+                <Ticket className="h-3.5 w-3.5 shrink-0" /> Créer un forfait de séances prépayées
+              </button>
+            ) : (
             <div className={sec}>
               <div className={secTitle}><span className="flex items-center gap-1.5"><Ticket className="h-4 w-4" /> Forfait séances</span></div>
 
@@ -1288,6 +1312,7 @@ export default function PatientDossier({
                 </Button>
               </div>
             </div>
+            )}
               </div>
               <div className="space-y-4">
             {/* Encaissements */}

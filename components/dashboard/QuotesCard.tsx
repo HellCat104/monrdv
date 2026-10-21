@@ -95,6 +95,8 @@ export default function QuotesCard({
   // Un seul booléen dérivé plutôt que `mode === …` répété dans le JSX : la
   // règle « la secrétaire ne modifie rien » se lit alors en un seul endroit.
   const secretaire = mode === 'secretaire'
+  // Déplié à la demande : voir le commentaire du rendu, plus bas.
+  const [deplie, setDeplie] = useState(false)
   const peutEncaisser = secretaire ? canPay : true
   // La secrétaire lit et encaisse via ses propres routes cabinet : celles du
   // médecin (/api/quotes) lui répondraient 404, elle n'est pas dans `doctors`.
@@ -355,6 +357,48 @@ export default function QuotesCard({
   async function clearInstallments(q: Quote) {
     const data = await call(`/api/quotes/${q.id}/installments`, { method: 'DELETE' })
     if (data) await refresh(q.id)
+  }
+
+  // UN BLOC VIDE N'EST PAS UNE CARTE.
+  //
+  // Le devis est un objet de dentisterie : c'est là que le plan de traitement
+  // chiffré fait le chiffre d'affaires du cabinet. Un généraliste, lui, est
+  // payé à la consultation et n'établira jamais de devis — il voyait pourtant
+  // la carte entière, formulaire ouvert, l'invitant à faire ce qu'il ne fera
+  // pas, et son onglet Paiements ne parlait plus de ce qui l'intéresse : ce
+  // qu'il a encaissé.
+  //
+  // La règle ne lit PAS la spécialité : `specialty` est du texte libre, et une
+  // liste serait fausse le jour où un praticien écrit « Médecin-dentiste ».
+  // Elle lit le CONTENU — rien dedans, donc une ligne — ce qui marche aussi
+  // pour les professions auxquelles on n'a pas pensé (le dermatologue
+  // esthétique qui chiffre un acte le trouve en un clic).
+  //
+  // Deux exceptions :
+  //   - le dentiste garde sa carte ouverte même vide : lui faire cliquer pour
+  //     atteindre son outil principal serait absurde ;
+  //   - la secrétaire garde la carte telle quelle. Sa phrase (« Seul le
+  //     médecin peut en créer un ») RÉPOND à une question qu'un patient pose
+  //     au comptoir ; et lui montrer « Chiffrer un plan » l'enverrait chercher
+  //     un bouton qui n'existe pas pour elle.
+  //
+  // Pendant le chargement on affiche DÉJÀ la ligne, au lieu de la carte avec
+  // « Chargement… » : chez un non-dentiste le cas de loin le plus fréquent est
+  // qu'il n'y ait aucun devis, et une grande carte qui se replie une seconde
+  // plus tard fait sauter tout l'écran. Si le patient en a un, la ligne grandit
+  // en carte — une surprise dans le bon sens, et plus discrète.
+  const replie = !secretaire && !dental && !deplie && (loading || quotes.length === 0)
+
+  if (replie) {
+    return (
+      <button
+        type="button"
+        onClick={() => setDeplie(true)}
+        className="w-full flex items-center gap-1.5 text-left text-xs text-gray-400 hover:text-primary-600 border border-dashed border-gray-200 hover:border-primary-200 rounded-xl px-4 py-2.5 transition-colors"
+      >
+        <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Chiffrer un plan de traitement
+      </button>
+    )
   }
 
   return (
