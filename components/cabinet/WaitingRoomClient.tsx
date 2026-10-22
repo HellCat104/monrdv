@@ -27,6 +27,7 @@ export default function WaitingRoomClient() {
   const [appts, setAppts] = useState<Apt[]>([])
   const [loading, setLoading] = useState(true)
   const [replieOuvert, setReplieOuvert] = useState(false)
+  const [repartisOuvert, setRepartisOuvert] = useState(false)
   const [permissions, setPermissions] = useState<StaffPermissions | null>(null)
   const [types, setTypes] = useState<ConsultationType[]>([])
   const [payFor, setPayFor] = useState<Apt | null>(null)
@@ -91,8 +92,15 @@ export default function WaitingRoomClient() {
   // Les autres ne sont pas effacés — ils se replient. Elle a encore besoin de
   // pointer quelqu'un qu'elle avait oublié, ou de corriger une erreur.
   const presents = appts.filter((a) => a.queue_status === 'arrive' || a.queue_status === 'en_consultation')
-  const autres = appts.filter((a) => !presents.includes(a))
-  const aAfficher = replieOuvert ? [...presents, ...autres] : presents
+  // Ceux qu'on attend encore : pas encore pointés, ou notés en retard. Les
+  // patients repartis n'ont plus rien à faire sur cet écran — c'est du passé,
+  // et la journée d'un cabinet en accumule vite trente.
+  const aVenir = appts.filter((a) => !a.queue_status)
+  // Les repartis restent atteignables, derrière un second repli : sans eux, un
+  // « Parti » cliqué par erreur serait définitif, l'agenda n'ayant plus de
+  // boutons de pointage sur un patient déjà passé.
+  const repartis = appts.filter((a) => a.queue_status === 'parti')
+  const aAfficher = [...presents, ...(replieOuvert ? aVenir : []), ...(repartisOuvert ? repartis : [])]
 
   return (
     <div className="space-y-4">
@@ -133,13 +141,13 @@ export default function WaitingRoomClient() {
         <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-400 text-sm">
           <Armchair className="h-8 w-8 mx-auto mb-2 opacity-40" /> Aucun rendez-vous aujourd&apos;hui.
         </div>
-      ) : presents.length === 0 && !replieOuvert ? (
+      ) : aAfficher.length === 0 ? (
         <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-400 text-sm">
           <Armchair className="h-8 w-8 mx-auto mb-2 opacity-40" />
           Personne n&apos;attend pour le moment.
-          {autres.length > 0 && (
+          {aVenir.length > 0 && (
             <button onClick={() => setReplieOuvert(true)} className="block mx-auto mt-2 text-xs text-primary-600 hover:underline">
-              Voir les {autres.length} rendez-vous du jour
+              Voir les {aVenir.length} rendez-vous à venir
             </button>
           )}
         </div>
@@ -219,16 +227,14 @@ export default function WaitingRoomClient() {
             )
           })}
 
-          {/* Le reste de la journée, replié : repartis, pas encore arrivés,
-              absents. On ne les efface pas — il faut pouvoir pointer celui
-              qu'on avait oublié, ou corriger une erreur. */}
-          {!replieOuvert && autres.length > 0 && (
+          {/* La suite de la journée — ceux qu'on attend encore. */}
+          {!replieOuvert && aVenir.length > 0 && (
             <button
               onClick={() => setReplieOuvert(true)}
               className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50"
             >
               <ChevronDown className="h-3.5 w-3.5" />
-              {autres.length} autre{autres.length > 1 ? 's' : ''} rendez-vous du jour
+              {aVenir.length} rendez-vous à venir aujourd&apos;hui
             </button>
           )}
           {replieOuvert && (
@@ -237,6 +243,18 @@ export default function WaitingRoomClient() {
               className="w-full py-2.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50"
             >
               Ne montrer que la salle d&apos;attente
+            </button>
+          )}
+
+          {/* Les repartis, derrière un second repli et jamais ouverts d'office :
+              un « Parti » cliqué par erreur doit pouvoir se corriger, mais la
+              journée en accumule trente et ce n'est pas ce qu'elle regarde. */}
+          {repartis.length > 0 && (
+            <button
+              onClick={() => setRepartisOuvert((v) => !v)}
+              className="w-full py-2 text-[11px] text-gray-300 hover:text-gray-500 hover:bg-gray-50"
+            >
+              {repartisOuvert ? 'Masquer les patients repartis' : `${repartis.length} patient${repartis.length > 1 ? 's' : ''} reparti${repartis.length > 1 ? 's' : ''}`}
             </button>
           )}
         </div>
