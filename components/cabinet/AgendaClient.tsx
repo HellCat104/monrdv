@@ -10,10 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { etatPatient, resumeEchange } from '@/lib/file-attente'
+import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing, MessageSquare } from 'lucide-react'
-import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
+import { Calendar, Plus, X, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing, MessageSquare } from 'lucide-react'
+import { PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
 import DaySheet from '@/components/shared/DaySheet'
 import { PatientPicker, type PatientChoice } from '@/components/shared/PatientPicker'
 import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
@@ -371,9 +372,15 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
       )}
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-primary-500" /> Agenda
-        </h1>
+        {/* Le rôle de l'écran, écrit — son pendant est sur la salle
+            d'attente. Deux écrans qui se ressemblent et dont on doit deviner
+            la différence, c'est deux écrans qu'on ouvre au hasard. */}
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-primary-500" /> Agenda
+          </h1>
+          <p className="text-xs text-gray-500 mt-0.5">La journée : créer, déplacer, encaisser.</p>
+        </div>
         {permissions.manage_appointments && (
           <div className="flex items-center gap-2 flex-wrap">
             <Button size="sm" variant="outline" onClick={() => setWalkInOpen(true)}>
@@ -526,20 +533,18 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 </p>
               </div>
 
-              {/* Présence */}
+              {/* Pointage — les MÊMES boutons que la salle d'attente.
+                  L'agenda portait « Présent / En retard / Absent », la salle
+                  d'attente « Arrivé / En consultation / Parti » : deux
+                  vocabulaires pour un seul geste, et cliquer ✓ ici ne faisait
+                  PAS apparaître le patient dans la salle d'attente du médecin. */}
               {permissions.mark_attendance ? (
-                <div className="flex items-center gap-1">
-                  {([['present', Check], ['late', Clock], ['absent', X]] as const).map(([key, Icon]) => (
-                    <button
-                      key={key}
-                      onClick={() => patchRdv(a.id, { attendance: a.attendance === key ? null : key })}
-                      title={ATTENDANCE_LABELS[key]}
-                      className={`p-1.5 rounded-lg border text-xs transition ${a.attendance === key ? ATTENDANCE_COLORS[key] + ' border-transparent' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                    </button>
-                  ))}
-                </div>
+                <BoutonsFile
+                  queueStatus={a.queue_status}
+                  attendance={a.attendance}
+                  onQueue={(key) => patchRdv(a.id, { queue_status: key })}
+                  onAttendance={(key) => patchRdv(a.id, { attendance: key })}
+                />
               ) : null}
 
               {/* RDV rattaché à un devis : l'argent de cette séance se saisit sur
