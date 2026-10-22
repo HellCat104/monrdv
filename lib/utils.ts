@@ -241,6 +241,23 @@ export function truncate(text: string, maxLength: number): string {
 
 /** Âge en années révolues à partir d'une date de naissance (YYYY-MM-DD).
  *  Source unique de vérité : quand la date est connue, l'âge en découle. */
+/** Minutes écoulées depuis un horodatage ISO.
+ *
+ *  `null` quand l'heure est absente — typiquement une migration pas encore
+ *  passée : l'écran n'affiche alors AUCUNE durée, plutôt qu'un « 0 min » faux.
+ *  Une durée fausse est pire que pas de durée : on décide dessus. */
+export function minutesDepuis(iso?: string | null): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (isNaN(t)) return null
+  return Math.max(0, Math.round((Date.now() - t) / 60000))
+}
+
+/** Un appel « faites entrer le suivant » est FUGACE : passé un quart d'heure,
+ *  c'est un appel oublié, et un bandeau qui clignote jusqu'au soir ne se lit
+ *  plus. Les écrans l'ignorent au-delà. */
+export const APPEL_VALIDE_MIN = 15
+
 export function ageFromBirthDate(birth?: string | null): number | null {
   if (!birth || !/^\d{4}-\d{2}-\d{2}$/.test(birth)) return null
   const b = new Date(birth + 'T00:00:00')

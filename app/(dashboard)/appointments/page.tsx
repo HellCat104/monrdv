@@ -23,17 +23,8 @@ import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDia
 import { UserPlus } from 'lucide-react'
 import { format, startOfWeek, endOfWeek, addDays, subDays, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, isSameDay, getDay, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { getNowInMaroc, ageFromBirthDate } from '@/lib/utils'
+import { getNowInMaroc, ageFromBirthDate, minutesDepuis } from '@/lib/utils'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
-
-/** Minutes écoulées depuis un horodatage. null si la v76 n'est pas passée —
- *  l'écran affiche alors le nom sans durée, au lieu d'un « 0 min » faux. */
-function minutesDepuis(iso?: string | null): number | null {
-  if (!iso) return null
-  const t = new Date(iso).getTime()
-  if (isNaN(t)) return null
-  return Math.max(0, Math.round((Date.now() - t) / 60000))
-}
 
 type ViewMode = 'day' | 'week' | 'month' | 'all'
 

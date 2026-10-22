@@ -3,9 +3,9 @@
 // File d'attente du jour : la secrétaire fait avancer chaque patient
 // dans le circuit Arrivé → En consultation → Parti.
 import { useCallback, useEffect, useState } from 'react'
-import { getNowInMaroc, formatTime } from '@/lib/utils'
+import { getNowInMaroc, formatTime, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { format } from 'date-fns'
-import { Armchair, LogIn, Stethoscope, LogOut, RotateCcw } from 'lucide-react'
+import { Armchair, LogIn, Stethoscope, LogOut, RotateCcw, BellRing } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
@@ -37,22 +37,50 @@ export default function WaitingRoomClient() {
     return () => clearInterval(t)
   }, [load])
 
-  async function setQueue(id: string, queue_status: string | null) {
+  async function patch(id: string, champs: Record<string, unknown>) {
     const res = await fetch('/api/cabinet/appointments', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, queue_status }),
+      body: JSON.stringify({ id, ...champs }),
     })
     const d = await res.json().catch(() => ({}))
     if (!res.ok) { alert(d.error || 'Échec'); return }
-    setAppts((prev) => prev.map((a) => (a.id === id ? { ...a, ...d } : a)))
+    // Le select du serveur ne renvoie pas les colonnes de la v76 : sans ce
+    // complément, effacer l'appel du médecin ne se voyait qu'au
+    // rafraîchissement suivant, et le bandeau semblait ignorer le clic.
+    const absents = Object.fromEntries(Object.entries(champs).filter(([c]) => !(c in d)))
+    setAppts((prev) => prev.map((a) => (a.id === id ? { ...a, ...d, ...absents } : a)))
   }
+
+  const setQueue = (id: string, queue_status: string | null) => patch(id, { queue_status })
+
+  // Le médecin réclame le patient suivant. Le bandeau existait sur l'agenda ;
+  // il manquait ICI, qui est pourtant l'écran depuis lequel on fait entrer.
+  const appels = appts.filter((a) => {
+    const m = minutesDepuis(a.appel_suivant_le)
+    return m != null && m <= APPEL_VALIDE_MIN
+  })
 
   const waiting = appts.filter((a) => a.queue_status === 'arrive')
   const inConsult = appts.filter((a) => a.queue_status === 'en_consultation')
 
   return (
     <div className="space-y-4">
+      {appels.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap bg-primary-500 text-white rounded-xl px-4 py-3">
+          <BellRing className="h-5 w-5 shrink-0" />
+          <span className="text-sm font-semibold flex-1 min-w-0">
+            Le médecin demande le patient suivant.
+          </span>
+          <button
+            onClick={() => appels.forEach((a) => patch(a.id, { appel_suivant_le: null }))}
+            className="text-xs font-semibold bg-white/20 hover:bg-white/30 rounded-lg px-3 py-1.5 transition"
+          >
+            C&apos;est fait
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
           <Armchair className="h-5 w-5 text-primary-500" /> Salle d&apos;attente
@@ -84,7 +112,13 @@ export default function WaitingRoomClient() {
                 </div>
 
                 {current && (
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${current.chip}`}>{current.label}</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${current.chip}`}>
+                    {current.label}
+                    {a.queue_status === 'arrive' && minutesDepuis(a.queue_arrived_at) != null
+                      && ` · ${minutesDepuis(a.queue_arrived_at)} min`}
+                    {a.queue_status === 'en_consultation' && minutesDepuis(a.queue_started_at) != null
+                      && ` · ${minutesDepuis(a.queue_started_at)} min`}
+                  </span>
                 )}
 
                 <div className="flex items-center gap-1">

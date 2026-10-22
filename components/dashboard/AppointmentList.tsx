@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { formatDateShort, formatTime, getInitials } from '@/lib/utils'
+import { formatDateShort, formatTime, getInitials, minutesDepuis } from '@/lib/utils'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, VITAL_DEFS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMethod } from '@/types'
 import {
@@ -89,15 +89,6 @@ interface AppointmentListProps {
   /** Forfait du médecin : en 'agenda', les actions Cabinet (consultation,
    *  ordonnance, facture, encaissement) sont masquées. Défaut 'complet'. */
   plan?: 'agenda' | 'complet'
-}
-
-/** Minutes écoulées depuis un horodatage (v76). null si la migration n'est
- *  pas passée : l'écran n'affiche alors rien plutôt qu'un « 0 min » faux. */
-function minutesDepuis(iso?: string | null): number | null {
-  if (!iso) return null
-  const t = new Date(iso).getTime()
-  if (isNaN(t)) return null
-  return Math.max(0, Math.round((Date.now() - t) / 60000))
 }
 
 /** Le dernier mot échangé avec l'accueil, prêt à afficher (v77). */

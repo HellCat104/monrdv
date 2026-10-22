@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getNowInMaroc, formatTime, formatAge } from '@/lib/utils'
+import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing, MessageSquare } from 'lucide-react'
@@ -21,19 +21,7 @@ import { FileText, UserPlus } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
 
-/** Minutes écoulées depuis un horodatage. null tant que la v76 n'est pas
- *  passée : l'écran n'affiche alors aucune durée, plutôt qu'un « 0 min » faux. */
-function minutesDepuis(iso?: string | null): number | null {
-  if (!iso) return null
-  const t = new Date(iso).getTime()
-  if (isNaN(t)) return null
-  return Math.max(0, Math.round((Date.now() - t) / 60000))
-}
 
-/** Un appel « faites entrer le suivant » est FUGACE : passé un quart d'heure,
- *  c'est un appel oublié, et un bandeau qui clignote jusqu'au soir ne se lit
- *  plus. L'écran l'ignore ; la colonne, elle, garde la trace. */
-const APPEL_VALIDE_MIN = 15
 interface CType { id: string; name: string; duration_minutes: number | null; default_price: number | null }
 const NO_TYPE = '__none__'
 
