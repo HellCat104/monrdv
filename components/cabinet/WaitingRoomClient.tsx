@@ -17,6 +17,7 @@ import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format } from 'date-fns'
 import EncaisserDialog, { type RdvAEncaisser } from '@/components/cabinet/EncaisserDialog'
 import PanneauMedecin, { BoutonMedecin, type RdvEchange } from '@/components/cabinet/PanneauMedecin'
+import AReprogrammer from '@/components/cabinet/AReprogrammer'
 import type { StaffPermissions, ConsultationType } from '@/types'
 import { Armchair, BellRing, ChevronDown, Banknote, FileText } from 'lucide-react'
 
@@ -121,6 +122,11 @@ export default function WaitingRoomClient() {
           </button>
         </div>
       )}
+
+      {/* Les consignes du médecin encore ouvertes, toutes dates confondues :
+          c'est le seul endroit du cabinet où une consigne d'hier reste
+          visible. Elle rend null quand il n'y en a pas. */}
+      <AReprogrammer peutSolder={!!permissions?.mark_attendance} />
 
       <div className="flex items-center justify-between flex-wrap gap-2">
         {/* Le rôle de l'écran, écrit. Deux écrans qui se ressemblent et dont
