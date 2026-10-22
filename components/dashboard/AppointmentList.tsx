@@ -40,7 +40,10 @@ function MoreMenu({ items }: { items: MoreMenuItem[] }) {
         <>
           {/* clic à l'extérieur = fermer */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-7 z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1">
+          {/* Aligné à DROITE du bouton, pas à gauche : le « … » est au bord
+              droit de la carte, et un menu de 208 px ancré à gauche partait
+              hors de l'écran — on ne lisait plus que le début des libellés. */}
+          <div className="absolute right-0 top-7 z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1">
             {items.map(({ label, icon: Icon, href, onClick, danger }) => (
               href ? (
                 <a

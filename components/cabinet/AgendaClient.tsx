@@ -261,7 +261,21 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) { alert(data.error || 'Échec de la modification'); return false }
-    setAppts((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)))
+    // Le serveur renvoie la ligne telle qu'il la relit — mais son select ne
+    // contient PAS les colonnes de la v76/v77 (appel du suivant, consigne de
+    // reprogrammation). Fusionner la réponse seule laissait donc l'ancienne
+    // valeur en place : le bandeau « le médecin demande le suivant » restait
+    // à l'écran après « C'est fait », jusqu'au rafraîchissement automatique
+    // trente secondes plus tard. D'où l'impression qu'il marchait une fois
+    // sur deux.
+    //
+    // On applique en plus ce qu'on a demandé, mais SEULEMENT pour les champs
+    // que la réponse ne porte pas : le serveur reste maître de ceux qu'il
+    // renvoie (il normalise des montants, par exemple).
+    const absentsDeLaReponse = Object.fromEntries(
+      Object.entries(patch).filter(([cle]) => !(cle in data)),
+    )
+    setAppts((prev) => prev.map((a) => (a.id === id ? { ...a, ...data, ...absentsDeLaReponse } : a)))
     return true
   }
 
