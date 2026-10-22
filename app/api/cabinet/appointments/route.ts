@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
   // migration, pas de fonctionnalité, mais jamais d'écran cassé.
   const ids = appointments.map((a) => (a as { id: string }).id)
   if (ids.length > 0 && ids.length <= 300) {
-    const [fileRes, ordRes, certRes] = await Promise.all([
+    const [fileRes, ordRes, certRes, motsRes] = await Promise.all([
       admin.from('appointments')
         .select('id, queue_arrived_at, queue_started_at, reprogrammer_jours, appel_suivant_le')
         .in('id', ids),
@@ -91,6 +91,12 @@ export async function GET(req: NextRequest) {
       // le contenu d'une ordonnance pour ça.
       admin.from('prescriptions').select('appointment_id').in('appointment_id', ids),
       admin.from('certificates').select('appointment_id').in('appointment_id', ids),
+      // Les mots échangés avec le médecin (v77). Pas de table, pas de mots :
+      // l'agenda s'affiche quand même.
+      admin.from('appointment_messages')
+        .select('id, appointment_id, auteur, auteur_nom, contenu, created_at')
+        .in('appointment_id', ids)
+        .order('created_at', { ascending: true }),
     ])
 
     const file = new Map<string, Record<string, unknown>>()
@@ -106,9 +112,21 @@ export async function GET(req: NextRequest) {
     const nbOrd = compte(ordRes.data as { appointment_id?: string | null }[] | null)
     const nbCert = compte(certRes.data as { appointment_id?: string | null }[] | null)
 
+    const mots = new Map<string, unknown[]>()
+    for (const m of (motsRes.data ?? []) as { appointment_id: string }[]) {
+      const l = mots.get(m.appointment_id) ?? []
+      l.push(m)
+      mots.set(m.appointment_id, l)
+    }
+
     appointments = appointments.map((a) => {
       const id = (a as { id: string }).id
-      return { ...a, ...(file.get(id) ?? {}), documents_a_remettre: (nbOrd.get(id) ?? 0) + (nbCert.get(id) ?? 0) }
+      return {
+        ...a,
+        ...(file.get(id) ?? {}),
+        documents_a_remettre: (nbOrd.get(id) ?? 0) + (nbCert.get(id) ?? 0),
+        mots: mots.get(id) ?? [],
+      }
     })
   }
 

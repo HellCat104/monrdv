@@ -88,6 +88,24 @@ interface AppointmentListProps {
   plan?: 'agenda' | 'complet'
 }
 
+/** Minutes écoulées depuis un horodatage (v76). null si la migration n'est
+ *  pas passée : l'écran n'affiche alors rien plutôt qu'un « 0 min » faux. */
+function minutesDepuis(iso?: string | null): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  if (isNaN(t)) return null
+  return Math.max(0, Math.round((Date.now() - t) / 60000))
+}
+
+/** Le dernier mot échangé avec l'accueil, prêt à afficher (v77). */
+function dernierMot(apt: Appointment): string | null {
+  const l = (apt as { mots?: { auteur: string; auteur_nom?: string | null; contenu: string }[] }).mots
+  if (!l || l.length === 0) return null
+  const m = l[l.length - 1]
+  const qui = m.auteur === 'medecin' ? 'Vous' : (m.auteur_nom?.split(' ')[0] || 'Accueil')
+  return `${qui} : ${m.contenu}`
+}
+
 export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, plan = 'complet' }: AppointmentListProps) {
   // Forfait Agenda : pas d'encaissement (le reste des actions est filtré plus bas)
   // L'encaissement est ouvert aux deux forfaits : seuls les documents
@@ -358,6 +376,20 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 {apt.attendance && (
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ATTENDANCE_COLORS[apt.attendance]}`}>
                     {ATTENDANCE_LABELS[apt.attendance]}
+                  </span>
+                )}
+                {/* Attend depuis… (v76) : « Présent » dit qu'il est venu, pas
+                    qu'il patiente encore. La durée, elle, fait agir. */}
+                {apt.queue_status === 'arrive' && minutesDepuis(apt.queue_arrived_at) != null && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                    Attend depuis {minutesDepuis(apt.queue_arrived_at)} min
+                  </span>
+                )}
+                {/* Dernier mot de l'accueil (v77), lisible sans ouvrir la
+                    consultation : dans un cabinet le mot fait six mots. */}
+                {dernierMot(apt) && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 max-w-[280px] truncate">
+                    💬 {dernierMot(apt)}
                   </span>
                 )}
                 {apt.specialty && (

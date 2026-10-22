@@ -16,7 +16,7 @@ import PerioCard from '@/components/dashboard/PerioCard'
 import ActesDuJourCard from './ActesDuJourCard'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
-  AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw, CalendarPlus, CalendarClock, BellRing,
+  AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw, CalendarPlus, CalendarClock, BellRing, MessageSquare,
 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,7 +53,7 @@ export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, consultationCertificates, recentVitals,
   consultationTypeId = null, queueStatus = null, reprogrammerJours = null, v76 = false,
-  prochainRdv = null,
+  prochainRdv = null, mots: motsInitiaux = [], v77 = false, doctorName = '',
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
   isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false,
 }: {
@@ -80,6 +80,10 @@ export default function ConsultationClient({
   reprogrammerJours?: number | null
   /** Rendez-vous déjà donné à ce patient après celui-ci, s'il existe. */
   prochainRdv?: { date: string; time: string } | null
+  /** Mots échangés avec l'accueil au sujet de ce rendez-vous (v77). */
+  mots?: Row[]
+  v77?: boolean
+  doctorName?: string
   /** La migration v76 est passée. Sinon les deux liens vers l'accueil
    *  n'existent pas — la règle de la maison : pas de migration, pas de
    *  fonctionnalité, mais jamais d'erreur. */
@@ -358,6 +362,26 @@ export default function ConsultationClient({
     setTimeout(() => setAppelEnvoye(false), 60000)
   }
 
+  // ── Le fil avec l'accueil ─────────────────────────────────────────────
+  const [mots, setMots] = useState<Row[]>(motsInitiaux)
+  const [motTexte, setMotTexte] = useState('')
+  const [motEnCours, setMotEnCours] = useState(false)
+
+  async function repondreAccueil() {
+    const contenu = motTexte.trim()
+    if (!contenu) return
+    setMotEnCours(true)
+    const { data, error } = await supabase
+      .from('appointment_messages')
+      .insert({ doctor_id: doctorId, appointment_id: appointmentId, auteur: 'medecin', auteur_nom: doctorName, contenu })
+      .select('id, auteur, auteur_nom, contenu, created_at')
+      .single()
+    setMotEnCours(false)
+    if (error || !data) { alert("Le mot n'a pas pu être envoyé à l'accueil."); return }
+    setMots((prev) => [...prev, data])
+    setMotTexte('')
+  }
+
   const savingRef = useRef(false)
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -525,6 +549,42 @@ export default function ConsultationClient({
               <HistoriqueReplie n={notesPrecedentes.length - 1} libelle="note(s) plus ancienne(s)">
                 {notesPrecedentes.slice(1).map((n) => ligneNote(n))}
               </HistoriqueReplie>
+            </div>
+          )}
+
+          {/* Mots de l'accueil (v77). En HAUT de la colonne gauche quand il y
+              en a : « elle demande à décaler à jeudi » se lit avant d'ouvrir
+              la bouche, pas après avoir rédigé l'ordonnance. La carte
+              n'existe pas quand le fil est vide — le bouton pour entamer la
+              conversation est à l'accueil, c'est de là que part le besoin. */}
+          {v77 && mots.length > 0 && (
+            <div className="bg-violet-50/60 border border-violet-200 rounded-xl p-4">
+              <h3 className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <MessageSquare className="h-3.5 w-3.5" /> Avec l&apos;accueil
+              </h3>
+              <div className="space-y-1.5 mb-2 max-h-44 overflow-y-auto">
+                {mots.map((m) => (
+                  <div key={m.id} className={`rounded-lg px-2.5 py-1.5 text-xs ${m.auteur === 'medecin' ? 'bg-white border border-violet-100' : 'bg-white border border-gray-100'}`}>
+                    <p className="text-[10px] text-gray-500 mb-0.5">
+                      {m.auteur === 'medecin' ? 'Vous' : (m.auteur_nom || 'Accueil')} · {String(m.created_at).slice(11, 16)}
+                    </p>
+                    <p className="text-gray-800 whitespace-pre-wrap">{m.contenu}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-1.5">
+                <Input
+                  value={motTexte}
+                  onChange={(e) => setMotTexte(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); repondreAccueil() } }}
+                  placeholder="Répondre…"
+                  maxLength={1000}
+                  className="text-xs h-8"
+                />
+                <Button size="sm" className="h-8 text-xs shrink-0" onClick={repondreAccueil} disabled={motEnCours || !motTexte.trim()}>
+                  {motEnCours ? '…' : 'Envoyer'}
+                </Button>
+              </div>
             </div>
           )}
 

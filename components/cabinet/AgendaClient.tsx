@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getNowInMaroc, formatTime, formatAge } from '@/lib/utils'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing } from 'lucide-react'
+import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing, MessageSquare } from 'lucide-react'
 import { ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
 import DaySheet from '@/components/shared/DaySheet'
 import { PatientPicker, type PatientChoice } from '@/components/shared/PatientPicker'
@@ -40,6 +40,11 @@ const NO_TYPE = '__none__'
 export default function AgendaClient({ permissions, doctorName = 'Cabinet médical' }: { permissions: StaffPermissions; doctorName?: string }) {
   const [date, setDate] = useState(() => format(getNowInMaroc(), 'yyyy-MM-dd'))
   const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd')
+  // Fil de messages ouvert sur un rendez-vous (v77)
+  const [motFor, setMotFor] = useState<Apt | null>(null)
+  const [motTexte, setMotTexte] = useState('')
+  const [motEnCours, setMotEnCours] = useState(false)
+  const [motErreur, setMotErreur] = useState('')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [patientCache, setPatientCache] = useState<PatientLite[] | null>(null)
@@ -319,6 +324,30 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     return m != null && m <= APPEL_VALIDE_MIN
   })
 
+  async function envoyerMot() {
+    if (!motFor || !motTexte.trim()) return
+    setMotEnCours(true)
+    setMotErreur('')
+    try {
+      const res = await fetch('/api/cabinet/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appointment_id: motFor.id, contenu: motTexte.trim() }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setMotErreur(d.error || 'Envoi impossible.'); return }
+      // On recharge l'agenda plutôt que de bricoler la liste à la main : le
+      // médecin a pu répondre entre-temps, et son mot doit apparaître aussi.
+      setMotTexte('')
+      await load(date, true)
+      setMotFor((prev) => prev ? { ...prev, mots: [...(prev.mots ?? []), d.message] } : prev)
+    } catch {
+      setMotErreur('Erreur réseau.')
+    } finally {
+      setMotEnCours(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* « Faites entrer le suivant » — en haut, au-dessus de tout : c'est la
@@ -478,6 +507,20 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                     </button>
                   )}
 
+                  {/* Un mot échangé avec le médecin (v77). On montre le
+                      DERNIER, tronqué : dans un cabinet le mot fait six mots
+                      (« elle demande à décaler à jeudi »), et le lire sans
+                      cliquer est tout l'intérêt. Le bouton ouvre le fil. */}
+                  {Array.isArray(a.mots) && a.mots.length > 0 && (
+                    <button
+                      onClick={() => { setMotFor(a); setMotTexte(''); setMotErreur('') }}
+                      title="Ouvrir le fil avec le médecin"
+                      className="text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 px-1.5 py-0.5 rounded-full max-w-[260px] truncate"
+                    >
+                      💬 {a.mots[a.mots.length - 1].auteur === 'medecin' ? 'Dr' : a.mots[a.mots.length - 1].auteur_nom?.split(' ')[0] || 'Moi'} : {a.mots[a.mots.length - 1].contenu}
+                    </button>
+                  )}
+
                   {/* Documents à remettre — un COMPTE, jamais le contenu : il
                       n'y a pas besoin de lire une ordonnance pour l'imprimer.
 
@@ -555,6 +598,17 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                   </button>
                 )
               )}
+
+              {/* Laisser un mot au médecin. Toujours présent : c'est le
+                  bouton qui permet d'ENTAMER un fil, là où la mention près du
+                  nom n'existe qu'une fois un mot écrit. */}
+              <button
+                onClick={() => { setMotFor(a); setMotTexte(''); setMotErreur('') }}
+                title="Laisser un mot au médecin"
+                className="flex items-center gap-1 text-xs text-violet-700 border border-violet-200 rounded-lg px-2 py-1 hover:bg-violet-50"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+              </button>
 
               {/* Déplacer */}
               {permissions.manage_appointments && a.amount_paid == null && (
@@ -795,6 +849,58 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
           onClose={() => setSheetOpen(false)}
         />
       )}
+
+      {/* Fil avec le médecin, au sujet d'un rendez-vous */}
+      <Dialog open={!!motFor} onOpenChange={(o) => { if (!o) { setMotFor(null); setMotErreur('') } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <MessageSquare className="h-4 w-4 text-violet-600" />
+              Mot au médecin — {motFor?.patient ? `${motFor.patient.first_name} ${motFor.patient.last_name}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {Array.isArray(motFor?.mots) && motFor!.mots.length > 0 && (
+              <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                {motFor!.mots.map((m: Apt) => (
+                  <div
+                    key={m.id}
+                    className={`rounded-lg px-3 py-2 text-sm ${m.auteur === 'medecin' ? 'bg-primary-50 border border-primary-100' : 'bg-gray-50 border border-gray-100'}`}
+                  >
+                    <p className="text-[11px] text-gray-500 mb-0.5">
+                      {m.auteur === 'medecin' ? doctorName : (m.auteur_nom || 'Accueil')} · {formatTime(String(m.created_at).slice(11, 16))}
+                    </p>
+                    <p className="text-gray-800 whitespace-pre-wrap">{m.contenu}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Pas de notification à inventer : l'écran du médecin se
+                rafraîchit déjà tout seul. On le dit, pour qu'elle sache si
+                elle doit aller frapper à la porte. */}
+            <p className="text-[11px] text-gray-400">
+              Le médecin le verra sur son agenda et dans la consultation du patient. Ce n&apos;est pas une alerte : pour une urgence, allez le voir.
+            </p>
+
+            <textarea
+              value={motTexte}
+              onChange={(e) => setMotTexte(e.target.value)}
+              rows={3}
+              maxLength={1000}
+              placeholder="Elle demande si elle peut décaler à jeudi…"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-200"
+            />
+            {motErreur && <p role="alert" className="text-xs text-red-600">{motErreur}</p>}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setMotFor(null); setMotErreur('') }} className="flex-1">Fermer</Button>
+              <Button onClick={envoyerMot} disabled={motEnCours || !motTexte.trim()} className="flex-1">
+                {motEnCours ? 'Envoi…' : 'Envoyer'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

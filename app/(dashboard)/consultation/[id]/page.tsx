@@ -4,7 +4,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { allVitalDefs, resolveEnabledVitals, isPsychiatricDoctor, type VitalDef } from '@/types'
 import { canAccess } from '@/lib/plan'
-import { colonneAbsente } from '@/lib/migrations'
+import { colonneAbsente, tableAbsente } from '@/lib/migrations'
 import { isDentalDoctor } from '@/lib/dental'
 import ConsultationClient from './ConsultationClient'
 
@@ -111,6 +111,15 @@ export default async function ConsultationPage({ params }: { params: { id: strin
     (r) => r.date > apt.date || (r.date === apt.date && String(r.time) > String(apt.time)),
   ) ?? null
 
+  // Les mots échangés avec l'accueil au sujet de ce rendez-vous (v77). Lus à
+  // part, comme le reste : pas de table, pas de fil, mais l'écran s'affiche.
+  const { data: motsRows, error: motsErr } = await supabase
+    .from('appointment_messages')
+    .select('id, auteur, auteur_nom, contenu, created_at')
+    .eq('appointment_id', apt.id)
+    .order('created_at', { ascending: true })
+  const v77 = !tableAbsente(motsErr?.code)
+
   const vitalDefsAll = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabled = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
   const vitalDefs = vitalDefsAll.filter((v) => enabled.includes(v.key))
@@ -137,6 +146,9 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       reprogrammerJours={reprogrammerJours}
       v76={v76}
       prochainRdv={prochainRdv}
+      mots={motsRows ?? []}
+      v77={v77}
+      doctorName={doctor.name}
       existingNoteId={existingNote?.id ?? null}
       existingNote={existingNote?.note ?? ''}
       noteSigned={!!existingNote?.signed_at}

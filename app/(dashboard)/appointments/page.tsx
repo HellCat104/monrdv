@@ -124,11 +124,32 @@ export default function AppointmentsPage() {
         ? await withConsultationSummary(supabase, brut)
         : brut
 
-      setAppointments(list)
+      // Mots de l'accueil (v77), lus à part : une table absente ne doit pas
+      // vider l'agenda. Sur la vue du jour seulement — un mot sur un
+      // rendez-vous du mois prochain n'intéresse personne ce matin.
+      let avecMots = list
+      if (viewMode === 'day' && list.length > 0 && list.length <= 200) {
+        const { data: motsData } = await supabase
+          .from('appointment_messages')
+          .select('appointment_id, auteur, auteur_nom, contenu, created_at')
+          .in('appointment_id', list.map((a) => a.id))
+          .order('created_at', { ascending: true })
+        if (motsData && motsData.length > 0) {
+          const parRdv = new Map<string, typeof motsData>()
+          for (const m of motsData) {
+            const l = parRdv.get(m.appointment_id) ?? []
+            l.push(m)
+            parRdv.set(m.appointment_id, l)
+          }
+          avecMots = list.map((a) => ({ ...a, mots: parRdv.get(a.id) ?? [] }))
+        }
+      }
+
+      setAppointments(avecMots)
     } finally {
       setLoading(false)
     }
-  }, [doctor, viewMode, currentDate, statusFilter])
+  }, [doctor, viewMode, currentDate, statusFilter, supabase])
 
   useEffect(() => {
     loadAppointments()

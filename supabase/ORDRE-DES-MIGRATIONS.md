@@ -305,6 +305,19 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      encarts ne s'affichent simplement pas.
      `notify pgrst, 'reload schema';` ensuite.
 
+ 77. `migration_v77_mot_sur_le_rdv.sql`  
+     Migration v77 — `appointment_messages` : un mot entre le médecin et
+     l'accueil, ATTACHÉ au rendez-vous et non dans un fil général, parce qu'un
+     fil perd le lien (« elle demande si c'est possible » — de qui parle-t-on ?).
+     `appointment_id` reste nullable : un fil de cabinet tiendrait dans la même
+     table sans rien reconstruire. `auteur` est posé par le SERVEUR, jamais par
+     le navigateur — le poste d'accueil ne doit pas pouvoir signer « le
+     médecin ». Pas de « lu / non lu » : les deux écrans se rafraîchissent déjà
+     seuls. Table NOUVELLE, donc GRANTS explicites (service_role complet,
+     authenticated en lecture + insertion, RIEN pour anon) et RLS des deux
+     côtés. Additive ; sans elle les cartes ne s'affichent pas.
+     `notify pgrst, 'reload schema';` ensuite.
+
 
 ## Toute nouvelle table arrive avec ses droits
 
