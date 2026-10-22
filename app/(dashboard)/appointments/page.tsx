@@ -25,6 +25,7 @@ import { format, startOfWeek, endOfWeek, addDays, subDays, startOfMonth, endOfMo
 import { fr } from 'date-fns/locale'
 import { getNowInMaroc, ageFromBirthDate, minutesDepuis } from '@/lib/utils'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
+import { useRafraichissement } from '@/lib/rafraichissement'
 
 type ViewMode = 'day' | 'week' | 'month' | 'all'
 
@@ -152,13 +153,11 @@ export default function AppointmentsPage() {
   // rafraîchissement, le médecin ne l'apprend qu'en rechargeant la page —
   // autant ne rien afficher. Seulement sur la vue du JOUR : personne n'attend
   // dans une salle d'attente du mois prochain.
-  useEffect(() => {
+  useRafraichissement(() => {
     if (!doctor || viewMode !== 'day') return
-    const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd')
-    if (!aujourdhui) return
-    const t = setInterval(() => loadAppointments(true), 45000)
-    return () => clearInterval(t)
-  }, [doctor, viewMode, currentDate, loadAppointments])
+    if (format(getNowInMaroc(), 'yyyy-MM-dd') !== format(currentDate, 'yyyy-MM-dd')) return
+    loadAppointments(true)
+  })
 
   // ── Patient sans RDV (walk-in) ──────────────────────────────────────────
   async function searchWalkInPatients(q: string): Promise<PatientLite[]> {

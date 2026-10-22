@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getNowInMaroc, formatTime, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { etatPatient, resumeEchange } from '@/lib/file-attente'
+import { useRafraichissement } from '@/lib/rafraichissement'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format } from 'date-fns'
 import EncaisserDialog, { type RdvAEncaisser } from '@/components/cabinet/EncaisserDialog'
@@ -50,12 +51,10 @@ export default function WaitingRoomClient() {
     setLoading(false)
   }, [today])
 
-  useEffect(() => {
-    load()
-    // La file bouge tout le temps : rafraîchit toutes les 60 s
-    const t = setInterval(load, 60000)
-    return () => clearInterval(t)
-  }, [load])
+  useEffect(() => { load() }, [load])
+  // La file bouge tout le temps, et c'est l'écran qu'elle garde ouvert :
+  // rythme court tant qu'elle le regarde, rien sinon.
+  useRafraichissement(load)
 
   async function patch(id: string, champs: Record<string, unknown>) {
     const res = await fetch('/api/cabinet/appointments', {

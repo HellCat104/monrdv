@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { etatPatient, resumeEchange } from '@/lib/file-attente'
+import { useRafraichissement } from '@/lib/rafraichissement'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -99,13 +100,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   useEffect(() => { load(date) }, [date, load])
 
   // L'agenda du jour bouge sans elle : le médecin ouvre un dossier, demande un
-  // patient, laisse une consigne. Trente secondes — c'est le poste d'accueil,
-  // la minute de retard s'y voit tout de suite.
-  useEffect(() => {
-    if (date !== aujourdhui) return
-    const t = setInterval(() => load(date, true), 30000)
-    return () => clearInterval(t)
-  }, [date, aujourdhui, load])
+  // patient, laisse une consigne. Rythme court quand l'écran est regardé,
+  // rien quand il ne l'est pas, et rafraîchissement immédiat au retour sur
+  // l'onglet — voir lib/rafraichissement.
+  useRafraichissement(() => { if (date === aujourdhui) load(date, true) })
 
   // Vue semaine : lundi -> dimanche contenant la date courante
   const weekDays = eachDayOfInterval({
