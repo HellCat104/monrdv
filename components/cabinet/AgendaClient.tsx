@@ -685,6 +685,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
             motif: a.consultation_type?.name || a.notes || null,
             phone: permissions.patients_contact ? a.patient?.phone ?? null : null,
             attendance: a.attendance ?? null,
+            queue_status: a.queue_status ?? null,
             amount_paid: a.amount_paid ?? null,
             payment_method: a.payment_method ?? null,
           }))}

@@ -635,6 +635,7 @@ export default function AppointmentsPage() {
               motif: a.consultation_type?.name || a.notes || null,
               phone: a.patient?.phone ?? null,
               attendance: a.attendance ?? null,
+            queue_status: a.queue_status ?? null,
               amount_paid: a.amount_paid ?? null,
               payment_method: a.payment_method ?? null,
             }))}

@@ -7,6 +7,8 @@ import { fr } from 'date-fns/locale'
 import { formatTime } from '@/lib/utils'
 import { Printer, X } from 'lucide-react'
 
+import { estVenu } from '@/lib/file-attente'
+
 export interface DaySheetItem {
   id: string
   time: string
@@ -16,6 +18,8 @@ export interface DaySheetItem {
   motif?: string | null
   phone?: string | null
   attendance?: string | null
+  /** État de la salle d'attente : il prime sur la présence, comme à l'écran. */
+  queue_status?: string | null
   amount_paid?: number | null
   payment_method?: string | null
 }
@@ -27,6 +31,15 @@ export interface DaySheetBlock {
 }
 
 const ATT_LABEL: Record<string, string> = { present: 'Présent', late: 'En retard', absent: 'Absent' }
+
+/** Ce qu'on imprime dans la colonne « Présent ». La file prime sur le bilan,
+ *  comme partout ailleurs : sans ça, la feuille de route imprimait « Absent »
+ *  pour un patient que l'écran montrait en salle d'attente. */
+function libelleVenue(i: DaySheetItem): string | null {
+  if (i.queue_status === 'arrive' || i.queue_status === 'en_consultation') return 'Présent'
+  if (i.queue_status === 'parti') return i.attendance === 'late' ? 'En retard' : 'Présent'
+  return i.attendance ? (ATT_LABEL[i.attendance] ?? i.attendance) : null
+}
 
 export default function DaySheet({
   doctorName, date, items, blocks = [], showPhone = true, showMoney = true, onClose,
@@ -40,7 +53,10 @@ export default function DaySheet({
   onClose: () => void
 }) {
   const sorted = [...items].sort((a, b) => String(a.time).localeCompare(String(b.time)))
-  const nbPresents = sorted.filter((i) => i.attendance === 'present').length
+  // « Venus », pas « marqués présents » : un patient pointé dans la file est
+  // venu, même si son bilan dit « en retard ». La feuille imprimée comptait
+  // autrement que l'écran, et c'est la feuille qu'on garde.
+  const nbPresents = sorted.filter(estVenu).length
   const encaisse = sorted.reduce((s, i) => s + (i.amount_paid ?? 0), 0)
   const nbEncaisses = sorted.filter((i) => i.amount_paid != null).length
 
@@ -122,7 +138,7 @@ export default function DaySheet({
                   <td className="py-2 pr-2 text-gray-600">{i.motif || '—'}</td>
                   {showPhone && <td className="py-2 pr-2 text-gray-600">{i.phone || '—'}</td>}
                   <td className="py-2 pr-2 text-center">
-                    {i.attendance ? (ATT_LABEL[i.attendance] ?? i.attendance) : <span className="inline-block w-4 h-4 border border-gray-400 rounded-sm align-middle" />}
+                    {libelleVenue(i) ?? <span className="inline-block w-4 h-4 border border-gray-400 rounded-sm align-middle" />}
                   </td>
                   {showMoney && <td className="py-2 pr-2 text-right text-gray-700">{i.amount_paid != null ? `${i.amount_paid} DH` : '—'}</td>}
                 </tr>

@@ -60,6 +60,22 @@ export function etatPatient(a: LigneFile): EtatPatient | null {
   return null
 }
 
+/** Le patient n'est pas venu — et on en est sûr.
+ *
+ *  « Absent » seul ne suffit pas : il a pu être coché par erreur sur quelqu'un
+ *  qui était dans la salle. Dès qu'une file le concerne, il est venu, et la
+ *  vue Semaine n'a pas à le barrer pendant que la vue Jour annonce « attend
+ *  depuis 12 min ». Trois écrans qui racontent trois choses du même rendez-vous,
+ *  c'est le médecin qui cesse de croire l'application. */
+export function estAbsent(a: LigneFile): boolean {
+  return a.attendance === 'absent' && !a.queue_status
+}
+
+/** Le patient est venu : il est passé par la file, ou son bilan le dit. */
+export function estVenu(a: LigneFile): boolean {
+  return !!a.queue_status || a.attendance === 'present' || a.attendance === 'late'
+}
+
 /** Ce qui attend un geste de l'autre poste, résumé en une ligne qu'on LIT.
  *  Le geste, lui, se fait dans le panneau au bout de la ligne — une pastille
  *  qui se clique et une pastille qui s'affiche, c'est la confusion garantie. */

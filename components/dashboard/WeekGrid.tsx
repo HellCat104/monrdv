@@ -9,6 +9,7 @@ import { format, addDays, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Ban } from 'lucide-react'
 import { getDayKey, getDayBreaks, getNowInMaroc, toMinutes } from '@/lib/utils'
+import { estAbsent } from '@/lib/file-attente'
 import type { Appointment, WorkingHours } from '@/types'
 
 export interface WeekBlock {
@@ -252,7 +253,8 @@ export function WeekGrid({
                 {rdv.map((r, i) => {
                   const { col, total } = places[i]
                   const largeur = 100 / total
-                  const absent = r.apt.attendance === 'absent'
+                  // Même règle que la vue Jour : voir estAbsent().
+                  const absent = estAbsent(r.apt)
                   const enAttente = r.apt.status === 'pending'
                   return (
                     <button
