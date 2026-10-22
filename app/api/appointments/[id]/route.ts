@@ -66,6 +66,18 @@ export async function PATCH(
   if (attendance !== undefined) {
     const allowedAtt = ['present', 'absent', 'late']
     updates.attendance = attendance && allowedAtt.includes(attendance) ? attendance : null
+    // Le médecin qui marque « Patient arrivé » doit le faire APPARAÎTRE dans
+    // la salle d'attente — la sienne comme celle de l'accueil. Les deux
+    // écrans filtrent sur la file, pas sur la présence : son clic affichait
+    // « Présent » en vert sans mettre personne dans la file, et l'heure
+    // d'arrivée n'était posée que bien plus tard, quand la secrétaire
+    // repointait. C'est le piège que le poste d'accueil avait déjà refermé,
+    // et qui restait ouvert de son côté.
+    //
+    // On ne touche pas à la file quand il marque « absent » ou « en retard » :
+    // dans ces deux cas le patient n'est pas devant lui.
+    if (attendance === 'present') updates.queue_status = 'arrive'
+    if (attendance === null) updates.queue_status = null
   }
   // Paiement : montant encaissé (null = marquer comme non payé)
   if (amount_paid !== undefined) {

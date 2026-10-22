@@ -50,15 +50,17 @@ function HistoriqueReplie({ n, libelle, children }: { n: number; libelle: string
 interface Patient { id: string; first_name: string; last_name: string; age?: number | null; birth_date?: string | null; blood_group?: string | null; phone?: string | null; cin?: string | null; mutuelle?: string | null; allergies?: string | null; chronic_conditions?: string | null; surgeries?: string | null; current_treatments?: string | null; vaccinations?: string | null }
 
 export default function ConsultationClient({
-  doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
+  doctorId, appointmentId, appointmentDate, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, consultationCertificates, recentVitals,
-  consultationTypeId = null, queueStatus = null, reprogrammerJours = null, v76 = false,
+  consultationTypeId = null, queueStatus = null, attendanceActuelle = null, reprogrammerJours = null, v76 = false,
   prochainRdv = null, mots: motsInitiaux = [], v77 = false, doctorName = '',
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
   isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false,
 }: {
   doctorId: string
   appointmentId: string
+  /** Date du RDV : on n'entre en file que pour celui du jour. */
+  appointmentDate: string
   appointmentPaid: boolean
   /** Ce rendez-vous porte déjà un `quote_id` : son argent se saisit sur le
    *  devis. Lu sur le rendez-vous, et non déduit des clics de la séance en
@@ -76,6 +78,8 @@ export default function ConsultationClient({
   consultationTypeId?: string | null
   /** État de file à l'ouverture : sert à ne prévenir l'accueil qu'une fois. */
   queueStatus?: string | null
+  /** Bilan de présence déjà noté : la clôture ne doit pas écraser un retard. */
+  attendanceActuelle?: string | null
   /** Délai déjà demandé à l'accueil, s'il y en a un (v76). */
   reprogrammerJours?: number | null
   /** Rendez-vous déjà donné à ce patient après celui-ci, s'il existe. */
@@ -257,6 +261,12 @@ export default function ConsultationClient({
     prochainRdv ? `${formatDateFr(prochainRdv.date)} à ${String(prochainRdv.time).slice(0, 5)}` : null,
   )
 
+  /** Date du jour au Maroc, au format des colonnes `date`. */
+  function jourMaroc(): string {
+    const d = getNowInMaroc()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
   function dansJours(n: number): string {
     const d = getNowInMaroc()
     d.setDate(d.getDate() + n)
@@ -324,6 +334,11 @@ export default function ConsultationClient({
   useEffect(() => {
     if (fileSignalee.current) return
     if (queueStatus === 'en_consultation' || queueStatus === 'parti') return
+    // SEULEMENT aujourd'hui. L'écran s'ouvre aussi sur un rendez-vous d'un
+    // autre jour — pour relire un dossier, ou par un clic sur la mauvaise
+    // ligne. Y entrer mettait le patient « en consultation » sur les trois
+    // écrans du cabinet, et le comptait présent un jour où il n'est pas venu.
+    if (appointmentDate !== jourMaroc()) return
     fileSignalee.current = true
     supabase
       .from('appointments')
@@ -333,7 +348,7 @@ export default function ConsultationClient({
         // Échec sans conséquence clinique : l'accueil garde l'état précédent.
         if (error) console.error('[Consultation] file d\'attente non mise à jour :', error.message)
       })
-  }, [appointmentId, queueStatus, supabase])
+  }, [appointmentId, appointmentDate, queueStatus, supabase])
 
   // ── Ce que le médecin transmet à l'accueil ────────────────────────────
   const [reprog, setReprog] = useState<number | null>(reprogrammerJours)
@@ -480,7 +495,10 @@ export default function ConsultationClient({
       if (note.trim()) await saveNote()
       await supabase
         .from('appointments')
-        .update({ attendance: 'present', queue_status: 'parti' })
+        // On ne repose « présent » que si rien de plus précis n'est noté : un
+        // « en retard » constaté à l'arrivée est la seule trace que le patient
+        // est venu après l'heure, et la clôture l'effaçait à chaque fois.
+        .update({ queue_status: 'parti', ...(attendanceActuelle === 'late' ? {} : { attendance: 'present' }) })
         .eq('id', appointmentId)
       router.push('/appointments')
       router.refresh()

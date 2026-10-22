@@ -367,7 +367,7 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient()
   // Le RDV doit appartenir au cabinet de la secrétaire
   const { data: apt } = await admin.from('appointments')
-    .select('id, doctor_id, amount_due, invoice_no, quote_id, consultation_type_id, date, time, status, duration_minutes, walk_in, cancel_token, patient:patients(first_name, last_name, email, phone)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
+    .select('id, doctor_id, attendance, queue_status, amount_due, invoice_no, quote_id, consultation_type_id, date, time, status, duration_minutes, walk_in, cancel_token, patient:patients(first_name, last_name, email, phone)').eq('id', id).eq('doctor_id', ctx.doctor.id).maybeSingle()
   if (!apt) return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
 
   const patch: Record<string, unknown> = {}
@@ -401,8 +401,31 @@ export async function PATCH(req: NextRequest) {
     const allowed = ['arrive', 'en_consultation', 'parti', null]
     if (!allowed.includes(body.queue_status)) return NextResponse.json({ error: 'Statut de file invalide' }, { status: 400 })
     patch.queue_status = body.queue_status
-    // « Arrivé » vaut pointage présent (cohérence avec les statistiques de présence)
-    if (body.queue_status === 'arrive') patch.attendance = 'present'
+
+    // Entrer dans la file PROUVE que le patient est venu : le bilan de présence
+    // doit suivre, sinon un patient reçu n'est compté nulle part. Il l'était
+    // seulement pour « arrivé » — cliquer directement « En consultation » ou
+    // « Parti », ce qui arrive quand le médecin le prend tout de suite,
+    // laissait la présence vide et le patient absent des statistiques.
+    //
+    // Mais on n'ÉCRASE PAS un « en retard » : il a été posé en connaissance de
+    // cause, et c'est la seule trace que le patient est arrivé après l'heure.
+    // Il disparaissait silencieusement au pointage d'arrivée, ce qui rendait
+    // le compteur des retards structurellement proche de zéro.
+    //
+    // « Absent », en revanche, devient faux dès qu'il franchit la porte.
+    if (body.queue_status && !('attendance' in body)) {
+      const dejaNote = (apt as { attendance?: string | null }).attendance
+      if (dejaNote == null || dejaNote === 'absent') patch.attendance = 'present'
+    }
+
+    // Sortir de la file (« Réinitialiser ») efface aussi le bilan qu'elle
+    // avait posé : garder « Présent » sur un patient retiré de la file est la
+    // contradiction que le bouton prétend défaire.
+    if (body.queue_status === null && !('attendance' in body)) {
+      const dejaNote = (apt as { attendance?: string | null }).attendance
+      if (dejaNote === 'present') patch.attendance = null
+    }
   }
 
   // Encaissement

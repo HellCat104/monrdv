@@ -40,7 +40,12 @@ export default function BoutonsFile({
   /** Version courte, pour l'AGENDA : « Arrivé » et « En retard », rien de
    *  plus. Faire avancer quelqu'un dans le circuit ou le marquer parti se
    *  fait au poste d'accueil, pas dans la vue d'ensemble — l'agenda y
-   *  gagnait cinq icônes par ligne que personne n'y cliquait. */
+   *  gagnait cinq icônes par ligne que personne n'y cliquait.
+   *
+   *  Le retour en arrière, lui, reste présent même en version réduite : sans
+   *  lui, un « Arrivé » cliqué par erreur sur l'agenda n'avait plus AUCUN
+   *  chemin de retour, et verrouillait au passage « Déplacer » et
+   *  « Annuler » sur cette ligne. */
   reduit?: boolean
 }) {
   const circuit = reduit ? CIRCUIT.filter((e) => e.key === 'arrive') : CIRCUIT
@@ -65,7 +70,7 @@ export default function BoutonsFile({
         </button>
       ))}
 
-      {queueStatus && !reduit && (
+      {queueStatus && (
         <button onClick={() => onQueue(null)} title="Réinitialiser le pointage" className="p-1.5 rounded-lg text-gray-300 hover:text-gray-500">
           <RotateCcw className="h-3.5 w-3.5" />
         </button>
@@ -75,20 +80,31 @@ export default function BoutonsFile({
           deux cas de figure qui l'interrompent. */}
       <span className="w-px h-5 bg-gray-200 mx-0.5" />
 
-      {exceptions.map(({ key, label, icon: Icon }) => (
-        <button
-          key={key}
-          onClick={() => onAttendance(attendance === key ? null : key)}
-          title={label}
-          className={`p-1.5 rounded-lg border text-xs transition ${
-            attendance === key
-              ? (key === 'absent' ? 'bg-red-100 text-red-700 border-transparent' : 'bg-orange-100 text-orange-700 border-transparent')
-              : 'border-gray-200 text-gray-400 hover:bg-gray-50'
-          }`}
-        >
-          <Icon className="h-3.5 w-3.5" />
-        </button>
-      ))}
+      {exceptions.map(({ key, label, icon: Icon }) => {
+        // « Absent » et « il est là » ne peuvent pas être vrais ensemble. Le
+        // bouton restait pourtant cliquable sur un patient assis dans la
+        // salle : l'écran affichait « Attend depuis 12 min » et les
+        // statistiques comptaient une absence pour une consultation faite.
+        //
+        // « En retard » reste proposé : un patient PEUT arriver en retard, et
+        // c'est même le seul moment où on le constate.
+        const impossible = key === 'absent' && !!queueStatus
+        if (impossible) return null
+        return (
+          <button
+            key={key}
+            onClick={() => onAttendance(attendance === key ? null : key)}
+            title={label}
+            className={`p-1.5 rounded-lg border text-xs transition ${
+              attendance === key
+                ? (key === 'absent' ? 'bg-red-100 text-red-700 border-transparent' : 'bg-orange-100 text-orange-700 border-transparent')
+                : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+          </button>
+        )
+      })}
     </div>
   )
 }

@@ -298,7 +298,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   // Le médecin réclame le patient suivant. On ne retient que les appels
   // récents : un appel d'il y a une heure n'est plus une demande, c'est du
   // bruit — et un bandeau rouge permanent cesse d'être vu.
-  const appels = appts.filter((a) => {
+  // Sans la permission « présences », le serveur refusera d'effacer l'appel :
+  // montrer la bannière mènerait à un bouton « C'est fait » qui alerte et ne
+  // fait rien, sans autre moyen de la faire taire.
+  const appels = !permissions.mark_attendance ? [] : appts.filter((a) => {
     const m = minutesDepuis(a.appel_suivant_le)
     return m != null && m <= APPEL_VALIDE_MIN
   })

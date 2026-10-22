@@ -22,7 +22,7 @@ export default function CabinetShell({
 
   const nav = [
     permissions.agenda && { href: '/cabinet', label: 'Agenda', icon: Calendar },
-    permissions.mark_attendance && { href: '/cabinet/attente', label: 'Salle d’attente', icon: Armchair },
+    (permissions.mark_attendance || permissions.payments) && { href: '/cabinet/attente', label: 'Salle d’attente', icon: Armchair },
     permissions.patients_contact && { href: '/cabinet/patients', label: 'Patients', icon: Users },
     (permissions.caisse_day || permissions.view_revenue) && { href: '/cabinet/caisse', label: 'Caisse', icon: Banknote },
     permissions.lab_works && { href: '/cabinet/laboratoire', label: 'Laboratoire', icon: FlaskConical },

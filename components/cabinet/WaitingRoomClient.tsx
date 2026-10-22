@@ -12,7 +12,7 @@
 // change, les deux écrans annonceraient au patient des montants différents.
 import { useCallback, useEffect, useState } from 'react'
 import { getNowInMaroc, formatTime, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
-import { etatPatient } from '@/lib/file-attente'
+import { etatPatient, resumeEchange } from '@/lib/file-attente'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format } from 'date-fns'
 import EncaisserDialog, { type RdvAEncaisser } from '@/components/cabinet/EncaisserDialog'
@@ -76,7 +76,10 @@ export default function WaitingRoomClient() {
 
   // Le médecin réclame le patient suivant. Le bandeau existait sur l'agenda ;
   // il manquait ICI, qui est pourtant l'écran depuis lequel on fait entrer.
-  const appels = appts.filter((a) => {
+  // Sans la permission « présences », le serveur refusera d'effacer l'appel :
+  // montrer la bannière mènerait à un bouton « C'est fait » qui alerte et ne
+  // fait rien, sans autre moyen de la faire taire.
+  const appels = !permissions?.mark_attendance ? [] : appts.filter((a) => {
     const m = minutesDepuis(a.appel_suivant_le)
     return m != null && m <= APPEL_VALIDE_MIN
   })
@@ -162,7 +165,10 @@ export default function WaitingRoomClient() {
                     <span className="truncate">{a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}</span>
                     {/* Les documents se remettent au moment où le patient sort,
                         donc depuis cet écran. Un COMPTE, jamais le contenu. */}
-                    {(a.queue_status === 'arrive' || a.queue_status === 'en_consultation')
+                    {/* Y COMPRIS « parti » : la pastille s'éteignait au clic
+                        sur Parti, c'est-à-dire exactement au moment où le
+                        patient passe au comptoir chercher son ordonnance. */}
+                    {!!a.queue_status
                       && typeof a.documents_a_remettre === 'number' && a.documents_a_remettre > 0 && (
                       <span className="text-[10px] font-semibold bg-primary-50 text-primary-700 border border-primary-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
                         <FileText className="h-3 w-3 inline mr-0.5" />{a.documents_a_remettre} à remettre
@@ -170,6 +176,12 @@ export default function WaitingRoomClient() {
                     )}
                   </p>
                   <p className="text-xs text-gray-500 truncate">{a.consultation_type?.name || a.notes || 'Consultation'}</p>
+                  {/* Ce que dit le médecin, lisible sans ouvrir le panneau —
+                      c'est son poste de travail, elle ne devrait pas avoir à
+                      cliquer pour savoir qu'il y a une consigne. */}
+                  {resumeEchange(a as never) && (
+                    <p className="text-[11px] text-violet-700 truncate">{resumeEchange(a as never)}</p>
+                  )}
                 </div>
 
                 {/* Même phrase que sur les deux agendas (lib/file-attente) :
@@ -181,13 +193,15 @@ export default function WaitingRoomClient() {
                   </span>
                 )}
 
-                <BoutonsFile
-                  queueStatus={a.queue_status}
-                  attendance={a.attendance}
-                  onQueue={(key) => setQueue(a.id, key)}
-                  onAttendance={(key) => patch(a.id, { attendance: key })}
-                  libelles
-                />
+                {permissions?.mark_attendance && (
+                  <BoutonsFile
+                    queueStatus={a.queue_status}
+                    attendance={a.attendance}
+                    onQueue={(key) => setQueue(a.id, key)}
+                    onAttendance={(key) => patch(a.id, { attendance: key })}
+                    libelles
+                  />
+                )}
 
                 {/* Répondre au médecin sans changer d'écran : c'est ici
                     qu'elle est quand il lui écrit. */}

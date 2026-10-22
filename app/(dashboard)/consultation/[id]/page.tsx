@@ -26,7 +26,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const { data: apt } = await supabase
     .from('appointments')
-    .select('id, date, time, queue_status, amount_paid, amount_due, payment_method, invoice_no, quote_id, consultation_type:consultation_types(id, name, default_price), patient:patients(id, first_name, last_name, age, birth_date, blood_group, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
+    .select('id, date, time, queue_status, attendance, amount_paid, amount_due, payment_method, invoice_no, quote_id, consultation_type:consultation_types(id, name, default_price), patient:patients(id, first_name, last_name, age, birth_date, blood_group, phone, cin, mutuelle, allergies, chronic_conditions, surgeries, current_treatments, vaccinations)')
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .single()
@@ -128,6 +128,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
     <ConsultationClient
       doctorId={doctor.id}
       appointmentId={apt.id}
+      appointmentDate={apt.date}
       appointmentPaid={apt.amount_paid != null}
       regleSurDevis={(apt as { quote_id?: string | null }).quote_id != null}
       amountPaid={apt.amount_paid ?? null}
@@ -143,6 +144,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       consultationCertificates={thisAptCertRes.data ?? []}
       consultationTypeId={consultationType?.id ?? null}
       queueStatus={(apt as { queue_status?: string | null }).queue_status ?? null}
+      attendanceActuelle={(apt as { attendance?: string | null }).attendance ?? null}
       reprogrammerJours={reprogrammerJours}
       v76={v76}
       prochainRdv={prochainRdv}

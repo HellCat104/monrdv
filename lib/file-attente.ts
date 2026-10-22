@@ -34,15 +34,19 @@ export function etatPatient(a: LigneFile): EtatPatient | null {
   }
 
   switch (a.queue_status) {
-    case 'arrive':
-      return {
-        // « Attend depuis » plutôt que « Arrivé » : c'est la durée qui fait
-        // agir, et elle répond à la question que le patient pose au comptoir.
-        label: minutesDepuis(a.queue_arrived_at) == null
-          ? 'En salle d’attente'
-          : `Attend depuis ${minutesDepuis(a.queue_arrived_at)} min`,
-        couleur: 'bg-blue-100 text-blue-700',
-      }
+    case 'arrive': {
+      // « Attend depuis » plutôt que « Arrivé » : c'est la durée qui fait
+      // agir, et elle répond à la question que le patient pose au comptoir.
+      const base = minutesDepuis(a.queue_arrived_at) == null
+        ? 'En salle d’attente'
+        : `Attend depuis ${minutesDepuis(a.queue_arrived_at)} min`
+      // Un retard noté AVANT l'arrivée restait invisible une fois le patient
+      // pointé : la file ayant la priorité, l'information existait en base et
+      // nulle part à l'écran. On la dit.
+      return a.attendance === 'late'
+        ? { label: `${base} · en retard`, couleur: 'bg-orange-100 text-orange-700' }
+        : { label: base, couleur: 'bg-blue-100 text-blue-700' }
+    }
     case 'en_consultation':
       return { label: `En consultation${duree(a.queue_started_at)}`, couleur: 'bg-green-100 text-green-700' }
     case 'parti':
