@@ -11,11 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { etatPatient, resumeEchange } from '@/lib/file-attente'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
-import EncaisserDialog, { type RdvAEncaisser } from '@/components/cabinet/EncaisserDialog'
-import PanneauMedecin, { BoutonMedecin, type RdvEchange } from '@/components/cabinet/PanneauMedecin'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Calendar, Plus, X, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing, MessageSquare } from 'lucide-react'
+import { Calendar, Plus, X, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing } from 'lucide-react'
 import { PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
 import DaySheet from '@/components/shared/DaySheet'
 import { PatientPicker, type PatientChoice } from '@/components/shared/PatientPicker'
@@ -33,7 +31,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const [date, setDate] = useState(() => format(getNowInMaroc(), 'yyyy-MM-dd'))
   const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd')
   // Fil de messages ouvert sur un rendez-vous (v77)
-  const [motFor, setMotFor] = useState<Apt | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [patientCache, setPatientCache] = useState<PatientLite[] | null>(null)
@@ -60,7 +57,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const [doctorId, setDoctorId] = useState('')
 
   // Encaissement inline (aligné sur le médecin : total dû + reste à payer)
-  const [payFor, setPayFor] = useState<Apt | null>(null)
 
   // Blocage de créneau
   type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
@@ -293,6 +289,12 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const active = appts.filter((a) => a.status !== 'cancelled')
   const cancelled = appts.filter((a) => a.status === 'cancelled')
 
+  /** Le patient est passé par le cabinet : arrivé, reçu, ou reparti. À partir
+   *  de là, tout se joue au poste d'accueil — l'agenda n'a plus qu'à le
+   *  constater. */
+  const dejaPasse = (a: Apt) =>
+    a.queue_status === 'arrive' || a.queue_status === 'en_consultation' || a.queue_status === 'parti'
+
   // Le médecin réclame le patient suivant. On ne retient que les appels
   // récents : un appel d'il y a une heure n'est plus une demande, c'est du
   // bruit — et un bandeau rouge permanent cesse d'être vu.
@@ -451,30 +453,17 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                     </span>
                   )}
 
-                  {/* Ce qui vient du médecin : on le LIT ici. Le geste se fait
-                      dans le panneau « Médecin », au bout de la ligne. Avant,
-                      deux de ces pastilles se cliquaient et deux non, sans que
-                      rien ne les distingue. */}
-                  {resumeEchange(a as never) && (
+                  {/* Ce qui vient du médecin : on le LIT, et seulement tant
+                      que le patient est encore attendu. Une consigne sur
+                      quelqu'un reparti il y a trois heures n'est plus une
+                      information, c'est une ligne de plus à relire. On y
+                      répond au poste d'accueil, pas d'ici. */}
+                  {!dejaPasse(a) && resumeEchange(a as never) && (
                     <span className="text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full max-w-[260px] truncate">
                       {resumeEchange(a as never)}
                     </span>
                   )}
 
-                  {/* Documents à remettre — un COMPTE, jamais le contenu : il
-                      n'y a pas besoin de lire une ordonnance pour l'imprimer.
-
-                      SEULEMENT TANT QUE LE PATIENT EST LÀ. « À remettre » est
-                      une chose à faire maintenant : sur quelqu'un qui est parti
-                      — ou qui n'a jamais été pointé à l'accueil — la mention
-                      affirme un travail en attente qui n'existe pas, et un
-                      badge qui ment finit par ne plus être lu du tout. */}
-                  {(a.queue_status === 'arrive' || a.queue_status === 'en_consultation')
-                    && typeof a.documents_a_remettre === 'number' && a.documents_a_remettre > 0 && (
-                    <span className="text-[10px] font-semibold bg-primary-50 text-primary-700 border border-primary-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                      {a.documents_a_remettre} document{a.documents_a_remettre > 1 ? 's' : ''} à remettre
-                    </span>
-                  )}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
                   {a.consultation_type?.name || a.notes || 'Consultation'}
@@ -482,77 +471,60 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 </p>
               </div>
 
-              {/* Pointage — les MÊMES boutons que la salle d'attente.
-                  L'agenda portait « Présent / En retard / Absent », la salle
-                  d'attente « Arrivé / En consultation / Parti » : deux
-                  vocabulaires pour un seul geste, et cliquer ✓ ici ne faisait
-                  PAS apparaître le patient dans la salle d'attente du médecin. */}
-              {permissions.mark_attendance ? (
-                <BoutonsFile
-                  queueStatus={a.queue_status}
-                  attendance={a.attendance}
-                  onQueue={(key) => patchRdv(a.id, { queue_status: key })}
-                  onAttendance={(key) => patchRdv(a.id, { attendance: key })}
-                />
-              ) : null}
+              {/* ── L'AGENDA EST UNE VUE D'ENSEMBLE ──────────────────────
+                  Chaque ligne portait jusqu'à cinq icônes de pointage, un
+                  encaissement, un panneau pour écrire au médecin, un
+                  déplacement et une annulation. Sur un patient reparti depuis
+                  trois heures, tout cela ne servait à rien et il fallait le
+                  relire à chaque ligne.
 
-              {/* RDV rattaché à un devis : l'argent de cette séance se saisit sur
-                  le plan de traitement, par le médecin. Encaisser ici en plus
-                  compterait la même somme deux fois — le serveur le refuse, et
-                  on l'écrit ici pour que la secrétaire sache pourquoi le bouton
-                  d'encaissement a disparu. */}
-              {a.quote_id && (
-                <span className="text-[11px] whitespace-nowrap rounded-full px-2 py-0.5 bg-primary-50 text-primary-700 border border-primary-100">
-                  Réglé via le devis
-                </span>
-              )}
+                  Ce qui se fait AU PASSAGE du patient — le faire entrer,
+                  l'encaisser, écrire au médecin — se fait au poste d'accueil,
+                  dans la salle d'attente. Ici on prépare et on organise. */}
 
-              {/* Paiement — total dû, reste à payer, paiement partiel (comme le médecin) */}
-              {permissions.payments && !a.quote_id && (
-                a.amount_paid != null ? (() => {
-                  const reste = (a.amount_due ?? 0) - a.amount_paid
-                  const partial = a.amount_due != null && reste > 0
-                  return (
+              {dejaPasse(a) ? (
+                /* Il est venu : la vue d'ensemble n'a plus qu'à le constater.
+                   Le montant reste, en texte : c'est le seul chiffre qui dise
+                   ce qu'a rapporté la journée. */
+                a.amount_paid != null ? (
+                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                    {a.amount_paid} DH{a.payment_method ? ` · ${PAYMENT_METHOD_LABELS[a.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? a.payment_method}` : ''}
+                  </span>
+                ) : a.quote_id ? (
+                  <span className="text-xs text-gray-500 whitespace-nowrap">Réglé via le devis</span>
+                ) : null
+              ) : (
+                <>
+                  {/* Pas encore là : on le pointe à son arrivée, on le note en
+                      retard, on le déplace, on annule. Rien d'autre. */}
+                  {permissions.mark_attendance && (
+                    <BoutonsFile
+                      queueStatus={a.queue_status}
+                      attendance={a.attendance}
+                      onQueue={(key) => patchRdv(a.id, { queue_status: key })}
+                      onAttendance={(key) => patchRdv(a.id, { attendance: key })}
+                      reduit
+                    />
+                  )}
+
+                  {permissions.manage_appointments && a.amount_paid == null && (
                     <button
-                      onClick={() => setPayFor(a)}
-                      title={partial ? 'Solder le reste' : 'Modifier l\'encaissement'}
-                      className={`text-xs whitespace-nowrap rounded-lg px-2 py-1 border ${partial ? 'text-orange-600 border-orange-200 hover:bg-orange-50' : 'text-gray-600 border-transparent hover:bg-gray-50'}`}
+                      onClick={() => { setMoveError(''); setMoveFor(a); setMoveDate(''); setMoveTime('') }}
+                      className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 rounded-lg px-2 py-1 hover:bg-primary-50"
                     >
-                      {partial
-                        ? `${a.amount_paid}/${a.amount_due} DH · reste ${reste}`
-                        : `✓ ${a.amount_paid} DH${a.payment_method ? ` · ${PAYMENT_METHOD_LABELS[a.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? a.payment_method}` : ''}`}
+                      <CalendarClock className="h-3.5 w-3.5" /> Déplacer
                     </button>
-                  )
-                })() : (
-                  <button
-                    onClick={() => setPayFor(a)}
-                    className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 rounded-lg px-2 py-1 hover:bg-primary-50"
-                  >
-                    <Banknote className="h-3.5 w-3.5" /> Encaisser
-                  </button>
-                )
-              )}
+                  )}
 
-              <BoutonMedecin rdv={a as RdvEchange} onOpen={() => setMotFor(a)} />
-
-              {/* Déplacer */}
-              {permissions.manage_appointments && a.amount_paid == null && (
-                <button
-                  onClick={() => { setMoveError(''); setMoveFor(a); setMoveDate(''); setMoveTime('') }}
-                  className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 rounded-lg px-2 py-1 hover:bg-primary-50"
-                >
-                  <CalendarClock className="h-3.5 w-3.5" /> Déplacer
-                </button>
-              )}
-
-              {/* Annulation */}
-              {permissions.manage_appointments && a.amount_paid == null && (
-                <button
-                  onClick={() => { if (confirm('Annuler ce rendez-vous ?')) patchRdv(a.id, { status: 'cancelled' }) }}
-                  className="text-xs text-gray-400 hover:text-red-500 px-1"
-                >
-                  Annuler
-                </button>
+                  {permissions.manage_appointments && a.amount_paid == null && (
+                    <button
+                      onClick={() => { if (confirm('Annuler ce rendez-vous ?')) patchRdv(a.id, { status: 'cancelled' }) }}
+                      className="text-xs text-gray-400 hover:text-red-500 px-1"
+                    >
+                      Annuler
+                    </button>
+                  )}
+                </>
               )}
             </div>
           ))}
@@ -697,13 +669,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
       </Dialog>
 
       {/* Dialog encaissement — total dû + reste à payer + solder (aligné médecin) */}
-      <EncaisserDialog
-        rdv={payFor as RdvAEncaisser | null}
-        tarifMotif={types.find((t) => t.id === payFor?.consultation_type_id)?.default_price ?? null}
-        peutModifierPrix={permissions.edit_prices}
-        onSave={(patch) => patchRdv(payFor!.id, patch)}
-        onClose={() => setPayFor(null)}
-      />
 
       {sheetOpen && (
         <DaySheet
@@ -727,12 +692,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         />
       )}
 
-      <PanneauMedecin
-        rdv={motFor as RdvEchange | null}
-        doctorName={doctorName}
-        onClose={() => setMotFor(null)}
-        onChange={() => load(date, true)}
-      />
     </div>
   )
 }

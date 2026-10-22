@@ -28,7 +28,7 @@ const EXCEPTIONS: { key: string; label: string; icon: typeof Clock }[] = [
 ]
 
 export default function BoutonsFile({
-  queueStatus, attendance, onQueue, onAttendance, libelles = false,
+  queueStatus, attendance, onQueue, onAttendance, libelles = false, reduit = false,
 }: {
   queueStatus?: string | null
   attendance?: string | null
@@ -37,10 +37,18 @@ export default function BoutonsFile({
   /** Afficher le texte à côté de l'icône (vrai sur la salle d'attente, qui a
    *  de la place ; faux sur l'agenda, dont la ligne porte déjà beaucoup). */
   libelles?: boolean
+  /** Version courte, pour l'AGENDA : « Arrivé » et « En retard », rien de
+   *  plus. Faire avancer quelqu'un dans le circuit ou le marquer parti se
+   *  fait au poste d'accueil, pas dans la vue d'ensemble — l'agenda y
+   *  gagnait cinq icônes par ligne que personne n'y cliquait. */
+  reduit?: boolean
 }) {
+  const circuit = reduit ? CIRCUIT.filter((e) => e.key === 'arrive') : CIRCUIT
+  const exceptions = reduit ? EXCEPTIONS.filter((e) => e.key === 'late') : EXCEPTIONS
+
   return (
     <div className="flex items-center gap-1">
-      {CIRCUIT.map(({ key, label, icon: Icon }) => (
+      {circuit.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
           onClick={() => onQueue(key)}
@@ -57,7 +65,7 @@ export default function BoutonsFile({
         </button>
       ))}
 
-      {queueStatus && (
+      {queueStatus && !reduit && (
         <button onClick={() => onQueue(null)} title="Réinitialiser le pointage" className="p-1.5 rounded-lg text-gray-300 hover:text-gray-500">
           <RotateCcw className="h-3.5 w-3.5" />
         </button>
@@ -67,7 +75,7 @@ export default function BoutonsFile({
           deux cas de figure qui l'interrompent. */}
       <span className="w-px h-5 bg-gray-200 mx-0.5" />
 
-      {EXCEPTIONS.map(({ key, label, icon: Icon }) => (
+      {exceptions.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
           onClick={() => onAttendance(attendance === key ? null : key)}
