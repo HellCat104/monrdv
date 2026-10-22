@@ -439,12 +439,13 @@ export default function AppointmentsPage() {
           <span className="text-sm font-semibold text-blue-800">
             {enAttente.length} patient{enAttente.length > 1 ? 's' : ''} en salle d&apos;attente
           </span>
+          {/* Les noms seuls. La durée est répétée sur chaque ligne de
+              l'agenda, où elle désigne UN patient : ici, trois « (1 min) »
+              côte à côte n'apprenaient rien et alourdissaient la lecture. */}
           <span className="text-sm text-blue-700 min-w-0">
-            {enAttente.slice(0, 3).map((a) => {
-              const nom = a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'
-              const min = minutesDepuis(a.queue_arrived_at)
-              return min == null ? nom : `${nom} (${min} min)`
-            }).join(' · ')}
+            {enAttente.slice(0, 3).map((a) => (
+              a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'
+            )).join(' · ')}
             {enAttente.length > 3 && ` · +${enAttente.length - 3}`}
           </span>
         </div>
