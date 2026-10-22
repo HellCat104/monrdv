@@ -1,13 +1,24 @@
 'use client'
 
-// File d'attente du jour : la secrétaire fait avancer chaque patient
-// dans le circuit Arrivé → En consultation → Parti.
+// Le POSTE D'ACCUEIL : c'est ici que la secrétaire travaille le plus clair de
+// sa journée. Elle fait avancer le patient dans le circuit Arrivé → En
+// consultation → Parti, elle encaisse quand il ressort, et elle échange avec
+// le médecin. L'agenda, lui, sert à organiser : créer, déplacer, voir la
+// semaine.
+//
+// Tout ce qui est partagé avec l'agenda l'est par des composants communs —
+// les boutons de pointage, l'encaissement, le panneau du médecin. Recopier
+// l'encaissement aurait été la pire option : le jour où le calcul du reste dû
+// change, les deux écrans annonceraient au patient des montants différents.
 import { useCallback, useEffect, useState } from 'react'
 import { getNowInMaroc, formatTime, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { etatPatient } from '@/lib/file-attente'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format } from 'date-fns'
-import { Armchair, BellRing, ChevronDown } from 'lucide-react'
+import EncaisserDialog, { type RdvAEncaisser } from '@/components/cabinet/EncaisserDialog'
+import PanneauMedecin, { BoutonMedecin, type RdvEchange } from '@/components/cabinet/PanneauMedecin'
+import type { StaffPermissions, ConsultationType } from '@/types'
+import { Armchair, BellRing, ChevronDown, Banknote, FileText } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
@@ -16,6 +27,11 @@ export default function WaitingRoomClient() {
   const [appts, setAppts] = useState<Apt[]>([])
   const [loading, setLoading] = useState(true)
   const [replieOuvert, setReplieOuvert] = useState(false)
+  const [permissions, setPermissions] = useState<StaffPermissions | null>(null)
+  const [types, setTypes] = useState<ConsultationType[]>([])
+  const [payFor, setPayFor] = useState<Apt | null>(null)
+  const [motFor, setMotFor] = useState<Apt | null>(null)
+  const [doctorName, setDoctorName] = useState('Le médecin')
   const today = format(getNowInMaroc(), 'yyyy-MM-dd')
 
   const load = useCallback(async () => {
@@ -23,6 +39,11 @@ export default function WaitingRoomClient() {
     if (res.ok) {
       const d = await res.json()
       setAppts((d.appointments ?? []).filter((a: Apt) => a.status !== 'cancelled'))
+      // Les permissions viennent de la même réponse : la page serveur n'a
+      // vérifié que l'accès à l'écran, pas le droit d'encaisser.
+      setPermissions(d.permissions ?? null)
+      setTypes(d.consultationTypes ?? [])
+      if (d.doctorName) setDoctorName(d.doctorName)
     }
     setLoading(false)
   }, [today])
@@ -41,12 +62,13 @@ export default function WaitingRoomClient() {
       body: JSON.stringify({ id, ...champs }),
     })
     const d = await res.json().catch(() => ({}))
-    if (!res.ok) { alert(d.error || 'Échec'); return }
+    if (!res.ok) { alert(d.error || 'Échec'); return false }
     // Le select du serveur ne renvoie pas les colonnes de la v76 : sans ce
     // complément, effacer l'appel du médecin ne se voyait qu'au
     // rafraîchissement suivant, et le bandeau semblait ignorer le clic.
     const absents = Object.fromEntries(Object.entries(champs).filter(([c]) => !(c in d)))
     setAppts((prev) => prev.map((a) => (a.id === id ? { ...a, ...d, ...absents } : a)))
+    return true
   }
 
   const setQueue = (id: string, queue_status: string | null) => patch(id, { queue_status })
@@ -97,7 +119,7 @@ export default function WaitingRoomClient() {
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Armchair className="h-5 w-5 text-primary-500" /> Salle d&apos;attente
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Maintenant : qui est là, qui entre.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Votre poste : qui est là, qui entre, qui règle.</p>
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span><b className="text-blue-600">{waiting.length}</b> en attente</span>
@@ -128,8 +150,16 @@ export default function WaitingRoomClient() {
               <div key={a.id} className="flex items-center gap-3 p-3.5 flex-wrap">
                 <div className="text-sm font-semibold text-gray-900 w-14 shrink-0">{formatTime(a.time)}</div>
                 <div className="flex-1 min-w-[140px]">
-                  <p className="font-medium text-gray-900 truncate">
-                    {a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}
+                  <p className="font-medium text-gray-900 flex items-center gap-1.5 flex-wrap">
+                    <span className="truncate">{a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}</span>
+                    {/* Les documents se remettent au moment où le patient sort,
+                        donc depuis cet écran. Un COMPTE, jamais le contenu. */}
+                    {(a.queue_status === 'arrive' || a.queue_status === 'en_consultation')
+                      && typeof a.documents_a_remettre === 'number' && a.documents_a_remettre > 0 && (
+                      <span className="text-[10px] font-semibold bg-primary-50 text-primary-700 border border-primary-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        <FileText className="h-3 w-3 inline mr-0.5" />{a.documents_a_remettre} à remettre
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs text-gray-500 truncate">{a.consultation_type?.name || a.notes || 'Consultation'}</p>
                 </div>
@@ -150,6 +180,41 @@ export default function WaitingRoomClient() {
                   onAttendance={(key) => patch(a.id, { attendance: key })}
                   libelles
                 />
+
+                {/* Répondre au médecin sans changer d'écran : c'est ici
+                    qu'elle est quand il lui écrit. */}
+                <BoutonMedecin rdv={a as RdvEchange} onOpen={() => setMotFor(a)} />
+
+                {/* L'argent, au moment où le patient sort — c'est ici qu'elle
+                    le voit partir, pas dans l'agenda. Le rendez-vous rattaché
+                    à un devis se règle sur le devis : on l'écrit plutôt que de
+                    faire disparaître le bouton sans explication. */}
+                {a.quote_id ? (
+                  <span className="text-[11px] whitespace-nowrap rounded-full px-2 py-0.5 bg-primary-50 text-primary-700 border border-primary-100">
+                    Réglé via le devis
+                  </span>
+                ) : permissions?.payments ? (
+                  a.amount_paid != null ? (() => {
+                    const reste = (a.amount_due ?? 0) - a.amount_paid
+                    const partiel = a.amount_due != null && reste > 0
+                    return (
+                      <button
+                        onClick={() => setPayFor(a)}
+                        title={partiel ? 'Solder le reste' : 'Modifier l\'encaissement'}
+                        className={`text-[11px] whitespace-nowrap rounded-full px-2 py-0.5 border ${partiel ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-green-50 text-green-700 border-green-200'}`}
+                      >
+                        {partiel ? `${a.amount_paid}/${a.amount_due} DH` : `✓ ${a.amount_paid} DH`}
+                      </button>
+                    )
+                  })() : (
+                    <button
+                      onClick={() => setPayFor(a)}
+                      className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 rounded-lg px-2 py-1 hover:bg-primary-50 whitespace-nowrap"
+                    >
+                      <Banknote className="h-3.5 w-3.5" /> Encaisser
+                    </button>
+                  )
+                ) : null}
               </div>
             )
           })}
@@ -176,6 +241,21 @@ export default function WaitingRoomClient() {
           )}
         </div>
       )}
+
+      <PanneauMedecin
+        rdv={motFor as RdvEchange | null}
+        doctorName={doctorName}
+        onClose={() => setMotFor(null)}
+        onChange={load}
+      />
+
+      <EncaisserDialog
+        rdv={payFor as RdvAEncaisser | null}
+        tarifMotif={types.find((t) => t.id === payFor?.consultation_type_id)?.default_price ?? null}
+        peutModifierPrix={!!permissions?.edit_prices}
+        onSave={(patchPaiement) => patch(payFor!.id, patchPaiement)}
+        onClose={() => setPayFor(null)}
+      />
 
       <p className="text-[11px] text-gray-400">« Arrivé » pointe automatiquement le patient comme présent dans les statistiques.</p>
     </div>

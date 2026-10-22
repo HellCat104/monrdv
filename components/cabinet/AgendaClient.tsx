@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { etatPatient, resumeEchange } from '@/lib/file-attente'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
+import EncaisserDialog, { type RdvAEncaisser } from '@/components/cabinet/EncaisserDialog'
+import PanneauMedecin, { BoutonMedecin, type RdvEchange } from '@/components/cabinet/PanneauMedecin'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Calendar, Plus, X, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing, MessageSquare } from 'lucide-react'
@@ -32,9 +34,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd')
   // Fil de messages ouvert sur un rendez-vous (v77)
   const [motFor, setMotFor] = useState<Apt | null>(null)
-  const [motTexte, setMotTexte] = useState('')
-  const [motEnCours, setMotEnCours] = useState(false)
-  const [motErreur, setMotErreur] = useState('')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [patientCache, setPatientCache] = useState<PatientLite[] | null>(null)
@@ -62,10 +61,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
 
   // Encaissement inline (aligné sur le médecin : total dû + reste à payer)
   const [payFor, setPayFor] = useState<Apt | null>(null)
-  const [payDue, setPayDue] = useState('')
-  const [payAmount, setPayAmount] = useState('')
-  const [payMethod, setPayMethod] = useState('especes')
-  const [payError, setPayError] = useState('')
 
   // Blocage de créneau
   type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
@@ -269,28 +264,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     return true
   }
 
-  // Ouvre le dialog en pré-remplissant depuis le RDV (et le tarif du motif)
-  function openPayDialog(a: Apt) {
-    const price = types.find((t) => t.id === a.consultation_type_id)?.default_price ?? null
-    const due = a.amount_due ?? price ?? null
-    setPayError('')
-    setPayDue(due != null ? String(due) : '')
-    setPayAmount(a.amount_paid != null ? String(a.amount_paid) : (due != null ? String(due) : ''))
-    setPayMethod(a.payment_method ?? 'especes')
-    setPayFor(a)
-  }
-
-  async function savePayment() {
-    if (!payFor) return
-    const paid = parseFloat(payAmount.replace(',', '.'))
-    if (isNaN(paid) || paid < 0) { setPayError('Montant encaissé invalide.'); return }
-    const dueRaw = payDue.trim()
-    const due = dueRaw === '' ? null : parseFloat(dueRaw.replace(',', '.'))
-    if (due !== null && (isNaN(due) || due < 0)) { setPayError('Total dû invalide.'); return }
-    setPayError('')
-    const ok = await patchRdv(payFor.id, { amount_paid: paid, amount_due: due, payment_method: payMethod })
-    if (ok) { setPayFor(null); setPayAmount(''); setPayDue('') }
-  }
 
   // Créneaux dispo pour le déplacement
   useEffect(() => {
@@ -328,30 +301,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     return m != null && m <= APPEL_VALIDE_MIN
   })
 
-  async function envoyerMot() {
-    if (!motFor || !motTexte.trim()) return
-    setMotEnCours(true)
-    setMotErreur('')
-    try {
-      const res = await fetch('/api/cabinet/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appointment_id: motFor.id, contenu: motTexte.trim() }),
-      })
-      const d = await res.json().catch(() => ({}))
-      if (!res.ok) { setMotErreur(d.error || 'Envoi impossible.'); return }
-      // On recharge l'agenda plutôt que de bricoler la liste à la main : le
-      // médecin a pu répondre entre-temps, et son mot doit apparaître aussi.
-      setMotTexte('')
-      await load(date, true)
-      setMotFor((prev) => prev ? { ...prev, mots: [...(prev.mots ?? []), d.message] } : prev)
-    } catch {
-      setMotErreur('Erreur réseau.')
-    } finally {
-      setMotEnCours(false)
-    }
-  }
-
   return (
     <div className="space-y-4">
       {/* « Faites entrer le suivant » — en haut, au-dessus de tout : c'est la
@@ -379,7 +328,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Calendar className="h-5 w-5 text-primary-500" /> Agenda
           </h1>
-          <p className="text-xs text-gray-500 mt-0.5">La journée : créer, déplacer, encaisser.</p>
+          <p className="text-xs text-gray-500 mt-0.5">La vue d’ensemble : créer, déplacer, la semaine.</p>
         </div>
         {permissions.manage_appointments && (
           <div className="flex items-center gap-2 flex-wrap">
@@ -565,7 +514,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                   const partial = a.amount_due != null && reste > 0
                   return (
                     <button
-                      onClick={() => openPayDialog(a)}
+                      onClick={() => setPayFor(a)}
                       title={partial ? 'Solder le reste' : 'Modifier l\'encaissement'}
                       className={`text-xs whitespace-nowrap rounded-lg px-2 py-1 border ${partial ? 'text-orange-600 border-orange-200 hover:bg-orange-50' : 'text-gray-600 border-transparent hover:bg-gray-50'}`}
                     >
@@ -576,7 +525,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                   )
                 })() : (
                   <button
-                    onClick={() => openPayDialog(a)}
+                    onClick={() => setPayFor(a)}
                     className="flex items-center gap-1 text-xs text-primary-600 border border-primary-200 rounded-lg px-2 py-1 hover:bg-primary-50"
                   >
                     <Banknote className="h-3.5 w-3.5" /> Encaisser
@@ -584,27 +533,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 )
               )}
 
-              {/* Le pendant exact du bouton « Accueil » chez le médecin :
-                  tout ce qui passe entre les deux postes pour CE patient. La
-                  pastille dit « il y a quelque chose », sans prétendre
-                  distinguer le lu du non lu — rien ne l'enregistre. */}
-              {(() => {
-                const enAttente = (Array.isArray(a.mots) && a.mots.length > 0) || a.reprogrammer_jours != null
-                return (
-                  <button
-                    onClick={() => { setMotFor(a); setMotTexte(''); setMotErreur('') }}
-                    title="Échanger avec le médecin"
-                    className={`relative flex items-center gap-1 text-xs rounded-lg px-2 py-1 border transition-colors ${
-                      enAttente
-                        ? 'border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100'
-                        : 'border-gray-200 text-gray-500 hover:border-violet-300 hover:text-violet-700'
-                    }`}
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" /> Médecin
-                    {enAttente && <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-violet-500" />}
-                  </button>
-                )
-              })()}
+              <BoutonMedecin rdv={a as RdvEchange} onOpen={() => setMotFor(a)} />
 
               {/* Déplacer */}
               {permissions.manage_appointments && a.amount_paid == null && (
@@ -768,61 +697,13 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
       </Dialog>
 
       {/* Dialog encaissement — total dû + reste à payer + solder (aligné médecin) */}
-      <Dialog open={!!payFor} onOpenChange={(o) => { if (!o) { setPayFor(null); setPayError('') } }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Encaisser — {payFor?.patient ? `${payFor.patient.first_name} ${payFor.patient.last_name}` : ''}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="pay_due">Total dû (DH)</Label>
-                <Input id="pay_due" type="number" inputMode="decimal" min="0" step="any" value={payDue}
-                  onChange={(e) => { setPayDue(e.target.value); setPayError('') }} placeholder="0"
-                  disabled={!permissions.edit_prices}
-                  className={!permissions.edit_prices ? 'bg-gray-50 text-gray-500' : ''} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="pay_amount">Encaissé (DH)</Label>
-                <Input id="pay_amount" type="number" inputMode="decimal" min="0" step="any" autoFocus value={payAmount} onChange={(e) => { setPayAmount(e.target.value); setPayError('') }} placeholder="0" />
-              </div>
-            </div>
-
-            {/* Reste à payer + bouton Solder le reste */}
-            {(() => {
-              const due = parseFloat(payDue.replace(',', '.'))
-              const paid = parseFloat(payAmount.replace(',', '.'))
-              const reste = Math.round((due - paid) * 100) / 100
-              if (!isNaN(due) && !isNaN(paid) && reste > 0) {
-                return (
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-orange-600 font-medium">Reste à payer : {reste} DH</p>
-                    <button type="button" onClick={() => { setPayAmount(payDue); setPayError('') }}
-                      className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1 hover:bg-green-100 transition-colors">
-                      Solder le reste
-                    </button>
-                  </div>
-                )
-              }
-              if (!isNaN(due) && !isNaN(paid) && due > 0 && paid >= due) return <p className="text-xs text-green-600 font-medium">Soldé ✓</p>
-              return null
-            })()}
-
-            <div className="space-y-1.5">
-              <Label>Mode de règlement</Label>
-              <Select value={payMethod} onValueChange={setPayMethod}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(PAYMENT_METHOD_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {payError && <p className="text-sm text-red-500 bg-red-50 p-2 rounded-lg">{payError}</p>}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => { setPayFor(null); setPayError('') }}>Annuler</Button>
-            <Button type="button" onClick={savePayment}>Enregistrer</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EncaisserDialog
+        rdv={payFor as RdvAEncaisser | null}
+        tarifMotif={types.find((t) => t.id === payFor?.consultation_type_id)?.default_price ?? null}
+        peutModifierPrix={permissions.edit_prices}
+        onSave={(patch) => patchRdv(payFor!.id, patch)}
+        onClose={() => setPayFor(null)}
+      />
 
       {sheetOpen && (
         <DaySheet
@@ -846,79 +727,12 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         />
       )}
 
-      {/* Fil avec le médecin, au sujet d'un rendez-vous */}
-      <Dialog open={!!motFor} onOpenChange={(o) => { if (!o) { setMotFor(null); setMotErreur('') } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <MessageSquare className="h-4 w-4 text-violet-600" />
-              Médecin — {motFor?.patient ? `${motFor.patient.first_name} ${motFor.patient.last_name}` : ''}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            {Array.isArray(motFor?.mots) && motFor!.mots.length > 0 && (
-              <div className="space-y-1.5 max-h-56 overflow-y-auto">
-                {motFor!.mots.map((m: Apt) => (
-                  <div
-                    key={m.id}
-                    className={`rounded-lg px-3 py-2 text-sm ${m.auteur === 'medecin' ? 'bg-primary-50 border border-primary-100' : 'bg-gray-50 border border-gray-100'}`}
-                  >
-                    <p className="text-[11px] text-gray-500 mb-0.5">
-                      {m.auteur === 'medecin' ? doctorName : (m.auteur_nom || 'Accueil')} · {formatTime(String(m.created_at).slice(11, 16))}
-                    </p>
-                    <p className="text-gray-800 whitespace-pre-wrap">{m.contenu}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Ce que le médecin demande, et le geste pour le solder — ici,
-                et plus sur une pastille à côté du nom : une pastille qui se
-                clique à côté d'une pastille qui s'affiche, personne ne sait
-                laquelle est laquelle. */}
-            {motFor?.reprogrammer_jours != null && (
-              <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 flex items-start gap-2">
-                <CalendarClock className="h-4 w-4 mt-0.5 shrink-0" />
-                <span className="flex-1">
-                  Le médecin demande de le revoir dans <strong>{motFor.reprogrammer_jours} jours</strong>.
-                </span>
-                <button
-                  onClick={async () => {
-                    await patchRdv(motFor.id, { reprogrammer_jours: null })
-                    setMotFor((prev) => prev ? { ...prev, reprogrammer_jours: null } : prev)
-                  }}
-                  className="text-xs font-semibold bg-amber-200/70 hover:bg-amber-200 rounded-lg px-2 py-1 shrink-0"
-                >
-                  C&apos;est fait
-                </button>
-              </div>
-            )}
-
-            {/* Pas de notification à inventer : l'écran du médecin se
-                rafraîchit déjà tout seul. On le dit, pour qu'elle sache si
-                elle doit aller frapper à la porte. */}
-            <p className="text-[11px] text-gray-400">
-              Le médecin le verra sur son agenda et dans la consultation du patient. Ce n&apos;est pas une alerte : pour une urgence, allez le voir.
-            </p>
-
-            <textarea
-              value={motTexte}
-              onChange={(e) => setMotTexte(e.target.value)}
-              rows={3}
-              maxLength={1000}
-              placeholder="Elle demande si elle peut décaler à jeudi…"
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-200"
-            />
-            {motErreur && <p role="alert" className="text-xs text-red-600">{motErreur}</p>}
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { setMotFor(null); setMotErreur('') }} className="flex-1">Fermer</Button>
-              <Button onClick={envoyerMot} disabled={motEnCours || !motTexte.trim()} className="flex-1">
-                {motEnCours ? 'Envoi…' : 'Envoyer'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <PanneauMedecin
+        rdv={motFor as RdvEchange | null}
+        doctorName={doctorName}
+        onClose={() => setMotFor(null)}
+        onChange={() => load(date, true)}
+      />
     </div>
   )
 }

@@ -137,6 +137,8 @@ export async function GET(req: NextRequest) {
     blocks: blocksRes.data ?? [],
     permissions: ctx.permissions,
     confidential: ctx.confidential,
+    // Pour signer les mots du médecin sur l'écran de la secrétaire.
+    doctorName: ctx.doctor.name,
   })
 }
 
