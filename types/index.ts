@@ -679,7 +679,13 @@ export interface StaffPermissions {
   edit_prices: boolean          // modifier le prix d'un acte au moment de l'encaissement
   caisse_day: boolean           // voir le journal de caisse du jour
   view_revenue: boolean         // voir le chiffre d'affaires global (mois / année)
-  factures: boolean             // accès aux factures
+  /** Déclarée, stockée, mais AUCUN écran ni aucune route ne la lit : il
+   *  n'existe pas de liste de factures côté cabinet, et /factures appartient
+   *  à l'espace médecin, dont le layout renvoie toute non-médecin vers
+   *  /cabinet. La case a donc quitté l'écran des permissions — le médecin
+   *  croyait accorder un accès qui n'existe pas. Le champ reste pour ne rien
+   *  casser des fiches déjà enregistrées. */
+  factures: boolean
   // Bloc sécurité
   delete_patient: boolean       // supprimer un dossier patient
   export_patients: boolean      // exporter la base patients (Excel)
@@ -763,7 +769,6 @@ export const STAFF_PERMISSION_GROUPS: {
       { key: 'quotes_payment', label: 'Encaisser sur un devis',     hint: 'Saisir un versement reçu — nécessite « Afficher les devis ». Aucune suppression ni avoir.', requiert: 'records' },
       { key: 'caisse_day',    label: 'Journal de caisse du jour',   hint: 'Total encaissé aujourd’hui, par mode de règlement' },
       { key: 'view_revenue',  label: 'Chiffre d’affaires global',   hint: 'Totaux du mois et de l’année' },
-      { key: 'factures',      label: 'Factures',                    hint: 'Accès à la liste des factures', requiert: 'invoicing' },
     ],
   },
   {

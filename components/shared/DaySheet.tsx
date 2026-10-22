@@ -42,14 +42,19 @@ function libelleVenue(i: DaySheetItem): string | null {
 }
 
 export default function DaySheet({
-  doctorName, date, items, blocks = [], showPhone = true, showMoney = true, onClose,
+  doctorName, date, items, blocks = [], showPhone = true, showMoney = true, showTotal = true, onClose,
 }: {
   doctorName: string
   date: string
   items: DaySheetItem[]
   blocks?: DaySheetBlock[]
   showPhone?: boolean
+  /** Colonne « Réglé », ligne par ligne : utile au comptoir. */
   showMoney?: boolean
+  /** Le TOTAL encaissé du jour. Séparé de la colonne : c'est un cumul, et
+   *  c'est lui que la permission « Journal de caisse du jour » protège. Une
+   *  feuille imprimée avec le total en bas rendait ce verrou décoratif. */
+  showTotal?: boolean
   onClose: () => void
 }) {
   const sorted = [...items].sort((a, b) => String(a.time).localeCompare(String(b.time)))
@@ -96,7 +101,7 @@ export default function DaySheet({
           <div className="text-right text-xs text-gray-600 space-y-0.5">
             <p><span className="font-semibold text-gray-900">{sorted.length}</span> rendez-vous</p>
             <p><span className="font-semibold text-gray-900">{nbPresents}</span> présent(s)</p>
-            {showMoney && <p><span className="font-semibold text-gray-900">{encaisse} DH</span> encaissés ({nbEncaisses})</p>}
+            {showTotal && <p><span className="font-semibold text-gray-900">{encaisse} DH</span> encaissés ({nbEncaisses})</p>}
           </div>
         </div>
 

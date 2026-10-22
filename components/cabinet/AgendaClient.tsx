@@ -490,9 +490,19 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                    Le montant reste, en texte : c'est le seul chiffre qui dise
                    ce qu'a rapporté la journée. */
                 a.amount_paid != null ? (
-                  <span className="text-xs text-gray-500 whitespace-nowrap">
-                    {a.amount_paid} DH{a.payment_method ? ` · ${PAYMENT_METHOD_LABELS[a.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? a.payment_method}` : ''}
-                  </span>
+                  // Le MONTANT n'apparaît qu'avec « Journal de caisse du
+                  // jour ». Sans cette condition, une secrétaire à qui le
+                  // médecin a refusé le journal n'avait qu'à additionner sa
+                  // colonne pour obtenir exactement le chiffre qu'on voulait
+                  // lui cacher. Elle encaisse en salle d'attente, où elle voit
+                  // ce que CE patient doit : c'est le cumul qu'on protège.
+                  permissions.caisse_day ? (
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      {a.amount_paid} DH{a.payment_method ? ` · ${PAYMENT_METHOD_LABELS[a.payment_method as keyof typeof PAYMENT_METHOD_LABELS] ?? a.payment_method}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-green-600 whitespace-nowrap">Réglé</span>
+                  )
                 ) : a.quote_id ? (
                   <span className="text-xs text-gray-500 whitespace-nowrap">Réglé via le devis</span>
                 ) : null
@@ -692,6 +702,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
           blocks={blocks}
           showPhone={permissions.patients_contact}
           showMoney={permissions.payments}
+          showTotal={permissions.caisse_day}
           onClose={() => setSheetOpen(false)}
         />
       )}

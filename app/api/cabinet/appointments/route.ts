@@ -44,6 +44,13 @@ export async function GET(req: NextRequest) {
   const dateRe = /^\d{4}-\d{2}-\d{2}$/
   if (isRange) {
     if (!dateRe.test(from!) || !dateRe.test(to!) || to! < from!) return NextResponse.json({ error: 'Plage invalide' }, { status: 400 })
+    // Borne de durée. La validation ne contrôlait que le format et l'ordre :
+    // il suffisait de demander du 1er janvier au 31 décembre pour recevoir
+    // l'année entière, montants compris, et reconstituer n'importe quel
+    // cumul — alors que les écrans affichent au plus une semaine. Un verrou
+    // posé sur l'écran seul reste décoratif.
+    const jours = (Date.parse(to!) - Date.parse(from!)) / 86400000
+    if (jours > 31) return NextResponse.json({ error: 'Plage trop longue (31 jours maximum)' }, { status: 400 })
   } else if (!dateRe.test(date)) {
     return NextResponse.json({ error: 'Date invalide' }, { status: 400 })
   }
@@ -72,6 +79,15 @@ export async function GET(req: NextRequest) {
   let appointments = aptRes.data ?? []
   if (ctx.confidential) {
     appointments = appointments.map((a) => ({ ...a, notes: null, consultation_type: [] }))
+  }
+
+  // L'ARGENT ne sort que pour qui peut le voir. Le select renvoyait les
+  // montants et les modes de règlement à toute secrétaire ayant l'agenda —
+  // et la vue Semaine chargeait déjà cette réponse sans rien en afficher.
+  // Masquer un chiffre à l'écran en le laissant dans la réponse, c'est un
+  // verrou qui ne ferme rien.
+  if (!ctx.permissions.payments && !ctx.permissions.caisse_day) {
+    appointments = appointments.map((a) => ({ ...a, amount_paid: null, amount_due: null, payment_method: null }))
   }
 
   // ── Ce qui vient du cabinet vers l'accueil (v76) ──────────────────────

@@ -11,10 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { getNowInMaroc, formatDateFr, formatDateShort, MAROC_TZ } from '@/lib/utils'
-import {
-  format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter,
-  startOfYear, endOfYear, parseISO, addMonths, setDate,
-} from 'date-fns'
+import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear, parseISO, addMonths, setDate, subDays } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { fr } from 'date-fns/locale'
 import { BarChart3, Wallet, UserCheck, UserX, Timer, TrendingUp, Download, Plus, Trash2, Banknote, Receipt, FileText, Table2, Paperclip, ArrowUp, ArrowDown, Repeat } from 'lucide-react'
@@ -22,8 +19,15 @@ import { EXPENSE_CATEGORIES, expenseCategoryLabel, variation } from '@/lib/compt
 import { COLONNES_EN_TETE, lignesEnTete, enTeteHtml, type LignesEnTete } from '@/lib/document-entete'
 import type { Appointment, Expense, CreditNote, RecurringExpense } from '@/types'
 
-type Period = 'month' | 'lastmonth' | 'quarter' | 'year' | 'all'
+// « Aujourd'hui » et « Hier » en tête : la maille la plus fine était le MOIS,
+// alors que la question que se pose un praticien en fermant le cabinet, c'est
+// « combien ce soir ? ». Tout le reste de l'écran suit gratuitement — les
+// recettes, la ventilation par mode de règlement, les exports — et l'écart
+// affiché compare automatiquement à la veille, puisque la période précédente
+// d'« aujourd'hui » est « hier ».
+type Period = 'today' | 'yesterday' | 'month' | 'lastmonth' | 'quarter' | 'year' | 'all'
 const PERIOD_LABELS: Record<Period, string> = {
+  today: "Aujourd'hui", yesterday: 'Hier',
   month: 'Ce mois-ci', lastmonth: 'Mois dernier', quarter: 'Ce trimestre', year: 'Cette année', all: 'Tout',
 }
 const RECEIPT_BUCKET = 'expense-receipts'
@@ -31,6 +35,8 @@ const PM_LABELS: Record<string, string> = { especes: 'Espèces', carte: 'Carte',
 
 function periodRange(p: Period, now: Date): { start: string; end: string } {
   if (p === 'all') return { start: '0000-01-01', end: '9999-12-31' }
+  if (p === 'today') { const j = format(now, 'yyyy-MM-dd'); return { start: j, end: j } }
+  if (p === 'yesterday') { const j = format(subDays(now, 1), 'yyyy-MM-dd'); return { start: j, end: j } }
   if (p === 'lastmonth') { const d = subMonths(now, 1); return { start: format(startOfMonth(d), 'yyyy-MM-dd'), end: format(endOfMonth(d), 'yyyy-MM-dd') } }
   if (p === 'quarter') return { start: format(startOfQuarter(now), 'yyyy-MM-dd'), end: format(endOfQuarter(now), 'yyyy-MM-dd') }
   if (p === 'year') return { start: format(startOfYear(now), 'yyyy-MM-dd'), end: format(endOfYear(now), 'yyyy-MM-dd') }
@@ -42,6 +48,9 @@ function periodRange(p: Period, now: Date): { start: string; end: string } {
 // période précédente.
 function previousPeriodRange(p: Period, now: Date): { start: string; end: string } | null {
   if (p === 'all') return null
+  // La veille, donc : la comparaison entre jours tombe toute seule.
+  if (p === 'today') { const j = format(subDays(now, 1), 'yyyy-MM-dd'); return { start: j, end: j } }
+  if (p === 'yesterday') { const j = format(subDays(now, 2), 'yyyy-MM-dd'); return { start: j, end: j } }
   if (p === 'quarter') { const d = subMonths(now, 3); return { start: format(startOfQuarter(d), 'yyyy-MM-dd'), end: format(endOfQuarter(d), 'yyyy-MM-dd') } }
   if (p === 'year')    { const d = subMonths(now, 12); return { start: format(startOfYear(d), 'yyyy-MM-dd'), end: format(endOfYear(d), 'yyyy-MM-dd') } }
   const back = p === 'lastmonth' ? 2 : 1
@@ -795,6 +804,37 @@ export default function StatistiquesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Le détail de la journée — et SEULEMENT sur une journée.
+          Ces lignes étaient déjà calculées, mais ne servaient qu'aux exports :
+          il fallait télécharger un fichier pour savoir qui avait réglé quoi ce
+          soir. Sur un mois elles feraient trois cents lignes et noieraient
+          l'écran, d'où la condition. */}
+      {(period === 'today' || period === 'yesterday') && d.rows.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-primary-500" /> Détail de la journée
+              <span className="ml-1 text-sm font-bold text-primary-600">
+                {d.recettes.toLocaleString('fr-FR')} DH
+              </span>
+              <span className="text-xs font-normal text-gray-400">· {d.rows.length} encaissement{d.rows.length > 1 ? 's' : ''}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="divide-y divide-gray-50">
+              {d.rows.map((r, i) => (
+                <div key={`${r.invoice}-${i}`} className="flex items-center gap-3 py-2 text-sm flex-wrap">
+                  <span className="font-medium text-gray-900 min-w-[140px]">{r.patient}</span>
+                  <span className="text-xs text-gray-500 flex-1 min-w-[100px] truncate">{r.motif}</span>
+                  <span className="text-xs text-gray-400">{r.mode}</span>
+                  <span className="font-semibold text-gray-900 tabular-nums">{r.amount.toLocaleString('fr-FR')} DH</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Impayés — indépendant de la période : une dette reste due */}
       {d.unpaid.length > 0 && (
