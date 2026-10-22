@@ -9,7 +9,7 @@ import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
 import { isDentalDoctor } from '@/lib/dental'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, TrendingDown, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Calendar, TrendingDown, CheckCircle, AlertTriangle, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -70,12 +70,23 @@ export default async function DashboardPage() {
   // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »).
   // Jamais en forfait Agenda : ces données de santé n'ont pas à quitter la base.
   const acces = canAccess(doctor.plan, 'consultation')
-  const [todaySummarised, upcomingSummarised] = acces
+  // Ce qui reste à faire aujourd'hui, et ce qui est fait.
+  //
+  // « Fait » ne veut pas dire « l'heure est passée » : à 13 h, le patient de
+  // 9 h 20 peut être encore assis dans la salle d'attente. C'est le pointage
+  // « parti » qui tranche, pas l'horloge — sinon on masquerait justement
+  // celui qu'il faut recevoir.
+  const estFait = (a: { queue_status?: string | null }) => a.queue_status === 'parti'
+  const todayAVenir = (todayAppointments ?? []).filter((a) => !estFait(a))
+  const todayPasses = (todayAppointments ?? []).filter(estFait)
+
+  const [todaySummarised, passesSummarised, upcomingSummarised] = acces
     ? await Promise.all([
-        withConsultationSummary(supabase, todayAppointments ?? []),
+        withConsultationSummary(supabase, todayAVenir),
+        withConsultationSummary(supabase, todayPasses),
         withConsultationSummary(supabase, upcomingAppointments ?? []),
       ])
-    : [todayAppointments ?? [], upcomingAppointments ?? []]
+    : [todayAVenir, todayPasses, upcomingAppointments ?? []]
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
   const estDentiste = isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])
@@ -152,43 +163,10 @@ export default async function DashboardPage() {
           désormais aux praticiens que ça concerne. */}
       {estDentiste && <SuiviLabo />}
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* RDV du jour */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-primary-500" />
-              Rendez-vous aujourd&apos;hui
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AppointmentList appointments={todaySummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
-          </CardContent>
-        </Card>
-
-        {/* Prochains RDV */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-green-500" />
-              Prochains rendez-vous
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AppointmentList appointments={upcomingSummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Statistiques du mois — EN BAS, et c'est le changement.
-          Elles occupaient la place d'honneur, au-dessus de la journée : à 9h,
-          un médecin veut savoir qui il voit, pas son total mensuel. Ce sont
-          des chiffres qu'on consulte, pas des chiffres qui déclenchent un
-          geste — et la page Statistiques existe pour les creuser.
-
-          Le taux d'absentéisme a quitté cet écran : c'est un indicateur de
-          pilotage mensuel, déjà présent dans Statistiques (présences,
-          absences, taux), et il n'apprenait rien d'actionnable le matin. */}
+      {/* Les trois chiffres du mois, en tête — c'est la place que la
+          praticienne leur a choisie. Le taux d'absentéisme, lui, ne revient
+          pas : il est déjà dans Statistiques avec les présences et les
+          absences, et il n'apprenait rien d'actionnable le matin. */}
       <div className="grid grid-cols-3 gap-4">
         <StatsCard
           title="RDV aujourd'hui"
@@ -217,6 +195,53 @@ export default async function DashboardPage() {
       <Link href="/statistiques" className="block text-center text-sm text-primary-600 hover:text-primary-700 hover:underline">
         Voir toutes les statistiques →
       </Link>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* RDV du jour */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-primary-500" />
+              Rendez-vous aujourd&apos;hui
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Les rendez-vous déjà faits sont REPLIÉS, au-dessus de la liste.
+                En fin de journée ils occupaient toute la carte et il fallait
+                faire défiler pour trouver le patient suivant — alors que
+                c'est la seule chose qu'on vient chercher ici.
+
+                Un <details> plutôt qu'un composant client : ils sont déjà
+                chargés, le volet s'ouvre sans aller-retour ni attente. */}
+            {passesSummarised.length > 0 && (
+              <details className="mb-3 group">
+                <summary className="cursor-pointer list-none text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1.5 py-1">
+                  <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+                  {passesSummarised.length} rendez-vous passé{passesSummarised.length > 1 ? 's' : ''}
+                </summary>
+                <div className="mt-2 opacity-70">
+                  <AppointmentList appointments={passesSummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
+                </div>
+              </details>
+            )}
+            <AppointmentList appointments={todaySummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
+          </CardContent>
+        </Card>
+
+        {/* Prochains RDV */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-green-500" />
+              Prochains rendez-vous
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AppointmentList appointments={upcomingSummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
+          </CardContent>
+        </Card>
+      </div>
+
     </div>
   )
 }
