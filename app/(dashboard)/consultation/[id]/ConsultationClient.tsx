@@ -53,6 +53,7 @@ export default function ConsultationClient({
   doctorId, appointmentId, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, consultationCertificates, recentVitals,
   consultationTypeId = null, queueStatus = null, reprogrammerJours = null, v76 = false,
+  prochainRdv = null,
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
   isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false,
 }: {
@@ -77,6 +78,8 @@ export default function ConsultationClient({
   queueStatus?: string | null
   /** Délai déjà demandé à l'accueil, s'il y en a un (v76). */
   reprogrammerJours?: number | null
+  /** Rendez-vous déjà donné à ce patient après celui-ci, s'il existe. */
+  prochainRdv?: { date: string; time: string } | null
   /** La migration v76 est passée. Sinon les deux liens vers l'accueil
    *  n'existent pas — la règle de la maison : pas de migration, pas de
    *  fonctionnalité, mais jamais d'erreur. */
@@ -243,7 +246,12 @@ export default function ConsultationClient({
   const [rdvChargement, setRdvChargement] = useState(false)
   const [rdvEnCours, setRdvEnCours] = useState(false)
   const [rdvErreur, setRdvErreur] = useState('')
-  const [rdvCree, setRdvCree] = useState<string | null>(null)
+  // Relu en base à chaque ouverture, et non gardé seulement en mémoire d'écran :
+  // sortir faire un certificat et revenir effaçait la confirmation, et le
+  // bouton réapparaissait comme si aucun rendez-vous n'avait été donné.
+  const [rdvCree, setRdvCree] = useState<string | null>(
+    prochainRdv ? `${formatDateFr(prochainRdv.date)} à ${String(prochainRdv.time).slice(0, 5)}` : null,
+  )
 
   function dansJours(n: number): string {
     const d = getNowInMaroc()
@@ -841,7 +849,17 @@ export default function ConsultationClient({
             {rdvCree ? (
               <div className="px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800 flex items-start gap-2">
                 <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>Prochain RDV : <strong>{rdvCree}</strong></span>
+                <span className="flex-1">
+                  Prochain RDV : <strong>{rdvCree}</strong>
+                  {/* Jamais d'impasse : un patient peut avoir besoin de deux
+                      rendez-vous (contrôle, puis bilan). */}
+                  <button
+                    onClick={() => { setRdvCree(null); setRdvOuvert(true); setRdvErreur('') }}
+                    className="block text-[11px] underline hover:no-underline mt-0.5"
+                  >
+                    En donner un autre
+                  </button>
+                </span>
               </div>
             ) : !rdvOuvert ? (
               <button onClick={() => { setRdvOuvert(true); setRdvErreur('') }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">

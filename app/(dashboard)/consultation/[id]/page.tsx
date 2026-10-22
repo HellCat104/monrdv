@@ -88,6 +88,29 @@ export default async function ConsultationPage({ params }: { params: { id: strin
   const v76 = !colonneAbsente(v76Err?.code)
   const reprogrammerJours = (v76Row as { reprogrammer_jours?: number | null } | null)?.reprogrammer_jours ?? null
 
+  // Le prochain rendez-vous DÉJÀ donné à ce patient.
+  //
+  // Le bandeau de confirmation n'existait que dans la mémoire de l'écran :
+  // sortir faire un certificat et revenir le faisait disparaître, et le bouton
+  // « Prochain rendez-vous » réapparaissait comme si rien n'avait été fait.
+  // Un praticien distrait pouvait en donner un second. On relit donc.
+  const { data: suivants } = await supabase
+    .from('appointments')
+    .select('date, time')
+    .eq('patient_id', patient.id)
+    .eq('doctor_id', doctor.id)
+    .neq('id', apt.id)
+    .neq('status', 'cancelled')
+    .gte('date', aujourdhui)
+    .order('date', { ascending: true })
+    .order('time', { ascending: true })
+    .limit(5)
+  // Un rendez-vous du matin alors qu'on consulte l'après-midi n'est pas « le
+  // prochain » : on ne garde que ce qui vient APRÈS celui-ci.
+  const prochainRdv = (suivants ?? []).find(
+    (r) => r.date > apt.date || (r.date === apt.date && String(r.time) > String(apt.time)),
+  ) ?? null
+
   const vitalDefsAll = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabled = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
   const vitalDefs = vitalDefsAll.filter((v) => enabled.includes(v.key))
@@ -113,6 +136,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       queueStatus={(apt as { queue_status?: string | null }).queue_status ?? null}
       reprogrammerJours={reprogrammerJours}
       v76={v76}
+      prochainRdv={prochainRdv}
       existingNoteId={existingNote?.id ?? null}
       existingNote={existingNote?.note ?? ''}
       noteSigned={!!existingNote?.signed_at}
