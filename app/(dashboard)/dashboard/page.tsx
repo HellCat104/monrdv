@@ -9,10 +9,10 @@ import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
 import { isDentalDoctor } from '@/lib/dental'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, TrendingDown, CheckCircle, AlertTriangle, ChevronRight } from 'lucide-react'
+import { Calendar, CheckCircle, AlertTriangle, ChevronRight, Banknote } from 'lucide-react'
 import Link from 'next/link'
 import { getNowInMaroc } from '@/lib/utils'
-import { format } from 'date-fns'
+import { format, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { displayName } from '@/lib/profession'
 
@@ -37,6 +37,7 @@ export default async function DashboardPage() {
   }
 
   const today = format(getNowInMaroc(), 'yyyy-MM-dd')
+  const demain = format(addDays(getNowInMaroc(), 1), 'yyyy-MM-dd')
   const firstOfMonth = format(getNowInMaroc(), 'yyyy-MM-01')
 
   // Ces trois requêtes sont indépendantes : les enchaîner ajoutait inutilement
@@ -44,7 +45,9 @@ export default async function DashboardPage() {
   const [
     { data: todayAppointments },
     { data: monthAppointments },
-    { data: upcomingAppointments },
+    { data: demainAppointments },
+    { data: reglesAujourdhui },
+    { data: versementsAujourdhui },
   ] = await Promise.all([
     // RDV du jour
     supabase.from('appointments')
@@ -55,16 +58,25 @@ export default async function DashboardPage() {
     supabase.from('appointments')
       .select('status')
       .eq('doctor_id', doctor.id).gte('date', firstOfMonth).lte('date', today),
-    // Prochains RDV
+    // Demain — et non « les cinq prochains », qui mélangeaient après-demain,
+    // la semaine prochaine et l'an prochain. Un praticien ne se demande pas
+    // quels sont ses cinq prochains rendez-vous : il se demande à quoi
+    // ressemble sa journée de demain, pour savoir s'il peut ouvrir un créneau.
     supabase.from('appointments')
       .select('*, patient:patients(*)')
-      .eq('doctor_id', doctor.id).gt('date', today).neq('status', 'cancelled')
-      .order('date', { ascending: true }).order('time', { ascending: true })
-      .limit(5),
+      .eq('doctor_id', doctor.id).eq('date', demain).neq('status', 'cancelled')
+      .order('time', { ascending: true }),
+    // L'argent du jour : les consultations réglées…
+    supabase.from('appointments')
+      .select('amount_paid')
+      .eq('doctor_id', doctor.id).eq('date', today).not('amount_paid', 'is', null),
+    // …et les versements sur devis, qui sont de l'argent reçu au même titre.
+    supabase.from('quote_payments')
+      .select('amount')
+      .eq('doctor_id', doctor.id).gte('paid_at', `${today}T00:00:00`).lte('paid_at', `${today}T23:59:59`),
   ])
 
   const monthTotal = monthAppointments?.length ?? 0
-  const monthCancelled = monthAppointments?.filter((a) => a.status === 'cancelled').length ?? 0
 
 
   // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »).
@@ -80,13 +92,21 @@ export default async function DashboardPage() {
   const todayAVenir = (todayAppointments ?? []).filter((a) => !estFait(a))
   const todayPasses = (todayAppointments ?? []).filter(estFait)
 
+  // Encaissé aujourd'hui : les consultations réglées ET les versements sur
+  // devis. Ne prendre que les premières afficherait un chiffre faux chez un
+  // dentiste, dont l'essentiel de la recette passe par les plans de traitement.
+  const encaisseAujourdhui =
+    (reglesAujourdhui ?? []).reduce((t, a) => t + Number(a.amount_paid ?? 0), 0) +
+    (versementsAujourdhui ?? []).reduce((t, v) => t + Number(v.amount ?? 0), 0)
+  const nbRegles = (reglesAujourdhui?.length ?? 0) + (versementsAujourdhui?.length ?? 0)
+
   const [todaySummarised, passesSummarised, upcomingSummarised] = acces
     ? await Promise.all([
         withConsultationSummary(supabase, todayAVenir),
         withConsultationSummary(supabase, todayPasses),
-        withConsultationSummary(supabase, upcomingAppointments ?? []),
+        withConsultationSummary(supabase, demainAppointments ?? []),
       ])
-    : [todayAVenir, todayPasses, upcomingAppointments ?? []]
+    : [todayAVenir, todayPasses, demainAppointments ?? []]
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
   const estDentiste = isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])
@@ -168,10 +188,12 @@ export default async function DashboardPage() {
           pas : il est déjà dans Statistiques avec les présences et les
           absences, et il n'apprenait rien d'actionnable le matin. */}
       <div className="grid grid-cols-3 gap-4">
+        {/* Un chiffre qui BOUGE pendant la journée : à 15 h, « 11 » ne dit
+            plus rien, « 4 à recevoir » dit s'il finit à 17 h ou à 19 h. */}
         <StatsCard
-          title="RDV aujourd'hui"
+          title="Aujourd'hui"
           value={todayAppointments?.length ?? 0}
-          subtitle={`${todayAppointments?.filter((a) => a.status === 'confirmed').length ?? 0} confirmés`}
+          subtitle={`${todayAVenir.length} à recevoir`}
           icon={Calendar}
           color="blue"
         />
@@ -182,11 +204,15 @@ export default async function DashboardPage() {
           icon={CheckCircle}
           color="green"
         />
+        {/* Le chiffre qu'un praticien regarde en fermant son cabinet, et qu'il
+            ne pouvait voir nulle part sans ouvrir les statistiques. Remplace
+            « Annulés ce mois », sur lequel personne n'agissait jamais. */}
         <StatsCard
-          title="Annulés ce mois"
-          value={monthCancelled}
-          icon={TrendingDown}
-          color="orange"
+          title="Encaissé aujourd'hui"
+          value={`${encaisseAujourdhui.toLocaleString('fr-FR')} DH`}
+          subtitle={nbRegles > 0 ? `${nbRegles} règlement${nbRegles > 1 ? 's' : ''}` : 'aucun règlement'}
+          icon={Banknote}
+          color="green"
         />
       </div>
 
@@ -233,7 +259,12 @@ export default async function DashboardPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Calendar className="h-4 w-4 text-green-500" />
-              Prochains rendez-vous
+              Demain
+              {demainAppointments && demainAppointments.length > 0 && (
+                <span className="text-xs font-normal text-gray-400">
+                  · {demainAppointments.length} rendez-vous, à partir de {String(demainAppointments[0].time).slice(0, 5)}
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
