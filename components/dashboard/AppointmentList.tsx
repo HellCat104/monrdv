@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { formatDateShort, formatTime, getInitials, minutesDepuis } from '@/lib/utils'
+import { formatDateShort, formatTime, getInitials } from '@/lib/utils'
+import { etatPatient, resumeEchange } from '@/lib/file-attente'
+import PanneauAccueil, { type Mot } from '@/components/dashboard/PanneauAccueil'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, VITAL_DEFS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMethod } from '@/types'
 import {
@@ -83,6 +85,8 @@ interface AppointmentListProps {
   appointments: Appointment[]
   onStatusChange?: (id: string, status: AppointmentStatus) => Promise<void>
   onAttendanceChange?: (id: string, attendance: AppointmentAttendance) => Promise<void>
+  /** Recharger la liste après un échange avec l'accueil. */
+  onRefresh?: () => void
   onPayment?: (id: string, payload: PaymentPayload) => Promise<void>
   onViewPatient?: (patientId: string) => void
   onReschedule?: (id: string, date: string, time: string) => Promise<void>
@@ -91,16 +95,7 @@ interface AppointmentListProps {
   plan?: 'agenda' | 'complet'
 }
 
-/** Le dernier mot échangé avec l'accueil, prêt à afficher (v77). */
-function dernierMot(apt: Appointment): string | null {
-  const l = (apt as { mots?: { auteur: string; auteur_nom?: string | null; contenu: string }[] }).mots
-  if (!l || l.length === 0) return null
-  const m = l[l.length - 1]
-  const qui = m.auteur === 'medecin' ? 'Vous' : (m.auteur_nom?.split(' ')[0] || 'Accueil')
-  return `${qui} : ${m.contenu}`
-}
-
-export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, plan = 'complet' }: AppointmentListProps) {
+export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, onRefresh, plan = 'complet' }: AppointmentListProps) {
   // Forfait Agenda : pas d'encaissement (le reste des actions est filtré plus bas)
   // L'encaissement est ouvert aux deux forfaits : seuls les documents
   // comptables (facture, avoir) restent réservés au Cabinet complet.
@@ -367,23 +362,22 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[apt.status]}`}>
                   {STATUS_LABELS[apt.status]}
                 </span>
-                {apt.attendance && (
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ATTENDANCE_COLORS[apt.attendance]}`}>
-                    {ATTENDANCE_LABELS[apt.attendance]}
+                {/* UNE seule étiquette d'état. Avant, « Présent » et « Attend
+                    depuis 12 min » cohabitaient pour dire la même chose, et
+                    « Présent » survivait à la consultation. La règle vit
+                    désormais dans lib/file-attente, lue pareil par les deux
+                    comptes. */}
+                {etatPatient(apt) && (
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${etatPatient(apt)!.couleur}`}>
+                    {etatPatient(apt)!.label}
                   </span>
                 )}
-                {/* Attend depuis… (v76) : « Présent » dit qu'il est venu, pas
-                    qu'il patiente encore. La durée, elle, fait agir. */}
-                {apt.queue_status === 'arrive' && minutesDepuis(apt.queue_arrived_at) != null && (
-                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                    Attend depuis {minutesDepuis(apt.queue_arrived_at)} min
-                  </span>
-                )}
-                {/* Dernier mot de l'accueil (v77), lisible sans ouvrir la
-                    consultation : dans un cabinet le mot fait six mots. */}
-                {dernierMot(apt) && (
+                {/* Ce qui vient de l'accueil : on le LIT ici, on y répond au
+                    bout de la ligne. Une pastille qui se clique à côté d'une
+                    pastille qui s'affiche, c'est la confusion garantie. */}
+                {resumeEchange(apt as never) && (
                   <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200 max-w-[280px] truncate">
-                    💬 {dernierMot(apt)}
+                    {resumeEchange(apt as never)}
                   </span>
                 )}
                 {apt.specialty && (
@@ -444,6 +438,20 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     >
                       <Play className="h-3 w-3" /> Consultation
                     </a>
+                  )}
+
+                  {/* Parler à l'accueil. Présent dans LES DEUX forfaits : faire
+                      entrer un patient n'est pas une donnée de santé, et c'est
+                      le seul écran du médecin en forfait Agenda. */}
+                  {apt.patient_id && apt.doctor_id && (
+                    <PanneauAccueil
+                      appointmentId={apt.id}
+                      doctorId={apt.doctor_id}
+                      patientNom={apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : 'Patient'}
+                      mots={(apt as { mots?: Mot[] }).mots ?? []}
+                      reprogrammerJours={apt.reprogrammer_jours ?? null}
+                      onChange={onRefresh}
+                    />
                   )}
 
                   {/* Rattaché à un devis : l'argent de cette séance est déjà

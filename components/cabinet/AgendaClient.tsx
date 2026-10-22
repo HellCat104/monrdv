@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
+import { etatPatient, resumeEchange } from '@/lib/file-attente'
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Calendar, Plus, Check, X, Clock, Banknote, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing, MessageSquare } from 'lucide-react'
@@ -484,43 +485,24 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                   <span className="truncate">{a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}</span>
                   {a.walk_in && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Sans RDV</span>}
 
-                  {/* Attend depuis… — la durée, pas seulement le fait */}
-                  {a.queue_status === 'arrive' && minutesDepuis(a.queue_arrived_at) != null && (
-                    <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                      Attend depuis {minutesDepuis(a.queue_arrived_at)} min
+                  {/* UNE seule étiquette d'état, la même règle que chez le
+                      médecin (lib/file-attente). « Présent » ne cohabite plus
+                      avec « Attend depuis » : c'était deux mots pour un fait,
+                      et « Présent » survivait à la consultation. */}
+                  {etatPatient(a) && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${etatPatient(a)!.couleur}`}>
+                      {etatPatient(a)!.label}
                     </span>
                   )}
 
-                  {/* Le médecin a ouvert le dossier : il est avec lui */}
-                  {a.queue_status === 'en_consultation' && (
-                    <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                      En consultation{minutesDepuis(a.queue_started_at) != null ? ` · ${minutesDepuis(a.queue_started_at)} min` : ''}
+                  {/* Ce qui vient du médecin : on le LIT ici. Le geste se fait
+                      dans le panneau « Médecin », au bout de la ligne. Avant,
+                      deux de ces pastilles se cliquaient et deux non, sans que
+                      rien ne les distingue. */}
+                  {resumeEchange(a as never) && (
+                    <span className="text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full max-w-[260px] truncate">
+                      {resumeEchange(a as never)}
                     </span>
-                  )}
-
-                  {/* À reprogrammer : la consigne se solde ici même */}
-                  {a.reprogrammer_jours != null && (
-                    <button
-                      onClick={() => patchRdv(a.id, { reprogrammer_jours: null })}
-                      title="Marquer la consigne comme traitée"
-                      className="text-[10px] font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap"
-                    >
-                      À revoir dans {a.reprogrammer_jours} j · fait ?
-                    </button>
-                  )}
-
-                  {/* Un mot échangé avec le médecin (v77). On montre le
-                      DERNIER, tronqué : dans un cabinet le mot fait six mots
-                      (« elle demande à décaler à jeudi »), et le lire sans
-                      cliquer est tout l'intérêt. Le bouton ouvre le fil. */}
-                  {Array.isArray(a.mots) && a.mots.length > 0 && (
-                    <button
-                      onClick={() => { setMotFor(a); setMotTexte(''); setMotErreur('') }}
-                      title="Ouvrir le fil avec le médecin"
-                      className="text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 px-1.5 py-0.5 rounded-full max-w-[260px] truncate"
-                    >
-                      💬 {a.mots[a.mots.length - 1].auteur === 'medecin' ? 'Dr' : a.mots[a.mots.length - 1].auteur_nom?.split(' ')[0] || 'Moi'} : {a.mots[a.mots.length - 1].contenu}
-                    </button>
                   )}
 
                   {/* Documents à remettre — un COMPTE, jamais le contenu : il
@@ -558,10 +540,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                     </button>
                   ))}
                 </div>
-              ) : a.attendance ? (
-                <span className={`text-[11px] px-2 py-0.5 rounded-full ${ATTENDANCE_COLORS[a.attendance as keyof typeof ATTENDANCE_COLORS] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {ATTENDANCE_LABELS[a.attendance as keyof typeof ATTENDANCE_LABELS] ?? a.attendance}
-                </span>
               ) : null}
 
               {/* RDV rattaché à un devis : l'argent de cette séance se saisit sur
@@ -601,16 +579,27 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 )
               )}
 
-              {/* Laisser un mot au médecin. Toujours présent : c'est le
-                  bouton qui permet d'ENTAMER un fil, là où la mention près du
-                  nom n'existe qu'une fois un mot écrit. */}
-              <button
-                onClick={() => { setMotFor(a); setMotTexte(''); setMotErreur('') }}
-                title="Laisser un mot au médecin"
-                className="flex items-center gap-1 text-xs text-violet-700 border border-violet-200 rounded-lg px-2 py-1 hover:bg-violet-50"
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-              </button>
+              {/* Le pendant exact du bouton « Accueil » chez le médecin :
+                  tout ce qui passe entre les deux postes pour CE patient. La
+                  pastille dit « il y a quelque chose », sans prétendre
+                  distinguer le lu du non lu — rien ne l'enregistre. */}
+              {(() => {
+                const enAttente = (Array.isArray(a.mots) && a.mots.length > 0) || a.reprogrammer_jours != null
+                return (
+                  <button
+                    onClick={() => { setMotFor(a); setMotTexte(''); setMotErreur('') }}
+                    title="Échanger avec le médecin"
+                    className={`relative flex items-center gap-1 text-xs rounded-lg px-2 py-1 border transition-colors ${
+                      enAttente
+                        ? 'border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100'
+                        : 'border-gray-200 text-gray-500 hover:border-violet-300 hover:text-violet-700'
+                    }`}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" /> Médecin
+                    {enAttente && <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-violet-500" />}
+                  </button>
+                )
+              })()}
 
               {/* Déplacer */}
               {permissions.manage_appointments && a.amount_paid == null && (
@@ -858,7 +847,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <MessageSquare className="h-4 w-4 text-violet-600" />
-              Mot au médecin — {motFor?.patient ? `${motFor.patient.first_name} ${motFor.patient.last_name}` : ''}
+              Médecin — {motFor?.patient ? `${motFor.patient.first_name} ${motFor.patient.last_name}` : ''}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
@@ -875,6 +864,28 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                     <p className="text-gray-800 whitespace-pre-wrap">{m.contenu}</p>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Ce que le médecin demande, et le geste pour le solder — ici,
+                et plus sur une pastille à côté du nom : une pastille qui se
+                clique à côté d'une pastille qui s'affiche, personne ne sait
+                laquelle est laquelle. */}
+            {motFor?.reprogrammer_jours != null && (
+              <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 flex items-start gap-2">
+                <CalendarClock className="h-4 w-4 mt-0.5 shrink-0" />
+                <span className="flex-1">
+                  Le médecin demande de le revoir dans <strong>{motFor.reprogrammer_jours} jours</strong>.
+                </span>
+                <button
+                  onClick={async () => {
+                    await patchRdv(motFor.id, { reprogrammer_jours: null })
+                    setMotFor((prev) => prev ? { ...prev, reprogrammer_jours: null } : prev)
+                  }}
+                  className="text-xs font-semibold bg-amber-200/70 hover:bg-amber-200 rounded-lg px-2 py-1 shrink-0"
+                >
+                  C&apos;est fait
+                </button>
               </div>
             )}
 

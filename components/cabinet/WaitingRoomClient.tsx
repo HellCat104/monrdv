@@ -4,16 +4,20 @@
 // dans le circuit Arrivé → En consultation → Parti.
 import { useCallback, useEffect, useState } from 'react'
 import { getNowInMaroc, formatTime, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
+import { etatPatient } from '@/lib/file-attente'
 import { format } from 'date-fns'
 import { Armchair, LogIn, Stethoscope, LogOut, RotateCcw, BellRing } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
 
-const QUEUE: { key: string; label: string; icon: typeof LogIn; chip: string }[] = [
-  { key: 'arrive',          label: 'Arrivé',          icon: LogIn,       chip: 'bg-blue-100 text-blue-700' },
-  { key: 'en_consultation', label: 'En consultation', icon: Stethoscope, chip: 'bg-green-100 text-green-700' },
-  { key: 'parti',           label: 'Parti',           icon: LogOut,      chip: 'bg-gray-200 text-gray-600' },
+// Les trois boutons du circuit. La COULEUR de l'état, elle, n'est plus ici :
+// elle vient de lib/file-attente, pour que les trois écrans du cabinet
+// nomment et colorent un même état de la même façon.
+const QUEUE: { key: string; label: string; icon: typeof LogIn }[] = [
+  { key: 'arrive',          label: 'Arrivé',          icon: LogIn },
+  { key: 'en_consultation', label: 'En consultation', icon: Stethoscope },
+  { key: 'parti',           label: 'Parti',           icon: LogOut },
 ]
 
 export default function WaitingRoomClient() {
@@ -100,7 +104,6 @@ export default function WaitingRoomClient() {
       ) : (
         <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50">
           {appts.map((a) => {
-            const current = QUEUE.find((q) => q.key === a.queue_status)
             return (
               <div key={a.id} className="flex items-center gap-3 p-3.5 flex-wrap">
                 <div className="text-sm font-semibold text-gray-900 w-14 shrink-0">{formatTime(a.time)}</div>
@@ -111,13 +114,12 @@ export default function WaitingRoomClient() {
                   <p className="text-xs text-gray-500 truncate">{a.consultation_type?.name || a.notes || 'Consultation'}</p>
                 </div>
 
-                {current && (
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${current.chip}`}>
-                    {current.label}
-                    {a.queue_status === 'arrive' && minutesDepuis(a.queue_arrived_at) != null
-                      && ` · ${minutesDepuis(a.queue_arrived_at)} min`}
-                    {a.queue_status === 'en_consultation' && minutesDepuis(a.queue_started_at) != null
-                      && ` · ${minutesDepuis(a.queue_started_at)} min`}
+                {/* Même phrase que sur les deux agendas (lib/file-attente) :
+                    trois écrans qui nomment différemment le même état, c'est
+                    trois choses à apprendre pour une seule. */}
+                {etatPatient(a) && (
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${etatPatient(a)!.couleur}`}>
+                    {etatPatient(a)!.label}
                   </span>
                 )}
 
