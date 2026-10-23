@@ -23,9 +23,19 @@ export interface CertField {
   options?: readonly string[]   // pour 'select'
 }
 
+/** Famille de document, pour regrouper les modèles derrière un seul bouton.
+ *
+ *  Un praticien ne cherche pas « un modèle parmi quinze », il cherche une
+ *  CHOSE À FAIRE : une ordonnance, un certificat, un courrier à un confrère,
+ *  une demande d'examen. La famille est ce qui permet de ne lui montrer que
+ *  les modèles de la chose qu'il a choisie — et, au passage, de ne jamais
+ *  proposer un consentement dentaire à un généraliste. */
+export type FamilleDocument = 'certificat' | 'courrier' | 'examen' | 'consentement'
+
 export interface CertTemplate {
   key: string
   title: string
+  famille: FamilleDocument
   /** Document signé PAR LE PATIENT, et non délivré par le praticien. Change
    *  la mise en page imprimée : deux signatures, et la mention « lu et
    *  approuvé ». Les clés commencent toutes par `consent_`, ce qui permet au
@@ -85,7 +95,7 @@ const piedConsent = () =>
 export const CERT_TEMPLATES: CertTemplate[] = [
   {
     key: 'repos',
-    title: 'Certificat médical de repos',
+    famille: 'certificat',    title: 'Certificat médical de repos',
     extraField: { key: 'jours', label: 'Nombre de jours de repos', type: 'number', placeholder: '3' },
     build: (p, d, jours) =>
       entete(d).replace('{PATIENT}', identite(p)) +
@@ -94,7 +104,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'sport',
-    title: 'Certificat d’aptitude au sport',
+    famille: 'certificat',    title: 'Certificat d’aptitude au sport',
     extraField: { key: 'sport', label: 'Sport / activité', type: 'text', placeholder: 'football' },
     build: (p, d, sport) =>
       entete(d).replace('{PATIENT}', identite(p)) +
@@ -103,7 +113,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'scolaire',
-    title: 'Certificat d’aptitude scolaire',
+    famille: 'certificat',    title: 'Certificat d’aptitude scolaire',
     build: (p, d) =>
       entete(d).replace('{PATIENT}', identite(p)) +
       `L'examen clinique de ce jour ne révèle aucune contre-indication apparente à la scolarité ni aux activités physiques scolaires.` +
@@ -111,7 +121,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'permis',
-    title: 'Certificat médical — permis de conduire',
+    famille: 'certificat',    title: 'Certificat médical — permis de conduire',
     extraField: { key: 'categorie', label: 'Catégorie du permis', type: 'text', placeholder: 'B' },
     build: (p, d, cat) =>
       entete(d).replace('{PATIENT}', identite(p)) +
@@ -120,7 +130,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'courrier',
-    title: 'Courrier au confrère',
+    famille: 'courrier',    title: 'Courrier au confrère',
     extraField: { key: 'destinataire', label: 'Confrère destinataire', type: 'text', placeholder: 'Dr. X, cardiologue' },
     build: (p, d, dest) =>
       `Cher confrère,\n\nJe vous adresse ${identite(p)} pour avis spécialisé et prise en charge.\n\n` +
@@ -130,7 +140,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'analyses',
-    title: 'Demande d’analyses',
+    famille: 'examen',    title: 'Demande d’analyses',
     build: (p, d) =>
       `Demande d'examens biologiques pour :\n\n${identite(p)}\n\n` +
       `Examens demandés :\n\n\n` +
@@ -138,7 +148,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'imagerie',
-    title: 'Demande d’imagerie médicale',
+    famille: 'examen',    title: 'Demande d’imagerie médicale',
     extraFields: [
       { key: 'examen', label: 'Examen demandé', type: 'select', options: EXAMENS_IMAGERIE },
       { key: 'region', label: 'Région ou organe exploré', type: 'text', placeholder: 'abdomen, genou droit, thorax…' },
@@ -163,7 +173,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   // personne — la loi comme le juge regardent l'information réellement donnée.
   {
     key: 'consent_extraction',
-    title: 'Consentement éclairé — extraction dentaire',
+    famille: 'consentement',    title: 'Consentement éclairé — extraction dentaire',
     consentement: true,
     extraField: { key: 'dents', label: 'Dent(s) concernée(s)', type: 'text', placeholder: '36, 37' },
     build: (p, d, dents) =>
@@ -180,7 +190,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'consent_sagesse',
-    title: 'Consentement éclairé — extraction de dent de sagesse',
+    famille: 'consentement',    title: 'Consentement éclairé — extraction de dent de sagesse',
     consentement: true,
     extraField: { key: 'dents', label: 'Dent(s) de sagesse', type: 'text', placeholder: '38, 48' },
     build: (p, d, dents) =>
@@ -193,7 +203,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'consent_implant',
-    title: 'Consentement éclairé — pose d\'implant',
+    famille: 'consentement',    title: 'Consentement éclairé — pose d\'implant',
     consentement: true,
     extraField: { key: 'site', label: 'Site(s) implantaire(s)', type: 'text', placeholder: '16' },
     build: (p, d, site) =>
@@ -210,7 +220,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'consent_endo',
-    title: 'Consentement éclairé — traitement de racine',
+    famille: 'consentement',    title: 'Consentement éclairé — traitement de racine',
     consentement: true,
     extraField: { key: 'dents', label: 'Dent(s) concernée(s)', type: 'text', placeholder: '26' },
     build: (p, d, dents) =>
@@ -222,7 +232,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'consent_prothese',
-    title: 'Consentement éclairé — prothèse',
+    famille: 'consentement',    title: 'Consentement éclairé — prothèse',
     consentement: true,
     extraField: { key: 'travail', label: 'Travail prévu', type: 'text', placeholder: 'couronne céramique sur 16' },
     build: (p, d, travail) =>
@@ -234,7 +244,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'consent_ortho',
-    title: 'Consentement éclairé — traitement orthodontique',
+    famille: 'consentement',    title: 'Consentement éclairé — traitement orthodontique',
     consentement: true,
     extraField: { key: 'duree', label: 'Durée annoncée (mois)', type: 'number', placeholder: '18' },
     build: (p, d, duree) =>
@@ -251,7 +261,7 @@ export const CERT_TEMPLATES: CertTemplate[] = [
   },
   {
     key: 'consent_mineur',
-    title: 'Autorisation de soins pour un mineur',
+    famille: 'consentement',    title: 'Autorisation de soins pour un mineur',
     consentement: true,
     extraField: { key: 'soins', label: 'Soins envisagés', type: 'text', placeholder: 'soins conservateurs et extraction' },
     build: (p, d, soins) =>
@@ -267,8 +277,28 @@ export const CERT_TEMPLATES: CertTemplate[] = [
       `Fait le ${formatDateFr(new Date())}.`,
   },
   {
+    // Le second usage du courrier au confrère : non plus demander un avis,
+    // mais transmettre. Le médecin qui adresse son patient résume ce qu'il
+    // sait — et sans trame, il écrit trois lignes ou rien.
+    key: 'resume',
+    famille: 'courrier',
+    title: 'Résumé médical pour un confrère',
+    extraField: { key: 'destinataire', label: 'Confrère destinataire', type: 'text', placeholder: 'Dr. X, cardiologue' },
+    build: (p, d, extra) =>
+      entete(d).replace('{PATIENT}', identite(p)) +
+      `\n\nCher confrère${extra ? ` (${extra})` : ''},\n\n` +
+      `Je vous adresse ${identite(p)}, que je suis pour :\n\n` +
+      `Antécédents :\n\n` +
+      `Traitement en cours :\n\n` +
+      `Évolution et examen clinique :\n\n` +
+      `Examens déjà réalisés :\n\n` +
+      `Je reste à votre disposition pour tout complément.\n\n` +
+      `Confraternellement,\n\n` +
+      pied(),
+  },
+  {
     key: 'libre',
-    title: 'Certificat libre',
+    famille: 'certificat',    title: 'Certificat libre',
     build: (p, d) =>
       entete(d).replace('{PATIENT}', identite(p)) +
       `\n\n` +

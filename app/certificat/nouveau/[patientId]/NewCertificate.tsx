@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select'
-import { CERT_TEMPLATES } from '@/lib/certificats'
+import { CERT_TEMPLATES, type FamilleDocument } from '@/lib/certificats'
 import { ArrowLeft, FileText, Printer } from 'lucide-react'
 
 interface Patient { id: string; first_name: string; last_name: string; age?: number | null; cin?: string | null; parent1_name?: string | null; parent2_name?: string | null }
@@ -24,8 +24,11 @@ function sansPrefixe(titre: string): string {
   return reste.charAt(0).toUpperCase() + reste.slice(1)
 }
 
-export default function NewCertificate({ doctorId, doctorName, patient, appointmentId, backHref }: {
+export default function NewCertificate({ doctorId, doctorName, patient, appointmentId, backHref, famille }: {
   doctorId: string; doctorName: string; patient: Patient; appointmentId: string | null; backHref: string
+  /** Ne montrer que les modèles de cette famille. Sans elle, tous — c'est le
+   *  comportement des écrans qui n'ont pas encore de regroupement. */
+  famille?: FamilleDocument
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -41,12 +44,18 @@ export default function NewCertificate({ doctorId, doctorName, patient, appointm
     )
   }
 
-  const [type, setType] = useState('repos')
+  // Les modèles de la famille demandée, et le premier d'entre eux comme choix
+  // de départ. Sans ça, le médecin qui clique « Courrier » arrivait sur un
+  // certificat de repos qu'il devait d'abord remplacer.
+  const modeles = famille ? CERT_TEMPLATES.filter((t) => t.famille === famille) : CERT_TEMPLATES
+  const premier = modeles[0]?.key ?? 'repos'
+
+  const [type, setType] = useState(premier)
   const [motif, setMotif] = useState('')
   const [extra, setExtra] = useState('')
   // Valeurs des champs multiples, dans l'ordre de tpl.extraFields
   const [extras, setExtras] = useState<string[]>([])
-  const [content, setContent] = useState(() => build('repos', ''))
+  const [content, setContent] = useState(() => build(premier, ''))
   const [saving, setSaving] = useState(false)
 
   const tpl = CERT_TEMPLATES.find((t) => t.key === type)
@@ -105,22 +114,33 @@ export default function NewCertificate({ doctorId, doctorName, patient, appointm
           <Select value={type} onValueChange={changeType}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {/* Deux familles, et la séparation se voit : un certificat
-                  atteste quelque chose à un tiers, un consentement est signé
-                  PAR le patient. Les confondre au moment de choisir, c'est
-                  imprimer le mauvais document. */}
-              <SelectGroup>
-                <SelectLabel>Certificats</SelectLabel>
-                {CERT_TEMPLATES.filter((t) => !t.consentement).map((t) => (
-                  <SelectItem key={t.key} value={t.key}>{t.title}</SelectItem>
-                ))}
-              </SelectGroup>
-              <SelectGroup>
-                <SelectLabel>Consentements éclairés</SelectLabel>
-                {CERT_TEMPLATES.filter((t) => t.consentement).map((t) => (
+              {/* Une famille demandée (le médecin a choisi « Courrier »,
+                  « Demande d'examen »…) : on ne montre QUE ses modèles. Sans
+                  elle, les deux groupes d'avant — c'est le comportement des
+                  écrans qui n'ont pas encore de regroupement. */}
+              {famille ? (
+                modeles.map((t) => (
                   <SelectItem key={t.key} value={t.key}>{sansPrefixe(t.title)}</SelectItem>
-                ))}
-              </SelectGroup>
+                ))
+              ) : (
+                <>
+                  {/* Un certificat atteste quelque chose à un tiers, un
+                      consentement est signé PAR le patient. Les confondre au
+                      moment de choisir, c'est imprimer le mauvais document. */}
+                  <SelectGroup>
+                    <SelectLabel>Certificats</SelectLabel>
+                    {CERT_TEMPLATES.filter((t) => !t.consentement).map((t) => (
+                      <SelectItem key={t.key} value={t.key}>{t.title}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Consentements éclairés</SelectLabel>
+                    {CERT_TEMPLATES.filter((t) => t.consentement).map((t) => (
+                      <SelectItem key={t.key} value={t.key}>{sansPrefixe(t.title)}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </>
+              )}
             </SelectContent>
           </Select>
           {tpl?.consentement && (

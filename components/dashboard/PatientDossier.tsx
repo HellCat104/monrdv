@@ -17,6 +17,7 @@ import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
 import QuotesCard from '@/components/dashboard/QuotesCard'
+import MenuDocuments from '@/components/dashboard/MenuDocuments'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import PerioCard from '@/components/dashboard/PerioCard'
@@ -33,7 +34,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getInitials, formatDateFr, formatDateShort, formatDateTimeFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { withConsultationSummary } from '@/lib/consultation-summary'
-import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, RECALL_OUVERTS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
+import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, RECALL_OUVERTS, isGeneralDoctor, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
   type PaymentMethod,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef, type SessionPackage } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
@@ -953,8 +954,18 @@ export default function PatientDossier({
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
               <div className="space-y-4 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <a href={`/ordonnance/patient/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-3 py-2"><Pill className="h-4 w-4" /> Nouvelle ordonnance</a>
-              <a href={`/certificat/nouveau/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg px-3 py-2 hover:bg-primary-50"><FileText className="h-4 w-4" /> Nouveau certificat</a>
+              {/* BRANCHE GÉNÉRALISTE : un seul bouton « Documents » pour les
+                  cinq choses qu'il remet au patient. Le dentiste et le
+                  pédiatre gardent leurs deux boutons — leurs documents ne sont
+                  pas les mêmes, et cette liste n'a pas été pensée pour eux. */}
+              {isGeneralDoctor(specialties) ? (
+                <MenuDocuments patientId={patient.id} backHref={`/patients/${patient.id}`} />
+              ) : (
+                <>
+                  <a href={`/ordonnance/patient/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-3 py-2"><Pill className="h-4 w-4" /> Nouvelle ordonnance</a>
+                  <a href={`/certificat/nouveau/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg px-3 py-2 hover:bg-primary-50"><FileText className="h-4 w-4" /> Nouveau certificat</a>
+                </>
+              )}
               <a href={`/dossier/${patient.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50"><Printer className="h-4 w-4" /> Imprimer</a>
             </div>
             <div className={sec}>

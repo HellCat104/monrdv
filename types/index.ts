@@ -790,6 +790,20 @@ export const MUTUELLES_MAROC = ['CNSS (AMO)', 'CNOPS', 'FAR', 'Assurance privée
 export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const
 
 // Spécialités « pédiatriques » → active courbes de croissance + calendrier vaccinal
+/** Médecine générale — la branche sur laquelle on travaille.
+ *
+ *  Il n'existait pas de détecteur pour elle : le généraliste était le chemin
+ *  PAR DÉFAUT, celui qu'on obtient quand aucune greffe de spécialité ne
+ *  s'applique. Or le pédiatre suit ce même chemin, avec ses courbes et ses
+ *  vaccins en plus : modifier « le défaut » touchait donc aussi son écran.
+ *  Une garde explicite est la seule façon de ne toucher qu'une branche.
+ *
+ *  « Médecin généraliste » en toutes lettres, et non « général » seul :
+ *  « Chirurgien général » contient le mot sans être de cette branche. */
+export function isGeneralDoctor(specialties: (string | null | undefined)[]): boolean {
+  return specialties.some((s) => !!s && /m[ée]decin g[ée]n[ée]raliste/i.test(s))
+}
+
 export function isPediatricDoctor(specialties: (string | null | undefined)[]): boolean {
   return specialties.some((s) => !!s && /p[ée]diatr/i.test(s))
 }

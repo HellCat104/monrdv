@@ -324,6 +324,20 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      les deux doivent changer ensemble.
      `notify pgrst, 'reload schema';` ensuite.
 
+ 79. `migration_v79_vaccinations.sql`  
+     Migration v79 — `vaccinations` : les vaccins administrés au cabinet,
+     BRANCHE GÉNÉRALISTE. Libellé libre (la liste de l'écran est une aide, pas
+     une contrainte : un vaccin du voyageur ne figure dans aucune nomenclature
+     courte), date d'administration, lot, dose, date de rappel indicative.
+     Distincte de `patients.vaccines` (v27), qui porte le calendrier
+     PÉDIATRIQUE sous la forme `{clé: date}` : un vaccin d'adulte a un lot et
+     peut être répété, ce qu'une clé unique ne sait pas représenter, et y
+     mélanger une seconde forme casserait le calendrier qui parcourt ces clés.
+     Table nouvelle, donc GRANTS explicites et RLS côté médecin seulement —
+     la secrétaire n'a aucune politique : un acte médical ne relève pas d'elle.
+     Additive ; sans elle l'écran s'affiche et le dit, mais n'enregistre pas.
+     `notify pgrst, 'reload schema';` ensuite.
+
  77. `migration_v77_mot_sur_le_rdv.sql`  
      Migration v77 — `appointment_messages` : un mot entre le médecin et
      l'accueil, ATTACHÉ au rendez-vous et non dans un fil général, parce qu'un

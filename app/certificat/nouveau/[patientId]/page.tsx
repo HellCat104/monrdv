@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
 import { ageFromBirthDate } from '@/lib/utils'
 import NewCertificate from './NewCertificate'
+import type { FamilleDocument } from '@/lib/certificats'
 
 export const dynamic = 'force-dynamic'
 
