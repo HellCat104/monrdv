@@ -24,8 +24,12 @@ function sansPrefixe(titre: string): string {
   return reste.charAt(0).toUpperCase() + reste.slice(1)
 }
 
-export default function NewCertificate({ doctorId, doctorName, patient, appointmentId, backHref, famille }: {
+export default function NewCertificate({ doctorId, doctorName, patient, appointmentId, backHref, famille, resume }: {
   doctorId: string; doctorName: string; patient: Patient; appointmentId: string | null; backHref: string
+  /** Le dossier du patient déjà mis en forme, que les courriers insèrent sous
+   *  le motif. Vide quand on ne sait rien de lui, ou hors courrier : les
+   *  modèles retombent alors sur leur trame à remplir. */
+  resume?: string
   /** Ne montrer que les modèles de cette famille. Sans elle, tous — c'est le
    *  comportement des écrans qui n'ont pas encore de regroupement. */
   famille?: FamilleDocument
@@ -41,6 +45,7 @@ export default function NewCertificate({ doctorId, doctorName, patient, appointm
       { name: doctorName },
       extra,
       extras,
+      resume,
     )
   }
 
