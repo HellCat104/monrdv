@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getInitials, formatDateShort } from '@/lib/utils'
+import { brancheDeveloppee } from '@/lib/plan'
 import {
   CheckCircle2, XCircle, FileText, Clock, Users,
   ToggleLeft, ToggleRight, CalendarDays, LogOut, RefreshCw, ArrowLeftRight, UserCheck,
@@ -193,6 +194,13 @@ export default function AdminPage() {
   // supprimer) — d'où la confirmation explicite.
   function askTogglePlan(doctor: DoctorRow) {
     const target = doctor.plan === 'complet' ? 'agenda' : 'complet'
+    // Le Cabinet complet est l'interface du médecin, adaptée à sa spécialité.
+    // Sans branche développée, il n'y a rien à lui ouvrir : on le dit ici
+    // plutôt que de laisser cliquer, échouer, et se demander pourquoi.
+    if (target === 'complet' && !brancheDeveloppee([doctor.specialty])) {
+      showToast(`Le Cabinet complet n'existe pas encore pour « ${doctor.specialty} ». Branches développées : médecine générale, pédiatrie, dentisterie.`, 'error')
+      return
+    }
     setPlanDialog({ open: true, id: doctor.id, name: doctor.name, target })
   }
 

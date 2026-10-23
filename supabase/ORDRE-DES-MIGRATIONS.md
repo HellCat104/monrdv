@@ -305,6 +305,25 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      encarts ne s'affichent simplement pas.
      `notify pgrst, 'reload schema';` ensuite.
 
+ 78. `migration_v78_branches_developpees.sql`  
+     Migration v78 — pas de branche développée, pas de Cabinet complet.
+     MonRDV est un tronc (le forfait Agenda, la relation secrétaire-médecin,
+     commune à toutes les spécialités) et des branches (le Cabinet complet
+     n'est que l'interface du MÉDECIN, adaptée à sa spécialité). Trois
+     branches à ce jour : médecine générale, pédiatrie, dentisterie. Une
+     spécialité sans branche n'a aucune interface de consultation à proposer,
+     et son forfait s'arrête à la prise de rendez-vous. La règle est tenue par
+     un DÉCLENCHEUR, pas par le code : `canAccess` est appelé depuis
+     quarante-six endroits, et l'un d'eux finirait par l'oublier. Nommé
+     `z_trg_forfait_selon_branche` à dessein, pour passer APRÈS
+     `trg_protect_doctor_plan` (v63), qui restaure sinon l'ancien forfait par
+     -dessus. Met aussi à niveau les comptes existants. Rien n'est supprimé :
+     un cabinet dont la branche s'ouvrira retrouve ses données en repassant au
+     forfait complet. Attention — la liste des branches vit AUSSI dans
+     lib/plan.ts (`brancheDeveloppee`), pour expliquer le blocage à l'écran :
+     les deux doivent changer ensemble.
+     `notify pgrst, 'reload schema';` ensuite.
+
  77. `migration_v77_mot_sur_le_rdv.sql`  
      Migration v77 — `appointment_messages` : un mot entre le médecin et
      l'accueil, ATTACHÉ au rendez-vous et non dans un fil général, parce qu'un

@@ -65,3 +65,29 @@ export function planFeatures(plan?: string | null): PlanFeatures {
 export function canAccess(plan: string | null | undefined, feature: keyof PlanFeatures): boolean {
   return planFeatures(plan)[feature]
 }
+
+/** Cette spécialité a-t-elle une interface médecin développée ?
+ *
+ *  MonRDV est un TRONC et des BRANCHES. Le tronc — le forfait Agenda — est la
+ *  relation secrétaire ↔ médecin, et il vaut pour toutes les spécialités. Le
+ *  Cabinet complet n'est rien d'autre que l'interface du MÉDECIN, adaptée à
+ *  sa spécialité. Trois branches existent : médecine générale, pédiatrie,
+ *  dentisterie.
+ *
+ *  Une spécialité sans branche n'a donc aucune interface de consultation à
+ *  proposer : son forfait s'arrête à la prise de rendez-vous. Une psychologue
+ *  ne doit pas trouver « demande d'examen de laboratoire » dans ses
+ *  documents.
+ *
+ *  LA RÈGLE EST TENUE PAR LA BASE (migration v78, `branche_developpee`), pas
+ *  par cette fonction : `canAccess` est appelé depuis quarante-six endroits,
+ *  et l'un d'eux finirait par l'oublier. Celle-ci sert à EXPLIQUER — dire à
+ *  l'écran d'administration pourquoi le Cabinet complet n'est pas proposé.
+ *  Les deux listes doivent être modifiées ensemble le jour où une branche
+ *  s'ouvre.
+ *
+ *  « Médecin généraliste » en toutes lettres, et non « général » seul :
+ *  « Chirurgien général » contient le mot sans être de cette branche. */
+export function brancheDeveloppee(specialties: (string | null | undefined)[]): boolean {
+  return specialties.some((s) => !!s && /m[ée]decin g[ée]n[ée]raliste|p[ée]diatr|dent|stomato|orthodont|odonto/i.test(s))
+}

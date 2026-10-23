@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendApprovalEmail, sendRejectionEmail } from '@/lib/email'
+import { brancheDeveloppee } from '@/lib/plan'
 
 // PATCH /api/admin/doctors/[id] — approve ou reject
 export async function PATCH(
@@ -32,6 +33,28 @@ export async function PATCH(
   if (action === 'set_plan') {
     if (plan !== 'agenda' && plan !== 'complet') {
       return NextResponse.json({ error: 'Forfait invalide' }, { status: 400 })
+    }
+
+    // Le Cabinet complet n'est que l'interface du MÉDECIN, adaptée à sa
+    // spécialité. Sans branche développée, il n'y a aucune interface à
+    // vendre. La base le corrigerait de toute façon (v78) — mais en silence,
+    // et l'écran afficherait « Cabinet complet ✓ » sur un compte qui ne
+    // l'aurait pas. Mieux vaut le refuser en le disant.
+    if (plan === 'complet') {
+      const { data: medecin } = await adminDb
+        .from('doctors')
+        .select('specialty, specialties')
+        .eq('id', params.id)
+        .maybeSingle()
+      const specialites = [
+        medecin?.specialty,
+        ...(((medecin?.specialties as string[] | null) ?? [])),
+      ]
+      if (!brancheDeveloppee(specialites)) {
+        return NextResponse.json({
+          error: `Le Cabinet complet n'existe pas encore pour cette spécialité (${medecin?.specialty ?? 'non renseignée'}). Les branches développées sont : médecine générale, pédiatrie, dentisterie.`,
+        }, { status: 409 })
+      }
     }
 
     const { error: updateErr } = await adminDb
