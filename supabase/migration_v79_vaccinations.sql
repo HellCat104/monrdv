@@ -82,7 +82,12 @@ create policy "Médecin : enregistrer un vaccin" on public.vaccinations
 drop policy if exists "Médecin : corriger un vaccin" on public.vaccinations;
 create policy "Médecin : corriger un vaccin" on public.vaccinations
   for update
-  using (doctor_id in (select id from public.doctors where email = auth.jwt() ->> 'email'));
+  using (doctor_id in (select id from public.doctors where email = auth.jwt() ->> 'email'))
+  -- `with check` en plus de `using` : sans lui, un médecin pouvait corriger sa
+  -- propre ligne en y inscrivant l'identifiant d'un confrère, et le vaccin
+  -- changeait de cabinet. `using` dit ce qu'on peut toucher, `with check` dit
+  -- ce que la ligne a le droit de devenir.
+  with check (doctor_id in (select id from public.doctors where email = auth.jwt() ->> 'email'));
 
 drop policy if exists "Médecin : effacer un vaccin" on public.vaccinations;
 create policy "Médecin : effacer un vaccin" on public.vaccinations
