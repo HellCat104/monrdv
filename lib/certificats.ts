@@ -77,6 +77,13 @@ const entete = (d: CertDoctor) =>
 const pied = () =>
   `\nCertificat établi à la demande de l'intéressé(e) et remis en main propre pour faire valoir ce que de droit.\n\nFait le ${formatDateFr(new Date())}.`
 
+// Une lettre à un confrère n'atteste rien à un tiers : elle transmet. Elle ne
+// doit donc ni s'ouvrir sur « je soussigné… certifie avoir examiné », ni se
+// fermer sur « remis en main propre pour faire valoir ce que de droit » — ces
+// formules sont celles du certificat, et sur un courrier elles font faux.
+const piedLettre = (d: CertDoctor, dest: string) =>
+  `\nÀ l'attention de : ${dest || '…'}\nDr. ${d.name} — le ${formatDateFr(new Date())}`
+
 // Un consentement n'est pas un certificat : il n'atteste rien à un tiers, il
 // constate que le patient a compris ce qu'on lui propose et qu'il l'accepte.
 // D'où un en-tête à la première personne DU PATIENT, et un pied qui rappelle
@@ -152,8 +159,8 @@ export const CERT_TEMPLATES: CertTemplate[] = [
       `Cher confrère,\n\nJe vous adresse ${identite(p)} pour avis spécialisé et prise en charge.\n\n` +
       `Motif d'adressage :\n\n\n` +
       (resume ? `${resume}\n\n` : `Renseignements cliniques :\n\n\n`) +
-      `Vous remerciant de votre retour, veuillez agréer, cher confrère, mes salutations confraternelles.\n\n` +
-      `À l'attention de : ${dest || '…'}\nDr. ${d.name} — le ${formatDateFr(new Date())}`,
+      `Vous remerciant de votre retour, veuillez agréer, cher confrère, mes salutations confraternelles.\n` +
+      piedLettre(d, dest),
   },
   {
     key: 'analyses',
@@ -315,9 +322,8 @@ export const CERT_TEMPLATES: CertTemplate[] = [
     // pour une fiche neuve — un résumé médical d'un patient dont on ne sait
     // rien, ça existe aussi.
     build: (p, d, extra, _extras, resume) =>
-      entete(d).replace('{PATIENT}', identite(p)) +
-      `\n\nCher confrère${extra ? ` (${extra})` : ''},\n\n` +
-      `Je vous adresse ${identite(p)}, que je suis.\n\n` +
+      `Cher confrère,\n\n` +
+      `Je vous transmets la synthèse du dossier de ${identite(p)}, que je suis.\n\n` +
       (resume
         ? `${resume}\n\n`
         : `Antécédents :\n\n` +
@@ -325,8 +331,8 @@ export const CERT_TEMPLATES: CertTemplate[] = [
           `Évolution et examen clinique :\n\n` +
           `Examens déjà réalisés :\n\n`) +
       `Je reste à votre disposition pour tout complément.\n\n` +
-      `Confraternellement,\n\n` +
-      pied(),
+      `Confraternellement,\n` +
+      piedLettre(d, extra),
   },
   {
     key: 'libre',
