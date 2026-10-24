@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
 import { lignesEnTete, type PraticienEnTete } from '@/lib/document-entete'
-import { formatDateFr } from '@/lib/utils'
+import { formatDateFr, getNowInMaroc } from '@/lib/utils'
 import { VACCINS_ADULTE } from '@/lib/vaccins-adulte'
 import { Syringe, Printer, Save, Check, AlertTriangle, ArrowLeft } from 'lucide-react'
 
@@ -30,6 +30,26 @@ interface Fait {
   lot: string | null
   dose: string | null
   rappel_le: string | null
+}
+
+/** Un jour de calendrier écrit depuis les composantes LOCALES de la date.
+ *  `toISOString()` passe par UTC et fait reculer le jour dès que l'heure
+ *  locale est en avance — ce qui est le cas au Maroc. */
+function jourLocal(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** La date de rappel suggérée pour un vaccin administré ce jour-là. Vide
+ *  quand le vaccin n'a pas de rappel standard, ou qu'il est saisi à la main :
+ *  proposer une date au hasard serait pire que de n'en proposer aucune. */
+function rappelPour(libelle: string, jour: string): string {
+  const connu = VACCINS_ADULTE.find((x) => x.libelle === libelle)
+  if (!connu?.rappelMois || !/^\d{4}-\d{2}-\d{2}$/.test(jour)) return ''
+  const [a, m, j] = jour.split('-').map(Number)
+  const d = new Date(a, m - 1, j)
+  d.setMonth(d.getMonth() + connu.rappelMois)
+  return jourLocal(d)
 }
 
 export default function VaccinClient({
@@ -47,13 +67,19 @@ export default function VaccinClient({
   const supabase = createClient()
   const router = useRouter()
 
-  const aujourdhui = new Date().toISOString().slice(0, 10)
+  // Le jour au Maroc, et pas en UTC : `toISOString()` recule d'une heure, donc
+  // d'un jour avant 1 h du matin — un vaccin administré à 00 h 30 était daté de
+  // la veille sur le certificat remis au patient.
+  const aujourdhui = jourLocal(getNowInMaroc())
   const [choix, setChoix] = useState(VACCINS_ADULTE[0].libelle)
   const [libelleLibre, setLibelleLibre] = useState('')
   const [date, setDate] = useState(aujourdhui)
   const [lot, setLot] = useState('')
   const [dose, setDose] = useState('')
-  const [rappel, setRappel] = useState('')
+  // Pré-rempli DÈS L'ARRIVÉE, pas seulement quand on change de vaccin : le cas
+  // le plus courant est d'accepter le vaccin proposé, et dans ce cas-là le
+  // rappel restait vide alors que l'écran annonçait « pré-rempli ».
+  const [rappel, setRappel] = useState(() => rappelPour(VACCINS_ADULTE[0].libelle, jourLocal(getNowInMaroc())))
   const [enregistre, setEnregistre] = useState(false)
   const [enCours, setEnCours] = useState(false)
   const [erreur, setErreur] = useState('')
@@ -66,14 +92,16 @@ export default function VaccinClient({
   function choisir(v: string) {
     setChoix(v)
     setErreur('')
-    const connu = VACCINS_ADULTE.find((x) => x.libelle === v)
-    if (connu?.rappelMois) {
-      const d = new Date(`${date}T00:00:00`)
-      d.setMonth(d.getMonth() + connu.rappelMois)
-      setRappel(d.toISOString().slice(0, 10))
-    } else {
-      setRappel('')
-    }
+    setRappel(rappelPour(v, date))
+  }
+
+  // Le rappel suit la date d'administration TANT QUE le médecin ne l'a pas
+  // fixé lui-même. Sans ce suivi, corriger « administré avant-hier » laissait
+  // un rappel compté depuis aujourd'hui ; et en écrasant systématiquement, on
+  // effaçait la date que le praticien venait de saisir à la main.
+  function changerDate(j: string) {
+    if (rappel === rappelPour(libelle, date)) setRappel(rappelPour(libelle, j))
+    setDate(j)
   }
 
   async function enregistrer() {
@@ -216,7 +244,7 @@ export default function VaccinClient({
               {/* Date d'ADMINISTRATION, pas de saisie : on rattrape souvent le
                   lendemain, et c'est elle qui compte pour le rappel. */}
               <Label htmlFor="vac-date">Administré le</Label>
-              <Input id="vac-date" type="date" value={date} max={aujourdhui} onChange={(e) => setDate(e.target.value)} disabled={enregistre} />
+              <Input id="vac-date" type="date" value={date} max={aujourdhui} onChange={(e) => changerDate(e.target.value)} disabled={enregistre} />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
