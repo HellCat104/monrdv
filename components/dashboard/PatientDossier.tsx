@@ -32,7 +32,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getInitials, formatDateFr, formatDateShort, formatDateTimeFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
+import { getInitials, formatDateFr, formatDateShort, formatDateTimeFr, getNowInMaroc, ageFromBirthDate, formatAge, isValidPhoneMaroc } from '@/lib/utils'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, RECALL_OUVERTS, isGeneralDoctor, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
   type PaymentMethod,
@@ -72,6 +72,14 @@ export default function PatientDossier({
   const nonPrescriber = isNonPrescriber(specialties)
 
   // Champs éditables de la fiche
+  // Nom, prénom et téléphone : ils s'affichaient en texte au milieu d'un
+  // formulaire, donc on les croyait verrouillés. Un prénom mal orthographié au
+  // guichet ou un patient qui change de numéro n'avaient aucune autre issue que
+  // de créer une seconde fiche — c'est-à-dire un doublon, avec son historique
+  // coupé en deux.
+  const [editFirstName, setEditFirstName] = useState(patient.first_name)
+  const [editLastName, setEditLastName] = useState(patient.last_name)
+  const [editPhone, setEditPhone] = useState(patient.phone ?? '')
   const [editAge, setEditAge] = useState(patient.age != null ? String(patient.age) : '')
   const [editBirthDate, setEditBirthDate] = useState(patient.birth_date ?? '')
   const [editSex, setEditSex] = useState<'M' | 'F' | ''>(patient.sex ?? '')
@@ -314,7 +322,18 @@ export default function PatientDossier({
     const etiquettes = enAttente && !dejaPosee(editConditions, enAttente)
       ? nettoyerEtiquettes([...editConditions, enAttente])
       : nettoyerEtiquettes(editConditions)
+    // Ces trois-là sont obligatoires en base : les vider ferait échouer tout
+    // l'enregistrement, allergies comprises, avec pour seul message
+    // « L'enregistrement a échoué ». On arrête avant, en disant quoi.
+    if (!editFirstName.trim() || !editLastName.trim() || !editPhone.trim()) {
+      setSaving(false)
+      alert('Le prénom, le nom et le téléphone sont obligatoires : une fiche sans eux ne se retrouve plus.')
+      return
+    }
     const updates = {
+      first_name: editFirstName.trim(),
+      last_name: editLastName.trim(),
+      phone: editPhone.trim(),
       age: ageFromBirthDate(editBirthDate) ?? (editAge ? Number(editAge) : null),
       birth_date: editBirthDate || null,
       sex: editSex || null,
@@ -375,6 +394,10 @@ export default function PatientDossier({
     // L'étiquette récupérée de la saisie en cours devient une pastille : sans
     // ça le champ garde son texte, et le praticien croit qu'elle n'est pas prise.
     setEditConditions(etiquettes); setSaisieEtiquette('')
+    // Le titre de la page, la liste des patients et les rendez-vous affichent
+    // le nom lu côté serveur : sans ce rafraîchissement, on corrigeait un
+    // prénom et l'en-tête gardait l'ancien, comme si rien n'avait été pris.
+    router.refresh()
     setSaved(true); setTimeout(() => setSaved(false), 3000)
   }
 
@@ -711,16 +734,26 @@ export default function PatientDossier({
         /* Mode modification : le formulaire, et rien d'autre. */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           <div className={sec}>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-semibold">{getInitials(patient.first_name, patient.last_name)}</div>
-              <div>
-                <p className="font-bold text-gray-900">{patient.first_name} {patient.last_name}</p>
-                {editMutuelle && <span className="inline-block bg-green-100 text-green-700 text-[11px] font-medium px-2 py-0.5 rounded-full mt-0.5">{editMutuelle}</span>}
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-semibold shrink-0">{getInitials(editFirstName || patient.first_name, editLastName || patient.last_name)}</div>
+              <div className="min-w-0 flex-1 grid grid-cols-2 gap-2">
+                <div className="space-y-1"><Label className="text-[11px] text-gray-400">Prénom</Label><Input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} className="h-9" /></div>
+                <div className="space-y-1"><Label className="text-[11px] text-gray-400">Nom</Label><Input value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="h-9" /></div>
               </div>
             </div>
+            {editMutuelle && <span className="inline-block bg-green-100 text-green-700 text-[11px] font-medium px-2 py-0.5 rounded-full mb-3">{editMutuelle}</span>}
 
             <div className="space-y-2.5 text-sm">
-              <div className="flex items-center gap-2 text-gray-600"><Phone className="h-3.5 w-3.5 text-primary-500 shrink-0" /> {patient.phone}</div>
+              <div className="space-y-1">
+                <Label className="text-[11px] text-gray-400 flex items-center gap-1"><Phone className="h-3 w-3" /> Téléphone</Label>
+                <Input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="h-9" />
+                {/* Averti, pas bloqué : beaucoup de fiches anciennes portent un
+                    numéro incomplet, et refuser l'enregistrement empêcherait de
+                    corriger une allergie sur ces fiches-là. */}
+                {editPhone.trim() && !isValidPhoneMaroc(editPhone) && (
+                  <p className="text-[11px] text-amber-600">Ce numéro n'a pas la forme d'un numéro marocain. Il sera enregistré tel quel, mais les rappels risquent de ne pas partir.</p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[11px] text-gray-400">Âge {editBirthDate && <span className="text-gray-300">(calculé)</span>}</Label>
