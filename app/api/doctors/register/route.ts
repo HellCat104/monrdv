@@ -71,17 +71,10 @@ export async function POST(req: NextRequest) {
   // 'agenda' (défaut SQL). Le passage au Cabinet complet se fait ensuite depuis
   // Abonnement (demande du médecin, confirmée par l'admin après paiement).
 
-  // Code délégué (facultatif) : normalisé en MAJUSCULES sans espaces pour que
-  // « adham 01 » et « ADHAM01 » soient comptés comme le même délégué.
-  const referral_code =
-    sanitizeString(formData.get('referral_code')).toUpperCase().replace(/\s+/g, '').slice(0, 20) || null
-
-  // Le médecin déclare seulement qu'il a une secrétaire ; le compte se crée
-  // depuis « Mon équipe », après validation du cabinet. Cette route étant
-  // publique et non authentifiée, y créer un compte d'authentification sur une
-  // adresse tierce, avec un mot de passe fourni dans la requête et marqué comme
-  // vérifié, permettait de squatter l'adresse e-mail de n'importe qui.
-  const withSecretary = formData.get('has_secretary') === '1'
+  // Ni le code délégué ni la secrétaire ne sont demandés ici. « Mon équipe »
+  // est désormais toujours dans le menu : le médecin déclare sa secrétaire
+  // quand il en a une, depuis cette page, et la colonne `has_secretary` garde
+  // sa valeur par défaut (false) jusque-là.
 
   // Validation stricte
   // Le CNOM n'est pas exigé : les psychologues, kinésithérapeutes et autres
@@ -136,8 +129,6 @@ export async function POST(req: NextRequest) {
       slug,
       status: 'pending',
       appointment_duration: 30,
-      has_secretary: withSecretary,
-      referral_code,
     })
     .select('id')
     .single()

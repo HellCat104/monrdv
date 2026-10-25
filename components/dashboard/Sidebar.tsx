@@ -35,19 +35,22 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
-  // « Mon équipe » n'apparaît que si le médecin a déclaré une secrétaire
-  const [hasSecretary, setHasSecretary] = useState(false)
+  // « Mon équipe » est TOUJOURS dans le menu. Avant, il n'apparaissait qu'une
+  // fois la secrétaire déclarée — le médecin qui avait répondu « non » à
+  // l'inscription, ou qui embauchait six mois plus tard, n'avait plus aucun
+  // chemin visible vers cette page et devait deviner qu'elle s'ouvrait depuis
+  // une case des Paramètres. La page sait se présenter quand il n'y a encore
+  // personne, et propose elle-même de l'activer.
   // Forfait : en 'agenda', les Factures sont masquées.
-  // Défaut 'agenda' (comme has_secretary=false) : on n'affiche qu'après confirmation.
+  // Défaut 'agenda' : on n'affiche qu'après confirmation.
   const [plan, setPlan] = useState<'agenda' | 'complet'>('agenda')
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
-      supabase.from('doctors').select('has_secretary, plan').eq('email', user.email).single()
+      supabase.from('doctors').select('plan').eq('email', user.email).single()
         .then(({ data }) => {
-          setHasSecretary(!!data?.has_secretary)
           setPlan(data?.plan === 'complet' ? 'complet' : 'agenda')
         })
     })
@@ -64,7 +67,7 @@ export function Sidebar() {
   // (Patients reste visible : fiche réduite nom/prénom/tél/notes en mode agenda.)
   const planHidden = plan === 'agenda' ? ['/factures'] : []
   const visibleItems = navItems.filter(
-    (i) => (i.href !== '/equipe' || hasSecretary) && !planHidden.includes(i.href)
+    (i) => !planHidden.includes(i.href)
   )
 
   const NavLinks = () => (

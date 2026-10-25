@@ -34,12 +34,6 @@ export default function InscriptionPage() {
   // Le forfait n'est pas choisi ici : tout compte démarre en « Agenda ».
   // Le passage au Cabinet complet se demande ensuite depuis Abonnement.
 
-  // Code du délégué qui a amené le médecin (facultatif)
-  const [referralCode, setReferralCode] = useState('')
-
-  // Secrétaire médicale (facultatif — crée un second compte lié au cabinet)
-  const [hasSecretary, setHasSecretary] = useState<'oui' | 'non'>('non')
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
@@ -69,10 +63,6 @@ export default function InscriptionPage() {
     try {
       const formData = new FormData()
       Object.entries(form).forEach(([k, v]) => formData.append(k, v))
-      if (referralCode.trim()) formData.append('referral_code', referralCode.trim())
-      // On transmet seulement la réponse : le compte de la secrétaire se crée
-      // depuis « Mon équipe », après validation du cabinet.
-      formData.append('has_secretary', hasSecretary === 'oui' ? '1' : '0')
 
       const res = await fetch('/api/doctors/register', {
         method: 'POST',
@@ -234,43 +224,6 @@ export default function InscriptionPage() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              {/* Code délégué — facultatif, sert au suivi commercial */}
-              <div className="space-y-1.5">
-                <Label htmlFor="referral_code">Code délégué (optionnel)</Label>
-                <Input
-                  id="referral_code"
-                  value={referralCode}
-                  onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                  placeholder="Ex : ADHAM01"
-                  maxLength={20}
-                />
-                <p className="text-xs text-gray-400">
-                  Si un conseiller MonRDV vous a accompagné, saisissez son code. Sinon, laissez vide.
-                </p>
-              </div>
-
-              {/* Secrétaire médicale — crée un second compte lié au cabinet */}
-              <div className="space-y-2">
-                <Label>Avez-vous une secrétaire médicale ?</Label>
-                <div className="flex gap-2">
-                  {(['non', 'oui'] as const).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setHasSecretary(v)}
-                      className={`flex-1 py-2 rounded-lg border text-sm font-medium transition ${hasSecretary === v ? 'bg-primary-500 border-primary-500 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}
-                    >
-                      {v === 'oui' ? 'Oui' : 'Non'}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400">
-                  {hasSecretary === 'oui'
-                    ? 'Vous créerez son compte depuis « Mon équipe » une fois votre cabinet validé — vous choisirez alors ses identifiants et ses accès.'
-                    : 'Pas de souci — vous pourrez l\u2019ajouter plus tard depuis « Mon équipe ».'}
-                </p>
               </div>
 
               {/* Les deux engagements en une case : CGU et données de santé.
