@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Stethoscope, CheckCircle2, Eye, EyeOff, Hash } from 'lucide-react'
+import { Stethoscope, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,8 +25,6 @@ export default function InscriptionPage() {
     specialty: '',
     phone: '',
     city: '',
-    slug: '',
-    cnom_number: '',
   })
 
   // Le forfait n'est pas choisi ici : tout compte démarre en « Agenda ».
@@ -37,18 +35,6 @@ export default function InscriptionPage() {
 
   // Secrétaire médicale (facultatif — crée un second compte lié au cabinet)
   const [hasSecretary, setHasSecretary] = useState<'oui' | 'non'>('non')
-
-  // Génère automatiquement un slug à partir du nom
-  function handleNameChange(name: string) {
-    const slug = name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-z0-9\s-]/g, '')
-      .trim()
-      .replace(/\s+/g, '-')
-    setForm({ ...form, name, slug })
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -159,7 +145,7 @@ export default function InscriptionPage() {
                 <Input
                   id="name"
                   value={form.name}
-                  onChange={(e) => handleNameChange(e.target.value)}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Hassan Alami"
                   required
                 />
@@ -221,7 +207,7 @@ export default function InscriptionPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="phone">Téléphone</Label>
+                  <Label htmlFor="phone">Téléphone (optionnel)</Label>
                   <Input
                     id="phone"
                     type="tel"
@@ -249,37 +235,6 @@ export default function InscriptionPage() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              {/* Slug */}
-              <div className="space-y-1.5">
-                <Label htmlFor="slug">URL de votre page *</Label>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-400 shrink-0">monrdv.co.ma/</span>
-                  <Input
-                    id="slug"
-                    value={form.slug}
-                    onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-                    placeholder="hassan-alami"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Numéro CNOM */}
-              <div className="space-y-1.5">
-                <Label htmlFor="cnom_number">Numéro CNOM (optionnel)</Label>
-                <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="cnom_number"
-                    value={form.cnom_number}
-                    onChange={(e) => setForm({ ...form, cnom_number: e.target.value })}
-                    placeholder="Ex : 12345"
-                    className="pl-9"
-                  />
-                </div>
-                <p className="text-xs text-gray-400">Numéro d&apos;inscription à l&apos;Ordre des Médecins. À laisser vide si votre profession n&apos;en délivre pas (psychologue, kinésithérapeute…).</p>
               </div>
 
               {/* Code délégué — facultatif, sert au suivi commercial */}
