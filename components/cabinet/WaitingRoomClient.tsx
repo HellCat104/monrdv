@@ -207,6 +207,15 @@ export default function WaitingRoomClient() {
         <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-400 text-sm">
           <Armchair className="h-8 w-8 mx-auto mb-2 opacity-40" />
           Personne n&apos;attend pour le moment.
+          {/* La salle est vide, mais la journée a eu lieu : sans ce second lien,
+              un patient adressé à l'hôpital disparaissait de l'écran sans
+              qu'aucun chemin n'y ramène — et c'est précisément celui dont il
+              faut prendre des nouvelles. */}
+          {repartis.length > 0 && (
+            <button onClick={() => setRepartisOuvert(true)} className="block mx-auto mt-2 text-xs text-gray-500 hover:text-primary-600 hover:underline">
+              Voir les {repartis.length} patient{repartis.length > 1 ? 's' : ''} déjà passé{repartis.length > 1 ? 's' : ''}
+            </button>
+          )}
           {aVenir.length > 0 && (
             <button onClick={() => setReplieOuvert(true)} className="block mx-auto mt-2 text-xs text-primary-600 hover:underline">
               Voir les {aVenir.length} rendez-vous à venir
@@ -337,7 +346,11 @@ export default function WaitingRoomClient() {
               onClick={() => setRepartisOuvert((v) => !v)}
               className="w-full py-2 text-[11px] text-gray-300 hover:text-gray-500 hover:bg-gray-50"
             >
-              {repartisOuvert ? 'Masquer les patients repartis' : `${repartis.length} patient${repartis.length > 1 ? 's' : ''} reparti${repartis.length > 1 ? 's' : ''}`}
+              {/* « Repartis » ne convient plus depuis qu'on peut être adressé
+                  à l'hôpital : on n'en repart pas chez soi. */}
+              {repartisOuvert
+                ? 'Masquer les patients déjà passés'
+                : `${repartis.length} patient${repartis.length > 1 ? 's' : ''} déjà passé${repartis.length > 1 ? 's' : ''}`}
             </button>
           )}
         </div>
