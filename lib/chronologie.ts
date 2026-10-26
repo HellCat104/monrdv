@@ -27,6 +27,7 @@ interface CertificatEnTete {
 
 export type NatureEvenement =
   | 'consultation' | 'ordonnance' | 'certificat' | 'document' | 'constantes' | 'rappel'
+  | 'endoscopie'
 
 export interface Evenement {
   id: string
@@ -60,6 +61,17 @@ export const LIBELLE_CATEGORIE: Record<string, string> = {
   autre: 'Document',
 }
 
+/** Les actes de la branche gastro. Ils arrivent ici APRÈS coup : la
+ *  chronologie a été écrite avant que ces tables existent, et un dossier qui
+ *  tait la coloscopie qu'on y lit par ailleurs n'est pas une chronologie. */
+interface ActeGastro {
+  id: string
+  jour: string
+  titre: string
+  detail?: string | null
+  brouillon?: boolean
+}
+
 export function construireChronologie(d: {
   notes: ConsultationNote[]
   prescriptions: Prescription[]
@@ -67,6 +79,10 @@ export function construireChronologie(d: {
   documents: PatientDocument[]
   vitals: VitalSign[]
   recalls: Recall[]
+  /** Consultations structurées et comptes rendus d'endoscopie (branche gastro).
+   *  Vides ailleurs : la chronologie ne change pas pour les autres branches. */
+  consultations?: ActeGastro[]
+  endoscopies?: ActeGastro[]
   /** Le jour d'aujourd'hui, pour séparer ce qui est fait de ce qui est prévu. */
   aujourdhui: string
 }): Evenement[] {
@@ -77,6 +93,22 @@ export function construireChronologie(d: {
       id: `note-${n.id}`, jour: jourDe(n.created_at), nature: 'consultation',
       titre: 'Consultation',
       detail: premiereLigne(n.note ?? ''),
+    })
+  }
+
+  for (const c of d.consultations ?? []) {
+    evenements.push({
+      id: `cons-${c.id}`, jour: c.jour, nature: 'consultation',
+      titre: c.brouillon ? 'Consultation (brouillon)' : 'Consultation',
+      detail: c.detail ?? undefined,
+    })
+  }
+
+  for (const e of d.endoscopies ?? []) {
+    evenements.push({
+      id: `endo-${e.id}`, jour: e.jour, nature: 'endoscopie',
+      titre: e.brouillon ? `${e.titre} (brouillon)` : e.titre,
+      detail: e.detail ?? undefined,
     })
   }
 

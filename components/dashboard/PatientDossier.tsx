@@ -58,6 +58,7 @@ const COULEUR_EVENEMENT: Record<string, string> = {
   document:     'bg-gray-400',
   constantes:   'bg-emerald-500',
   rappel:       'bg-amber-500',
+  endoscopie:   'bg-rose-500',
 }
 
 // Le journal stocke des codes ; l'écran doit parler français.
@@ -171,6 +172,11 @@ export default function PatientDossier({
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [vitals, setVitals] = useState<VitalSign[]>([])
   const [packages, setPackages] = useState<SessionPackage[]>([])
+  // Actes de la branche gastro, pour la chronologie. Chargés à part : leurs
+  // tables peuvent ne pas exister (migration non passée), et le dossier ne
+  // doit pas tomber pour autant.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [actesGastro, setActesGastro] = useState<{ consultations: any[]; endoscopies: any[] }>({ consultations: [], endoscopies: [] })
   // Solder un reste dû sans rouvrir le rendez-vous : le patient qui passe à
   // l'accueil pour régler une ancienne consultation n'a pas de RDV du jour.
   const [soldeId, setSoldeId] = useState<string | null>(null)
@@ -232,6 +238,17 @@ export default function PatientDossier({
     setVitals(vitalsRes.data ?? [])
     setCertificates(certsRes.data ?? [])
     setPackages(pkgRes.data ?? [])
+
+    // Branche gastro : les actes structurés, pour la chronologie. Requête
+    // séparée et silencieuse — pas de migration, pas de ligne, mais jamais de
+    // dossier cassé.
+    if (isGastroDoctor(specialties)) {
+      const [consRes, endoRes] = await Promise.all([
+        supabase.from('consultations').select('id, date_consultation, motif, statut').eq('patient_id', patient.id),
+        supabase.from('endoscopies').select('id, date_examen, type_examen, conclusion, statut').eq('patient_id', patient.id),
+      ])
+      setActesGastro({ consultations: consRes.data ?? [], endoscopies: endoRes.data ?? [] })
+    }
     setLoading(false)
   }, [patient.id, supabase])
   useEffect(() => { load() }, [load])
@@ -714,6 +731,16 @@ export default function PatientDossier({
     ? construireChronologie({
         notes: consultNotes, prescriptions, certificates,
         documents, vitals, recalls, aujourdhui: todayStr,
+        consultations: actesGastro.consultations.map((c) => ({
+          id: c.id, jour: c.date_consultation, detail: c.motif,
+          titre: 'Consultation', brouillon: c.statut === 'brouillon',
+        })),
+        endoscopies: actesGastro.endoscopies.map((e) => ({
+          id: e.id, jour: e.date_examen,
+          titre: e.type_examen === 'coloscopie' ? 'Coloscopie' : 'Gastroscopie',
+          detail: e.conclusion ? String(e.conclusion).split('\n')[0] : null,
+          brouillon: e.statut === 'brouillon',
+        })),
       })
     : []
   const aSoins = estDentiste || estPediatre || (!isPsy && enabledVitals.length > 0)
