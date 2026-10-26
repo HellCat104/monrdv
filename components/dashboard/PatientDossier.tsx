@@ -19,6 +19,8 @@ import DentalChart from '@/components/dashboard/DentalChart'
 import QuotesCard from '@/components/dashboard/QuotesCard'
 import MenuDocuments from '@/components/dashboard/MenuDocuments'
 import BlocGastro from '@/components/gastro/BlocGastro'
+import SuiviPoids from '@/components/gastro/SuiviPoids'
+import SynthesePathologie from '@/components/gastro/SynthesePathologie'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import PerioCard from '@/components/dashboard/PerioCard'
@@ -1070,6 +1072,28 @@ export default function PatientDossier({
                 été fait. En tête de l'onglet, parce que c'est le premier geste
                 de la consultation. */}
             {estGastro && <BlocGastro patientId={patient.id} doctorId={doctorId} />}
+
+            {/* La synthèse des maladies suivies et le poids : les deux choses
+                qu'on veut voir AVANT de lire l'historique. Sur un Crohn ou une
+                cirrhose, elles répondent aux trois questions de l'ouverture du
+                dossier — depuis quand, sous quoi, où en est-on — et à celle
+                qui change la conduite : a-t-il maigri ? */}
+            {estGastro && (
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_260px] gap-4 items-start">
+                <SynthesePathologie
+                  patientId={patient.id}
+                  doctorId={doctorId}
+                  actes={{
+                    consultations: actesGastro.consultations.map((c) => String(c.date_consultation)),
+                    endoscopies: actesGastro.endoscopies.map((e) => ({
+                      jour: String(e.date_examen),
+                      titre: e.type_examen === 'coloscopie' ? 'Coloscopie' : 'Gastroscopie',
+                    })),
+                  }}
+                />
+                <SuiviPoids vitals={vitals} />
+              </div>
+            )}
             <div className="flex items-center gap-2 flex-wrap">
               {/* BRANCHE GÉNÉRALISTE : un seul bouton « Documents » pour les
                   cinq choses qu'il remet au patient. Le dentiste et le

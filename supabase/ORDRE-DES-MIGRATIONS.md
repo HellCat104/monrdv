@@ -353,6 +353,26 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      s'enregistre et le dit, mais sans les antécédents familiaux.
      `notify pgrst, 'reload schema';` est dans le fichier.
 
+ 81. `migration_v81_gastro_actes.sql`
+     Migration v81 — BRANCHE GASTRO, parties B à G. Tables `consultations`,
+     `endoscopies`, `preparation_protocols`, `prescription_templates`,
+     `resultats` ; `recalls` étendu (source, notes, statuts). Toutes les
+     colonnes cliniques sont NULLABLE : une rubrique vide ne s'imprime pas, et
+     `observations` ne contient que les régions réellement explorées — une clé
+     absente ne vaut pas constatation normale. Déclencheur `fige_document_valide`
+     : un document validé ne se modifie plus, verrou en base et non à l'écran.
+     GRANTS explicites, RLS médecin seul (aucune politique secrétaire sur ces
+     cinq tables : données de santé).
+
+ 82. `migration_v82_gastro_pathologies.sql`
+     Migration v82 — BRANCHE GASTRO : `patient_pathologies`, la fiche de
+     synthèse d'une maladie suivie au long cours (libellé, date de diagnostic,
+     statut, traitement, évolution). Distincte de `patients.conditions` (v72),
+     qui porte des ÉTIQUETTES servant aux cohortes et ne peut pas porter une
+     histoire. Toutes les colonnes sont saisies : le logiciel ne qualifie
+     jamais une évolution, il compte seulement les actes depuis le diagnostic.
+     RLS médecin seul. Additive ; sans elle le bloc ne s'affiche pas.
+
  77. `migration_v77_mot_sur_le_rdv.sql`  
      Migration v77 — `appointment_messages` : un mot entre le médecin et
      l'accueil, ATTACHÉ au rendez-vous et non dans un fil général, parce qu'un
