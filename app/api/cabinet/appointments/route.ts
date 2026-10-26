@@ -68,7 +68,10 @@ export async function GET(req: NextRequest) {
     admin.from('consultation_types')
       .select('id, name, duration_minutes, default_price')
       .eq('doctor_id', ctx.doctor.id).eq('active', true).order('created_at', { ascending: true }),
-    admin.from('doctors').select('appointment_duration').eq('id', ctx.doctor.id).single(),
+    // Les horaires d'ouverture servent à dessiner la grille horaire de la
+    // secrétaire : sans eux, la grille s'ouvre à 8 h et ferme à 19 h pour tout
+    // le monde, et les cases hors ouverture ne se distinguent pas des trous.
+    admin.from('doctors').select('appointment_duration, working_hours').eq('id', ctx.doctor.id).single(),
     isRange
       ? admin.from('blocked_dates').select('id, date, start_time, end_time, reason').eq('doctor_id', ctx.doctor.id).gte('date', from!).lte('date', to!)
       : Promise.resolve({ data: [] as unknown[] }),
@@ -150,6 +153,7 @@ export async function GET(req: NextRequest) {
     appointments,
     consultationTypes: ctx.confidential ? [] : (typesRes.data ?? []),
     defaultDuration: docRes.data?.appointment_duration ?? 30,
+    workingHours: docRes.data?.working_hours ?? null,
     blocks: blocksRes.data ?? [],
     permissions: ctx.permissions,
     confidential: ctx.confidential,

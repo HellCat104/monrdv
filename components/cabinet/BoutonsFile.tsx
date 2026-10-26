@@ -51,6 +51,21 @@ export default function BoutonsFile({
   const circuit = reduit ? CIRCUIT.filter((e) => e.key === 'arrive') : CIRCUIT
   const exceptions = reduit ? EXCEPTIONS.filter((e) => e.key === 'late') : EXCEPTIONS
 
+  // Le patient est reparti : la ligne est close. Il n'y a plus de geste de
+  // pointage à faire — le faire entrer, le dire en consultation ou le déclarer
+  // absent ne veut plus rien dire — et sept boutons sur une ligne terminée,
+  // c'est sept occasions de cliquer par erreur sur une autre ligne.
+  //
+  // Seul le retour en arrière reste : « Parti » se clique parfois sur le
+  // mauvais patient, et sans lui l'erreur serait définitive.
+  if (queueStatus === 'parti') {
+    return (
+      <button onClick={() => onQueue(null)} title="Annuler le pointage" className="p-1.5 rounded-lg text-gray-300 hover:text-gray-500">
+        <RotateCcw className="h-3.5 w-3.5" />
+      </button>
+    )
+  }
+
   return (
     <div className="flex items-center gap-1">
       {circuit.map(({ key, label, icon: Icon }) => (
@@ -81,14 +96,13 @@ export default function BoutonsFile({
       <span className="w-px h-5 bg-gray-200 mx-0.5" />
 
       {exceptions.map(({ key, label, icon: Icon }) => {
-        // « Absent » et « il est là » ne peuvent pas être vrais ensemble. Le
-        // bouton restait pourtant cliquable sur un patient assis dans la
-        // salle : l'écran affichait « Attend depuis 12 min » et les
-        // statistiques comptaient une absence pour une consultation faite.
-        //
-        // « En retard » reste proposé : un patient PEUT arriver en retard, et
-        // c'est même le seul moment où on le constate.
-        const impossible = key === 'absent' && !!queueStatus
+        // Ni « absent » ni « en retard » ne veulent dire quoi que ce soit sur
+        // quelqu'un qui est assis dans la salle d'attente. L'un contredisait
+        // l'écran — « Attend depuis 12 min » et une absence comptée dans les
+        // statistiques — l'autre arrivait trop tard : le retard se constate
+        // AVANT de pointer l'arrivée, pas après. Les deux boutons ne servent
+        // donc qu'au patient qu'on attend encore.
+        const impossible = !!queueStatus
         if (impossible) return null
         return (
           <button

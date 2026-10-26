@@ -21,13 +21,17 @@ export interface WeekBlock {
 }
 
 interface WeekGridProps {
-  weekStart: Date                     // lundi de la semaine affichée
+  weekStart: Date                     // lundi de la semaine affichée, ou le jour affiché si nbJours = 1
   appointments: Appointment[]
   blocks: WeekBlock[]
   workingHours: WorkingHours
   defaultDuration: number             // durée de base, si le RDV n'en porte pas
   onSelectDay: (day: Date) => void
   onSelectAppointment: (apt: Appointment) => void
+  /** Nombre de colonnes. 7 pour la semaine, 1 pour une seule journée — la
+   *  même grille sert aux deux : des trous à voir et des chevauchements à
+   *  démêler, c'est le même problème sur un jour que sur sept. */
+  nbJours?: number
 }
 
 const HEURE_PX = 56                   // hauteur d'une heure, en pixels
@@ -72,9 +76,13 @@ function repartir(items: { start: number; end: number }[]): { col: number; total
 
 export function WeekGrid({
   weekStart, appointments, blocks, workingHours,
-  defaultDuration, onSelectDay, onSelectAppointment,
+  defaultDuration, onSelectDay, onSelectAppointment, nbJours = 7,
 }: WeekGridProps) {
-  const jours = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const jours = Array.from({ length: nbJours }, (_, i) => addDays(weekStart, i))
+  // La grille des colonnes et la largeur minimale suivent le nombre de jours :
+  // une journée seule étalée sur 760 px de large laissait six colonnes vides.
+  const colonnes = { gridTemplateColumns: `48px repeat(${nbJours}, 1fr)` }
+  const largeur = nbJours === 1 ? 'min-w-[280px]' : 'min-w-[760px]'
   const aujourdhui = getNowInMaroc()
 
   // Amplitude de la grille : la plus large plage d'ouverture de la semaine,
@@ -112,10 +120,10 @@ export function WeekGrid({
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[760px]">
+      <div className={largeur}>
 
         {/* En-tête : les sept jours */}
-        <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b border-gray-200">
+        <div className="grid border-b border-gray-200" style={colonnes}>
           <div />
           {jours.map((j) => {
             const estAujourdhui = isSameDay(j, aujourdhui)
@@ -142,7 +150,7 @@ export function WeekGrid({
 
         {/* Bandeau des journées entièrement fermées */}
         {blocks.some((b) => !b.start_time) && (
-          <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50">
+          <div className="grid border-b border-gray-200 bg-gray-50" style={colonnes}>
             <div className="text-[10px] text-gray-400 px-1 py-1.5 text-right leading-tight">toute la journée</div>
             {jours.map((j) => {
               const conges = congesDuJour(format(j, 'yyyy-MM-dd'))
@@ -162,7 +170,7 @@ export function WeekGrid({
         )}
 
         {/* Grille horaire */}
-        <div className="relative grid grid-cols-[48px_repeat(7,1fr)] mt-3" style={{ height: hauteur }}>
+        <div className="relative grid mt-3" style={{ ...colonnes, height: hauteur }}>
 
           {/* Colonne des heures */}
           <div className="relative">

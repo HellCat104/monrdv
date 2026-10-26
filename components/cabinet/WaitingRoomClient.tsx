@@ -209,8 +209,12 @@ export default function WaitingRoomClient() {
                 )}
 
                 {/* Répondre au médecin sans changer d'écran : c'est ici
-                    qu'elle est quand il lui écrit. */}
-                <BoutonMedecin rdv={a as RdvEchange} onOpen={() => setMotFor(a)} />
+                    qu'elle est quand il lui écrit. Plus une fois le patient
+                    reparti : un mot sur quelqu'un qui est dehors n'appelle
+                    plus de geste, et la consigne reste lisible sur la ligne. */}
+                {a.queue_status !== 'parti' && (
+                  <BoutonMedecin rdv={a as RdvEchange} onOpen={() => setMotFor(a)} />
+                )}
 
                 {/* L'argent, au moment où le patient sort — c'est ici qu'elle
                     le voit partir, pas dans l'agenda. Le rendez-vous rattaché

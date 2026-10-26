@@ -12,10 +12,20 @@ import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN }
 import { etatPatient, resumeEchange } from '@/lib/file-attente'
 import { useRafraichissement } from '@/lib/rafraichissement'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
-import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns'
+import { format, addDays, addMonths, startOfWeek, endOfWeek, startOfMonth, eachDayOfInterval, getDay, subDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Calendar, Plus, X, ChevronLeft, ChevronRight, CalendarClock, Ban, BellRing } from 'lucide-react'
-import { PAYMENT_METHOD_LABELS, type StaffPermissions } from '@/types'
+import { PAYMENT_METHOD_LABELS, type StaffPermissions, type WorkingHours } from '@/types'
+import { WeekGrid } from '@/components/dashboard/WeekGrid'
+import { MonthGrid } from '@/components/dashboard/MonthGrid'
+
+// Horaires de repli : la grille a besoin d'une amplitude pour se dessiner, et
+// une base qui n'aurait pas encore de `working_hours` ne doit pas faire une
+// page blanche. Elle s'élargit de toute façon sur les rendez-vous réels.
+const HORAIRES_PAR_DEFAUT = Object.fromEntries(
+  ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    .map((j) => [j, { enabled: j !== 'sunday', start: '08:00', end: '19:00' }]),
+) as unknown as WorkingHours
 import DaySheet from '@/components/shared/DaySheet'
 import { PatientPicker, type PatientChoice } from '@/components/shared/PatientPicker'
 import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
@@ -23,6 +33,7 @@ import { FileText, UserPlus } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
+type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
 
 
 interface CType { id: string; name: string; duration_minutes: number | null; default_price: number | null }
@@ -35,9 +46,18 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const [sheetOpen, setSheetOpen] = useState(false)
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [patientCache, setPatientCache] = useState<PatientLite[] | null>(null)
-  const [viewMode, setViewMode] = useState<'day' | 'week'>('day')
-  const [weekAppts, setWeekAppts] = useState<Apt[]>([])
-  const [weekLoading, setWeekLoading] = useState(false)
+  // Deux façons de regarder la même journée, et la secrétaire ne les utilise
+  // pas au même moment. La LISTE est son poste de travail : une ligne par
+  // patient, avec les gestes au bout. Le CALENDRIER répond à la question du
+  // téléphone — « vous avez quoi jeudi après-midi ? » — à laquelle une liste
+  // ne répond pas : ce sont les TROUS qu'on y cherche, et une liste ne montre
+  // que ce qui est pris.
+  const [mode, setMode] = useState<'liste' | 'calendrier'>('liste')
+  const [grain, setGrain] = useState<'jour' | 'semaine' | 'mois'>('semaine')
+  const [plageAppts, setPlageAppts] = useState<Apt[]>([])
+  const [plageBlocks, setPlageBlocks] = useState<Block[]>([])
+  const [plageLoading, setPlageLoading] = useState(false)
+  const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null)
   const [appts, setAppts] = useState<Apt[]>([])
   const [types, setTypes] = useState<CType[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,7 +80,6 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   // Encaissement inline (aligné sur le médecin : total dû + reste à payer)
 
   // Blocage de créneau
-  type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
   const [blocks, setBlocks] = useState<Block[]>([])
   const [blockOpen, setBlockOpen] = useState(false)
   const [blockFullDay, setBlockFullDay] = useState(false)
@@ -90,6 +109,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
       const data = await res.json()
       setAppts(data.appointments ?? [])
       setTypes(data.consultationTypes ?? [])
+      if (data.workingHours) setWorkingHours(data.workingHours as WorkingHours)
     } catch {
       setError('Erreur réseau.')
     } finally {
@@ -105,22 +125,47 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   // l'onglet — voir lib/rafraichissement.
   useRafraichissement(() => { if (date === aujourdhui) load(date, true) })
 
-  // Vue semaine : lundi -> dimanche contenant la date courante
-  const weekDays = eachDayOfInterval({
-    start: startOfWeek(new Date(date + 'T12:00:00'), { weekStartsOn: 1 }),
-    end: endOfWeek(new Date(date + 'T12:00:00'), { weekStartsOn: 1 }),
-  })
-  const loadWeek = useCallback(async (d: string) => {
-    setWeekLoading(true)
+  const jourCourant = new Date(date + 'T12:00:00')
+  const debutSemaine = startOfWeek(jourCourant, { weekStartsOn: 1 })
+
+  // La grille du mois va du lundi précédant le 1er au dimanche suivant le
+  // dernier : 42 cases, qui débordent sur les mois voisins.
+  const grilleMois = (() => {
+    const premier = startOfMonth(jourCourant)
+    const decalage = (getDay(premier) + 6) % 7 // lundi = 0
+    const debut = subDays(premier, decalage)
+    return Array.from({ length: 42 }, (_, i) => addDays(debut, i))
+  })()
+
+  /** Les rendez-vous ET les fermetures d'une plage de dates.
+   *
+   *  L'API refuse plus de 31 jours d'un coup — une borne posée exprès, pour
+   *  qu'on ne puisse pas redemander l'année entière et reconstituer les
+   *  recettes. La grille du mois en fait 42, on la demande donc en deux fois
+   *  plutôt que de desserrer le verrou. Sans ça, les jours des mois voisins
+   *  s'affichaient vides alors qu'ils ne l'étaient pas. */
+  const loadPlage = useCallback(async (jours: Date[]) => {
+    setPlageLoading(true)
     try {
-      const base = new Date(d + 'T12:00:00')
-      const from = format(startOfWeek(base, { weekStartsOn: 1 }), 'yyyy-MM-dd')
-      const to = format(endOfWeek(base, { weekStartsOn: 1 }), 'yyyy-MM-dd')
-      const res = await fetch(`/api/cabinet/appointments?from=${from}&to=${to}`)
-      if (res.ok) { const data = await res.json(); setWeekAppts(data.appointments ?? []) }
-    } catch { /* silencieux */ } finally { setWeekLoading(false) }
+      const moitie = Math.ceil(jours.length / 2)
+      const tranches = jours.length <= 31 ? [jours] : [jours.slice(0, moitie), jours.slice(moitie)]
+      const reponses = await Promise.all(tranches.map(async (t) => {
+        const from = format(t[0], 'yyyy-MM-dd')
+        const to = format(t[t.length - 1], 'yyyy-MM-dd')
+        const res = await fetch(`/api/cabinet/appointments?from=${from}&to=${to}`)
+        return res.ok ? res.json() : { appointments: [], blocks: [] }
+      }))
+      setPlageAppts(reponses.flatMap((d) => d.appointments ?? []))
+      setPlageBlocks(reponses.flatMap((d) => d.blocks ?? []))
+    } catch { /* silencieux */ } finally { setPlageLoading(false) }
   }, [])
-  useEffect(() => { if (viewMode === 'week') loadWeek(date) }, [viewMode, date, loadWeek])
+
+  useEffect(() => {
+    if (mode !== 'calendrier') return
+    if (grain === 'semaine') loadPlage(eachDayOfInterval({ start: debutSemaine, end: endOfWeek(jourCourant, { weekStartsOn: 1 }) }))
+    else if (grain === 'mois') loadPlage(grilleMois)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, grain, date, loadPlage])
 
   const loadBlocks = useCallback(async (d: string) => {
     try {
@@ -283,7 +328,25 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   }
 
   const dayShift = (n: number) => setDate(format(addDays(new Date(date + 'T12:00:00'), n), 'yyyy-MM-dd'))
-  const isToday = date === format(getNowInMaroc(), 'yyyy-MM-dd')
+
+  // Les flèches avancent de ce que l'écran montre : un jour sur la liste, une
+  // semaine sur la semaine, un mois sur le mois. Avancer d'un jour en vue Mois
+  // ne faisait rien de visible onze fois sur douze.
+  const decaler = (sens: 1 | -1) => {
+    if (mode === 'calendrier' && grain === 'mois') {
+      setDate(format(addMonths(jourCourant, sens), 'yyyy-MM-dd'))
+    } else if (mode === 'calendrier' && grain === 'semaine') {
+      dayShift(7 * sens)
+    } else {
+      dayShift(sens)
+    }
+  }
+
+  const titrePeriode = mode === 'calendrier' && grain === 'mois'
+    ? format(jourCourant, 'MMMM yyyy', { locale: fr })
+    : mode === 'calendrier' && grain === 'semaine'
+    ? `${format(debutSemaine, 'd', { locale: fr })} – ${format(endOfWeek(jourCourant, { weekStartsOn: 1 }), 'd MMM', { locale: fr })}`
+    : `${format(jourCourant, 'EEEE d MMMM', { locale: fr })}${date === aujourdhui ? " · aujourd'hui" : ''}`
   const active = appts.filter((a) => a.status !== 'cancelled')
   const cancelled = appts.filter((a) => a.status === 'cancelled')
 
@@ -351,27 +414,38 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         )}
       </div>
 
-      {/* Navigation + bascule Jour / Semaine */}
+      {/* Navigation + bascule Liste / Calendrier */}
       <div className="flex items-center gap-2 flex-wrap">
-        <button onClick={() => dayShift(viewMode === 'week' ? -7 : -1)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Précédent"><ChevronLeft className="h-4 w-4" /></button>
+        <button onClick={() => decaler(-1)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Précédent"><ChevronLeft className="h-4 w-4" /></button>
         <Input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="w-40" />
-        <button onClick={() => dayShift(viewMode === 'week' ? 7 : 1)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Suivant"><ChevronRight className="h-4 w-4" /></button>
-        <span className="text-sm text-gray-500 capitalize ml-1">
-          {viewMode === 'day'
-            ? `${format(new Date(date + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })}${isToday ? " · aujourd'hui" : ''}`
-            : `${format(weekDays[0], 'd', { locale: fr })} – ${format(weekDays[6], 'd MMM', { locale: fr })}`}
-        </span>
-        <div className="ml-auto inline-flex rounded-lg border border-gray-200 p-0.5">
-          {(['day', 'week'] as const).map((m) => (
-            <button key={m} onClick={() => setViewMode(m)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition ${viewMode === m ? 'bg-primary-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
-              {m === 'day' ? 'Jour' : 'Semaine'}
-            </button>
-          ))}
+        <button onClick={() => decaler(1)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label="Suivant"><ChevronRight className="h-4 w-4" /></button>
+        <span className="text-sm text-gray-500 capitalize ml-1">{titrePeriode}</span>
+
+        <div className="ml-auto flex items-center gap-2">
+          {/* Le grain n'apparaît QUE dans le calendrier : il ne veut rien dire
+              sur la liste, qui est toujours celle d'une journée. */}
+          {mode === 'calendrier' && (
+            <div className="inline-flex rounded-lg border border-gray-200 p-0.5">
+              {(['jour', 'semaine', 'mois'] as const).map((g) => (
+                <button key={g} onClick={() => setGrain(g)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition capitalize ${grain === g ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-50'}`}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="inline-flex rounded-lg border border-gray-200 p-0.5">
+            {([['liste', 'Liste'], ['calendrier', 'Calendrier']] as const).map(([m, label]) => (
+              <button key={m} onClick={() => setMode(m)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition ${mode === m ? 'bg-primary-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {viewMode === 'day' && blocks.length > 0 && (
+      {mode === 'liste' && blocks.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {blocks.map((b) => (
             <span key={b.id} className="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-2 py-1">
@@ -388,40 +462,32 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
 
       {error && <p className="text-sm text-red-500 bg-red-50 p-3 rounded-lg">{error}</p>}
 
-      {viewMode === 'week' ? (
-        weekLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-            {weekDays.map((_, i) => <div key={i} className="h-40 bg-gray-100 rounded-xl animate-pulse" />)}
+      {mode === 'calendrier' ? (
+        plageLoading && grain !== 'jour' ? (
+          <div className="h-80 bg-gray-100 rounded-xl animate-pulse" />
+        ) : grain === 'mois' ? (
+          <div className="bg-white border border-gray-100 rounded-xl p-3">
+            <MonthGrid
+              days={grilleMois}
+              month={jourCourant}
+              appointments={plageAppts as never}
+              blocks={plageBlocks}
+              onSelectDay={(d) => { setDate(format(d, 'yyyy-MM-dd')); setMode('liste') }}
+              onSelectAppointment={(a) => { setDate((a as unknown as Apt).date); setMode('liste') }}
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-            {weekDays.map((d) => {
-              const dStr = format(d, 'yyyy-MM-dd')
-              const dayList = weekAppts
-                .filter((a) => a.date === dStr && a.status !== 'cancelled')
-                .sort((a, b) => String(a.time).localeCompare(String(b.time)))
-              const today = isSameDay(d, getNowInMaroc())
-              return (
-                <button key={dStr} onClick={() => { setDate(dStr); setViewMode('day') }}
-                  className={`text-left bg-white border rounded-xl p-2 min-h-[8rem] hover:border-primary-300 transition ${today ? 'border-primary-400' : 'border-gray-100'}`}>
-                  <div className={`text-xs font-semibold mb-1.5 capitalize ${today ? 'text-primary-600' : 'text-gray-700'}`}>
-                    {format(d, 'EEE d', { locale: fr })}
-                  </div>
-                  {dayList.length === 0 ? (
-                    <p className="text-[11px] text-gray-300">—</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {dayList.slice(0, 6).map((a) => (
-                        <div key={a.id} className="text-[11px] leading-tight bg-primary-50 text-primary-700 rounded px-1.5 py-0.5 truncate">
-                          <span className="font-medium">{formatTime(a.time)}</span> {a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : ''}
-                        </div>
-                      ))}
-                      {dayList.length > 6 && <p className="text-[10px] text-gray-400">+{dayList.length - 6} autres</p>}
-                    </div>
-                  )}
-                </button>
-              )
-            })}
+          <div className="bg-white border border-gray-100 rounded-xl p-3">
+            <WeekGrid
+              weekStart={grain === 'jour' ? jourCourant : debutSemaine}
+              nbJours={grain === 'jour' ? 1 : 7}
+              appointments={(grain === 'jour' ? appts : plageAppts) as never}
+              blocks={grain === 'jour' ? blocks : plageBlocks}
+              workingHours={workingHours ?? HORAIRES_PAR_DEFAUT}
+              defaultDuration={30}
+              onSelectDay={(d) => { setDate(format(d, 'yyyy-MM-dd')); setMode('liste') }}
+              onSelectAppointment={(a) => { setDate((a as unknown as Apt).date); setMode('liste') }}
+            />
           </div>
         )
       ) : loading ? (
@@ -542,7 +608,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         </div>
       )}
 
-      {viewMode === 'day' && cancelled.length > 0 && (
+      {mode === 'liste' && cancelled.length > 0 && (
         <p className="text-[11px] text-gray-400">{cancelled.length} RDV annulé(s) ce jour.</p>
       )}
 
