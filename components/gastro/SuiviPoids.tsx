@@ -80,7 +80,13 @@ export default function SuiviPoids({ vitals }: { vitals: VitalSign[] }) {
       {ecart != null && (
         <p className={`text-xs mt-1 flex items-center gap-1 ${ecart < 0 ? 'text-orange-700' : ecart > 0 ? 'text-gray-600' : 'text-gray-400'}`}>
           {ecart < 0 ? <TrendingDown className="h-3.5 w-3.5" /> : ecart > 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />}
-          {ecart === 0 ? 'Stable' : `${ecart > 0 ? '+' : ''}${arrondi(ecart)} kg`} depuis le {formatDateFr(precedent!.date)}
+          {ecart === 0 ? 'Stable' : `${ecart > 0 ? '+' : ''}${arrondi(ecart)} kg`}
+          {/* Deux pesées le même jour, cela arrive — une à l'accueil, une au
+              cabinet. Répéter la date donnait « 62 kg le 21 octobre, −6 kg
+              depuis le 21 octobre », qu'on relit deux fois avant de comprendre. */}
+          {' '}{memeJour(dernier.date, precedent!.date)
+            ? 'depuis la pesée précédente'
+            : `depuis le ${formatDateFr(precedent!.date)}`}
         </p>
       )}
 
@@ -107,6 +113,11 @@ export default function SuiviPoids({ vitals }: { vitals: VitalSign[] }) {
       )}
     </div>
   )
+}
+
+/** Deux horodatages tombent-ils le même jour de calendrier ? */
+function memeJour(a: string, b: string): boolean {
+  return a.substring(0, 10) === b.substring(0, 10)
 }
 
 /** Un chiffre après la virgule, et pas de « -0 ». */
