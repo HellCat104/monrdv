@@ -579,7 +579,7 @@ export default function AppointmentsPage() {
               blocks={dayBlocks}
               onSelectDay={(day) => { setCurrentDate(day); setViewMode('day') }}
               onSelectAppointment={(apt) => {
-                if (apt.patient_id) router.push(`/patients?patient=${apt.patient_id}`)
+                if (apt.patient_id) router.push(`/patients/${apt.patient_id}`)
               }}
             />
           ) : viewMode === 'week' && doctor ? (
@@ -592,7 +592,7 @@ export default function AppointmentsPage() {
               defaultDuration={doctor.appointment_duration}
               onSelectDay={(day) => { setCurrentDate(day); setViewMode('day') }}
               onSelectAppointment={(apt) => {
-                if (apt.patient_id) router.push(`/patients?patient=${apt.patient_id}`)
+                if (apt.patient_id) router.push(`/patients/${apt.patient_id}`)
               }}
             />
           ) : (
@@ -601,7 +601,7 @@ export default function AppointmentsPage() {
               onStatusChange={handleStatusChange}
               onAttendanceChange={handleAttendanceChange}
               onPayment={handlePayment}
-              onViewPatient={(patientId) => router.push(`/patients?patient=${patientId}`)}
+              onViewPatient={(patientId) => router.push(`/patients/${patientId}`)}
               onReschedule={handleReschedule}
               onRefresh={() => loadAppointments(true)}
               plan={doctor?.plan === 'complet' ? 'complet' : 'agenda'}

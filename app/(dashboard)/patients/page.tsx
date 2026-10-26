@@ -1770,7 +1770,7 @@ export default function PatientsPage() {
                   </h4>
                   {selectedPatient && (
                     <a
-                      href={`/ordonnance/patient/${selectedPatient.id}?back=${encodeURIComponent(`/patients?patient=${selectedPatient.id}`)}`}
+                      href={`/ordonnance/patient/${selectedPatient.id}?back=${encodeURIComponent(`/patients/${selectedPatient.id}`)}`}
                       className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 bg-primary-50 border border-primary-100 rounded-lg px-2.5 py-1.5"
                     >
                       <Plus className="h-3.5 w-3.5" /> Nouvelle ordonnance

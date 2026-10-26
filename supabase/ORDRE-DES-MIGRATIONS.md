@@ -338,6 +338,21 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      Additive ; sans elle l'écran s'affiche et le dit, mais n'enregistre pas.
      `notify pgrst, 'reload schema';` ensuite.
 
+ 80. `migration_v80_gastro_dossier.sql`
+     Migration v80 — BRANCHE GASTRO-ENTÉROLOGIE, partie A (le dossier).
+     Ouvre le Cabinet complet à la gastro-entérologie en remplaçant la fonction
+     `branche_developpee()` de la v78 (même signature, `set search_path`
+     conservé, le déclencheur n'est pas retouché). Ajoute
+     `patients.family_history` — les antécédents FAMILIAUX décident de la
+     conduite ici : un cancer colorectal chez un parent du premier degré avance
+     la première coloscopie de dix ans, et les écrire dans
+     `chronic_conditions` revenait à prêter au patient la maladie de son père.
+     Ajoute `patient_documents.categorie` (biologie | imagerie |
+     anatomopathologie | compte_rendu | autre), NULL sur l'existant : on ne
+     reclasse pas à la place du praticien. Additive ; sans elle la fiche
+     s'enregistre et le dit, mais sans les antécédents familiaux.
+     `notify pgrst, 'reload schema';` est dans le fichier.
+
  77. `migration_v77_mot_sur_le_rdv.sql`  
      Migration v77 — `appointment_messages` : un mot entre le médecin et
      l'accueil, ATTACHÉ au rendez-vous et non dans un fil général, parce qu'un

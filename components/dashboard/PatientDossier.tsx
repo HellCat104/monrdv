@@ -34,18 +34,30 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getInitials, formatDateFr, formatDateShort, formatDateTimeFr, getNowInMaroc, ageFromBirthDate, formatAge, isValidPhoneMaroc } from '@/lib/utils'
 import { withConsultationSummary } from '@/lib/consultation-summary'
-import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, RECALL_OUVERTS, isGeneralDoctor, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE,
+import { construireChronologie, type Evenement } from '@/lib/chronologie'
+import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, RECALL_OUVERTS, isGeneralDoctor, isGastroDoctor, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE, CATEGORIES_DOCUMENT, type CategorieDocument,
   type PaymentMethod,
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef, type SessionPackage } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
   Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users, Ticket,
-  Pencil, Wallet, AlertTriangle } from 'lucide-react'
+  Pencil, Wallet, AlertTriangle, History } from 'lucide-react'
 import { messageQuota } from '@/lib/stockage'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
 
 const DOC_BUCKET = 'patient-documents'
 
-type Onglet = 'suivi' | 'soins' | 'argent' | 'dossier'
+type Onglet = 'suivi' | 'soins' | 'argent' | 'dossier' | 'chronologie'
+
+// Une couleur par nature d'événement : la chronologie se parcourt à l'œil
+// avant de se lire, et c'est la pastille qui guide.
+const COULEUR_EVENEMENT: Record<string, string> = {
+  consultation: 'bg-primary-500',
+  ordonnance:   'bg-violet-500',
+  certificat:   'bg-sky-500',
+  document:     'bg-gray-400',
+  constantes:   'bg-emerald-500',
+  rappel:       'bg-amber-500',
+}
 
 // Le journal stocke des codes ; l'écran doit parler français.
 const ACTIONS_LISIBLES: Record<string, string> = {"dossier_consulte": "Dossier consulté", "dossier_imprime": "Version imprimable ouverte", "dossier_exporte": "Dossier exporté", "patients_exportes": "Export groupé", "patient_fusionne": "Fiche fusionnée"}
@@ -137,6 +149,11 @@ export default function PatientDossier({
   // présentes en base. C'est le seul test fiable côté navigateur.
   const couvertureDisponible = (patient as { insurer_data?: unknown }).insurer_data !== undefined
   const etiquettesDisponibles = Array.isArray(patient.conditions)
+  // Antécédents FAMILIAUX (v80). Distincts des maladies du patient : les
+  // écrire dans « maladies chroniques » revenait à lui prêter celle de son
+  // père — et en gastro-entérologie, c'est cette ligne qui avance la première
+  // coloscopie de dix ans.
+  const [editFamily, setEditFamily] = useState((patient as { family_history?: string | null }).family_history ?? '')
   const [editSurgeries, setEditSurgeries] = useState(patient.surgeries ?? '')
   const [editTreatments, setEditTreatments] = useState(patient.current_treatments ?? '')
   const [editVaccinations, setEditVaccinations] = useState(patient.vaccinations ?? '')
@@ -181,6 +198,11 @@ export default function PatientDossier({
   const [recallReason, setRecallReason] = useState('')
   const [addingRecall, setAddingRecall] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
+  // La nature du prochain document importé : choisie AVANT de prendre le
+  // fichier, parce qu'une boîte de dialogue qui s'ouvre après l'envoi se fait
+  // valider sans être lue.
+  const [categorieImport, setCategorieImport] = useState<CategorieDocument>('biologie')
+  const [filtreCategorie, setFiltreCategorie] = useState<CategorieDocument | 'tout'>('tout')
   const [vitalInput, setVitalInput] = useState<Record<string, string>>({})
   const [savingVital, setSavingVital] = useState(false)
   const [pkgTotal, setPkgTotal] = useState('10')
@@ -361,6 +383,7 @@ export default function PatientDossier({
       allergies: editAllergies || null,
       chronic_conditions: editChronic || null,
       surgeries: editSurgeries || null,
+      family_history: editFamily || null,
       current_treatments: editTreatments || null,
       vaccinations: editVaccinations || null,
       // Étiquettes : seulement si la colonne existe (v72). Écrire une clé
@@ -381,10 +404,11 @@ export default function PatientDossier({
       const sansRecentes = { ...updates } as Record<string, unknown>
       delete sansRecentes.conditions
       delete sansRecentes.insurer_data
+      delete sansRecentes.family_history
       const retry = await supabase.from('patients').update(sansRecentes).eq('id', patient.id)
       error = retry.error
       if (!error) {
-        alert("Fiche enregistrée, sauf les étiquettes de pathologie et les informations d'assuré : une migration n'est pas encore passée sur cette base.")
+        alert("Fiche enregistrée, sauf les étiquettes de pathologie, les informations d'assuré et les antécédents familiaux : une migration n'est pas encore passée sur cette base.")
       }
     }
     setSaving(false)
@@ -594,7 +618,10 @@ export default function PatientDossier({
       if (upErr) throw upErr
       const { data, error: insErr } = await supabase.from('patient_documents')
         .insert({ doctor_id: doctorId, patient_id: patient.id, file_path: path, file_name: file.name.substring(0, 200),
-                  file_type: file.type || null, file_size: file.size }).select().single()
+                  file_type: file.type || null, file_size: file.size,
+                  // Seule la gastro classe ses documents pour l'instant : chez
+                  // les autres, la colonne reste vide et la liste ne change pas.
+                  ...(estGastro ? { categorie: categorieImport } : {}) }).select().single()
       // L'enregistrement peut échouer APRÈS l'envoi du fichier : quota du
       // cabinet atteint (trigger v63), coupure réseau… Sans ce nettoyage, le
       // fichier resterait dans le stockage sans aucune ligne pour le désigner :
@@ -678,6 +705,16 @@ export default function PatientDossier({
 
   const estDentiste = isDentalDoctor(specialties)
   const estPediatre = isPediatricDoctor(specialties)
+  const estGastro = isGastroDoctor(specialties)
+
+  // La chronologie ne coûte aucune requête : elle remet en ordre ce que le
+  // dossier a déjà chargé pour ses autres onglets.
+  const chronologie = estGastro
+    ? construireChronologie({
+        notes: consultNotes, prescriptions, certificates,
+        documents, vitals, recalls, aujourdhui: todayStr,
+      })
+    : []
   const aSoins = estDentiste || estPediatre || (!isPsy && enabledVitals.length > 0)
   const onglets: { cle: Onglet; titre: string; icone: ReactNode }[] = [
     { cle: 'suivi', titre: 'Consultations', icone: <Calendar className="h-4 w-4" /> },
@@ -690,6 +727,10 @@ export default function PatientDossier({
       : []),
     { cle: 'argent', titre: 'Paiements', icone: <Wallet className="h-4 w-4" /> },
     { cle: 'dossier', titre: 'Documents', icone: <Paperclip className="h-4 w-4" /> },
+    // Le dossier range chaque chose dans son tiroir, ce qui est commode pour
+    // saisir et inutilisable pour comprendre : « que s'est-il passé en mars ? »
+    // obligeait à ouvrir quatre onglets et à recoller les dates de tête.
+    ...(estGastro ? [{ cle: 'chronologie' as Onglet, titre: 'Chronologie', icone: <History className="h-4 w-4" /> }] : []),
   ]
 
   return (
@@ -925,6 +966,17 @@ export default function PatientDossier({
                 </div>
               )}
               <div className="space-y-1"><Label className="text-[11px] text-gray-400">Antécédents chirurgicaux</Label><textarea value={editSurgeries} onChange={(e) => setEditSurgeries(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
+              {/* Les antécédents FAMILIAUX décident de la conduite en
+                  gastro-entérologie : un cancer colorectal chez un parent du
+                  premier degré avance la première coloscopie de dix ans. */}
+              {estGastro && (
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-gray-400">Antécédents familiaux</Label>
+                  <textarea value={editFamily} onChange={(e) => setEditFamily(e.target.value)} rows={2}
+                    placeholder="Ex : père — cancer du côlon à 58 ans ; sœur — maladie de Crohn"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                </div>
+              )}
               <div className="space-y-1"><Label className="text-[11px] text-gray-400">Traitements de fond</Label><textarea value={editTreatments} onChange={(e) => setEditTreatments(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
               {!isPsy && (
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Vaccins</Label><textarea value={editVaccinations} onChange={(e) => setEditVaccinations(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300" /></div>
@@ -1420,6 +1472,33 @@ export default function PatientDossier({
             </div>
           )}
 
+          {/* ── CHRONOLOGIE ────────────────────────────────────────────────
+              Un seul fil, du plus récent au plus ancien, où se lit
+              l'enchaînement : le compte rendu, l'anapath qui a suivi, le
+              traitement qui en est sorti, le contrôle programmé. Les suivis
+              encore à venir sont en tête — c'est ce qu'on perd de vue. */}
+          {onglet === 'chronologie' && (
+            <div className={sec}>
+              {chronologie.length === 0 ? (
+                <p className="text-sm text-gray-400 py-8 text-center">Ce dossier ne contient encore aucun événement.</p>
+              ) : (
+                <ol className="relative border-l border-gray-100 ml-2">
+                  {chronologie.map((e: Evenement) => (
+                    <li key={e.id} className="ml-4 pb-4 last:pb-0">
+                      <span className={`absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full ${COULEUR_EVENEMENT[e.nature]} ${e.futur ? 'ring-2 ring-amber-200' : ''}`} />
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <time className="text-[11px] font-medium text-gray-400 w-28 shrink-0">{formatDateFr(e.jour)}</time>
+                        <span className="text-sm font-medium text-gray-900">{e.titre}</span>
+                        {e.futur && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">à venir</span>}
+                      </div>
+                      {e.detail && <p className="text-xs text-gray-500 ml-[7.5rem] truncate">{e.detail}</p>}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+
           {onglet === 'dossier' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <div className="space-y-4">
@@ -1428,10 +1507,44 @@ export default function PatientDossier({
               <div className={secTitle}><span className="flex items-center gap-1.5"><Paperclip className="h-4 w-4" /> Documents ({documents.length})</span>
                 <label className="text-xs font-medium text-primary-600 cursor-pointer hover:text-primary-700">{uploadingDoc ? '…' : '＋ Ajouter'}<input type="file" className="hidden" onChange={uploadDocument} disabled={uploadingDoc} /></label>
               </div>
+
+              {/* La nature se choisit AVANT de prendre le fichier : une boîte
+                  de dialogue qui s'ouvre après l'envoi se fait valider sans
+                  être lue, et tout finit dans « Autre ». */}
+              {estGastro && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {CATEGORIES_DOCUMENT.map((c) => (
+                    <button key={c.cle} type="button" onClick={() => setCategorieImport(c.cle)}
+                      className={`text-[11px] px-2 py-1 rounded-lg border transition ${categorieImport === c.cle ? 'bg-primary-500 border-primary-500 text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                      {c.label}
+                    </button>
+                  ))}
+                  <span className="text-[11px] text-gray-400 w-full">Nature du prochain document ajouté.</span>
+                </div>
+              )}
+
+              {estGastro && documents.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2 pt-2 border-t border-gray-50">
+                  {([['tout', 'Tout'], ...CATEGORIES_DOCUMENT.map((c) => [c.cle, c.label] as const)] as const).map(([cle, label]) => (
+                    <button key={cle} type="button" onClick={() => setFiltreCategorie(cle as CategorieDocument | 'tout')}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border transition ${filtreCategorie === cle ? 'bg-gray-800 border-gray-800 text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {documents.length === 0 ? <p className="text-xs text-gray-400 italic">Analyses, radios, ordonnances scannées… (max 10 Mo)</p> : (
                 <ul className="space-y-1.5">
-                  {documents.map((d) => (
-                    <li key={d.id}><button onClick={() => downloadDocument(d)} className="text-sm text-primary-600 hover:underline truncate flex items-center gap-1.5 w-full text-left"><Download className="h-3.5 w-3.5 shrink-0" /> {d.file_name}</button></li>
+                  {documents
+                    .filter((d) => !estGastro || filtreCategorie === 'tout' || (d.categorie ?? 'autre') === filtreCategorie)
+                    .map((d) => (
+                    <li key={d.id}>
+                      <button onClick={() => downloadDocument(d)} className="text-sm text-primary-600 hover:underline truncate flex items-center gap-1.5 w-full text-left"><Download className="h-3.5 w-3.5 shrink-0" /> {d.file_name}</button>
+                      {estGastro && d.categorie && (
+                        <span className="text-[10px] text-gray-400 ml-5">{CATEGORIES_DOCUMENT.find((c) => c.cle === d.categorie)?.label}</span>
+                      )}
+                    </li>
                   ))}
                 </ul>
               )}

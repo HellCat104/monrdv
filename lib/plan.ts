@@ -89,5 +89,5 @@ export function canAccess(plan: string | null | undefined, feature: keyof PlanFe
  *  « Médecin généraliste » en toutes lettres, et non « général » seul :
  *  « Chirurgien général » contient le mot sans être de cette branche. */
 export function brancheDeveloppee(specialties: (string | null | undefined)[]): boolean {
-  return specialties.some((s) => !!s && /m[ée]decin g[ée]n[ée]raliste|p[ée]diatr|dent|stomato|orthodont|odonto/i.test(s))
+  return specialties.some((s) => !!s && /m[ée]decin g[ée]n[ée]raliste|p[ée]diatr|dent|stomato|orthodont|odonto|gastro/i.test(s))
 }

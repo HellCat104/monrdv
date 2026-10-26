@@ -376,8 +376,24 @@ export interface PatientDocument {
   file_name: string
   file_type?: string | null
   file_size?: number | null   // octets (quota de stockage par médecin)
+  /** Nature du document (v80). NULL sur tout ce qui a été importé avant :
+   *  on ne reclasse pas à la place du praticien. */
+  categorie?: CategorieDocument | null
   created_at: string
 }
+
+// Ce qu'un dossier reçoit de l'extérieur. Rangés dans une seule liste de noms
+// de fichiers, ces documents deviennent introuvables au bout d'un an — et
+// c'est l'anapath qu'on cherche, trois ans après la polypectomie.
+export type CategorieDocument = 'biologie' | 'imagerie' | 'anatomopathologie' | 'compte_rendu' | 'autre'
+
+export const CATEGORIES_DOCUMENT: { cle: CategorieDocument; label: string }[] = [
+  { cle: 'biologie',          label: 'Analyses biologiques' },
+  { cle: 'imagerie',          label: 'Imagerie' },
+  { cle: 'anatomopathologie', label: 'Anatomopathologie' },
+  { cle: 'compte_rendu',      label: 'Compte rendu externe' },
+  { cle: 'autre',             label: 'Autre' },
+]
 
 // Pour les créneaux disponibles
 export interface TimeSlot {
@@ -810,6 +826,13 @@ export function isPediatricDoctor(specialties: (string | null | undefined)[]): b
 
 // Spécialités « psy » (psychiatre, pédopsychiatre) → active la fiche de synthèse
 // et le modèle de note structuré (Motif / Histoire / Évolution / Traitement / RDV)
+// Gastro-entérologie. Le dossier y est long : un patient surveillé après
+// polypectomie revient dix ans, et c'est l'enchaînement des événements qu'on
+// lit, pas chaque pièce isolée.
+export function isGastroDoctor(specialties: (string | null | undefined)[]): boolean {
+  return specialties.some((s) => !!s && /gastro/i.test(s))
+}
+
 export function isPsychiatricDoctor(specialties: (string | null | undefined)[]): boolean {
   return specialties.some((s) => !!s && /psychiatr|pédopsy|pedopsy/i.test(s))
 }
