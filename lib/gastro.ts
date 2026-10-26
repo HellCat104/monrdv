@@ -68,7 +68,7 @@ export const TRAMES_CONSULTATION: TrameConsultation[] = [
     champs: {
       motif: 'Douleurs abdominales',
       symptomes: 'Siège :\nType :\nIrradiation :\nHoraire :\nFacteurs déclenchants et calmants :\nSignes associés :',
-      examen_clinique: 'État général :\nPalpation :\nDéfense ou contracture :\nOrifices herniaires :\nToucher rectal :',
+      examen_clinique: 'État général :\nPalpation :\nDéfense ou contracture :\nOrifices herniaires :\nToucher rectal :\nSignes d’alarme (fièvre, défense, amaigrissement, ictère) :',
     },
   },
   {
@@ -76,7 +76,7 @@ export const TRAMES_CONSULTATION: TrameConsultation[] = [
     champs: {
       motif: 'Troubles du transit',
       symptomes: 'Fréquence des selles :\nConsistance (Bristol) :\nAlternance :\nDouleurs associées :\nBallonnements :\nAncienneté :',
-      examen_clinique: 'État général :\nAbdomen :\nToucher rectal :',
+      examen_clinique: 'État général :\nAbdomen :\nToucher rectal :\nSignes d’alarme (rectorragies, amaigrissement, anémie, âge > 50 ans) :',
     },
   },
   {
@@ -84,7 +84,7 @@ export const TRAMES_CONSULTATION: TrameConsultation[] = [
     champs: {
       motif: 'Diarrhée chronique',
       symptomes: 'Ancienneté :\nNombre de selles / 24 h :\nSelles nocturnes :\nGlaires ou sang :\nAmaigrissement :\nVoyage, antibiotiques récents :\nTerrain (thyroïde, diabète) :',
-      examen_clinique: 'Poids et variation :\nÉtat d’hydratation :\nAbdomen :\nSignes extra-digestifs :',
+      examen_clinique: 'Poids et variation :\nÉtat d’hydratation :\nAbdomen :\nSignes extra-digestifs :\nSignes d’alarme (sang, selles nocturnes, amaigrissement, fièvre) :',
     },
   },
   {
@@ -92,7 +92,27 @@ export const TRAMES_CONSULTATION: TrameConsultation[] = [
     champs: {
       motif: 'Constipation',
       symptomes: 'Fréquence des selles :\nEffort de poussée :\nSensation d’évacuation incomplète :\nLaxatifs utilisés :\nApports en fibres et en eau :\nAncienneté :',
-      examen_clinique: 'Abdomen :\nMarge anale :\nToucher rectal :',
+      examen_clinique: 'Abdomen :\nMarge anale :\nToucher rectal :\nSignes d’alarme (début récent après 50 ans, sang, amaigrissement) :',
+    },
+  },
+  {
+    // Le motif le plus fréquent du cabinet après le reflux, et il n'avait pas
+    // de trame : le praticien repartait d'une page blanche dix fois par mois.
+    cle: 'epigastralgies', nom: 'Épigastralgies / H. pylori',
+    champs: {
+      motif: 'Douleurs épigastriques',
+      symptomes: 'Type de douleur :\nHoraire par rapport aux repas :\nBrûlures :\nBallonnements :\nNausées ou vomissements :\nAnciennet\u00e9 :',
+      antecedents: 'Traitements déjà essayés et leur effet :\nAINS, aspirine, corticoïdes :\nTabac, alcool :\nTest H. pylori déjà fait (lequel, quand, résultat) :',
+      examen_clinique: 'État général :\nSensibilité épigastrique :\nSignes d’alarme (amaigrissement, vomissements, anémie, dysphagie, âge > 50 ans) :',
+    },
+  },
+  {
+    cle: 'sii', nom: 'Intestin irritable',
+    champs: {
+      motif: 'Douleurs abdominales chroniques et ballonnements',
+      symptomes: 'Douleur : siège, soulagée par la défécation ?\nModification de la fréquence des selles :\nModification de la consistance :\nAncienneté et rythme :\nRetentissement sur la vie quotidienne :',
+      histoire: 'Facteurs alimentaires identifiés :\nStress, sommeil, activité physique :\nRégimes déjà tentés :',
+      examen_clinique: 'État général :\nAbdomen :\nSignes d’alarme (sang, amaigrissement, fièvre, antécédent familial de cancer ou de MICI, anémie) :',
     },
   },
   {
@@ -101,7 +121,7 @@ export const TRAMES_CONSULTATION: TrameConsultation[] = [
       motif: 'Suivi de maladie chronique',
       histoire: 'Pathologie suivie :\nDate du diagnostic :\nTraitement en cours et observance :\nDernier examen et sa date :',
       symptomes: 'Évolution depuis la dernière consultation :\nPoussées :\nTolérance du traitement :',
-      examen_clinique: 'Poids et variation :\nAbdomen :\nSignes extra-digestifs :',
+      examen_clinique: 'Poids et variation :\nAbdomen :\nSignes extra-digestifs :\nSignes d’alarme ou de décompensation :',
     },
   },
 ]
