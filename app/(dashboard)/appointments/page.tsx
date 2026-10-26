@@ -35,6 +35,10 @@ export default function AppointmentsPage() {
   const [doctor, setDoctor] = useState<Doctor | null>(null)
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
+  // Case cliquée dans le calendrier : elle ouvre la création déjà datée.
+  const [creneauVise, setCreneauVise] = useState<{ date: string; heure: string } | null>(null)
+  // Rendez-vous touché dans la grille : ses actions s'ouvrent sur place.
+  const [actionsFor, setActionsFor] = useState<Appointment | null>(null)
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('day')
@@ -73,6 +77,19 @@ export default function AppointmentsPage() {
   }, [])
 
   // Charge les rendez-vous selon la vue
+  /** Déplacer un rendez-vous en le faisant glisser dans la grille.
+   *
+   *  Le médecin écrit directement en base — c'est ainsi que fait le reste de
+   *  cet écran — et la RLS le limite à son cabinet. En cas de refus on le DIT :
+   *  un rendez-vous qui revient tout seul à sa place ferait croire que le
+   *  geste n'a pas été compris, et on recommencerait. */
+  async function deplacerDepuisCalendrier(apt: Appointment, jour: string, heure: string) {
+    const { error } = await supabase.from('appointments')
+      .update({ date: jour, time: heure }).eq('id', apt.id)
+    if (error) { alert('Le déplacement a échoué. Le rendez-vous n’a pas bougé.'); return }
+    await loadAppointments(true)
+  }
+
   const loadAppointments = useCallback(async (silencieux = false) => {
     if (!doctor) return
     // Le rafraîchissement automatique ne remet PAS les squelettes de
@@ -578,9 +595,7 @@ export default function AppointmentsPage() {
               appointments={filtered}
               blocks={dayBlocks}
               onSelectDay={(day) => { setCurrentDate(day); setViewMode('day') }}
-              onSelectAppointment={(apt) => {
-                if (apt.patient_id) router.push(`/patients/${apt.patient_id}`)
-              }}
+              onSelectAppointment={(apt) => setActionsFor(apt)}
             />
           ) : viewMode === 'week' && doctor ? (
             /* Grille horaire hebdomadaire */
@@ -591,9 +606,9 @@ export default function AppointmentsPage() {
               workingHours={doctor.working_hours}
               defaultDuration={doctor.appointment_duration}
               onSelectDay={(day) => { setCurrentDate(day); setViewMode('day') }}
-              onSelectAppointment={(apt) => {
-                if (apt.patient_id) router.push(`/patients/${apt.patient_id}`)
-              }}
+              onSelectAppointment={(apt) => setActionsFor(apt)}
+              onCreate={(jour, heure) => { setCreneauVise({ date: jour, heure }); setAddOpen(true) }}
+              onMove={(apt, jour, heure) => deplacerDepuisCalendrier(apt, jour, heure)}
             />
           ) : (
             <AppointmentList
@@ -614,9 +629,11 @@ export default function AppointmentsPage() {
       {doctor && (
         <AddAppointmentDialog
           open={addOpen}
-          onOpenChange={setAddOpen}
+          onOpenChange={(o) => { setAddOpen(o); if (!o) setCreneauVise(null) }}
           doctor={doctor}
           onSuccess={loadAppointments}
+          dateInitiale={creneauVise?.date}
+          heureInitiale={creneauVise?.heure}
         />
       )}
 
@@ -647,6 +664,49 @@ export default function AppointmentsPage() {
       <WalkInDialog open={walkInOpen} onOpenChange={setWalkInOpen} onSearch={searchWalkInPatients} onSubmit={addWalkIn} doctorId={doctor?.id ?? null} />
 
       {/* Dialog : bloquer un créneau */}
+      {/* Les actions d'un rendez-vous touché dans le calendrier : ouvrir le
+          dossier, annuler. On reste dans la grille — y renvoyer vers la liste
+          faisait perdre la vue d'ensemble qu'on était venu chercher. Pour
+          changer l'heure, on fait glisser. */}
+      <Dialog open={!!actionsFor} onOpenChange={(o) => !o && setActionsFor(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {actionsFor?.patient ? `${actionsFor.patient.first_name} ${actionsFor.patient.last_name}` : 'Rendez-vous'}
+            </DialogTitle>
+          </DialogHeader>
+          {actionsFor && (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500 capitalize">
+                {format(new Date(actionsFor.date + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })} à {actionsFor.time.substring(0, 5)}
+              </p>
+              <Button variant="outline" className="w-full justify-start"
+                onClick={() => { const a = actionsFor; setActionsFor(null); if (a.patient_id) router.push(`/patients/${a.patient_id}`) }}>
+                Ouvrir le dossier du patient
+              </Button>
+              <Button variant="outline" className="w-full justify-start"
+                onClick={() => { const a = actionsFor; setActionsFor(null); setCurrentDate(new Date(a.date + 'T12:00:00')); setViewMode('day') }}>
+                Voir la journée
+              </Button>
+              <Button variant="outline" className="w-full justify-start text-red-600 hover:text-red-700"
+                onClick={async () => {
+                  const a = actionsFor
+                  if (!confirm('Annuler ce rendez-vous ?')) return
+                  setActionsFor(null)
+                  const { error } = await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', a.id)
+                  if (error) { alert('L’annulation a échoué.'); return }
+                  await loadAppointments(true)
+                }}>
+                <X className="h-4 w-4 mr-2" /> Annuler le rendez-vous
+              </Button>
+              <p className="text-[11px] text-gray-400 pt-1">
+                Pour changer l’heure, faites glisser le rendez-vous dans la grille.
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Bloquer un créneau</DialogTitle></DialogHeader>

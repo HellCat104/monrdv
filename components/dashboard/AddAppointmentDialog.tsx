@@ -31,6 +31,11 @@ interface AddAppointmentDialogProps {
   onOpenChange: (open: boolean) => void
   doctor: Doctor
   onSuccess: () => void
+  /** Date et heure de départ, quand la fenêtre est ouverte en cliquant une
+   *  case libre du calendrier. Sans elles, le praticien qui vise 14 h 30 le
+   *  jeudi devait les ressaisir — ce qui retirait tout l'intérêt du clic. */
+  dateInitiale?: string
+  heureInitiale?: string
 }
 
 // Valeur "aucun motif" du Select (durée de base du médecin)
@@ -51,6 +56,8 @@ export function AddAppointmentDialog({
   onOpenChange,
   doctor,
   onSuccess,
+  dateInitiale,
+  heureInitiale,
 }: AddAppointmentDialogProps) {
   // Patient du RDV : fiche existante choisie dans la liste, ou nouvelle fiche
   const [patient, setPatient] = useState<PatientChoice>(null)
@@ -71,6 +78,16 @@ export function AddAppointmentDialog({
   const supabase = createClient()
 
   // Charge les motifs du médecin à l'ouverture
+  // La case cliquée dans le calendrier devient la date et l'heure de départ.
+  // À chaque OUVERTURE, et pas une seule fois : on clique 9 h, on annule, on
+  // clique 14 h — la seconde valeur doit remplacer la première.
+  useEffect(() => {
+    if (!open) return
+    if (dateInitiale || heureInitiale) {
+      setForm((f) => ({ ...f, date: dateInitiale ?? f.date, time: heureInitiale ?? f.time }))
+    }
+  }, [open, dateInitiale, heureInitiale])
+
   useEffect(() => {
     if (!open) return
     supabase

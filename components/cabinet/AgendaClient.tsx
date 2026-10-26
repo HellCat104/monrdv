@@ -57,6 +57,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   // jour est une colonne de trente lignes sur lesquelles il n'y a plus rien à
   // faire, et ce qui reste à faire se perd dedans.
   const [passesOuverts, setPassesOuverts] = useState(false)
+  // Rendez-vous touché dans le calendrier : on ouvre ses actions SUR PLACE.
+  // Renvoyer vers la liste obligeait à retrouver la ligne, et faisait perdre
+  // la vue d'ensemble qu'on était justement venu chercher.
+  const [actionsFor, setActionsFor] = useState<Apt | null>(null)
   const [grain, setGrain] = useState<'jour' | 'semaine' | 'mois'>('semaine')
   const [plageAppts, setPlageAppts] = useState<Apt[]>([])
   const [plageBlocks, setPlageBlocks] = useState<Block[]>([])
@@ -334,6 +338,32 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     await load(date)
   }
 
+  /** Déplacement par glissement, depuis le calendrier. Le serveur reste juge :
+   *  s'il refuse — créneau pris, cabinet fermé — on le DIT au lieu de laisser
+   *  le rendez-vous revenir silencieusement à sa place, ce qui ferait croire
+   *  que le geste n'a pas été compris. */
+  async function deplacerDepuisCalendrier(a: Apt, jour: string, heure: string) {
+    setError('')
+    const res = await fetch('/api/cabinet/appointments', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: a.id, date: jour, time: heure }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) { setError(d.error || 'Déplacement refusé.'); return }
+    await rechargerCalendrier()
+  }
+
+  /** Après une écriture : la liste du jour ET la plage affichée. Sans la
+   *  seconde, le rendez-vous déplacé restait à son ancienne place dans la
+   *  grille jusqu'au prochain changement de semaine. */
+  async function rechargerCalendrier() {
+    await load(date)
+    if (mode === 'calendrier' && grain !== 'jour') {
+      await loadPlage(grain === 'mois' ? grilleMois
+        : eachDayOfInterval({ start: debutSemaine, end: endOfWeek(jourCourant, { weekStartsOn: 1 }) }))
+    }
+  }
+
   const dayShift = (n: number) => setDate(format(addDays(new Date(date + 'T12:00:00'), n), 'yyyy-MM-dd'))
 
   // Les flèches avancent de ce que l'écran montre : un jour sur la liste, une
@@ -510,7 +540,16 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
               workingHours={workingHours ?? HORAIRES_PAR_DEFAUT}
               defaultDuration={30}
               onSelectDay={(d) => { setDate(format(d, 'yyyy-MM-dd')); setMode('liste') }}
-              onSelectAppointment={(a) => { setDate((a as unknown as Apt).date); setMode('liste') }}
+              onSelectAppointment={(a) => setActionsFor(a as unknown as Apt)}
+              // Créer et déplacer depuis la grille — seulement si elle en a le
+              // droit : sans la permission, la grille reste en lecture.
+              onCreate={permissions.manage_appointments ? (jour, heure) => {
+                setDate(jour); setAddError(''); setForm({ time: heure, notes: '' })
+                setPatient(null); setTypeId(NO_TYPE); setAddOpen(true)
+              } : undefined}
+              onMove={permissions.manage_appointments ? (a, jour, heure) => {
+                deplacerDepuisCalendrier(a as unknown as Apt, jour, heure)
+              } : undefined}
             />
           </div>
         )
@@ -740,6 +779,53 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
       </Dialog>
 
       {/* Dialog déplacer */}
+      {/* Les actions d'un rendez-vous touché dans le calendrier. Trois gestes,
+          nommés : ouvrir, déplacer, annuler — sans quitter le calendrier.
+          Renvoyer vers la liste obligeait à retrouver la ligne, et faisait
+          perdre la vue d'ensemble qu'on était venu chercher. */}
+      <Dialog open={!!actionsFor} onOpenChange={(o) => !o && setActionsFor(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {actionsFor?.patient ? `${actionsFor.patient.first_name} ${actionsFor.patient.last_name}` : 'Rendez-vous'}
+            </DialogTitle>
+          </DialogHeader>
+          {actionsFor && (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500 capitalize">
+                {format(new Date(actionsFor.date + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })} à {formatTime(actionsFor.time)}
+                {actionsFor.consultation_type?.name ? ` · ${actionsFor.consultation_type.name}` : ''}
+              </p>
+              <Button variant="outline" className="w-full justify-start"
+                onClick={() => { const a = actionsFor; setActionsFor(null); setDate(a.date); setMode('liste') }}>
+                Voir dans la liste du jour
+              </Button>
+              {permissions.manage_appointments && (
+                <>
+                  <Button variant="outline" className="w-full justify-start"
+                    onClick={() => { const a = actionsFor; setActionsFor(null); setMoveError(''); setMoveFor(a); setMoveDate(''); setMoveTime('') }}>
+                    <CalendarClock className="h-4 w-4 mr-2" /> Déplacer à une autre date
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start text-red-600 hover:text-red-700"
+                    onClick={async () => {
+                      const a = actionsFor
+                      if (!confirm('Annuler ce rendez-vous ?')) return
+                      setActionsFor(null)
+                      await patchRdv(a.id, { status: 'cancelled' })
+                      await rechargerCalendrier()
+                    }}>
+                    <X className="h-4 w-4 mr-2" /> Annuler le rendez-vous
+                  </Button>
+                  <p className="text-[11px] text-gray-400 pt-1">
+                    Pour un simple changement d’heure, faites glisser le rendez-vous dans la grille.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!moveFor} onOpenChange={(o) => !o && setMoveFor(null)}>
         <DialogContent className="max-w-xs">
           <DialogHeader><DialogTitle>Déplacer — {moveFor?.patient ? `${moveFor.patient.first_name} ${moveFor.patient.last_name}` : ''}</DialogTitle></DialogHeader>

@@ -5,6 +5,7 @@
 // journée ; ici les trous, les blocages et les chevauchements se voient d'un
 // coup d'œil, ce qui est tout l'intérêt d'un agenda de cabinet.
 
+import { useRef, useState } from 'react'
 import { format, addDays, isSameDay } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Ban } from 'lucide-react'
@@ -28,6 +29,13 @@ interface WeekGridProps {
   defaultDuration: number             // durée de base, si le RDV n'en porte pas
   onSelectDay: (day: Date) => void
   onSelectAppointment: (apt: Appointment) => void
+  /** Clic sur un créneau LIBRE : créer un rendez-vous à cette date et cette
+   *  heure. Absent = la grille reste en lecture seule (ce qu'elle était). */
+  onCreate?: (date: string, heure: string) => void
+  /** Rendez-vous déplacé en le faisant GLISSER. On ne prévient le parent qu'au
+   *  relâchement, et seulement si la case a changé : un doigt qui tremble sur
+   *  une tablette ne doit pas déplacer la consultation de quelqu'un. */
+  onMove?: (apt: Appointment, date: string, heure: string) => void
   /** Nombre de colonnes. 7 pour la semaine, 1 pour une seule journée — la
    *  même grille sert aux deux : des trous à voir et des chevauchements à
    *  démêler, c'est le même problème sur un jour que sur sept. */
@@ -76,7 +84,7 @@ function repartir(items: { start: number; end: number }[]): { col: number; total
 
 export function WeekGrid({
   weekStart, appointments, blocks, workingHours,
-  defaultDuration, onSelectDay, onSelectAppointment, nbJours = 7,
+  defaultDuration, onSelectDay, onSelectAppointment, onCreate, onMove, nbJours = 7,
 }: WeekGridProps) {
   const jours = Array.from({ length: nbJours }, (_, i) => addDays(weekStart, i))
   // La grille des colonnes et la largeur minimale suivent le nombre de jours :
@@ -117,6 +125,33 @@ export function WeekGrid({
   const afficheMaintenant = colonneAujourdhui >= 0 && maintenant >= debut && maintenant <= fin
 
   const congesDuJour = (dStr: string) => blocks.filter((b) => b.date === dStr && !b.start_time)
+
+  // ── Interaction : créer en cliquant, déplacer en glissant ─────────────────
+  //
+  // Les minutes se calent sur le quart d'heure. Au pixel près, on obtiendrait
+  // « 09:07 », que personne n'a voulu et que tout le monde devrait corriger.
+  const PAS_MIN = 15
+  const grille = useRef<HTMLDivElement>(null)
+  const [glisse, setGlisse] = useState<{ id: string; dejaBouge: boolean } | null>(null)
+  const [cible, setCible] = useState<{ jour: string; minutes: number } | null>(null)
+
+  /** Où pointe-t-on dans la grille ? Null hors des colonnes de jours. */
+  function positionDe(clientX: number, clientY: number): { jour: Date; minutes: number } | null {
+    const el = grille.current
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    const largeurColonnes = r.width - 48          // 48 px : la colonne des heures
+    const x = clientX - r.left - 48
+    if (x < 0 || x > largeurColonnes) return null
+    const index = Math.min(nbJours - 1, Math.max(0, Math.floor(x / (largeurColonnes / nbJours))))
+    const brut = debut + (clientY - r.top) / MINUTE_PX
+    const cale = Math.round(brut / PAS_MIN) * PAS_MIN
+    if (cale < debut || cale >= fin) return null
+    return { jour: jours[index], minutes: cale }
+  }
+
+  const enTexte = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 
   return (
     <div className="overflow-x-auto">
@@ -170,7 +205,29 @@ export function WeekGrid({
         )}
 
         {/* Grille horaire */}
-        <div className="relative grid mt-3" style={{ ...colonnes, height: hauteur }}>
+        <div ref={grille} className="relative grid mt-3" style={{ ...colonnes, height: hauteur }}
+          onPointerMove={(e) => {
+            if (!glisse) return
+            const p = positionDe(e.clientX, e.clientY)
+            if (p) { setCible({ jour: format(p.jour, 'yyyy-MM-dd'), minutes: p.minutes }); setGlisse({ ...glisse, dejaBouge: true }) }
+          }}
+          onPointerUp={(e) => {
+            if (!glisse) return
+            const encours = glisse
+            setGlisse(null); setCible(null)
+            if (!encours.dejaBouge || !onMove) return
+            const p = positionDe(e.clientX, e.clientY)
+            if (!p) return
+            const apt = appointments.find((a) => a.id === encours.id)
+            if (!apt) return
+            const jour = format(p.jour, 'yyyy-MM-dd')
+            const heure = enTexte(p.minutes)
+            // Reposé exactement d'où il vient : ce n'est pas un déplacement.
+            if (jour === apt.date && heure === apt.time.substring(0, 5)) return
+            onMove(apt, jour, heure)
+          }}
+          onPointerLeave={() => { setGlisse(null); setCible(null) }}
+        >
 
           {/* Colonne des heures */}
           <div className="relative">
@@ -209,30 +266,39 @@ export function WeekGrid({
             const plages = blocks.filter((b) => b.date === dStr && b.start_time && b.end_time)
 
             return (
-              <div key={dStr} className="relative border-l border-gray-100">
+              <div key={dStr}
+                className={`relative border-l border-gray-100 ${onCreate ? 'cursor-copy' : ''}`}
+                onClick={(e) => {
+                  // Seulement le fond de la colonne : un clic sur un rendez-vous
+                  // ou sur un créneau bloqué veut dire autre chose.
+                  if (!onCreate || e.target !== e.currentTarget) return
+                  const p = positionDe(e.clientX, e.clientY)
+                  if (p) onCreate(format(p.jour, 'yyyy-MM-dd'), enTexte(p.minutes))
+                }}
+              >
 
                 {/* Congé : toute la colonne est teintée, sinon la fermeture
                     ne se lit que dans le bandeau du haut. */}
                 {congesDuJour(dStr).length > 0 && (
-                  <div className="absolute inset-0 bg-red-50/60 z-[1]" />
+                  <div className="absolute inset-0 bg-red-50/60 z-[1] pointer-events-none" />
                 )}
 
                 {/* Hors horaires d'ouverture — grisé */}
                 {!ouvert ? (
-                  <div className="absolute inset-0 bg-gray-50/80" />
+                  <div className="absolute inset-0 bg-gray-50/80 pointer-events-none" />
                 ) : (
                   <>
                     {ouv > debut && (
-                      <div className="absolute inset-x-0 bg-gray-50/80"
+                      <div className="absolute inset-x-0 bg-gray-50/80 pointer-events-none"
                            style={{ top: 0, height: y(ouv, debut) }} />
                     )}
                     {ferm < fin && (
-                      <div className="absolute inset-x-0 bg-gray-50/80"
+                      <div className="absolute inset-x-0 bg-gray-50/80 pointer-events-none"
                            style={{ top: y(ferm, debut), height: y(fin, debut) - y(ferm, debut) }} />
                     )}
                     {/* Pauses déclarées (déjeuner…) */}
                     {getDayBreaks(sched).map((p, i) => (
-                      <div key={i} className="absolute inset-x-0 bg-gray-100/70"
+                      <div key={i} className="absolute inset-x-0 bg-gray-100/70 pointer-events-none"
                            style={{ top: y(toMinutes(p.start), debut),
                                     height: (toMinutes(p.end) - toMinutes(p.start)) * MINUTE_PX }} />
                     ))}
@@ -267,8 +333,19 @@ export function WeekGrid({
                   return (
                     <button
                       key={r.apt.id}
-                      onClick={() => onSelectAppointment(r.apt)}
+                      onPointerDown={(e) => {
+                        if (!onMove) return
+                        // On capture le pointeur sur la GRILLE et non sur le
+                        // bloc : sinon, dès que le doigt sort du rendez-vous,
+                        // les événements cessent d'arriver et le déplacement
+                        // s'interrompt au premier millimètre.
+                        e.preventDefault()
+                        setGlisse({ id: r.apt.id, dejaBouge: false })
+                      }}
+                      onClick={() => { if (!glisse) onSelectAppointment(r.apt) }}
                       className={`absolute rounded px-1 pt-0.5 text-left overflow-hidden border-l-2 transition-shadow hover:shadow-md ${
+                        onMove ? 'cursor-grab active:cursor-grabbing touch-none' : ''
+                      } ${glisse?.id === r.apt.id ? 'opacity-40' : ''} ${
                         absent      ? 'bg-gray-100 border-gray-400 text-gray-500 line-through'
                         : enAttente ? 'bg-amber-50 border-amber-400 text-amber-900'
                                     : 'bg-primary-50 border-primary-500 text-primary-900'
@@ -296,6 +373,24 @@ export function WeekGrid({
               </div>
             )
           })}
+
+          {/* L'ombre de destination : sans elle on lâche à l'aveugle, et on
+              découvre l'heure obtenue une fois le rendez-vous déplacé. */}
+          {glisse && cible && (
+            <div className="absolute z-20 pointer-events-none flex items-center justify-center rounded border-2 border-dashed border-primary-500 bg-primary-50/70"
+              style={{
+                top: y(cible.minutes, debut),
+                height: 24,
+                // Les colonnes commencent APRÈS la gouttière des heures : un
+                // pourcentage de la largeur totale décalerait l'ombre de 48 px
+                // divisés par le nombre de jours.
+                left: `calc(48px + (100% - 48px) * ${jours.findIndex((j) => format(j, 'yyyy-MM-dd') === cible.jour)} / ${nbJours})`,
+                width: `calc((100% - 48px) / ${nbJours})`,
+              }}
+            >
+              <span className="text-[10px] font-semibold text-primary-700">{enTexte(cible.minutes)}</span>
+            </div>
+          )}
 
           {/* Trait de l'heure courante */}
           {afficheMaintenant && (
