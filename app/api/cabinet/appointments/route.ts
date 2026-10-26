@@ -19,6 +19,7 @@ import { sendAppointmentConfirmationToPatient, sendRescheduleEmailToPatient, sen
 import { displayName } from '@/lib/profession'
 import { formatDateShort } from '@/lib/utils'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey, ageFromBirthDate } from '@/lib/utils'
+import { retardMinutes } from '@/lib/file-attente'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { proposerCreneauLibere, creneauDuRdv } from '@/lib/waitlist'
 import { randomUUID } from 'crypto'
@@ -434,9 +435,22 @@ export async function PATCH(req: NextRequest) {
     // le compteur des retards structurellement proche de zéro.
     //
     // « Absent », en revanche, devient faux dès qu'il franchit la porte.
+    //
+    // LE RETARD SE CONSTATE TOUT SEUL. Il fallait le cocher à la main, c'est
+    // dire le constater au moment précis où l'on accueille quelqu'un — donc
+    // jamais, et le compteur des retards restait structurellement à zéro.
+    // L'heure du rendez-vous et l'heure du pointage suffisent à le savoir.
+    //
+    // Seulement sur « arrivé » : c'est le seul pointage qui dit « il est là,
+    // maintenant ». Cliquer « Parti » à 13 h sur un patient de 12 h reçu à
+    // l'heure aurait inventé un retard d'une heure.
     if (body.queue_status && !('attendance' in body)) {
       const dejaNote = (apt as { attendance?: string | null }).attendance
-      if (dejaNote == null || dejaNote === 'absent') patch.attendance = 'present'
+      if (dejaNote == null || dejaNote === 'absent') {
+        const enRetard = body.queue_status === 'arrive'
+          && retardMinutes(apt as { date: string; time: string }, getNowInMaroc()) != null
+        patch.attendance = enRetard ? 'late' : 'present'
+      }
     }
 
     // Sortir de la file (« Réinitialiser ») efface aussi le bilan qu'elle

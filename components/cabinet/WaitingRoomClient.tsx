@@ -21,6 +21,13 @@ import PanneauMedecin, { BoutonMedecin, type RdvEchange } from '@/components/cab
 import AReprogrammer from '@/components/cabinet/AReprogrammer'
 import type { StaffPermissions, ConsultationType } from '@/types'
 import { Armchair, BellRing, ChevronDown, Banknote, FileText } from 'lucide-react'
+import TableauFile from '@/components/cabinet/TableauFile'
+
+/** La vue choisie survit au rechargement : un écran qu'on rouvre vingt fois
+ *  par jour ne doit pas redemander son réglage à chaque fois. Stocké dans le
+ *  navigateur, donc propre à ce poste — et sans conséquence s'il est
+ *  indisponible (navigation privée, stockage bloqué). */
+const CLE_VUE = 'monrdv.attente.vue'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
@@ -35,7 +42,22 @@ export default function WaitingRoomClient() {
   const [payFor, setPayFor] = useState<Apt | null>(null)
   const [motFor, setMotFor] = useState<Apt | null>(null)
   const [doctorName, setDoctorName] = useState('Le médecin')
+  const [vue, setVue] = useState<'liste' | 'cases'>('liste')
+  // L'heure du dernier chargement : toutes les durées de l'écran s'en servent,
+  // pour que deux cartes côte à côte ne soient pas lues à deux instants.
+  const [maintenant, setMaintenant] = useState(() => getNowInMaroc())
   const today = format(getNowInMaroc(), 'yyyy-MM-dd')
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(CLE_VUE)
+      if (v === 'cases' || v === 'liste') setVue(v)
+    } catch { /* stockage indisponible : on garde la liste */ }
+  }, [])
+  const changerVue = (v: 'liste' | 'cases') => {
+    setVue(v)
+    try { localStorage.setItem(CLE_VUE, v) } catch { /* sans conséquence */ }
+  }
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/cabinet/appointments?date=${today}`)
@@ -47,6 +69,7 @@ export default function WaitingRoomClient() {
       setPermissions(d.permissions ?? null)
       setTypes(d.consultationTypes ?? [])
       if (d.doctorName) setDoctorName(d.doctorName)
+      setMaintenant(getNowInMaroc())
     }
     setLoading(false)
   }, [today])
@@ -140,11 +163,33 @@ export default function WaitingRoomClient() {
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span><b className="text-blue-600">{waiting.length}</b> en attente</span>
           <span><b className="text-green-600">{inConsult.length}</b> en consultation</span>
+          {/* Deux façons de regarder la même pièce : la liste pour agir sur
+              un patient, les cases pour voir où on en est. */}
+          <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-white">
+            {([['liste', 'Liste'], ['cases', 'Cases']] as const).map(([v, label]) => (
+              <button key={v} onClick={() => changerVue(v)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${vue === v ? 'bg-primary-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {loading ? (
         <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+      ) : vue === 'cases' ? (
+        <TableauFile
+          attendus={aVenir}
+          attente={waiting}
+          consultation={inConsult}
+          permissions={permissions}
+          maintenant={maintenant}
+          appelEnCours={appels.length > 0}
+          onQueue={(id, statut) => setQueue(id, statut)}
+          onPay={(a) => setPayFor(a)}
+          onMot={(a) => setMotFor(a)}
+        />
       ) : appts.length === 0 ? (
         <div className="bg-white border border-gray-100 rounded-xl p-10 text-center text-gray-400 text-sm">
           <Armchair className="h-8 w-8 mx-auto mb-2 opacity-40" /> Aucun rendez-vous aujourd&apos;hui.

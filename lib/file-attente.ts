@@ -12,7 +12,40 @@
 // rendez-vous : venu, absent, en retard — c'est elle qui alimente les
 // statistiques. Quand la file a quelque chose à dire, elle parle ; la présence
 // ne reprend la parole que pour ce qu'elle seule sait : une absence, un retard.
-import { minutesDepuis } from '@/lib/utils'
+import { minutesDepuis, getNowInMaroc } from '@/lib/utils'
+
+/** Au-delà de ce retard, on considère que le patient est en retard. Dix
+ *  minutes : en deçà, c'est la vie d'un cabinet, pas un retard, et l'annoncer
+ *  ferait passer tout le monde pour fautif. */
+export const RETARD_TOLERANCE_MIN = 10
+
+/** Les minutes de retard d'un patient qu'on attend ENCORE, ou null.
+ *
+ *  Calculé depuis l'heure du rendez-vous : personne n'a à cliquer quoi que ce
+ *  soit pour qu'un retard se voie. Le bouton « En retard » demandait à la
+ *  secrétaire de constater à la main ce que l'horloge sait déjà — et comme
+ *  elle a autre chose à faire, le compteur des retards restait à zéro. */
+export function retardMinutes(
+  a: { date?: string | null; time?: string | null; queue_status?: string | null },
+  maintenant: Date,
+): number | null {
+  // Il est arrivé : son retard, s'il y en avait un, appartient au passé et
+  // c'est le serveur qui l'a inscrit au pointage.
+  if (a.queue_status || !a.date || !a.time) return null
+  const [an, mois, jour] = String(a.date).split('-').map(Number)
+  const [heure, minute] = String(a.time).substring(0, 5).split(':').map(Number)
+  if ([an, mois, jour, heure, minute].some((n) => !Number.isFinite(n))) return null
+  // Uniquement AUJOURD'HUI. Un rendez-vous de la semaine dernière jamais
+  // pointé n'est pas « en retard de 10 080 minutes » : il est passé, et c'est
+  // une absence, pas un retard.
+  const memeJour = maintenant.getFullYear() === an
+    && maintenant.getMonth() + 1 === mois
+    && maintenant.getDate() === jour
+  if (!memeJour) return null
+  const prevu = new Date(an, mois - 1, jour, heure, minute)
+  const ecart = Math.floor((maintenant.getTime() - prevu.getTime()) / 60000)
+  return ecart > RETARD_TOLERANCE_MIN ? ecart : null
+}
 
 export interface EtatPatient {
   label: string
@@ -21,6 +54,8 @@ export interface EtatPatient {
 }
 
 interface LigneFile {
+  date?: string | null
+  time?: string | null
   queue_status?: string | null
   queue_arrived_at?: string | null
   queue_started_at?: string | null
@@ -55,6 +90,12 @@ export function etatPatient(a: LigneFile): EtatPatient | null {
 
   // Pas de file ce jour-là : seule la présence peut encore dire quelque chose.
   if (a.attendance === 'absent') return { label: 'Absent', couleur: 'bg-red-100 text-red-700' }
+
+  // Le retard s'affiche SEUL, sans que personne l'ait coché : l'heure du
+  // rendez-vous et l'horloge suffisent. Avant, il fallait que la secrétaire
+  // pense à cliquer au bon moment — elle avait un patient devant elle.
+  const retard = retardMinutes(a, getNowInMaroc())
+  if (retard != null) return { label: `En retard de ${retard} min`, couleur: 'bg-orange-100 text-orange-700' }
   if (a.attendance === 'late') return { label: 'En retard', couleur: 'bg-orange-100 text-orange-700' }
   if (a.attendance === 'present') return { label: 'Présent', couleur: 'bg-green-100 text-green-700' }
   return null
