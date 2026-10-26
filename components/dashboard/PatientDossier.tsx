@@ -18,6 +18,7 @@ import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
 import QuotesCard from '@/components/dashboard/QuotesCard'
 import MenuDocuments from '@/components/dashboard/MenuDocuments'
+import BlocGastro from '@/components/gastro/BlocGastro'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import PerioCard from '@/components/dashboard/PerioCard'
@@ -1038,6 +1039,10 @@ export default function PatientDossier({
           {onglet === 'suivi' && (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
               <div className="space-y-4 min-w-0">
+            {/* BRANCHE GASTRO-ENTÉROLOGIE : par où l'on crée, et ce qui a déjà
+                été fait. En tête de l'onglet, parce que c'est le premier geste
+                de la consultation. */}
+            {estGastro && <BlocGastro patientId={patient.id} doctorId={doctorId} />}
             <div className="flex items-center gap-2 flex-wrap">
               {/* BRANCHE GÉNÉRALISTE : un seul bouton « Documents » pour les
                   cinq choses qu'il remet au patient. Le dentiste et le

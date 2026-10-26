@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { isGastroDoctor } from '@/types'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -16,6 +17,8 @@ import {
   BarChart3,
   Receipt,
   Users2,
+  BellRing,
+  ClipboardList,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -26,6 +29,8 @@ const navItems = [
   { href: '/patients',      label: 'Patients',          icon: Users },
   { href: '/factures',      label: 'Factures',          icon: Receipt },
   { href: '/statistiques',  label: 'Statistiques',      icon: BarChart3 },
+  { href: '/gastro/suivis', label: 'Suivis et résultats', icon: BellRing, branche: 'gastro' },
+  { href: '/gastro/modeles', label: 'Mes modèles',       icon: ClipboardList, branche: 'gastro' },
   { href: '/equipe',        label: 'Mon équipe',        icon: Users2 },
   { href: '/settings',      label: 'Paramètres',        icon: Settings },
   { href: '/abonnement',    label: 'Abonnement',        icon: CreditCard },
@@ -44,14 +49,22 @@ export function Sidebar() {
   // Forfait : en 'agenda', les Factures sont masquées.
   // Défaut 'agenda' : on n'affiche qu'après confirmation.
   const [plan, setPlan] = useState<'agenda' | 'complet'>('agenda')
+  // Branche du médecin : null tant qu'on ne sait pas, pour ne pas faire
+  // clignoter une entrée qui va disparaître.
+  const [branche, setBranche] = useState<string | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
-      supabase.from('doctors').select('plan').eq('email', user.email).single()
+      supabase.from('doctors').select('plan, specialty, specialties').eq('email', user.email).single()
         .then(({ data }) => {
           setPlan(data?.plan === 'complet' ? 'complet' : 'agenda')
+          // Les entrées de branche ne s'affichent que chez la spécialité
+          // concernée : je ne veux pas retrouver « Suivis » chez une
+          // psychologue, dont la branche n'existe pas encore.
+          const specs = (data?.specialties as string[] | null) ?? (data?.specialty ? [data.specialty] : [])
+          setBranche(isGastroDoctor(specs) ? 'gastro' : null)
         })
     })
   }, [pathname]) // re-vérifie après un passage dans Paramètres / Mon équipe / Abonnement
@@ -65,9 +78,11 @@ export function Sidebar() {
   // En forfait Agenda, les statistiques restent accessibles (activité, caisse) ;
   // seules les factures conformes sont réservées au Cabinet complet.
   // (Patients reste visible : fiche réduite nom/prénom/tél/notes en mode agenda.)
-  const planHidden = plan === 'agenda' ? ['/factures'] : []
+  // En forfait Agenda, les écrans de branche n'existent pas : leurs pages
+  // redirigent déjà côté serveur, le menu ne doit pas y mener.
+  const planHidden = plan === 'agenda' ? ['/factures', '/gastro/suivis', '/gastro/modeles'] : []
   const visibleItems = navItems.filter(
-    (i) => !planHidden.includes(i.href)
+    (i) => !planHidden.includes(i.href) && (!i.branche || i.branche === branche)
   )
 
   const NavLinks = () => (

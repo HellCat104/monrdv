@@ -7,6 +7,8 @@ import { getOrdonnanceAReprendre, getRecentPrescriptionLines } from '@/lib/ordon
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE } from '@/lib/document-entete'
 import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
+import { isGastroDoctor, type LigneOrdonnance } from '@/types'
+import { rendreModele } from '@/lib/gastro'
 import { format } from 'date-fns'
 
 // N'accepte qu'un chemin interne (évite les redirections ouvertes)
@@ -30,7 +32,7 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select(`id, prescription_favorites, plan, ${COLONNES_EN_TETE}`)
+    .select(`id, prescription_favorites, plan, specialty, specialties, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -55,8 +57,24 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
     getOrdonnanceAReprendre(supabase, doctor.id, patient.id, searchParams.reprendre),
   ])
 
+  // Les modèles d'ordonnance ne concernent que la branche gastro pour
+  // l'instant : les charger ailleurs afficherait un panneau vide chez tout le
+  // monde, et une requête de plus à chaque ouverture.
+  const specialites = (doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])
+  let modeles: { id: string; nom: string; categorie: string | null; texte: string }[] = []
+  if (isGastroDoctor(specialites)) {
+    const { data } = await supabase
+      .from('prescription_templates').select('id, nom, categorie, lignes, examens, notes')
+      .is('archive_le', null).order('categorie').order('nom')
+    modeles = (data ?? []).map((m) => ({
+      id: m.id, nom: m.nom, categorie: m.categorie,
+      texte: rendreModele((m.lignes ?? []) as LigneOrdonnance[], m.examens, m.notes),
+    })).filter((m) => m.texte.trim())
+  }
+
   return (
     <OrdonnanceEditor
+      modeles={modeles}
       doctor={doctor}
       patient={patient}
       appointmentId={null}

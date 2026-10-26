@@ -42,6 +42,10 @@ interface Props {
    *  sera enregistrée. Un médecin qui voit son texte déjà rempli doit savoir
    *  d'où il vient, sinon il peut croire qu'il modifie l'ancienne. */
   repriseDu?: string | null
+  /** Modèles d'ordonnance du praticien (branche gastro). Déposés dans
+   *  l'éditeur, jamais appliqués tout seuls : un modèle évite de retaper, il
+   *  ne prescrit pas — c'est le médecin qui l'adapte puis enregistre. */
+  modeles?: { id: string; nom: string; categorie: string | null; texte: string }[]
 }
 
 // Message affiché tant que l'échec n'est pas réparé. Il dit ce qui est perdu
@@ -53,7 +57,7 @@ const ECHEC_ENREGISTREMENT =
 export function OrdonnanceEditor({
   doctor, patient, appointmentId, appointmentDate, existingId, existingContent,
   favorites: initialFavorites, recentLines, backHref = '/appointments', logoUrl = null,
-  repriseDu = null,
+  repriseDu = null, modeles = [],
 }: Props) {
   const [content, setContent] = useState(existingContent)
   const [prescriptionId, setPrescriptionId] = useState<string | null>(existingId)
@@ -253,6 +257,29 @@ export function OrdonnanceEditor({
 
         {/* Panneau favoris + suggestions — masqué à l'impression */}
         <aside className="w-72 shrink-0 space-y-4 print:hidden">
+          {/* Les modèles du praticien (branche gastro). Ils AJOUTENT au texte
+              plutôt que de l'écraser : on compose souvent une ordonnance de
+              deux modèles, et perdre ce qu'on venait d'écrire serait pire que
+              de retaper. */}
+          {modeles.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">Mes modèles</h3>
+              <div className="space-y-1.5">
+                {modeles.map((m) => (
+                  <button key={m.id} type="button"
+                    onClick={() => setContent((c) => (c.trim() ? `${c.trimEnd()}\n${m.texte}` : m.texte))}
+                    className="w-full text-left text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 hover:bg-gray-50 hover:border-gray-300 transition">
+                    <span className="block font-medium text-gray-800">{m.nom}</span>
+                    {m.categorie && <span className="block text-[10px] text-gray-400">{m.categorie}</span>}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">
+                Le texte est déposé ici : relisez et adaptez avant d’enregistrer.
+              </p>
+            </div>
+          )}
+
           <div className="bg-white rounded-lg shadow-sm p-4">
             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-2">
               <Star className="h-4 w-4 text-amber-400" /> Mes favoris
