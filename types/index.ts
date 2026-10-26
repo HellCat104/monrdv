@@ -865,3 +865,143 @@ Histoire :
 Traitement :
 
 Prochain RDV : `
+
+// ════════════════════════════════════════════════════════════════════════════
+// BRANCHE GASTRO-ENTÉROLOGIE (v81)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Toutes les rubriques cliniques sont FACULTATIVES, et c'est la règle qui
+// gouverne ces écrans : une rubrique vide ne s'imprime pas. Un compte rendu
+// qui annoncerait « œsophage normal » parce que le médecin n'a rien tapé
+// serait un faux, et il serait signé.
+
+export type StatutDocument = 'brouillon' | 'validee' | 'valide'
+
+export interface Consultation {
+  id: string
+  doctor_id: string
+  patient_id: string
+  appointment_id?: string | null
+  date_consultation: string
+  motif?: string | null
+  histoire?: string | null
+  symptomes?: string | null
+  antecedents?: string | null
+  allergies?: string | null
+  mesures?: string | null
+  examen_clinique?: string | null
+  hypotheses?: string | null
+  diagnostic?: string | null
+  examens_demandes?: string | null
+  traitement?: string | null
+  conduite?: string | null
+  recommandations?: string | null
+  prochain_controle?: string | null
+  statut: 'brouillon' | 'validee'
+  validee_le?: string | null
+  created_at: string
+}
+
+export type TypeEndoscopie = 'gastroscopie' | 'coloscopie'
+
+export interface Polype {
+  localisation?: string
+  taille_mm?: string
+  morphologie?: string
+  geste?: string
+}
+
+export interface Endoscopie {
+  id: string
+  doctor_id: string
+  patient_id: string
+  appointment_id?: string | null
+  consultation_id?: string | null
+  type_examen: TypeEndoscopie
+  date_examen: string
+  indication?: string | null
+  conditions?: string | null
+  preparation?: string | null
+  qualite_preparation?: string | null
+  etendue?: string | null
+  qualite_visualisation?: string | null
+  /** Seules les régions RÉELLEMENT explorées y figurent. Une clé absente ne
+   *  vaut pas constatation normale. */
+  observations: Record<string, string>
+  lesions?: string | null
+  polypes: Polype[]
+  prelevements?: string | null
+  conclusion?: string | null
+  recommandations?: string | null
+  surveillance_le?: string | null
+  statut: 'brouillon' | 'valide'
+  valide_le?: string | null
+  created_at: string
+}
+
+export interface LigneOrdonnance {
+  medicament?: string
+  dosage?: string
+  voie?: string
+  frequence?: string
+  duree?: string
+}
+
+export interface ModeleOrdonnance {
+  id: string
+  doctor_id: string
+  nom: string
+  categorie?: string | null
+  lignes: LigneOrdonnance[]
+  examens?: string | null
+  notes?: string | null
+  archive_le?: string | null
+  created_at: string
+}
+
+export interface HoraireePreparation {
+  quand?: string
+  quoi?: string
+}
+
+export interface ProtocolePreparation {
+  id: string
+  doctor_id: string
+  nom: string
+  produit?: string | null
+  regime?: string | null
+  modalites?: string | null
+  horaires: HoraireePreparation[]
+  consignes_medicaments?: string | null
+  consignes_pratiques?: string | null
+  archive_le?: string | null
+  created_at: string
+}
+
+export type StatutResultat = 'attendu' | 'recu' | 'examine' | 'suivi_requis'
+
+export interface Resultat {
+  id: string
+  doctor_id: string
+  patient_id: string
+  endoscopie_id?: string | null
+  consultation_id?: string | null
+  document_id?: string | null
+  type_resultat: 'biologie' | 'anatomopathologie' | 'imagerie' | 'autre'
+  libelle: string
+  statut: StatutResultat
+  attendu_le?: string | null
+  recu_le?: string | null
+  examine_le?: string | null
+  conclusion_medecin?: string | null
+  notes?: string | null
+  created_at: string
+}
+
+export const STATUTS_RESULTAT: { cle: StatutResultat; label: string; couleur: string }[] = [
+  { cle: 'attendu',      label: 'Attendu',            couleur: 'bg-gray-100 text-gray-600' },
+  { cle: 'recu',         label: 'Reçu, à examiner',   couleur: 'bg-amber-100 text-amber-700' },
+  { cle: 'examine',      label: 'Examiné',            couleur: 'bg-green-100 text-green-700' },
+  { cle: 'suivi_requis', label: 'Suivi nécessaire',   couleur: 'bg-red-100 text-red-700' },
+]
+
