@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
-import { etatPatient, resumeEchange } from '@/lib/file-attente'
+import { etatPatient, resumeEchange, retardMinutes } from '@/lib/file-attente'
 import { useRafraichissement } from '@/lib/rafraichissement'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format, addDays, addMonths, startOfWeek, endOfWeek, startOfMonth, eachDayOfInterval, getDay, subDays } from 'date-fns'
@@ -53,6 +53,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   // ne répond pas : ce sont les TROUS qu'on y cherche, et une liste ne montre
   // que ce qui est pris.
   const [mode, setMode] = useState<'liste' | 'calendrier'>('liste')
+  // Les rendez-vous déjà clos sont repliés : en fin de journée, la liste du
+  // jour est une colonne de trente lignes sur lesquelles il n'y a plus rien à
+  // faire, et ce qui reste à faire se perd dedans.
+  const [passesOuverts, setPassesOuverts] = useState(false)
   const [grain, setGrain] = useState<'jour' | 'semaine' | 'mois'>('semaine')
   const [plageAppts, setPlageAppts] = useState<Apt[]>([])
   const [plageBlocks, setPlageBlocks] = useState<Block[]>([])
@@ -118,6 +122,9 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   }, [])
 
   useEffect(() => { load(date) }, [date, load])
+  // Changer de jour referme le repli : on ouvre un jour sur ce qu'il reste à
+  // y faire, pas sur ce qu'on avait déplié la veille.
+  useEffect(() => { setPassesOuverts(false) }, [date])
 
   // L'agenda du jour bouge sans elle : le médecin ouvre un dossier, demande un
   // patient, laisse une consigne. Rythme court quand l'écran est regardé,
@@ -356,6 +363,20 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const dejaPasse = (a: Apt) =>
     a.queue_status === 'arrive' || a.queue_status === 'en_consultation' || a.queue_status === 'parti'
 
+  /** Le rendez-vous est CLOS : il n'y a plus rien à en attendre.
+   *
+   *  Soit le patient est reparti, soit il a été noté absent, soit son heure
+   *  est dépassée d'une bonne heure sans qu'il se soit présenté. Une heure et
+   *  pas dix minutes : entre les deux, il est simplement en retard, la ligne
+   *  le dit toute seule, et la secrétaire peut encore vouloir l'appeler. */
+  const estClos = (a: Apt) =>
+    a.queue_status === 'parti'
+    || a.attendance === 'absent'
+    || (!a.queue_status && (retardMinutes(a, getNowInMaroc()) ?? 0) > 60)
+
+  const clos = active.filter(estClos)
+  const visibles = passesOuverts ? active : active.filter((a) => !estClos(a))
+
   // Le médecin réclame le patient suivant. On ne retient que les appels
   // récents : un appel d'il y a une heure n'est plus une demande, c'est du
   // bruit — et un bandeau rouge permanent cesse d'être vu.
@@ -498,7 +519,23 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
         </div>
       ) : (
         <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50">
-          {active.map((a) => (
+          {/* La ligne de chargement est EN HAUT : les rendez-vous clos sont
+              ceux du début de journée, c'est là qu'ils reprennent leur place
+              quand on les déplie. */}
+          {clos.length > 0 && (
+            <button
+              onClick={() => setPassesOuverts(!passesOuverts)}
+              className="w-full text-center text-xs text-gray-400 hover:text-primary-600 py-2.5 transition"
+            >
+              {passesOuverts
+                ? 'Masquer les rendez-vous passés'
+                : `Charger les ${clos.length} rendez-vous précédents`}
+            </button>
+          )}
+          {visibles.length === 0 && (
+            <p className="text-center text-sm text-gray-400 py-8">Plus rien d&apos;attendu aujourd&apos;hui.</p>
+          )}
+          {visibles.map((a) => (
             <div key={a.id} className="flex items-center gap-3 p-3.5 flex-wrap">
               <div className="text-sm font-semibold text-gray-900 w-14 shrink-0">{formatTime(a.time)}</div>
               <div className="flex-1 min-w-[160px]">
