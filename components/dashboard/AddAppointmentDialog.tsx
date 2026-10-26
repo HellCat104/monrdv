@@ -114,6 +114,23 @@ export function AddAppointmentDialog({
 
   const availableSlots = slots.filter((s) => s.available)
 
+  // L'heure visée dans le calendrier, rapprochée d'un créneau RÉEL.
+  //
+  // Le clic se cale au quart d'heure, le cabinet travaille par pas de trente
+  // minutes : viser 11 h 45 ne correspond souvent à aucun créneau, et la liste
+  // restait vide sans rien dire. On prend donc le premier créneau libre à
+  // partir de l'heure visée — le praticien a montré un moment de la journée,
+  // pas une minute précise — et à défaut le dernier libre avant elle.
+  useEffect(() => {
+    if (!open || !heureInitiale || availableSlots.length === 0) return
+    if (availableSlots.some((s) => s.time === form.time)) return
+    const apres = availableSlots.find((s) => s.time >= heureInitiale)
+    const avant = [...availableSlots].reverse().find((s) => s.time < heureInitiale)
+    const choisi = apres ?? avant
+    if (choisi) setForm((f) => ({ ...f, time: choisi.time }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, heureInitiale, slots])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
