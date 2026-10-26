@@ -4,7 +4,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
-import { isGastroDoctor } from '@/types'
+import { isGastroDoctor, specialitesDu } from '@/types'
 import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { RUBRIQUES_CONSULTATION } from '@/lib/gastro'
@@ -24,7 +24,7 @@ export default async function PageCrConsultation({ params }: { params: { id: str
   if (!doctor) notFound()
   if (!canAccess(doctor.plan, 'records')) redirect('/appointments')
 
-  const specialites = (doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])
+  const specialites = specialitesDu(doctor)
   if (!isGastroDoctor(specialites)) redirect('/appointments')
 
   const { data: c } = await supabase

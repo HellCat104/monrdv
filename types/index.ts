@@ -816,6 +816,21 @@ export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] a
  *
  *  « Médecin généraliste » en toutes lettres, et non « général » seul :
  *  « Chirurgien général » contient le mot sans être de cette branche. */
+/** Les spécialités d'un praticien, quelle que soit la forme où elles sont
+ *  rangées.
+ *
+ *  `specialties` est la liste, `specialty` l'ancien champ unique. L'écriture
+ *  naturelle — `specialties ?? [specialty]` — a un trou : `??` ne rattrape que
+ *  NULL, et un tableau VIDE passe à travers. Le praticien gardait alors sa
+ *  spécialité à l'écran (elle vient de `specialty`) tout en étant traité comme
+ *  n'en ayant aucune : écrans de branche masqués, et forfait ramené à Agenda
+ *  par le déclencheur, au moment où il enregistrait tout autre chose. */
+export function specialitesDu(d: { specialty?: string | null; specialties?: string[] | null }): string[] {
+  const liste = d.specialties ?? []
+  if (liste.length > 0) return liste
+  return d.specialty ? [d.specialty] : []
+}
+
 export function isGeneralDoctor(specialties: (string | null | undefined)[]): boolean {
   return specialties.some((s) => !!s && /m[ée]decin g[ée]n[ée]raliste/i.test(s))
 }

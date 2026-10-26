@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { isGastroDoctor } from '@/types'
+import { isGastroDoctor, specialitesDu } from '@/types'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -63,7 +63,7 @@ export function Sidebar() {
           // Les entrées de branche ne s'affichent que chez la spécialité
           // concernée : je ne veux pas retrouver « Suivis » chez une
           // psychologue, dont la branche n'existe pas encore.
-          const specs = (data?.specialties as string[] | null) ?? (data?.specialty ? [data.specialty] : [])
+          const specs = specialitesDu(data ?? {})
           setBranche(isGastroDoctor(specs) ? 'gastro' : null)
         })
     })

@@ -88,6 +88,10 @@ export function canAccess(plan: string | null | undefined, feature: keyof PlanFe
  *
  *  « Médecin généraliste » en toutes lettres, et non « général » seul :
  *  « Chirurgien général » contient le mot sans être de cette branche. */
+/** Attention à ce qu'on lui passe : un tableau `specialties` VIDE ne doit pas
+ *  arriver ici tel quel. Utiliser `specialitesDu()` (types/index.ts), qui
+ *  retombe sur `specialty` — c'est le piège qui a fait perdre Cabinet complet
+ *  à un praticien dont la spécialité s'affichait pourtant à l'écran. */
 export function brancheDeveloppee(specialties: (string | null | undefined)[]): boolean {
   return specialties.some((s) => !!s && /m[ée]decin g[ée]n[ée]raliste|p[ée]diatr|dent|stomato|orthodont|odonto|gastro/i.test(s))
 }

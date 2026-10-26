@@ -8,7 +8,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
-import { isGastroDoctor, VITAL_DEFS } from '@/types'
+import { isGastroDoctor, VITAL_DEFS, specialitesDu } from '@/types'
 import { formatDateFr } from '@/lib/utils'
 import ConsultationClient from './ConsultationClient'
 
@@ -30,7 +30,7 @@ export default async function PageConsultation({
   if (!doctor) notFound()
   if (!canAccess(doctor.plan, 'records')) redirect('/appointments')
 
-  const specialites = (doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])
+  const specialites = specialitesDu(doctor)
   if (!isGastroDoctor(specialites)) redirect('/appointments')
 
   const { data: patient } = await supabase

@@ -2,7 +2,7 @@
 // Forfait Agenda : fiche minimale (nom, prénom, téléphone, notes) sans données de santé.
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { allVitalDefs, resolveEnabledVitals, type VitalDef } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, type VitalDef, specialitesDu } from '@/types'
 import { canAccess } from '@/lib/plan'
 import PatientDossier from '@/components/dashboard/PatientDossier'
 import PatientDossierLite from '@/components/dashboard/PatientDossierLite'
@@ -41,7 +41,7 @@ export default async function PatientDossierPage({ params }: { params: { id: str
     actorEmail: user.email, action: 'dossier_consulte', patientId: patient.id,
   })
 
-  const specialties = ((doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])).filter(Boolean)
+  const specialties = (specialitesDu(doctor)).filter(Boolean)
   const vitalDefsAll: VitalDef[] = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabledVitals = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
 

@@ -6,7 +6,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
-import { isGastroDoctor } from '@/types'
+import { isGastroDoctor, specialitesDu } from '@/types'
 import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import PreparationClient from './PreparationClient'
@@ -28,7 +28,7 @@ export default async function PagePreparation({
   if (!doctor) notFound()
   if (!canAccess(doctor.plan, 'records')) redirect('/appointments')
 
-  const specialites = (doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])
+  const specialites = specialitesDu(doctor)
   if (!isGastroDoctor(specialites)) redirect('/appointments')
 
   const { data: patient } = await supabase

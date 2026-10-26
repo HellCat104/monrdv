@@ -7,7 +7,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
-import { isGastroDoctor } from '@/types'
+import { isGastroDoctor, specialitesDu } from '@/types'
 import ModelesClient from './ModelesClient'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,7 @@ export default async function PageModeles() {
   if (!doctor) notFound()
   if (!canAccess(doctor.plan, 'records')) redirect('/appointments')
 
-  const specialites = (doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])
+  const specialites = specialitesDu(doctor)
   if (!isGastroDoctor(specialites)) redirect('/appointments')
 
   return <ModelesClient doctorId={doctor.id} />

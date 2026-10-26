@@ -4,7 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
 import { ageFromBirthDate } from '@/lib/utils'
-import { isGeneralDoctor } from '@/types'
+import { isGeneralDoctor, specialitesDu } from '@/types'
 import { blocResumeMedical, texteConstantes } from '@/lib/resume-medical'
 import NewCertificate from './NewCertificate'
 import { FAMILLES_DOCUMENT, type FamilleDocument } from '@/lib/certificats'
@@ -60,7 +60,7 @@ export default async function NewCertificatePage({ params, searchParams }: { par
   // laquelle nous travaillons, et les autres spécialités n'ont pas demandé ça.
   // Pour l'ouvrir au pédiatre ou au dentiste, il suffira d'élargir ce test.
   const famille = safeFamille(searchParams.famille)
-  const specialites = (doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])
+  const specialites = specialitesDu(doctor)
   let resume = ''
   if (famille === 'courrier' && isGeneralDoctor(specialites)) {
     const [notes, ordos, constantes] = await Promise.all([

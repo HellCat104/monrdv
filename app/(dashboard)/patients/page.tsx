@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import type { Patient, Appointment, ConsultationNote, PatientDocument, Recall, VitalSign, Prescription, Certificate } from '@/types'
-import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE, type VitalDef, RECALL_OUVERTS } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, MUTUELLES_MAROC, BLOOD_GROUPS, isPediatricDoctor, isPsychiatricDoctor, PSY_NOTE_TEMPLATE, type VitalDef, RECALL_OUVERTS, specialitesDu } from '@/types'
 import { CERT_TEMPLATES } from '@/lib/certificats'
 import { getInitials, formatDateShort, formatDateFr, getNowInMaroc, ageFromBirthDate, formatAge } from '@/lib/utils'
 import { Users, Search, Phone, Calendar, Save, Check, UserPlus, UserCheck, UserX, Clock, Trash2, AlertTriangle, HeartPulse, Pill, NotebookPen, Plus, Paperclip, Download, Upload, Activity, BellRing, X, Lock, Printer, GitMerge, ListChecks, FileText, RefreshCw, Scissors, Syringe } from 'lucide-react'
@@ -189,7 +189,7 @@ export default function PatientsPage() {
     setEnabledVitals(resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty))
     setVitalDefs(allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? []))
     setDoctorSpecialties(
-      ((doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : []))
+      (specialitesDu(doctor))
         .filter(Boolean)
     )
 

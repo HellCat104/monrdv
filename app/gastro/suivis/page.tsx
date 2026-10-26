@@ -8,7 +8,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
-import { isGastroDoctor } from '@/types'
+import { isGastroDoctor, specialitesDu } from '@/types'
 import SuivisClient from './SuivisClient'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +23,7 @@ export default async function PageSuivis() {
   if (!doctor) notFound()
   if (!canAccess(doctor.plan, 'records')) redirect('/appointments')
 
-  const specialites = (doctor.specialties as string[] | null) ?? (doctor.specialty ? [doctor.specialty] : [])
+  const specialites = specialitesDu(doctor)
   if (!isGastroDoctor(specialites)) redirect('/appointments')
 
   return <SuivisClient />
