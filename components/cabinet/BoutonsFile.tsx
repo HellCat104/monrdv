@@ -14,7 +14,7 @@
 // Les deux boutons de droite disent ce que le circuit ne sait pas dire : un
 // patient qui n'est jamais venu, un patient en retard. Ils comptent dans les
 // statistiques de présence, pas le circuit.
-import { LogIn, Stethoscope, LogOut, RotateCcw, Clock, UserX } from 'lucide-react'
+import { LogIn, Stethoscope, LogOut, RotateCcw, Clock, UserX, Ambulance } from 'lucide-react'
 
 export const CIRCUIT: { key: string; label: string; icon: typeof LogIn }[] = [
   { key: 'arrive',          label: 'Arrivé',          icon: LogIn },
@@ -58,7 +58,7 @@ export default function BoutonsFile({
   //
   // Seul le retour en arrière reste : « Parti » se clique parfois sur le
   // mauvais patient, et sans lui l'erreur serait définitive.
-  if (queueStatus === 'parti') {
+  if (queueStatus === 'parti' || queueStatus === 'hopital') {
     return (
       <button onClick={() => onQueue(null)} title="Annuler le pointage" className="p-1.5 rounded-lg text-gray-300 hover:text-gray-500">
         <RotateCcw className="h-3.5 w-3.5" />
@@ -84,6 +84,20 @@ export default function BoutonsFile({
           {libelles && <span className="hidden sm:inline">{label}</span>}
         </button>
       ))}
+
+      {/* L'issue qui n'est pas « il est rentré chez lui ». Discrète et à part :
+          elle sert quelques fois par an, mais ce jour-là elle doit être
+          trouvable sans réfléchir. Jamais sur l'agenda, qui n'est pas le poste
+          d'où l'on voit partir un patient. */}
+      {!reduit && queueStatus && (
+        <button
+          onClick={() => { if (confirm('Marquer ce patient comme adressé à l’hôpital ?')) onQueue('hopital') }}
+          title="Adressé à l’hôpital"
+          className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition"
+        >
+          <Ambulance className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {queueStatus && (
         <button onClick={() => onQueue(null)} title="Réinitialiser le pointage" className="p-1.5 rounded-lg text-gray-300 hover:text-gray-500">

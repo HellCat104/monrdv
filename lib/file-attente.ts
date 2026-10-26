@@ -86,6 +86,11 @@ export function etatPatient(a: LigneFile): EtatPatient | null {
       return { label: `En consultation${duree(a.queue_started_at)}`, couleur: 'bg-green-100 text-green-700' }
     case 'parti':
       return { label: 'Terminé', couleur: 'bg-gray-100 text-gray-600' }
+    // Sortie du circuit, mais pas la même que « parti » : le patient n'est pas
+    // rentré chez lui, il est à l'hôpital. Le dire à l'écran évite qu'on le
+    // range mentalement parmi les consultations finies.
+    case 'hopital':
+      return { label: 'Adressé à l’hôpital', couleur: 'bg-red-100 text-red-700' }
   }
 
   // Pas de file ce jour-là : seule la présence peut encore dire quelque chose.
@@ -115,6 +120,12 @@ export function estAbsent(a: LigneFile): boolean {
 /** Le patient est venu : il est passé par la file, ou son bilan le dit. */
 export function estVenu(a: LigneFile): boolean {
   return !!a.queue_status || a.attendance === 'present' || a.attendance === 'late'
+}
+
+/** Le rendez-vous est CLOS pour la journée : le patient est rentré chez lui,
+ *  ou il est parti à l'hôpital. Dans les deux cas il n'est plus dans la pièce. */
+export function sortiDuCircuit(a: LigneFile): boolean {
+  return a.queue_status === 'parti' || a.queue_status === 'hopital'
 }
 
 /** Ce qui attend un geste de l'autre poste, résumé en une ligne qu'on LIT.

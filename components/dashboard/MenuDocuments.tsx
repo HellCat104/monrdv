@@ -26,7 +26,7 @@ export default function MenuDocuments({ patientId, backHref }: {
   const entrees = [
     { label: 'Ordonnance',        aide: 'Médicaments à délivrer',        icone: Pill,          href: `/ordonnance/patient/${patientId}?back=${retour}` },
     { label: 'Certificat',        aide: 'Repos, sport, scolaire, permis', icone: FileText,     href: `/certificat/nouveau/${patientId}?famille=certificat&back=${retour}` },
-    { label: 'Courrier',          aide: 'Demande d’avis, résumé médical', icone: Mail,         href: `/certificat/nouveau/${patientId}?famille=courrier&back=${retour}` },
+    { label: 'Courrier',          aide: 'Demande d’avis, résumé médical, adressage en urgence', icone: Mail,         href: `/certificat/nouveau/${patientId}?famille=courrier&back=${retour}` },
     { label: 'Vaccin',            aide: 'Enregistrer et remettre le certificat', icone: Syringe, href: `/vaccin/${patientId}?back=${retour}` },
     { label: 'Demande d’examen',  aide: 'Analyses, imagerie',            icone: FlaskConical, href: `/certificat/nouveau/${patientId}?famille=examen&back=${retour}` },
   ]

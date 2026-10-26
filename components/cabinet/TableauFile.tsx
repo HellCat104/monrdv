@@ -108,7 +108,8 @@ export default function TableauFile({
                     <div
                       key={a.id}
                       className={`bg-white border rounded-lg p-2.5 space-y-2 ${
-                        designe ? 'border-primary-400 ring-2 ring-primary-100'
+                        a.urgent ? 'border-red-300 ring-2 ring-red-100'
+                        : designe ? 'border-primary-400 ring-2 ring-primary-100'
                         : retard ? 'border-orange-200'
                         : 'border-gray-100'
                       }`}
@@ -116,6 +117,11 @@ export default function TableauFile({
                       <div className="flex items-baseline gap-2">
                         <span className="text-xs font-semibold text-gray-400 shrink-0">{heure(a)}</span>
                         <span className="font-medium text-gray-900 text-sm truncate flex-1 min-w-0">{nom(a)}</span>
+                        {a.urgent && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide bg-red-600 text-white px-1.5 py-0.5 rounded-full shrink-0">
+                            Urgent
+                          </span>
+                        )}
                       </div>
 
                       {/* Une seule ligne d'état, et elle s'écrit seule : le

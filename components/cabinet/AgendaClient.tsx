@@ -375,7 +375,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     || (!a.queue_status && (retardMinutes(a, getNowInMaroc()) ?? 0) > 60)
 
   const clos = active.filter(estClos)
-  const visibles = passesOuverts ? active : active.filter((a) => !estClos(a))
+  // Les urgences remontent en tête : la secrétaire parcourt sa colonne de
+  // noms, et c'est le premier regard qui doit tomber dessus.
+  const parUrgence = (l: Apt[]) => [...l].sort((x, y) => Number(!!y.urgent) - Number(!!x.urgent))
+  const visibles = parUrgence(passesOuverts ? active : active.filter((a) => !estClos(a)))
 
   // Le médecin réclame le patient suivant. On ne retient que les appels
   // récents : un appel d'il y a une heure n'est plus une demande, c'est du
@@ -545,6 +548,23 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                     geste, et disparaît une fois le geste fait. */}
                 <p className="font-medium text-gray-900 flex items-center gap-1.5 flex-wrap">
                   <span className="truncate">{a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}</span>
+                  {/* C'est ICI qu'on coche, parce que c'est ici qu'on répond au
+                      téléphone. La pastille se clique pour se mettre et se
+                      retirer : une urgence annoncée qui n'en était pas une doit
+                      pouvoir redevenir un rendez-vous ordinaire. */}
+                  {permissions.manage_appointments ? (
+                    <button
+                      onClick={() => patchRdv(a.id, { urgent: !a.urgent })}
+                      title={a.urgent ? 'Retirer l’urgence' : 'Marquer urgent'}
+                      className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full transition ${
+                        a.urgent ? 'bg-red-600 text-white' : 'border border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-500'
+                      }`}
+                    >
+                      Urgent
+                    </button>
+                  ) : a.urgent ? (
+                    <span className="text-[10px] font-bold uppercase tracking-wide bg-red-600 text-white px-1.5 py-0.5 rounded-full">Urgent</span>
+                  ) : null}
                   {a.walk_in && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Sans RDV</span>}
 
                   {/* UNE seule étiquette d'état, la même règle que chez le

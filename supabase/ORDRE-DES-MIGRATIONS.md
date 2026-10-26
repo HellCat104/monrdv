@@ -373,6 +373,28 @@ Les fichiers sont écrits pour être rejouables (`IF NOT EXISTS`,
      jamais une évolution, il compte seulement les actes depuis le diagnostic.
      RLS médecin seul. Additive ; sans elle le bloc ne s'affiche pas.
 
+ 83. `migration_v83_branche_tableau_vide.sql`
+     Migration v83 — CORRECTIF. `branche_developpee` utilisait
+     `coalesce(p_specialties, array[p_specialty])` : `coalesce` ne remplace que
+     NULL, donc un `specialties` à `{}` produisait une chaîne vide, aucune
+     branche, et le déclencheur basculait le médecin en forfait Agenda à la
+     PREMIÈRE modification de sa fiche. Sa spécialité s'affichait pourtant à
+     l'écran, elle venait de `specialty`. La fonction teste désormais la
+     longueur du tableau. Même piège corrigé onze fois côté TypeScript
+     (`specialitesDu()` dans types/index.ts).
+
+ 84. `migration_v84_urgence.sql`
+     Migration v84 — L'URGENCE, TRONC COMMUN (toutes spécialités).
+     `appointments.urgent` (booléen, false par défaut) : coché à la main par
+     qui répond au téléphone. Aucun score, aucun tri automatique, aucune
+     conduite à tenir — un logiciel qui calculerait « gravité modérée » sur une
+     hémorragie digestive serait dangereux. Index partiel : on ne cherche que
+     les urgences. Documente aussi la valeur `queue_status = 'hopital'`,
+     adressage aux urgences : le patient quitte le circuit du jour sans être
+     compté comme une consultation terminée. Pas de contrainte ajoutée sur
+     `queue_status` (jamais contrainte depuis la v22) : c'est l'API qui
+     contrôle les valeurs. Additive.
+
  77. `migration_v77_mot_sur_le_rdv.sql`  
      Migration v77 — `appointment_messages` : un mot entre le médecin et
      l'accueil, ATTACHÉ au rendez-vous et non dans un fil général, parce qu'un

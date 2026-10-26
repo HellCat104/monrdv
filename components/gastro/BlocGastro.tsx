@@ -80,7 +80,7 @@ export default function BlocGastro({ patientId, doctorId }: { patientId: string;
     { label: 'Coloscopie', aide: 'Compte rendu structuré', icone: Microscope, href: `/gastro/endoscopie/${patientId}?type=coloscopie` },
     { label: 'Fiche de préparation', aide: 'À remettre avant la coloscopie', icone: ClipboardList, href: `/gastro/preparation/${patientId}` },
     { label: 'Ordonnance', aide: 'Depuis un modèle ou vierge', icone: Pill, href: `/ordonnance/patient/${patientId}?back=${retour}` },
-    { label: 'Courrier', aide: 'Demande d’avis, résumé médical', icone: Mail, href: `/certificat/nouveau/${patientId}?famille=courrier&back=${retour}` },
+    { label: 'Courrier', aide: 'Demande d’avis, résumé médical, adressage en urgence', icone: Mail, href: `/certificat/nouveau/${patientId}?famille=courrier&back=${retour}` },
     { label: 'Demande d’examen', aide: 'Analyses, imagerie', icone: FlaskConical, href: `/certificat/nouveau/${patientId}?famille=examen&back=${retour}` },
     { label: 'Certificat', aide: 'Repos, aptitude, scolaire', icone: FileText, href: `/certificat/nouveau/${patientId}?famille=certificat&back=${retour}` },
   ]

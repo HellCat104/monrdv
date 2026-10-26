@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
   let aptQuery = admin.from('appointments')
-    .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
+    .select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
     .eq('doctor_id', ctx.doctor.id)
   aptQuery = isRange
     ? aptQuery.gte('date', from!).lte('date', to!).order('date', { ascending: true }).order('time', { ascending: true })
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
       status: 'confirmed', walk_in: true, queue_status: 'arrive', attendance: 'present',
       cancel_token: generateCancelToken(), specialty: specs0.length === 1 ? specs0[0] : null,
       duration_minutes: doc0?.appointment_duration ?? 30, consent_at: null,
-    }).select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+    }).select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
     if (aErr || !appt0) return NextResponse.json({ error: 'Échec de l\'ajout à la file' }, { status: 500 })
     return NextResponse.json({ appointment: filtreConfidentiel(appt0, ctx.confidential) }, { status: 201 })
   }
@@ -343,7 +343,7 @@ export async function POST(req: NextRequest) {
         consent_at: null,
         recurrence_group_id: groupId,
       })
-      .select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+      .select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
     if (e || !appt) {
       // 23505 = même heure de départ ; 23P01 = chevauchement (contrainte d'exclusion)
       if (e?.code === '23505' || e?.code === '23P01') { skipped.push(ds); continue }
@@ -416,10 +416,24 @@ export async function PATCH(req: NextRequest) {
     patch.appel_suivant_le = null
   }
 
-  // Salle d'attente : arrivé / en consultation / parti
+  // Urgence : la secrétaire la coche en prenant l'appel. Rattaché à la
+  // permission « agenda » et non à « salle d'attente » : c'est au téléphone
+  // qu'on l'apprend, avant même que le patient soit là.
+  if ('urgent' in body) {
+    if (!ctx.permissions.manage_appointments) {
+      return NextResponse.json({ error: 'Permission manquante (rendez-vous)' }, { status: 403 })
+    }
+    patch.urgent = body.urgent === true
+  }
+
+  // Salle d'attente : arrivé / en consultation / parti / adressé à l'hôpital
   if ('queue_status' in body) {
     if (!ctx.permissions.mark_attendance) return NextResponse.json({ error: 'Permission manquante (salle d\'attente)' }, { status: 403 })
-    const allowed = ['arrive', 'en_consultation', 'parti', null]
+    // « hopital » : le patient a été adressé aux urgences. C'est une SORTIE du
+    // circuit, au même titre que « parti », mais elle ne dit pas la même
+    // chose — et les statistiques ne doivent pas la compter comme une
+    // consultation qui s'est terminée normalement.
+    const allowed = ['arrive', 'en_consultation', 'parti', 'hopital', null]
     if (!allowed.includes(body.queue_status)) return NextResponse.json({ error: 'Statut de file invalide' }, { status: 400 })
     patch.queue_status = body.queue_status
 
@@ -525,7 +539,7 @@ export async function PATCH(req: NextRequest) {
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Aucune modification' }, { status: 400 })
 
   const { data: updated, error } = await admin.from('appointments')
-    .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('id, date, time, status, attendance, queue_status, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, cancel_token, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+    .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, cancel_token, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
   if (error) {
     if (error.code === '23505' || error.code === '23P01') {
       return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant.' }, { status: 409 })

@@ -117,15 +117,24 @@ export default function WaitingRoomClient() {
   //
   // Les autres ne sont pas effacés — ils se replient. Elle a encore besoin de
   // pointer quelqu'un qu'elle avait oublié, ou de corriger une erreur.
-  const presents = appts.filter((a) => a.queue_status === 'arrive' || a.queue_status === 'en_consultation')
+  // Les urgences passent devant. Un patient marqué urgent n'attend pas son
+  // tour : c'est tout l'intérêt de l'avoir coché au téléphone.
+  const dAbordLesUrgences = (l: Apt[]) =>
+    [...l].sort((x, y) => Number(!!y.urgent) - Number(!!x.urgent))
+
+  const presents = dAbordLesUrgences(
+    appts.filter((a) => a.queue_status === 'arrive' || a.queue_status === 'en_consultation'))
   // Ceux qu'on attend encore : pas encore pointés, ou notés en retard. Les
   // patients repartis n'ont plus rien à faire sur cet écran — c'est du passé,
   // et la journée d'un cabinet en accumule vite trente.
-  const aVenir = appts.filter((a) => !a.queue_status)
+  const aVenir = dAbordLesUrgences(appts.filter((a) => !a.queue_status))
   // Les repartis restent atteignables, derrière un second repli : sans eux, un
   // « Parti » cliqué par erreur serait définitif, l'agenda n'ayant plus de
   // boutons de pointage sur un patient déjà passé.
-  const repartis = appts.filter((a) => a.queue_status === 'parti')
+  // « Parti » et « adressé à l'hôpital » sortent tous deux du circuit du
+  // jour : ils se replient ensemble, et l'étiquette de chacun dit laquelle
+  // des deux sorties c'était.
+  const repartis = appts.filter((a) => a.queue_status === 'parti' || a.queue_status === 'hopital')
   const aAfficher = [...presents, ...(replieOuvert ? aVenir : []), ...(repartisOuvert ? repartis : [])]
 
   return (
@@ -213,6 +222,12 @@ export default function WaitingRoomClient() {
                 <div className="flex-1 min-w-[140px]">
                   <p className="font-medium text-gray-900 flex items-center gap-1.5 flex-wrap">
                     <span className="truncate">{a.patient ? `${a.patient.first_name} ${a.patient.last_name}` : 'Patient'}</span>
+                    {/* L'urgence se voit de loin, ou elle ne sert à rien. */}
+                    {a.urgent && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-red-600 text-white px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        Urgent
+                      </span>
+                    )}
                     {/* Les documents se remettent au moment où le patient sort,
                         donc depuis cet écran. Un COMPTE, jamais le contenu. */}
                     {/* Y COMPRIS « parti » : la pastille s'éteignait au clic

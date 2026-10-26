@@ -310,6 +310,36 @@ export const CERT_TEMPLATES: CertTemplate[] = [
       `Fait le ${formatDateFr(new Date())}.`,
   },
   {
+    // LA LETTRE QU'ON ÉCRIT EN TROIS MINUTES, debout, pendant que le patient
+    // remet son manteau.
+    //
+    // « Courrier au confrère » ne convient pas : il commence par « je vous
+    // adresse pour avis spécialisé et prise en charge », ce qui est une
+    // phrase pour un rendez-vous dans trois semaines. Ici le médecin de garde
+    // veut quatre choses, dans cet ordre : ce qui a été constaté, les
+    // constantes, ce qui a été fait au cabinet, et ce qu'on suspecte.
+    //
+    // Les rubriques sont VIDES. Rien n'est pré-rempli, et surtout aucune
+    // conduite à tenir : le service qui reçoit décide, pas MonRDV.
+    key: 'adressage_urgence',
+    famille: 'courrier',
+    title: 'Adressage en urgence',
+    extraField: { key: 'destination', label: 'Adressé à', type: 'text', placeholder: 'Service des urgences de…' },
+    build: (p, d, dest) =>
+      `ADRESSAGE EN URGENCE\n\n` +
+      `Cher confrère,\n\n` +
+      `Je vous adresse en urgence ${identite(p)}, vu ce jour à mon cabinet.\n\n` +
+      `Heure de l'examen :\n\n` +
+      `Motif et constatations :\n\n\n` +
+      `Constantes (tension, pouls, température, SpO₂) :\n\n` +
+      `Gestes et traitements administrés au cabinet :\n\n\n` +
+      `Hypothèse diagnostique :\n\n\n` +
+      `Antécédents et traitements en cours utiles :\n\n\n` +
+      `Je reste joignable au cabinet.\n\n` +
+      `Confraternellement,\n` +
+      piedLettre(d, dest),
+  },
+  {
     // Le second usage du courrier au confrère : non plus demander un avis,
     // mais transmettre. Le médecin qui adresse son patient résume ce qu'il
     // sait — et sans trame, il écrit trois lignes ou rien.
