@@ -12,7 +12,7 @@
 // change, les deux écrans annonceraient au patient des montants différents.
 import { useCallback, useEffect, useState } from 'react'
 import { getNowInMaroc, formatTime, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
-import { etatPatient, resumeEchange } from '@/lib/file-attente'
+import { etatPatient, resumeEchange, sortiDuCircuit } from '@/lib/file-attente'
 import { useRafraichissement } from '@/lib/rafraichissement'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format } from 'date-fns'
@@ -281,7 +281,7 @@ export default function WaitingRoomClient() {
                     qu'elle est quand il lui écrit. Plus une fois le patient
                     reparti : un mot sur quelqu'un qui est dehors n'appelle
                     plus de geste, et la consigne reste lisible sur la ligne. */}
-                {a.queue_status !== 'parti' && (
+                {!sortiDuCircuit(a) && (
                   <BoutonMedecin rdv={a as RdvEchange} onOpen={() => setMotFor(a)} />
                 )}
 
