@@ -56,6 +56,14 @@ export async function POST(req: NextRequest) {
     return Number.isFinite(n) ? n : null
   }
   const depart = nombre(body.quantite) ?? 0
+  // Une quantité de départ négative n'a pas de sens, et elle se contredisait
+  // avec le premier mouvement écrit plus bas (un inventaire porte une
+  // magnitude positive) : l'article serait né avec un compte et le journal
+  // avec un autre. On refuse au lieu de deviner.
+  if (depart < 0) {
+    return NextResponse.json(
+      { error: 'La quantité de départ ne peut pas être négative.' }, { status: 400 })
+  }
 
   const { data, error } = await supabase
     .from('stock_articles')
@@ -93,7 +101,7 @@ export async function POST(req: NextRequest) {
   // il vaut mieux un article sans première ligne qu'une création perdue.
   if (depart !== 0) {
     const { error: eMvt } = await supabase.rpc('stock_mouvement', {
-      p_article: data.id, p_sens: 'inventaire', p_qte: Math.abs(depart),
+      p_article: data.id, p_sens: 'inventaire', p_qte: depart,
       p_motif: 'Quantité à la création',
     })
     if (eMvt) console.error('[Stock] premier mouvement non écrit :', eMvt.message)
