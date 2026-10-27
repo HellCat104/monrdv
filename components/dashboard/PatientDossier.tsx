@@ -821,8 +821,15 @@ export default function PatientDossier({
           ancienne={anamneseAncienne(editAnamneseMaj)}
           maj={editAnamneseMaj}
           onOuvrir={() => {
+            // Le questionnaire vit dans l'onglet des soins : sans ce passage
+            // d'onglet, le lien promettait une action et ne faisait rien —
+            // l'élément visé n'était même pas rendu. On change d'onglet, PUIS
+            // on fait défiler, une fois le bloc à l'écran.
             setOuvrirAnamnese(true)
-            document.getElementById('bloc-anamnese')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            setOnglet('soins')
+            requestAnimationFrame(() => {
+              document.getElementById('bloc-anamnese')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            })
           }}
         />
       ) : editAllergies.trim() ? (
