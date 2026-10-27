@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { formatDateFr } from '@/lib/utils'
 import { Printer, Save, Check, AlertTriangle, Star, Plus, X, History } from 'lucide-react'
 import { EnTeteDocument } from '@/components/shared/EnTeteDocument'
+import BandeauRisques from '@/components/dashboard/BandeauRisques'
+import type { Risque as RisqueAlerte } from '@/lib/anamnese'
 import { lignesEnTete, type PraticienEnTete } from '@/lib/document-entete'
 
 /** Champs de l'en-tête commun (COLONNES_EN_TETE), plus l'identifiant pour
@@ -46,6 +48,20 @@ interface Props {
    *  l'éditeur, jamais appliqués tout seuls : un modèle évite de retaper, il
    *  ne prescrit pas — c'est le médecin qui l'adapte puis enregistre. */
   modeles?: { id: string; nom: string; categorie: string | null; texte: string }[]
+  /** La branche dispose de modèles (gastro, dentisterie). Sans ce drapeau, un
+   *  praticien dont la liste est vide ne voyait RIEN : la fonctionnalité
+   *  existait et restait introuvable tant qu'il n'avait pas écrit son premier
+   *  modèle — ce qu'il ne pouvait pas savoir. */
+  modelesDisponibles?: boolean
+  /** Ce que l'anamnèse a relevé : allergie à un antibiotique, anticoagulant,
+   *  grossesse, insuffisance rénale. Affiché À CÔTÉ du texte qu'on rédige, et
+   *  jamais imprimé : c'est une aide au praticien, pas une mention destinée au
+   *  patient. Une allergie connue signalée en haut de la fiche patient ne sert
+   *  à rien au moment où on écrit le nom d'un antibiotique. */
+  alertes?: {
+    risques: RisqueAlerte[]; verifier: RisqueAlerte[]
+    remplie: boolean; ancienne: boolean; maj: string | null
+  }
 }
 
 // Message affiché tant que l'échec n'est pas réparé. Il dit ce qui est perdu
@@ -57,7 +73,7 @@ const ECHEC_ENREGISTREMENT =
 export function OrdonnanceEditor({
   doctor, patient, appointmentId, appointmentDate, existingId, existingContent,
   favorites: initialFavorites, recentLines, backHref = '/appointments', logoUrl = null,
-  repriseDu = null, modeles = [],
+  repriseDu = null, modeles = [], modelesDisponibles = false, alertes,
 }: Props) {
   const [content, setContent] = useState(existingContent)
   const [prescriptionId, setPrescriptionId] = useState<string | null>(existingId)
@@ -174,6 +190,18 @@ export function OrdonnanceEditor({
         </div>
       </div>
 
+      {/* Ce que l'anamnèse a relevé, au-dessus du texte qu'on rédige. Jamais
+          imprimé : l'ordonnance remise au patient n'a pas à porter la conduite
+          à tenir du praticien. */}
+      {alertes && alertes.risques.length > 0 && (
+        <div className="max-w-5xl mx-auto mb-4 print:hidden">
+          <BandeauRisques
+            risques={alertes.risques} verifier={alertes.verifier}
+            remplie={alertes.remplie} ancienne={alertes.ancienne} maj={alertes.maj}
+          />
+        </div>
+      )}
+
       {/* Renouvellement : le texte vient d'une ordonnance passée. On le dit,
           et on dit surtout ce qui va se passer — « une nouvelle ordonnance
           sera enregistrée » —, parce qu'un champ pré-rempli ressemble à une
@@ -257,13 +285,20 @@ export function OrdonnanceEditor({
 
         {/* Panneau favoris + suggestions — masqué à l'impression */}
         <aside className="w-72 shrink-0 space-y-4 print:hidden">
-          {/* Les modèles du praticien (branche gastro). Ils AJOUTENT au texte
-              plutôt que de l'écraser : on compose souvent une ordonnance de
-              deux modèles, et perdre ce qu'on venait d'écrire serait pire que
-              de retaper. */}
-          {modeles.length > 0 && (
+          {/* Les modèles du praticien. Ils AJOUTENT au texte plutôt que de
+              l'écraser : on compose souvent une ordonnance de deux modèles, et
+              perdre ce qu'on venait d'écrire serait pire que de retaper. */}
+          {(modeles.length > 0 || modelesDisponibles) && (
             <div className="bg-white rounded-lg shadow-sm p-4">
               <h3 className="text-sm font-semibold text-gray-800 mb-2">Mes modèles</h3>
+              {modeles.length === 0 && (
+                <p className="text-[11px] text-gray-400">
+                  Aucun modèle pour l’instant. Les ordonnances que vous rédigez souvent —
+                  après une extraction, en cas d’infection — s’écrivent une fois dans{' '}
+                  <a href="/modeles" className="text-primary-600 hover:underline">Mes modèles</a>,
+                  puis se déposent ici en un clic.
+                </p>
+              )}
               <div className="space-y-1.5">
                 {modeles.map((m) => (
                   <button key={m.id} type="button"

@@ -7,8 +7,9 @@ import { getOrdonnanceAReprendre, getRecentPrescriptionLines } from '@/lib/ordon
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE } from '@/lib/document-entete'
 import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
-import { isGastroDoctor, type LigneOrdonnance, specialitesDu } from '@/types'
-import { rendreModele } from '@/lib/gastro'
+import { specialitesDu } from '@/types'
+import { chargerModeles, aDesModeles } from '@/lib/ordonnance'
+import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne } from '@/lib/anamnese'
 import { format } from 'date-fns'
 
 // N'accepte qu'un chemin interne (évite les redirections ouvertes)
@@ -57,24 +58,20 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
     getOrdonnanceAReprendre(supabase, doctor.id, patient.id, searchParams.reprendre),
   ])
 
-  // Les modèles d'ordonnance ne concernent que la branche gastro pour
-  // l'instant : les charger ailleurs afficherait un panneau vide chez tout le
-  // monde, et une requête de plus à chaque ouverture.
   const specialites = specialitesDu(doctor)
-  let modeles: { id: string; nom: string; categorie: string | null; texte: string }[] = []
-  if (isGastroDoctor(specialites)) {
-    const { data } = await supabase
-      .from('prescription_templates').select('id, nom, categorie, lignes, examens, notes')
-      .is('archive_le', null).order('categorie').order('nom')
-    modeles = (data ?? []).map((m) => ({
-      id: m.id, nom: m.nom, categorie: m.categorie,
-      texte: rendreModele((m.lignes ?? []) as LigneOrdonnance[], m.examens, m.notes),
-    })).filter((m) => m.texte.trim())
-  }
+  const modeles = await chargerModeles(supabase, specialites)
+
+  // L'anamnèse (v87), lue à part : une colonne de plus dans le select du
+  // patient ferait disparaître l'écran d'ordonnance tant que la migration
+  // n'est pas passée.
+  const { data: anam } = await supabase
+    .from('patients').select('anamnese, anamnese_maj')
+    .eq('id', patient.id).eq('doctor_id', doctor.id).maybeSingle()
 
   return (
     <OrdonnanceEditor
       modeles={modeles}
+      modelesDisponibles={aDesModeles(specialites)}
       doctor={doctor}
       patient={patient}
       appointmentId={null}
@@ -86,6 +83,13 @@ export default async function OrdonnancePatientPage({ params, searchParams }: Pr
       recentLines={recentLines}
       backHref={safeBack(searchParams.back)}
       logoUrl={logoUrl}
+      alertes={{
+        risques: risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }),
+        verifier: aVerifier(anam?.anamnese),
+        remplie: anamneseRemplie(anam?.anamnese),
+        ancienne: anamneseAncienne(anam?.anamnese_maj),
+        maj: anam?.anamnese_maj ?? null,
+      }}
     />
   )
 }

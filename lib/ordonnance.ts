@@ -1,3 +1,9 @@
+import { isGastroDoctor } from '@/types'
+import { isDentalDoctor } from '@/lib/dental'
+import { CATEGORIES_MODELE, rendreModele } from '@/lib/gastro'
+import { CATEGORIES_MODELE_DENTAIRE } from '@/lib/dentaire'
+import type { LigneOrdonnance } from '@/types'
+
 // Aides ordonnance : lignes récemment prescrites par le médecin (auto-apprentissage).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getRecentPrescriptionLines(supabase: any, doctorId: string, exclude: string[]): Promise<string[]> {
@@ -54,4 +60,48 @@ export async function getOrdonnanceAReprendre(
     .maybeSingle()
   if (!data?.content) return null
   return { content: String(data.content), created_at: String(data.created_at) }
+}
+
+
+// ── LES MODÈLES D'ORDONNANCE ────────────────────────────────────────────────
+//
+// Ils étaient réservés à la gastro-entérologie, et seulement sur l'ordonnance
+// ouverte depuis la fiche patient. Deux limites sans raison : la table est
+// commune, et un dentiste qui rédige « après extraction » trois fois par jour
+// a exactement le même besoin. Celle qu'on rédige PENDANT la consultation,
+// elle, n'en proposait aucun — c'est pourtant là qu'on écrit le plus.
+//
+// Un modèle n'est jamais appliqué tout seul : il dépose du texte que le
+// praticien relit, adapte et valide. Et rien n'est livré pré-rempli.
+
+export interface ModeleOrdonnance {
+  id: string; nom: string; categorie: string | null; texte: string
+}
+
+/** Les branches qui disposent de modèles. Ailleurs, on ne charge rien plutôt
+ *  que d'afficher un panneau vide et une requête de plus à chaque ouverture. */
+export function aDesModeles(specialites: string[]): boolean {
+  return isGastroDoctor(specialites) || isDentalDoctor(specialites)
+}
+
+/** Les catégories proposées pour RANGER les modèles. Elles diffèrent par
+ *  branche : « Éradication d'Helicobacter pylori » n'a rien à faire chez un
+ *  dentiste, « Après une extraction » rien à faire chez un gastro-entérologue. */
+export function categoriesModeles(specialites: string[]): string[] {
+  return isDentalDoctor(specialites) ? CATEGORIES_MODELE_DENTAIRE : CATEGORIES_MODELE
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function chargerModeles(supabase: any, specialites: string[]): Promise<ModeleOrdonnance[]> {
+  if (!aDesModeles(specialites)) return []
+  const { data, error } = await supabase
+    .from('prescription_templates').select('id, nom, categorie, lignes, examens, notes')
+    .is('archive_le', null).order('categorie').order('nom')
+  // Pas de migration, pas de modèles — mais jamais d'ordonnance inaccessible.
+  if (error) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((m: any) => ({
+    id: m.id, nom: m.nom, categorie: m.categorie,
+    texte: rendreModele((m.lignes ?? []) as LigneOrdonnance[], m.examens, m.notes),
+  })).filter((m: ModeleOrdonnance) => m.texte.trim())
 }

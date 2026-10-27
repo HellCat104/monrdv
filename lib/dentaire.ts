@@ -106,3 +106,25 @@ export const CATEGORIES_ACTES_DENTAIRES = [
   'Radiologie',
   'Actes complémentaires',
 ]
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// LES MODÈLES D'ORDONNANCE (lot 6)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Des CATÉGORIES pour ranger, et rien d'autre. Aucune molécule, aucune
+// posologie, aucune durée : MonRDV ne prescrit pas. Le praticien écrit ses
+// modèles une fois, et les relit avant chaque usage.
+//
+// Les intitulés sont ceux des SITUATIONS d'un cabinet dentaire, pas ceux d'une
+// classe pharmacologique : on cherche « après extraction », on ne cherche pas
+// « bêta-lactamines ».
+export const CATEGORIES_MODELE_DENTAIRE = [
+  'Après une extraction',
+  'Douleur',
+  'Infection et abcès',
+  'Avant un geste',
+  'Chirurgie et implantologie',
+  'Bains de bouche et hygiène',
+  'Prescriptions courantes',
+]

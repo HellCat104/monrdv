@@ -13,14 +13,24 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Plus, Trash2, Copy, Archive, Save, Pill, ClipboardList } from 'lucide-react'
-import { CATEGORIES_MODELE } from '@/lib/gastro'
 import type { LigneOrdonnance, HoraireePreparation } from '@/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Modele = Record<string, any>
 const champ = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-primary-300'
 
-export default function ModelesClient({ doctorId }: { doctorId: string }) {
+export default function ModelesClient({
+  doctorId, categories, preparations = true,
+}: {
+  doctorId: string
+  /** Les catégories proposées pour ranger : elles viennent de la BRANCHE, pas
+   *  de ce composant. Un dentiste ne range pas ses modèles comme un
+   *  gastro-entérologue. */
+  categories: string[]
+  /** Les protocoles de préparation (coloscopie) : gastro-entérologie
+   *  seulement. Ailleurs, pas d'onglet plutôt qu'un onglet toujours vide. */
+  preparations?: boolean
+}) {
   const supabase = createClient()
   const [onglet, setOnglet] = useState<'ordonnances' | 'preparations'>('ordonnances')
   const [ordos, setOrdos] = useState<Modele[]>([])
@@ -32,7 +42,9 @@ export default function ModelesClient({ doctorId }: { doctorId: string }) {
   const charger = useCallback(async () => {
     const [o, p] = await Promise.all([
       supabase.from('prescription_templates').select('*').is('archive_le', null).order('categorie').order('nom'),
-      supabase.from('preparation_protocols').select('*').is('archive_le', null).order('nom'),
+      preparations
+        ? supabase.from('preparation_protocols').select('*').is('archive_le', null).order('nom')
+        : Promise.resolve({ data: [], error: null }),
     ])
     if (o.error || p.error) {
       setErreur('Les modèles attendent une migration de la base (v81).')
@@ -40,14 +52,14 @@ export default function ModelesClient({ doctorId }: { doctorId: string }) {
       setOrdos(o.data ?? []); setPreps(p.data ?? [])
     }
     setChargement(false)
-  }, [supabase])
+  }, [supabase, preparations])
   useEffect(() => { charger() }, [charger])
 
   const table = () => (onglet === 'ordonnances' ? 'prescription_templates' : 'preparation_protocols')
 
   function nouveau() {
     setEdite(onglet === 'ordonnances'
-      ? { nom: '', categorie: CATEGORIES_MODELE[0], lignes: [{}] as LigneOrdonnance[], examens: '', notes: '' }
+      ? { nom: '', categorie: categories[0], lignes: [{}] as LigneOrdonnance[], examens: '', notes: '' }
       : { nom: '', produit: '', regime: '', modalites: '', horaires: [{}] as HoraireePreparation[], consignes_medicaments: '', consignes_pratiques: '' })
   }
 
@@ -86,12 +98,15 @@ export default function ModelesClient({ doctorId }: { doctorId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-gray-200 p-0.5">
-            {([['ordonnances', 'Ordonnances'], ['preparations', 'Préparations']] as const).map(([c, l]) => (
-              <button key={c} onClick={() => { setOnglet(c); setEdite(null) }}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition ${onglet === c ? 'bg-primary-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>{l}</button>
-            ))}
-          </div>
+          {/* Un seul type de modèle : pas de sélecteur à un bouton. */}
+          {preparations && (
+            <div className="inline-flex rounded-lg border border-gray-200 p-0.5">
+              {([['ordonnances', 'Ordonnances'], ['preparations', 'Préparations']] as const).map(([c, l]) => (
+                <button key={c} onClick={() => { setOnglet(c); setEdite(null) }}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition ${onglet === c ? 'bg-primary-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>{l}</button>
+              ))}
+            </div>
+          )}
           <Button size="sm" onClick={nouveau}><Plus className="h-4 w-4 mr-1.5" /> Nouveau</Button>
         </div>
       </div>
@@ -110,7 +125,7 @@ export default function ModelesClient({ doctorId }: { doctorId: string }) {
                 <Label className="text-[11px] text-gray-400">Catégorie</Label>
                 <Input list="categories-modele" value={edite.categorie ?? ''} onChange={(e) => setEdite({ ...edite, categorie: e.target.value })} className="h-9" />
                 <datalist id="categories-modele">
-                  {CATEGORIES_MODELE.map((c) => <option key={c} value={c} />)}
+                  {categories.map((c) => <option key={c} value={c} />)}
                 </datalist>
               </div>
             )}

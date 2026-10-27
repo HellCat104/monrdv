@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { isGastroDoctor, specialitesDu } from '@/types'
+import { isDentalDoctor } from '@/lib/dental'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -30,7 +31,10 @@ const navItems = [
   { href: '/factures',      label: 'Factures',          icon: Receipt },
   { href: '/statistiques',  label: 'Statistiques',      icon: BarChart3 },
   { href: '/gastro/suivis', label: 'Suivis et résultats', icon: BellRing, branche: 'gastro' },
-  { href: '/gastro/modeles', label: 'Mes modèles',       icon: ClipboardList, branche: 'gastro' },
+  // Les modèles d'ordonnance ne sont plus un objet de gastro-entérologie :
+  // la table est commune, et un dentiste qui rédige « après extraction »
+  // trois fois par jour a le même besoin.
+  { href: '/modeles',       label: 'Mes modèles',       icon: ClipboardList, branches: ['gastro', 'dentaire'] },
   { href: '/equipe',        label: 'Mon équipe',        icon: Users2 },
   { href: '/settings',      label: 'Paramètres',        icon: Settings },
   { href: '/abonnement',    label: 'Abonnement',        icon: CreditCard },
@@ -64,7 +68,7 @@ export function Sidebar() {
           // concernée : je ne veux pas retrouver « Suivis » chez une
           // psychologue, dont la branche n'existe pas encore.
           const specs = specialitesDu(data ?? {})
-          setBranche(isGastroDoctor(specs) ? 'gastro' : null)
+          setBranche(isGastroDoctor(specs) ? 'gastro' : isDentalDoctor(specs) ? 'dentaire' : null)
         })
     })
   }, [pathname]) // re-vérifie après un passage dans Paramètres / Mon équipe / Abonnement
@@ -80,10 +84,17 @@ export function Sidebar() {
   // (Patients reste visible : fiche réduite nom/prénom/tél/notes en mode agenda.)
   // En forfait Agenda, les écrans de branche n'existent pas : leurs pages
   // redirigent déjà côté serveur, le menu ne doit pas y mener.
-  const planHidden = plan === 'agenda' ? ['/factures', '/gastro/suivis', '/gastro/modeles'] : []
-  const visibleItems = navItems.filter(
-    (i) => !planHidden.includes(i.href) && (!i.branche || i.branche === branche)
-  )
+  const planHidden = plan === 'agenda' ? ['/factures', '/gastro/suivis', '/modeles'] : []
+  const visibleItems = navItems.filter((i) => {
+    if (planHidden.includes(i.href)) return false
+    // Une entrée sans branche est commune ; sinon elle n'apparaît que chez les
+    // spécialités concernées. Tant que la branche est inconnue (null), on ne
+    // montre rien de spécifique : mieux vaut une entrée qui arrive qu'une
+    // entrée qui disparaît sous les yeux.
+    const branches = (i as { branche?: string; branches?: string[] }).branches
+      ?? ((i as { branche?: string }).branche ? [(i as { branche?: string }).branche as string] : null)
+    return !branches || (branche != null && branches.includes(branche))
+  })
 
   const NavLinks = () => (
     <>

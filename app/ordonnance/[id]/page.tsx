@@ -7,6 +7,9 @@ import { OrdonnanceEditor } from './OrdonnanceEditor'
 import { canAccess } from '@/lib/plan'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE } from '@/lib/document-entete'
+import { chargerModeles, aDesModeles } from '@/lib/ordonnance'
+import { specialitesDu } from '@/types'
+import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne } from '@/lib/anamnese'
 
 interface Props {
   params: { id: string }
@@ -23,7 +26,7 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select(`id, prescription_favorites, plan, ${COLONNES_EN_TETE}`)
+    .select(`id, prescription_favorites, plan, specialty, specialties, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
 
@@ -67,10 +70,20 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
   const favorites = ((doctor.prescription_favorites as string[] | null) ?? []).filter((f) => typeof f === 'string')
   // Logo lu à part de la fiche (voir lib/cabinet-logo-server.ts) : si la
   // migration v57 manque, l'ordonnance s'affiche sans logo au lieu de tomber.
-  const [recentLines, logoUrl] = await Promise.all([
+  // Les modèles manquaient ICI, c'est-à-dire sur l'ordonnance qu'on rédige
+  // PENDANT la consultation — celle qu'on écrit le plus souvent.
+  const specialites = specialitesDu(doctor)
+  const [recentLines, logoUrl, modeles] = await Promise.all([
     getRecentPrescriptionLines(supabase, doctor.id, favorites),
     getCabinetLogoUrl(supabase, doctor.id),
+    chargerModeles(supabase, specialites),
   ])
+
+  // L'anamnèse (v87), lue à part du rendez-vous : sans la migration, pas
+  // d'alerte, mais l'ordonnance s'ouvre.
+  const { data: anam } = await supabase
+    .from('patients').select('anamnese, anamnese_maj')
+    .eq('id', patient.id).maybeSingle()
 
   return (
     <OrdonnanceEditor
@@ -85,6 +98,15 @@ export default async function OrdonnancePage({ params, searchParams }: Props) {
       recentLines={recentLines}
       backHref={safeBack(searchParams.back)}
       logoUrl={logoUrl}
+      modeles={modeles}
+      modelesDisponibles={aDesModeles(specialites)}
+      alertes={{
+        risques: risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }),
+        verifier: aVerifier(anam?.anamnese),
+        remplie: anamneseRemplie(anam?.anamnese),
+        ancienne: anamneseAncienne(anam?.anamnese_maj),
+        maj: anam?.anamnese_maj ?? null,
+      }}
     />
   )
 }

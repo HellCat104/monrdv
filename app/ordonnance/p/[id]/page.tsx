@@ -7,6 +7,9 @@ import { OrdonnanceEditor } from '../../[id]/OrdonnanceEditor'
 import { canAccess } from '@/lib/plan'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE } from '@/lib/document-entete'
+import { chargerModeles, aDesModeles } from '@/lib/ordonnance'
+import { specialitesDu } from '@/types'
+import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne } from '@/lib/anamnese'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +27,7 @@ export default async function OrdonnanceByIdPage({ params, searchParams }: { par
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select(`id, prescription_favorites, plan, ${COLONNES_EN_TETE}`)
+    .select(`id, prescription_favorites, plan, specialty, specialties, ${COLONNES_EN_TETE}`)
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -44,10 +47,19 @@ export default async function OrdonnanceByIdPage({ params, searchParams }: { par
   const patient = Array.isArray(prescription.patient) ? prescription.patient[0] : prescription.patient
   const favorites = ((doctor.prescription_favorites as string[] | null) ?? []).filter((f) => typeof f === 'string')
   // Logo lu à part de la fiche : sans la migration v57, pas de logo, pas de 404.
-  const [recentLines, logoUrl] = await Promise.all([
+  const specialites = specialitesDu(doctor)
+  const [recentLines, logoUrl, modeles] = await Promise.all([
     getRecentPrescriptionLines(supabase, doctor.id, favorites),
     getCabinetLogoUrl(supabase, doctor.id),
+    chargerModeles(supabase, specialites),
   ])
+
+  // L'ordonnance rouverte est MODIFIABLE : l'alerte a donc sa place ici aussi.
+  // Lue à part, comme partout : sans la v87, pas d'alerte, mais l'écran
+  // s'ouvre.
+  const { data: anam } = await supabase
+    .from('patients').select('anamnese, anamnese_maj')
+    .eq('id', patient.id).maybeSingle()
 
   return (
     <OrdonnanceEditor
@@ -61,6 +73,15 @@ export default async function OrdonnanceByIdPage({ params, searchParams }: { par
       recentLines={recentLines}
       backHref={safeBack(searchParams.back)}
       logoUrl={logoUrl}
+      modeles={modeles}
+      modelesDisponibles={aDesModeles(specialites)}
+      alertes={{
+        risques: risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }),
+        verifier: aVerifier(anam?.anamnese),
+        remplie: anamneseRemplie(anam?.anamnese),
+        ancienne: anamneseAncienne(anam?.anamnese_maj),
+        maj: anam?.anamnese_maj ?? null,
+      }}
     />
   )
 }

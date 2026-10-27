@@ -103,7 +103,7 @@ export default function PreparationClient({
           <p className="text-xs text-gray-400 mt-1">
             MonRDV n’en propose aucun : produits, volumes et horaires relèvent de vous.
           </p>
-          <Button size="sm" className="mt-3" onClick={() => router.push('/gastro/modeles')}>Créer un protocole</Button>
+          <Button size="sm" className="mt-3" onClick={() => router.push('/modeles')}>Créer un protocole</Button>
         </div>
       ) : !copie ? (
         <div className="bg-white border border-gray-100 rounded-xl divide-y divide-gray-50 print:hidden">
