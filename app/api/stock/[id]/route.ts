@@ -52,8 +52,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .select(CHAMPS).maybeSingle()
 
   if (error) {
-    if (tableStockAbsente(error)) return NextResponse.json({ error: STOCK_NON_ACTIVE }, { status: 503 })
+    // Le cas nommé d'abord : voir app/api/stock/route.ts.
     if (error.code === '23505') return NextResponse.json({ error: 'Un article porte déjà ce nom.' }, { status: 409 })
+    if (tableStockAbsente(error)) return NextResponse.json({ error: STOCK_NON_ACTIVE }, { status: 503 })
     console.error('[Stock] modification impossible :', error.message)
     return NextResponse.json({ error: 'Modification impossible' }, { status: 500 })
   }

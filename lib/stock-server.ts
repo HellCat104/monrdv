@@ -37,13 +37,28 @@ export async function requireStockDoctor(): Promise<{ error: NextResponse } | { 
 
 /** La v88 n'est pas passée. Règle de la maison : pas de migration, pas de
  *  fonctionnalité — mais jamais d'écran cassé. Les écrans lisent ce drapeau
- *  et se présentent eux-mêmes comme en attente. */
+ *  et se présentent eux-mêmes comme en attente.
+ *
+ *  UNIQUEMENT des codes d'erreur, jamais le texte du message. J'avais d'abord
+ *  ajouté « le message contient stock_articles », et tout refus LÉGITIME de la
+ *  base se mettait à répondre « le stock attend une migration » : le nom de
+ *  l'index d'unicité est `idx_stock_articles_nom`, si bien qu'ajouter deux
+ *  fois « Gants M » envoyait le praticien relancer une migration déjà passée.
+ *  Une contrainte violée, un refus de RLS, un contrôle de validité portent
+ *  tous le nom de la table — et aucun ne veut dire qu'elle est absente. */
 export function tableStockAbsente(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false
-  const code = error.code ?? ''
-  const msg = (error.message ?? '').toLowerCase()
-  return code === '42P01' || code === '42703' || code === 'PGRST204' || code === 'PGRST202'
-    || msg.includes('stock_articles') || msg.includes('stock_mouvement')
+  switch (error.code) {
+    case '42P01':    // la table n'existe pas
+    case '42883':    // la fonction stock_mouvement() n'existe pas
+    case '42703':    // la colonne n'existe pas
+    case 'PGRST202': // fonction absente du cache de schéma PostgREST
+    case 'PGRST204': // colonne absente du cache de schéma
+    case 'PGRST205': // table absente du cache de schéma
+      return true
+    default:
+      return false
+  }
 }
 
 export const STOCK_NON_ACTIVE = 'Le stock attend une migration de la base (v88).'

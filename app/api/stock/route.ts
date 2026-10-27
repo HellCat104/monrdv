@@ -84,13 +84,15 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !data) {
-    if (tableStockAbsente(error)) {
-      return NextResponse.json({ error: STOCK_NON_ACTIVE }, { status: 503 })
-    }
+    // Les cas NOMMÉS d'abord, le fourre-tout de la migration absente ensuite :
+    // un refus légitime ne doit jamais être présenté comme une base en retard.
     // 23505 : l'index unique sur (cabinet, nom). Deux « Gants M » dans un
     // cabinet, ce sont deux comptes qui se contredisent.
     if (error?.code === '23505') {
       return NextResponse.json({ error: `« ${nom} » existe déjà dans votre stock.` }, { status: 409 })
+    }
+    if (tableStockAbsente(error)) {
+      return NextResponse.json({ error: STOCK_NON_ACTIVE }, { status: 503 })
     }
     console.error('[Stock] création impossible :', error?.message)
     return NextResponse.json({ error: 'L’article n’a pas pu être créé' }, { status: 500 })
