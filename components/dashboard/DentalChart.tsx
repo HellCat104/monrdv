@@ -19,8 +19,17 @@ import {
   DENTAL_FACES, ETATS_AVEC_FACES, estDentDeLait,
   normalizeTeeth, toggleToothState, toggleFace, toothFaces, facesLabel,
   primaryState, stateColors, statesLabel, statesWithFacesLabel,
-  type DentalTeeth, type ToothStatus, type ToothFace,
+  DENTAL_NATURES, natureDe,
+  type DentalTeeth, type ToothStatus, type ToothFace, type ToothNature,
 } from '@/lib/dental'
+
+/** Le jour, écrit depuis les composantes locales : passer par toISOString()
+ *  recule d'un jour dès que l'heure locale est en avance sur UTC. */
+function aujourdhui(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
 import {
   describeToothChange, formatToothEventDate, toothEventTitle,
   type ToothEvent,
@@ -40,6 +49,10 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
   // null = pas encore choisi par le praticien : l'affichage se règle alors sur
   // le contenu du dossier (voir `denture` plus bas).
   const [dentureChoisie, setDentureChoisie] = useState<'definitive' | 'lait' | 'mixte' | null>(null)
+  // Nature posée par défaut quand on coche un état. « Constaté » au fauteuil ;
+  // le praticien qui prépare un plan de traitement bascule sur « À faire » et
+  // n'a plus à la préciser dent après dent.
+  const [natureParDefaut, setNatureParDefaut] = useState<ToothNature>('constate')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -93,10 +106,41 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
   function toggleState(n: string, s: ToothStatus) {
     setTeeth((prev) => {
       const next = { ...prev }
-      const states = toggleToothState(prev[n]?.s ?? [], s)
+      const avant = prev[n]?.s ?? []
+      const states = toggleToothState(avant, s)
       // Plus aucun état : la dent sort du schéma (et sa note avec elle).
-      if (states.length === 0) delete next[n]
-      else next[n] = { ...next[n], s: states }
+      if (states.length === 0) { delete next[n]; scheduleSave(next); return next }
+
+      const ajoute = states.includes(s) && !avant.includes(s)
+      const p = { ...(next[n]?.p ?? {}) }
+      const d = { ...(next[n]?.d ?? {}) }
+      if (ajoute) {
+        // Un état qu'on vient de cocher est CONSTATÉ, et daté du jour : c'est
+        // ce que fait le praticien au fauteuil. Les trois autres natures se
+        // choisissent ensuite, en un clic, sur la ligne de l'état.
+        p[s] = natureParDefaut
+        d[s] = aujourdhui()
+      } else {
+        delete p[s]; delete d[s]
+      }
+      next[n] = { ...next[n], s: states, p, d }
+      scheduleSave(next)
+      return next
+    })
+  }
+
+  /** Changer la nature d'un état déjà posé : constaté → à faire → réalisé.
+   *  C'est le geste qui fait vivre le plan de traitement sur le schéma. */
+  function changerNature(n: string, s: ToothStatus, nature: ToothNature) {
+    setTeeth((prev) => {
+      const next = { ...prev }
+      if (!next[n]) return prev
+      const p = { ...(next[n].p ?? {}), [s]: nature }
+      const d = { ...(next[n].d ?? {}) }
+      // La date suit la nature : « réalisé le » est l'information qu'on
+      // cherchera dans six mois, pas la date du diagnostic.
+      d[s] = aujourdhui()
+      next[n] = { ...next[n], p, d }
       scheduleSave(next)
       return next
     })
@@ -287,6 +331,23 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
             <button type="button" onClick={() => setActive(null)} className="text-xs text-gray-400 hover:text-gray-600">Fermer</button>
           </div>
           <p className="text-[11px] text-gray-400 mb-2">Cochez tous les états qui s&apos;appliquent. « Absente / extraite » s&apos;utilise seule.</p>
+
+          {/* CE QU'ON EST EN TRAIN DE NOTER. Au fauteuil on constate ; en
+              préparant un plan de traitement on coche « À faire » une fois,
+              puis on pose les soins dent après dent sans le répéter. */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-2 pb-2 border-b border-gray-100">
+            <span className="text-[11px] text-gray-400 mr-0.5">Je note :</span>
+            {DENTAL_NATURES.map((nat) => (
+              <button key={nat.key} type="button" onClick={() => setNatureParDefaut(nat.key)}
+                title={nat.aide}
+                className={`text-[11px] px-2 py-1 rounded-full border transition ${
+                  natureParDefaut === nat.key
+                    ? 'bg-gray-800 border-gray-800 text-white'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                {nat.label}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {DENTAL_STATES.map((s) => {
               const on = activeStates.includes(s.key)
@@ -318,6 +379,37 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
               Tout effacer
             </button>
           </div>
+          {/* CE QUI EST POSÉ SUR CETTE DENT, et dans quel statut. C'est ici
+              qu'un soin passe de « à faire » à « réalisé » : le plan de
+              traitement vit sur le schéma, pas dans un écran à part. */}
+          {activeStates.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+              {activeStates.map((st) => {
+                const nat = natureDe(activeInfo, st)
+                const quand = activeInfo?.d?.[st]
+                return (
+                  <div key={st} className="flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: DENTAL_COLOR[st] }} />
+                    <span className="text-[12px] text-gray-700 w-[110px] shrink-0">
+                      {DENTAL_STATES.find((x) => x.key === st)?.label}
+                    </span>
+                    {DENTAL_NATURES.map((n) => (
+                      <button key={n.key} type="button" onClick={() => changerNature(active, st, n.key)}
+                        title={n.aide}
+                        className={`text-[11px] px-1.5 py-0.5 rounded border transition ${
+                          nat === n.key
+                            ? 'bg-gray-800 border-gray-800 text-white'
+                            : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'}`}>
+                        {n.label}
+                      </button>
+                    ))}
+                    {quand && <span className="text-[10px] text-gray-400">le {quand.split('-').reverse().join('/')}</span>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* Faces — seulement pour les états qui se localisent (carie,
               obturation) : une couronne coiffe la dent entière, proposer des
               faces inviterait à saisir un non-sens. */}

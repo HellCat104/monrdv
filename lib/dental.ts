@@ -1,7 +1,38 @@
 // Schéma dentaire (odontogramme) — constantes partagées entre l'UI et l'export.
 // Notation FDI (internationale) : chaque dent porte un numéro à 2 chiffres.
 
-export type ToothStatus = 'carie' | 'obturation' | 'couronne' | 'a_extraire' | 'extraite' | 'implant'
+export type ToothStatus =
+  | 'carie' | 'obturation' | 'couronne' | 'a_extraire' | 'extraite' | 'implant'
+  | 'fracture' | 'bridge' | 'endodontie' | 'mobilite'
+
+// ── LES QUATRE NATURES ──────────────────────────────────────────────────────
+//
+// « Carie sur la 46 » et « obturation prévue sur la 46 » ne disent pas la même
+// chose, et « obturation faite » encore moins. Confondus en un seul état, le
+// plan de traitement devenait indiscernable du travail accompli : on ne savait
+// plus ce qui restait à faire, ni ce qui avait été facturé.
+//
+// Chaque état porte donc sa nature. ABSENTE = « constaté » : c'est ce que
+// voulaient dire toutes les lignes écrites avant cette version, et aucune
+// donnée n'est réécrite.
+export type ToothNature = 'constate' | 'diagnostic' | 'planifie' | 'realise'
+
+export const DENTAL_NATURES: { key: ToothNature; label: string; aide: string }[] = [
+  { key: 'constate',   label: 'Constaté',   aide: 'Ce que je vois aujourd’hui' },
+  { key: 'diagnostic', label: 'Diagnostic', aide: 'Ce que j’en conclus' },
+  { key: 'planifie',   label: 'À faire',    aide: 'Soin prévu, pas encore réalisé' },
+  { key: 'realise',    label: 'Réalisé',    aide: 'Soin effectué' },
+]
+
+export const NATURE_LABEL: Record<string, string> =
+  Object.fromEntries(DENTAL_NATURES.map((n) => [n.key, n.label]))
+
+/** La nature d'un état, « constaté » par défaut : c'est le sens qu'avaient les
+ *  lignes écrites avant que les natures existent. */
+export function natureDe(info: ToothInfo | undefined, etat: ToothStatus): ToothNature {
+  const n = info?.p?.[etat]
+  return n && DENTAL_NATURES.some((x) => x.key === n) ? n : 'constate'
+}
 
 // Une dent porte PLUSIEURS états simultanés : une couronne peut se carier, une dent
 // obturée peut devenir à extraire. Format écrit en base (jsonb) :
@@ -16,7 +47,15 @@ export type ToothStatus = 'carie' | 'obturation' | 'couronne' | 'a_extraire' | '
 // `f` absent ou vide = l'état porte sur la dent entière, ce qui reste le cas de
 // la couronne, de l'implant ou d'une dent absente. C'est aussi l'état de toutes
 // les lignes écrites avant cette version : rien à migrer.
-export interface ToothInfo { s: ToothStatus[]; n?: string; f?: Partial<Record<ToothStatus, ToothFace[]>> }
+export interface ToothInfo {
+  s: ToothStatus[]
+  n?: string
+  f?: Partial<Record<ToothStatus, ToothFace[]>>
+  /** Nature de chaque état (voir ToothNature). Clé absente = « constaté ». */
+  p?: Partial<Record<ToothStatus, ToothNature>>
+  /** Date à laquelle l'état a été posé, par état. Format YYYY-MM-DD. */
+  d?: Partial<Record<ToothStatus, string>>
+}
 export type DentalTeeth = Record<string, ToothInfo>
 
 // Ancien format, antérieur aux états multiples : { "16": { "s": "carie" } }.
@@ -32,8 +71,12 @@ export type StoredDentalTeeth = Record<string, StoredToothInfo | null | undefine
 
 export const DENTAL_STATES: { key: ToothStatus; label: string; color: string }[] = [
   { key: 'carie',      label: 'Carie',                 color: '#ef4444' },
+  { key: 'fracture',   label: 'Fracture',              color: '#dc2626' },
+  { key: 'mobilite',   label: 'Mobilité',              color: '#ea580c' },
   { key: 'obturation', label: 'Plombage / obturation', color: '#3b82f6' },
+  { key: 'endodontie', label: 'Traitement de racine',  color: '#0ea5e9' },
   { key: 'couronne',   label: 'Couronne',              color: '#f59e0b' },
+  { key: 'bridge',     label: 'Bridge',                color: '#d97706' },
   { key: 'a_extraire', label: 'À extraire',            color: '#f97316' },
   { key: 'extraite',   label: 'Absente / extraite',    color: '#6b7280' },
   { key: 'implant',    label: 'Implant',               color: '#8b5cf6' },
@@ -58,7 +101,10 @@ export const DENTAL_FACE_LABEL: Record<string, string> =
 // Quels états se localisent sur une face. Une couronne coiffe la dent entière,
 // un implant la remplace, une dent extraite n'a plus de face : proposer des
 // cases à cocher pour ces états-là inviterait à saisir un non-sens.
-export const ETATS_AVEC_FACES = new Set<ToothStatus>(['carie', 'obturation'])
+// Une couronne coiffe la dent entière, un implant la remplace, une dent
+// extraite n'a plus de face, une mobilité concerne la dent dans son ensemble :
+// proposer des cases de face pour ces états inviterait à saisir un non-sens.
+export const ETATS_AVEC_FACES = new Set<ToothStatus>(['carie', 'obturation', 'fracture'])
 
 export const DENTAL_LABEL: Record<string, string> = Object.fromEntries(DENTAL_STATES.map((s) => [s.key, s.label]))
 export const DENTAL_COLOR: Record<string, string> = Object.fromEntries(DENTAL_STATES.map((s) => [s.key, s.color]))
@@ -71,7 +117,10 @@ const STATE_RANK: Record<string, number> = Object.fromEntries(DENTAL_STATES.map(
 // Quand une dent cumule plusieurs états, la couleur de fond ne peut en montrer
 // qu'un : on met en avant ce qui doit sauter aux yeux du praticien (l'urgence, puis
 // la pathologie) ; les états « réparés » ne servent que de marqueur secondaire.
-const PRIMARY_PRIORITY: ToothStatus[] = ['extraite', 'a_extraire', 'carie', 'implant', 'couronne', 'obturation']
+const PRIMARY_PRIORITY: ToothStatus[] = [
+  'extraite', 'a_extraire', 'fracture', 'carie', 'mobilite',
+  'implant', 'bridge', 'couronne', 'endodontie', 'obturation',
+]
 
 // Arcades, dans l'ordre d'affichage (vue du praticien : côté droit du patient à gauche).
 export const FDI_UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]
