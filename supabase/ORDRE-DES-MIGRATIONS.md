@@ -479,3 +479,35 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      Les champs de texte libre restent en place et continuent d'alimenter la
      même bannière : un cabinet qui ne remplit jamais le questionnaire garde
      exactement ce qu'il avait. Additive, aucune RLS à ajouter.
+
+ 88. `migration_v88_stock.sql`
+     Migration v88 — LE STOCK DU CABINET. Deux tables nouvelles :
+     `stock_articles` (nom, catégorie, unité de comptage, quantité, seuil
+     d'alerte, péremption la plus proche, fournisseur, référence, prix
+     d'achat, `actif`) et `stock_mouvements` (sens entree/sortie/inventaire,
+     quantité, `quantite_apres`, motif).
+     C'était le seul poste du cabinet dentaire dont MonRDV ne savait rien :
+     combien reste-t-il de composite, de cartouches, de gants ? On s'en
+     apercevait au fauteuil, patient installé.
+     La quantité vit sur l'article — on la lit cent fois par jour et une liste
+     de quatre-vingts références qui additionnerait ses mouvements serait lente
+     pour rien — mais elle n'est modifiable QUE par la fonction
+     `stock_mouvement()`, qui écrit la ligne de journal et la nouvelle quantité
+     dans la même transaction, sous `for update`. Sans ce verrou, le médecin au
+     fauteuil et la secrétaire au comptoir lisent le même « 12 » et écrivent
+     tous les deux « 11 ». SECURITY INVOKER, pour que la RLS s'applique comme
+     à n'importe quelle requête.
+     La quantité PEUT devenir négative, et c'est voulu : refuser une sortie au
+     fauteuil ferait abandonner le module en une semaine, et ramener
+     silencieusement à zéro mentirait dans le journal. Un nombre négatif ne
+     peut venir que d'un comptage inexact : il est l'alerte lui-même.
+     Pas d'`update` ni de `delete` sur les mouvements — un journal qu'on
+     réécrit ne sert plus à rien ; une erreur se contre-passe. Index unique
+     partiel sur (doctor_id, nom) des articles ACTIFS seulement : archiver
+     « Gants M » doit laisser la place à un nouvel article du même nom.
+     Aucune déduction automatique depuis les actes réalisés : « composite deux
+     faces » ne consomme pas une quantité connue, et un stock décrémenté par
+     une consultation donnerait des comptes faux avec l'autorité du chiffre.
+     RLS médecin uniquement ; la secrétaire, qui tient souvent l'étagère,
+     reste à ouvrir par une permission — une décision à prendre, pas un oubli.
+     Additive, deux tables nouvelles, aucune ligne existante touchée.

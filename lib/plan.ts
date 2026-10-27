@@ -20,6 +20,11 @@ export interface PlanFeatures {
   invoicing: boolean
   /** Accès à l'écran Statistiques (contenu adapté au forfait) */
   stats: boolean
+  /** Stock du cabinet : consommables, seuils d'alerte, péremptions.
+   *  Ce n'est pas une donnée de santé — un stock n'appartient à aucun
+   *  patient — mais c'est de la gestion de cabinet, et le forfait Agenda
+   *  s'arrête à la prise de rendez-vous. */
+  stock: boolean
 }
 
 export const PLAN_LABELS: Record<DoctorPlan, string> = {
@@ -42,6 +47,7 @@ const FEATURES: Record<DoctorPlan, PlanFeatures> = {
     payments: true,
     invoicing: false,
     stats: true,
+    stock: false,
   },
   complet: {
     records: true,
@@ -50,6 +56,7 @@ const FEATURES: Record<DoctorPlan, PlanFeatures> = {
     payments: true,
     invoicing: true,
     stats: true,
+    stock: true,
   },
 }
 

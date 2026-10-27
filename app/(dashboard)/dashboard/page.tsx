@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import SuiviLabo from '@/components/dashboard/SuiviLabo'
+import BandeauStock from '@/components/dashboard/BandeauStock'
 import RappelsDus from '@/components/dashboard/RappelsDus'
 import ConversationsAReprendre from '@/components/dashboard/ConversationsAReprendre'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
@@ -82,6 +83,10 @@ export default async function DashboardPage() {
   // Résumé des consultations clôturées (sinon les cartes affichent « Aucune note »).
   // Jamais en forfait Agenda : ces données de santé n'ont pas à quitter la base.
   const acces = canAccess(doctor.plan, 'consultation')
+  // Le stock a sa propre fonctionnalité de forfait : s'appuyer sur celle de
+  // la consultation marcherait aujourd'hui et se tromperait le jour où les
+  // deux ne vont plus ensemble.
+  const accesStock = canAccess(doctor.plan, 'stock')
   // Ce qui reste à faire aujourd'hui, et ce qui est fait.
   //
   // « Fait » ne veut pas dire « l'heure est passée » : à 13 h, le patient de
@@ -182,6 +187,12 @@ export default async function DashboardPage() {
           cours, mais rien n'empêchait un généraliste de la voir. On la réserve
           désormais aux praticiens que ça concerne. */}
       {estDentiste && <SuiviLabo />}
+
+      {/* Stock : ce qu'il faut commander, et ce qui périme. Un stock qu'il
+          faut aller consulter ne sert à rien — on s'en aperçoit au fauteuil,
+          et il est trop tard. L'encart ne s'affiche que s'il y a quelque
+          chose à dire. */}
+      {estDentiste && accesStock && <BandeauStock />}
 
       {/* Les trois chiffres du mois, en tête — c'est la place que la
           praticienne leur a choisie. Le taux d'absentéisme, lui, ne revient

@@ -20,6 +20,7 @@ import {
   Users2,
   BellRing,
   ClipboardList,
+  Package,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -35,6 +36,11 @@ const navItems = [
   // la table est commune, et un dentiste qui rédige « après extraction »
   // trois fois par jour a le même besoin.
   { href: '/modeles',       label: 'Mes modèles',       icon: ClipboardList, branches: ['gastro', 'dentaire'] },
+  // Le stock est un besoin de CABINET, pas de spécialité : des gants et des
+  // compresses s'épuisent partout. Il n'est ouvert qu'à la dentisterie pour
+  // l'instant parce que c'est là qu'il a été demandé et éprouvé — l'ouvrir à
+  // une autre branche est un mot à ajouter ici, rien de plus.
+  { href: '/stock',         label: 'Stock',             icon: Package, branches: ['dentaire'] },
   { href: '/equipe',        label: 'Mon équipe',        icon: Users2 },
   { href: '/settings',      label: 'Paramètres',        icon: Settings },
   { href: '/abonnement',    label: 'Abonnement',        icon: CreditCard },
@@ -84,7 +90,7 @@ export function Sidebar() {
   // (Patients reste visible : fiche réduite nom/prénom/tél/notes en mode agenda.)
   // En forfait Agenda, les écrans de branche n'existent pas : leurs pages
   // redirigent déjà côté serveur, le menu ne doit pas y mener.
-  const planHidden = plan === 'agenda' ? ['/factures', '/gastro/suivis', '/modeles'] : []
+  const planHidden = plan === 'agenda' ? ['/factures', '/gastro/suivis', '/modeles', '/stock'] : []
   const visibleItems = navItems.filter((i) => {
     if (planHidden.includes(i.href)) return false
     // Une entrée sans branche est commune ; sinon elle n'apparaît que chez les
