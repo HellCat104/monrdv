@@ -86,6 +86,7 @@ export async function getStaffContext(): Promise<StaffContext | null> {
     permissions.quotes_payment = false
   }
   if (!canAccess(doctor.plan, 'prescriptions')) permissions.prescriptions_view = false
+  if (!canAccess(doctor.plan, 'stock')) permissions.stock = false
   if (!canAccess(doctor.plan, 'invoicing')) permissions.factures = false
 
   const confidential = doctor.confidential_mode === true
@@ -108,6 +109,11 @@ export async function getStaffContext(): Promise<StaffContext | null> {
     // médecin. C'est le prix du mode, et il est réversible d'un clic.
     permissions.quotes_view = false
     permissions.quotes_payment = false
+    // Le stock, lui, SURVIT au mode confidentiel, et c'est délibéré : une
+    // boîte de gants ne nomme aucun patient. Ce mode tire un rideau sur le
+    // clinique, pas sur le ménage de l'étagère — et le couper obligerait le
+    // médecin à recompter lui-même des cartouches pour protéger un secret
+    // qu'elles ne portent pas.
   }
 
   const doctorPublic = { id: doctor.id, name: doctor.name, specialty: doctor.specialty, city: doctor.city }

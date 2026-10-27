@@ -691,6 +691,12 @@ export interface StaffPermissions {
   // suivre un travail — dates, statut — sans accéder au dossier médical ni
   // au coût facturé par le laboratoire, qui regarde le médecin seul.
   lab_works: boolean            // suivre les travaux de laboratoire (dentistes)
+  // C'est souvent elle qui tient l'étagère : elle range la livraison, elle
+  // voit la boîte se vider. Un stock que seul le médecin peut décompter est
+  // un stock faux au bout d'une semaine. Elle COMPTE donc, et c'est tout :
+  // créer un article, fixer un seuil ou lire un prix d'achat restent des
+  // décisions de cabinet, qui regardent le praticien.
+  stock: boolean                // compter le stock : entrées, sorties, inventaire
   // Bloc finances
   payments: boolean             // saisir les encaissements (espèces, chèque…)
   // Volontairement distinct de `payments`, qui ne règle QU'UN rendez-vous : un
@@ -738,6 +744,7 @@ export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
   // lui-même. Un devis cumule les deux.
   quotes_view: false,
   lab_works: false,
+  stock: false,
   quotes_payment: false,
   payments: false,
   edit_prices: false,
@@ -754,7 +761,7 @@ export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
 // aucune donnée de santé. Absent = disponible dans les deux forfaits.
 export const STAFF_PERMISSION_GROUPS: {
   title: string
-  items: { key: keyof StaffPermissions; label: string; hint: string; requiert?: 'records' | 'prescriptions' | 'invoicing' }[]
+  items: { key: keyof StaffPermissions; label: string; hint: string; requiert?: 'records' | 'prescriptions' | 'invoicing' | 'stock' }[]
 }[] = [
   {
     title: 'Agenda & accueil',
@@ -777,6 +784,15 @@ export const STAFF_PERMISSION_GROUPS: {
       // un prix ou un statut reste au médecin, sans case pour l'ouvrir.
       { key: 'quotes_view',         label: 'Afficher les devis',                hint: 'Actes prévus, total, déjà versé, reste dû — sans pouvoir les modifier', requiert: 'records' },
       { key: 'lab_works',           label: 'Suivre les travaux de laboratoire', hint: 'Dates et statut d\'un travail de prothèse — sans le coût facturé par le labo', requiert: 'records' },
+    ],
+  },
+  {
+    // Ni médical ni financier : un tube de composite ne dit rien d'un patient,
+    // et compter des boîtes n'est pas tenir une caisse. Lui forcer la place
+    // dans un bloc existant aurait mal nommé ce qu'on accorde.
+    title: 'Matériel',
+    items: [
+      { key: 'stock', label: 'Tenir le stock', hint: 'Entrées, sorties et inventaires — sans les prix d\'achat ni la valeur du stock, et sans pouvoir créer ni modifier un article', requiert: 'stock' },
     ],
   },
   {

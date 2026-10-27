@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Calendar, Users, LogOut, Settings, Armchair, Banknote, FlaskConical } from 'lucide-react'
+import { Calendar, Users, LogOut, Settings, Armchair, Banknote, FlaskConical, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { StaffPermissions } from '@/types'
 
@@ -26,6 +26,7 @@ export default function CabinetShell({
     permissions.patients_contact && { href: '/cabinet/patients', label: 'Patients', icon: Users },
     (permissions.caisse_day || permissions.view_revenue) && { href: '/cabinet/caisse', label: 'Caisse', icon: Banknote },
     permissions.lab_works && { href: '/cabinet/laboratoire', label: 'Laboratoire', icon: FlaskConical },
+    permissions.stock && { href: '/cabinet/stock', label: 'Stock', icon: Package },
     // Toujours visible : chacun gère son propre compte (mot de passe…)
     { href: '/cabinet/compte', label: 'Mon compte', icon: Settings },
   ].filter(Boolean) as { href: string; label: string; icon: typeof Calendar }[]
