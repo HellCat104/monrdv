@@ -16,6 +16,9 @@ import GrowthChart from '@/components/dashboard/GrowthChart'
 import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
+import AnamneseDentaire from '@/components/dashboard/AnamneseDentaire'
+import BandeauRisques from '@/components/dashboard/BandeauRisques'
+import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne, type Anamnese } from '@/lib/anamnese'
 import QuotesCard from '@/components/dashboard/QuotesCard'
 import MenuDocuments from '@/components/dashboard/MenuDocuments'
 import BlocGastro from '@/components/gastro/BlocGastro'
@@ -134,6 +137,11 @@ export default function PatientDossier({
   )
   const [mutuelleOther, setMutuelleOther] = useState(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
   const [editAllergies, setEditAllergies] = useState(patient.allergies ?? '')
+  // L'anamnèse structurée (v87), tenue ici : la bannière du haut et celle de
+  // l'odontogramme lisent la même valeur et doivent changer ensemble.
+  const [editAnamnese, setEditAnamnese] = useState<Anamnese>((patient.anamnese ?? {}) as Anamnese)
+  const [editAnamneseMaj, setEditAnamneseMaj] = useState<string | null>(patient.anamnese_maj ?? null)
+  const [ouvrirAnamnese, setOuvrirAnamnese] = useState(false)
   const [editChronic, setEditChronic] = useState(patient.chronic_conditions ?? '')
   // Étiquettes de pathologie (v72). Elles ne doublent pas le texte libre
   // ci-dessus : celui-ci porte la nuance (« déséquilibré depuis mars »),
@@ -801,13 +809,28 @@ export default function PatientDossier({
         </div>
       </div>
 
-      {/* L'allergie ne se range pas dans un onglet : elle reste sous les yeux. */}
-      {editAllergies.trim() && (
+      {/* L'allergie ne se range pas dans un onglet : elle reste sous les yeux.
+          Chez le dentiste, la même place porte TOUT ce qui change un geste —
+          anticoagulant, valve, bisphosphonates — et dit explicitement quand
+          rien n'a été demandé. Ailleurs, l'encadré d'allergies est inchangé. */}
+      {isDentalDoctor(specialties) ? (
+        <BandeauRisques
+          risques={risquesActifs({ anamnese: editAnamnese, allergies: editAllergies })}
+          verifier={aVerifier(editAnamnese)}
+          remplie={anamneseRemplie(editAnamnese)}
+          ancienne={anamneseAncienne(editAnamneseMaj)}
+          maj={editAnamneseMaj}
+          onOuvrir={() => {
+            setOuvrirAnamnese(true)
+            document.getElementById('bloc-anamnese')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}
+        />
+      ) : editAllergies.trim() ? (
         <div className="flex items-start gap-2 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3">
           <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
           <p className="text-sm"><b>Allergies :</b> {editAllergies}</p>
         </div>
-      )}
+      ) : null}
 
       {edition ? (
         /* Mode modification : le formulaire, et rien d'autre. */
@@ -1284,7 +1307,30 @@ export default function PatientDossier({
                 />
               )}
           {/* Sections spécialité */}
-          {isDentalDoctor(specialties) && <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />}
+          {isDentalDoctor(specialties) && (
+            <div id="bloc-anamnese" className="space-y-3">
+              <AnamneseDentaire
+                key={`an-${patient.id}`}
+                patientId={patient.id}
+                valeur={editAnamnese}
+                maj={editAnamneseMaj}
+                ouvertParDefaut={ouvrirAnamnese}
+                onEnregistre={(a, jour) => { setEditAnamnese(a); setEditAnamneseMaj(jour) }}
+              />
+              {/* La même bannière, en une ligne, JUSTE au-dessus de l'arcade :
+                  celle du haut de page est à plusieurs écrans de la dent sur
+                  laquelle on va cliquer. */}
+              <BandeauRisques
+                compact
+                risques={risquesActifs({ anamnese: editAnamnese, allergies: editAllergies })}
+                verifier={aVerifier(editAnamnese)}
+                remplie={anamneseRemplie(editAnamnese)}
+                ancienne={anamneseAncienne(editAnamneseMaj)}
+                maj={editAnamneseMaj}
+              />
+              <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />
+            </div>
+          )}
           {suiviEnfant && (
             <div className="space-y-4">
               <GrowthChart key={`g-${patient.id}`} birthDate={editBirthDate} vitals={vitals} sex={editSex || null} gestationalWeeks={editGestWeeks ? Number(editGestWeeks) : null} />

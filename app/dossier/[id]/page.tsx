@@ -2,6 +2,7 @@
 // Accessible uniquement par le médecin propriétaire du patient.
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { risquesActifs } from '@/lib/anamnese'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
 import { PrintButton } from './PrintButton'
@@ -125,6 +126,32 @@ export default async function DossierPage({ params }: Props) {
           {patient.current_treatments && <div><span className="text-blue-600 font-medium">Traitements en cours :</span> {patient.current_treatments}</div>}
           {patient.notes && <div><span className="text-gray-500 font-medium">Notes :</span> {patient.notes}</div>}
         </div>
+
+        {/* L'ANAMNÈSE (v87) — sur la pièce imprimée aussi. Un dossier
+            transmis à un confrère sans la ligne « sous anticoagulant » lui
+            cache précisément ce qu'il doit savoir avant de toucher une dent.
+            Seules les réponses « oui » figurent : une liste de vingt-deux
+            « non » noierait l'information. */}
+        {(() => {
+          const risques = risquesActifs({ anamnese: (patient as { anamnese?: unknown }).anamnese })
+          const maj = (patient as { anamnese_maj?: string | null }).anamnese_maj ?? null
+          if (risques.length === 0) return null
+          return (
+            <div className="mt-3 border border-red-200 rounded-lg px-3 py-2">
+              <p className="text-xs font-bold text-red-700 uppercase tracking-wide">
+                À savoir avant tout acte
+                {maj ? <span className="font-normal text-gray-500 normal-case tracking-normal"> · anamnèse du {formatDateFr(maj)}</span> : null}
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {risques.map((r) => (
+                  <li key={r.cle} className="text-sm text-gray-800">
+                    • {r.titre}{r.precision ? ` — ${r.precision}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })()}
 
         {/* Rendez-vous */}
         <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mt-7 mb-2">Rendez-vous ({appointments.length})</h3>

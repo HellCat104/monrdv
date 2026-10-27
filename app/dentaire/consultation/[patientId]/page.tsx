@@ -13,6 +13,7 @@ import { isDentalDoctor } from '@/lib/dental'
 import { formatDateFr } from '@/lib/utils'
 import ConsultationStructuree from '@/components/consultation/ConsultationStructuree'
 import { RUBRIQUES_CONSULTATION_DENTAIRE, TRAMES_CONSULTATION_DENTAIRE } from '@/lib/dentaire'
+import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne } from '@/lib/anamnese'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,14 @@ export default async function PageConsultation({
     .select('id, first_name, last_name, age, cin, allergies, chronic_conditions, surgeries, current_treatments, family_history')
     .eq('id', params.patientId).eq('doctor_id', doctor.id).single()
   if (!patient) notFound()
+
+  // L'anamnèse est lue À PART du reste du dossier. Si la v87 n'est pas passée,
+  // la colonne n'existe pas : une requête séparée échoue seule, là où une
+  // colonne de plus dans le select ci-dessus aurait fait disparaître l'écran
+  // de consultation tout entier.
+  const { data: anam } = await supabase
+    .from('patients').select('anamnese, anamnese_maj')
+    .eq('id', patient.id).eq('doctor_id', doctor.id).maybeSingle()
 
   let aptId: string | null = null
   if (searchParams.apt) {
@@ -96,6 +105,13 @@ export default async function PageConsultation({
       trames={TRAMES_CONSULTATION_DENTAIRE}
       retourCr="/dentaire/consultation/cr"
       dentaire
+      alertes={{
+        risques: risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }),
+        verifier: aVerifier(anam?.anamnese),
+        remplie: anamneseRemplie(anam?.anamnese),
+        ancienne: anamneseAncienne(anam?.anamnese_maj),
+        maj: anam?.anamnese_maj ?? null,
+      }}
     />
   )
 }

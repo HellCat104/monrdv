@@ -26,6 +26,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import BandeauRisques from '@/components/dashboard/BandeauRisques'
+import type { Risque as RisqueAlerte } from '@/lib/anamnese'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ArrowLeft, Save, Check, Eye, FileText } from 'lucide-react'
@@ -38,7 +40,7 @@ type Existant = Record<string, any> | null
 
 export default function ConsultationStructuree({
   doctorId, patient, appointmentId, existant, dossier,
-  rubriques, trames, retourCr, dentaire = false,
+  rubriques, trames, retourCr, dentaire = false, alertes,
 }: {
   doctorId: string
   patient: PatientLite
@@ -50,6 +52,16 @@ export default function ConsultationStructuree({
   trames: TrameConsultation[]
   /** Où mène l'aperçu du compte rendu (la route diffère par branche). */
   retourCr: string
+  /** Les risques à signaler AVANT le geste (anamnèse + allergies du dossier).
+   *  Absent = pas de bannière : c'est la branche qui décide, pas ce composant,
+   *  et une branche sans questionnaire n'a pas à être invitée à le remplir. */
+  alertes?: {
+    risques: RisqueAlerte[]
+    verifier: RisqueAlerte[]
+    remplie: boolean
+    ancienne: boolean
+    maj: string | null
+  }
   /** Dentisterie : les dents concernées et les matériaux employés, deux
    *  colonnes qui n'existent qu'au fauteuil (v85). */
   dentaire?: boolean
@@ -154,6 +166,15 @@ export default function ConsultationStructuree({
       </div>
 
       {erreur && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erreur}</p>}
+
+      {/* AVANT la trame et avant la première rubrique. Une alerte d'hémostase
+          placée après l'examen clinique arrive après la décision. */}
+      {alertes && (
+        <BandeauRisques
+          risques={alertes.risques} verifier={alertes.verifier}
+          remplie={alertes.remplie} ancienne={alertes.ancienne} maj={alertes.maj}
+        />
+      )}
 
       <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
         <div className="flex items-end gap-3 flex-wrap">

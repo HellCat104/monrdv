@@ -131,6 +131,12 @@ export interface Patient {
   conditions?: string[] | null
   surgeries?: string | null               // antécédents chirurgicaux
   current_treatments?: string | null      // traitements de fond
+  // Anamnèse médicale structurée (v87) : { "<question>": { "r": "oui|non|inconnu", "p": "précision" } }.
+  // Les champs de texte libre ci-dessus restent la source principale ; celle-ci
+  // est RELUE PAR LE LOGICIEL pour alerter avant un acte. Facultatif : la
+  // colonne est absente tant que la v87 n'est pas passée.
+  anamnese?: Record<string, { r?: string; p?: string }> | null
+  anamnese_maj?: string | null            // date de dernière confirmation
   vaccinations?: string | null            // vaccins / statut vaccinal (texte libre)
   vaccines?: Record<string, string> | null // calendrier vaccinal structuré (pédiatrie)
   milestones?: Record<string, { s: 'ok' | 'ko'; d: string }> | null // repères de développement (pédiatrie)

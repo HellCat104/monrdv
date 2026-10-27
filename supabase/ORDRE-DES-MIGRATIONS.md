@@ -462,3 +462,20 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      réserver, et les mélanger polluait la page de réservation publique.
      Index unique partiel sur (doctor_id, code) : deux actes sans code ne sont
      pas des doublons. Additive, aucune ligne réécrite.
+
+ 87. `migration_v87_anamnese.sql`
+     Migration v87 — L'ANAMNÈSE MÉDICALE STRUCTURÉE. Ajoute `patients.anamnese`
+     (jsonb) et `patients.anamnese_maj` (date). Le dossier portait déjà quatre
+     champs de TEXTE LIBRE (allergies, maladies chroniques, chirurgies,
+     traitements) : un texte libre ne prévient personne. « Sintrom depuis
+     2019 » écrit en 2022 dans un champ qu'on n'ouvre pas ne s'affiche nulle
+     part le jour où on extrait une dent. Vingt-deux questions rangées, elles,
+     sont RELUES PAR LE LOGICIEL et affichées d'elles-mêmes en haut du dossier
+     et au-dessus de l'odontogramme.
+     Un seul jsonb plutôt que vingt-deux colonnes : `patients` est une table du
+     tronc commun, et chaque pédiatre aurait porté les colonnes du dentiste.
+     Format { "<cle>": { "r": "oui|non|inconnu", "p": "précision" } } ; une clé
+     ABSENTE veut dire « pas encore posée », ce qui n'est pas « non ».
+     Les champs de texte libre restent en place et continuent d'alimenter la
+     même bannière : un cabinet qui ne remplit jamais le questionnaire garde
+     exactement ce qu'il avait. Additive, aucune RLS à ajouter.

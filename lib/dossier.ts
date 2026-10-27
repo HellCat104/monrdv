@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit'
 import { formatDateFr, formatDateShort, formatTime } from '@/lib/utils'
 import { allVitalDefs, type VitalDef } from '@/types'
 import { summarizeTeeth, normalizeTeeth, stateColors, statesLabel, toothFaces, DENTAL_STATES, FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT, estDentDeLait, type DentalTeeth } from '@/lib/dental'
+import { risquesActifs } from '@/lib/anamnese'
 import { loadCabinetLogoForPdf } from '@/lib/cabinet-logo-server'
 import { lignesEnTete, ligneCoordonnees, type PraticienEnTete } from '@/lib/document-entete'
 
@@ -241,6 +242,12 @@ function renderDossierPDF(doctor: DossierDoctor, d: DossierData, logo: Buffer | 
     if (patient.chronic_conditions) kv('Antécédents :', String(patient.chronic_conditions))
     if (patient.current_treatments) kv('Traitements :', String(patient.current_treatments))
     if (patient.notes) kv('Notes :', String(patient.notes))
+    // L'anamnèse (v87) : seules les réponses « oui ». Un dossier transmis à un
+    // confrère sans la ligne « sous anticoagulant » lui cache précisément ce
+    // qu'il doit savoir avant de toucher une dent.
+    for (const r of risquesActifs({ anamnese: patient.anamnese })) {
+      kv('À savoir :', `${r.titre}${r.precision ? ` — ${r.precision}` : ''}`, C.red)
+    }
 
     // ── Rendez-vous (tableau) ────────────────────────────────────────────
     section(`Rendez-vous (${appointments.length})`)
@@ -491,7 +498,8 @@ ${patient.allergies ? `<br><span style="color:#dc2626"><strong>Allergies :</stro
 ${Array.isArray(patient.conditions) && patient.conditions.length > 0 ? `<br><strong>Pathologies :</strong> ${esc((patient.conditions as string[]).join(' · '))}` : ''}
 ${patient.chronic_conditions ? `<br><strong>Antécédents :</strong> ${esc(patient.chronic_conditions)}` : ''}
 ${patient.current_treatments ? `<br><strong>Traitements :</strong> ${esc(patient.current_treatments)}` : ''}
-${patient.notes ? `<br><strong>Notes :</strong> ${esc(patient.notes)}` : ''}</div>
+${patient.notes ? `<br><strong>Notes :</strong> ${esc(patient.notes)}` : ''}
+${risquesActifs({ anamnese: patient.anamnese }).map((r) => `<br><span style="color:#dc2626"><strong>À savoir :</strong> ${esc(r.titre)}${r.precision ? ' — ' + esc(r.precision) : ''}</span>`).join('')}</div>
 
 <h2>Rendez-vous (${appointments.length})</h2>
 ${appointments.length === 0 ? '<p class="muted">Aucun.</p>' : `<table><tr><th>Date</th><th>Motif</th><th>Présence</th><th>Payé</th></tr>

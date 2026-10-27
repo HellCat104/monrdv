@@ -5,6 +5,8 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import BandeauRisques from '@/components/dashboard/BandeauRisques'
+import type { Risque as RisqueAlerte } from '@/lib/anamnese'
 import { Input } from '@/components/ui/input'
 import { formatDateFr, formatAge, getNowInMaroc } from '@/lib/utils'
 import { NOTE_TEMPLATE, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
@@ -55,7 +57,7 @@ export default function ConsultationClient({
   consultationTypeId = null, queueStatus = null, attendanceActuelle = null, reprogrammerJours = null, v76 = false,
   prochainRdv = null, mots: motsInitiaux = [], v77 = false, doctorName = '',
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
-  isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false,
+  isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false, alertes,
 }: {
   doctorId: string
   appointmentId: string
@@ -101,6 +103,12 @@ export default function ConsultationClient({
   vitalDefsAll: VitalDef[]
   isPsy?: boolean
   isDental?: boolean
+  /** Les risques à signaler avant le geste (anamnèse v87 + allergies du
+   *  dossier). Affichés en tête du panneau de gauche chez le dentiste. */
+  alertes?: {
+    risques: RisqueAlerte[]; verifier: RisqueAlerte[]
+    remplie: boolean; ancienne: boolean; maj: string | null
+  }
   mutuelle?: string | null
   suggestionsFeuille?: ActeSuggere[]
 }) {
@@ -533,6 +541,16 @@ export default function ConsultationClient({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* ── Colonne gauche : dossier ─────────────────────────────── */}
         <aside className="lg:col-span-4 space-y-3">
+          {/* EN TÊTE du dossier, pas au milieu : le patient est au fauteuil.
+              Dentisterie seulement — c'est la branche qui porte le
+              questionnaire, et un pédiatre n'a pas à être invité à le
+              remplir. L'encadré d'allergies ci-dessous reste pour tous. */}
+          {isDental && alertes && (
+            <BandeauRisques
+              risques={alertes.risques} verifier={alertes.verifier}
+              remplie={alertes.remplie} ancienne={alertes.ancienne} maj={alertes.maj}
+            />
+          )}
           <div className="bg-white border border-gray-100 rounded-xl p-4 text-sm space-y-2">
             <p className="text-gray-600">📞 {patient.phone || '—'}</p>
             {patient.blood_group && <p className="text-gray-700 text-xs"><b>Groupe sanguin :</b> <span className="text-red-600 font-semibold">{patient.blood_group}</span></p>}

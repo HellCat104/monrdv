@@ -6,6 +6,7 @@ import { allVitalDefs, resolveEnabledVitals, isPsychiatricDoctor, type VitalDef 
 import { canAccess } from '@/lib/plan'
 import { colonneAbsente, tableAbsente } from '@/lib/migrations'
 import { isDentalDoctor } from '@/lib/dental'
+import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne } from '@/lib/anamnese'
 import ConsultationClient from './ConsultationClient'
 
 export const dynamic = 'force-dynamic'
@@ -120,6 +121,13 @@ export default async function ConsultationPage({ params }: { params: { id: strin
     .order('created_at', { ascending: true })
   const v77 = !tableAbsente(motsErr?.code)
 
+  // L'anamnèse (v87), lue à part comme le reste : une colonne de plus dans le
+  // select du rendez-vous ferait tomber tout l'écran tant que la migration
+  // n'est pas passée.
+  const { data: anam } = await supabase
+    .from('patients').select('anamnese, anamnese_maj')
+    .eq('id', patient.id).maybeSingle()
+
   const vitalDefsAll = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabled = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
   const vitalDefs = vitalDefsAll.filter((v) => enabled.includes(v.key))
@@ -166,6 +174,15 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       // encombrerait l'écran de consultation pour rien.
       mutuelle={(patient.mutuelle as string | null) ?? null}
       suggestionsFeuille={suggestionsFeuille}
+      // Ce qui doit se voir pendant que le patient est AU FAUTEUIL. La fiche
+      // patient porte la même bannière, mais on n'y est pas à ce moment-là.
+      alertes={{
+        risques: risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }),
+        verifier: aVerifier(anam?.anamnese),
+        remplie: anamneseRemplie(anam?.anamnese),
+        ancienne: anamneseAncienne(anam?.anamnese_maj),
+        maj: anam?.anamnese_maj ?? null,
+      }}
     />
   )
 }

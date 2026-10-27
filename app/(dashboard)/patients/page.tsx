@@ -7,6 +7,9 @@ import DentalChart from '@/components/dashboard/DentalChart'
 import GrowthChart from '@/components/dashboard/GrowthChart'
 import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import { isDentalDoctor } from '@/lib/dental'
+import AnamneseDentaire from '@/components/dashboard/AnamneseDentaire'
+import BandeauRisques from '@/components/dashboard/BandeauRisques'
+import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne, type Anamnese } from '@/lib/anamnese'
 import { compterEtiquettes, porteEtiquette } from '@/lib/pathologies'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -114,6 +117,12 @@ export default function PatientsPage() {
   const [mutuelleOther, setMutuelleOther] = useState(false)
   const [editNotes, setEditNotes] = useState<string>('')
   const [editAllergies, setEditAllergies] = useState<string>('')
+  // L'anamnèse structurée (v87). Tenue ICI et non dans son composant : la
+  // bannière de risques doit changer dès l'enregistrement, et elle s'affiche
+  // à deux endroits de la page.
+  const [editAnamnese, setEditAnamnese] = useState<Anamnese>({})
+  const [editAnamneseMaj, setEditAnamneseMaj] = useState<string | null>(null)
+  const [ouvrirAnamnese, setOuvrirAnamnese] = useState(false)
   const [editChronic, setEditChronic] = useState<string>('')
   const [editSurgeries, setEditSurgeries] = useState<string>('')
   const [editTreatments, setEditTreatments] = useState<string>('')
@@ -249,6 +258,9 @@ export default function PatientsPage() {
     setMutuelleOther(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
     setEditNotes(patient.notes ?? '')
     setEditAllergies(patient.allergies ?? '')
+    setEditAnamnese((patient.anamnese ?? {}) as Anamnese)
+    setEditAnamneseMaj(patient.anamnese_maj ?? null)
+    setOuvrirAnamnese(false)
     setEditChronic(patient.chronic_conditions ?? '')
     setEditSurgeries(patient.surgeries ?? '')
     setEditTreatments(patient.current_treatments ?? '')
@@ -1363,8 +1375,26 @@ export default function PatientsPage() {
                 💡 « Télécharger (PDF) » enregistre sur votre PC le dossier complet en PDF (récapitulatif du patient). Si le patient a des radios ou documents joints, le tout est fourni dans un .zip. Vos données médicales vous appartiennent.
               </p>
 
-              {/* Alerte allergies — visible immédiatement à l'ouverture */}
-              {editAllergies.trim() && (
+              {/* Ce qui doit se voir AVANT le geste.
+                  Chez le dentiste, la bannière lit l'anamnèse structurée EN
+                  PLUS du texte libre, et elle DIT quand rien n'a été demandé —
+                  « aucune allergie » et « personne n'a posé la question » ne se
+                  ressemblent pas. Ailleurs, le dossier garde son encadré
+                  d'allergies, inchangé : le questionnaire est dentaire, et un
+                  pédiatre n'a pas à recevoir une invitation à le remplir. */}
+              {isDentalDoctor(doctorSpecialties) ? (
+                <BandeauRisques
+                  risques={risquesActifs({ anamnese: editAnamnese, allergies: editAllergies })}
+                  verifier={aVerifier(editAnamnese)}
+                  remplie={anamneseRemplie(editAnamnese)}
+                  ancienne={anamneseAncienne(editAnamneseMaj)}
+                  maj={editAnamneseMaj}
+                  onOuvrir={() => {
+                    setOuvrirAnamnese(true)
+                    document.getElementById('bloc-anamnese')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }}
+                />
+              ) : editAllergies.trim() ? (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
                   <div className="text-sm">
@@ -1372,7 +1402,7 @@ export default function PatientsPage() {
                     <span className="text-red-600">{editAllergies}</span>
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* Stats présence */}
               <div className="grid grid-cols-3 gap-2">
@@ -1673,7 +1703,35 @@ export default function PatientsPage() {
                   désormais côté serveur (v55). Sans ce test, un praticien
                   Agenda verrait un schéma qu'il ne pourrait plus enregistrer. */}
               {selectedPatient && doctorId && doctorPlan === 'complet' && isDentalDoctor(doctorSpecialties) && (
-                <DentalChart key={selectedPatient.id} patientId={selectedPatient.id} doctorId={doctorId} />
+                <div id="bloc-anamnese" className="space-y-3">
+                  <AnamneseDentaire
+                    key={`an-${selectedPatient.id}`}
+                    patientId={selectedPatient.id}
+                    valeur={editAnamnese}
+                    maj={editAnamneseMaj}
+                    ouvertParDefaut={ouvrirAnamnese}
+                    onEnregistre={(a, jour) => {
+                      setEditAnamnese(a)
+                      setEditAnamneseMaj(jour)
+                      // La liste garde la nouvelle valeur : rouvrir le dossier
+                      // ne doit pas réafficher l'ancienne anamnèse.
+                      setPatients((prev) => prev.map((pt) => pt.id === selectedPatient.id
+                        ? { ...pt, anamnese: a, anamnese_maj: jour } : pt))
+                    }}
+                  />
+                  {/* La même bannière, en une ligne, JUSTE au-dessus de
+                      l'arcade. Celle du haut du dossier est à six écrans de
+                      défilement de la dent sur laquelle on va cliquer. */}
+                  <BandeauRisques
+                    compact
+                    risques={risquesActifs({ anamnese: editAnamnese, allergies: editAllergies })}
+                    verifier={aVerifier(editAnamnese)}
+                    remplie={anamneseRemplie(editAnamnese)}
+                    ancienne={anamneseAncienne(editAnamneseMaj)}
+                    maj={editAnamneseMaj}
+                  />
+                  <DentalChart key={selectedPatient.id} patientId={selectedPatient.id} doctorId={doctorId} />
+                </div>
               )}
 
               {/* Courbe de croissance + calendrier vaccinal. Affichés selon
