@@ -7,6 +7,14 @@ const config: Config = {
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
+    // `lib/` manquait, et Tailwind ne génère que les classes qu'il VOIT.
+    // Plusieurs modules y rangent pourtant leurs couleurs — l'état d'un
+    // patient en salle d'attente (lib/file-attente), le statut d'un travail de
+    // laboratoire (lib/labo), l'orthodontie, les postes de travail. Les teintes
+    // communes existaient par ailleurs et passaient donc inaperçues ; les
+    // autres sortaient tout simplement sans couleur, sans la moindre erreur
+    // pour le dire.
+    './lib/**/*.{ts,tsx}',
   ],
   theme: {
     container: {
