@@ -168,6 +168,22 @@ export function OrdonnanceEditor({
     setNewFav('')
   }
 
+  // Ce qui s'imprime au titre des allergies : le texte libre du dossier, plus
+  // les allergies relevées par l'anamnèse. Dédoublonné sur le libellé — le
+  // praticien qui a écrit « latex » dans les deux endroits ne doit pas le lire
+  // deux fois sur l'ordonnance.
+  const allergiesImprimees = (() => {
+    const morceaux: string[] = []
+    const libre = (patient.allergies ?? '').trim()
+    if (libre) morceaux.push(libre)
+    for (const r of alertes?.risques ?? []) {
+      if (!r.cle.startsWith('allergie_')) continue
+      const texte = (r.precision ?? '').trim() || r.titre
+      if (!morceaux.some((m) => m.toLowerCase() === texte.toLowerCase())) morceaux.push(texte)
+    }
+    return morceaux.join(' · ')
+  })()
+
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
       {/* Barre d'actions — masquée à l'impression */}
@@ -252,10 +268,17 @@ export function OrdonnanceEditor({
               <span className="font-semibold">{patient.first_name} {patient.last_name}</span>
               {patient.age != null && <span className="text-gray-500"> · {patient.age} ans</span>}
             </p>
-            {patient.allergies && patient.allergies.trim() && (
+            {/* Les allergies SUR LE DOCUMENT — c'est le pharmacien qui les
+                lit. Elles viennent des deux sources : le champ de texte libre
+                du dossier ET l'anamnèse structurée. Une allergie à la
+                pénicilline cochée dans le questionnaire mais absente de
+                l'ordonnance ne protège personne au comptoir.
+                Seules les allergies figurent ici : l'anticoagulant ou le
+                diabète regardent le praticien, pas la délivrance. */}
+            {allergiesImprimees && (
               <p className="text-sm text-red-600 mt-1 flex items-center gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                <span><strong>Allergies :</strong> {patient.allergies}</span>
+                <span><strong>Allergies :</strong> {allergiesImprimees}</span>
               </p>
             )}
           </div>
