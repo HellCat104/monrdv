@@ -105,7 +105,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const note = v.n?.trim().slice(0, NOTE_MAX)
     // normalizeTeeth() a déjà filtré les faces : état inconnu, face inventée ou
     // face posée sur un état qui n'en accepte pas ne sont plus là.
-    teeth[k] = { s: v.s, ...(note ? { n: note } : {}), ...(v.f ? { f: v.f } : {}) }
+    // Natures et dates passent par le même filtre que le reste : normalizeTeeth
+    // les a déjà bornées aux états présents et aux valeurs connues. Les omettre
+    // ici reviendrait à les perdre à l'enregistrement, et le praticien verrait
+    // son « à faire » redevenir « constaté » au rechargement suivant.
+    teeth[k] = {
+      s: v.s,
+      ...(note ? { n: note } : {}),
+      ...(v.f ? { f: v.f } : {}),
+      ...(v.p ? { p: v.p } : {}),
+      ...(v.d ? { d: v.d } : {}),
+    }
   }
 
   const admin = createAdminClient()

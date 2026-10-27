@@ -212,6 +212,35 @@ export function statesWithFacesLabel(info: StoredToothInfo | ToothInfo | null | 
 
 // Normalise la carte entière lue en base (ancien OU nouveau format) vers le format
 // tableau utilisé partout dans le code. Ne touche évidemment à rien en base.
+const VALID_NATURES = new Set<string>(DENTAL_NATURES.map((n) => n.key))
+
+/** Les natures d'une dent, limitées aux états réellement présents et aux
+ *  valeurs connues. Point de passage unique, comme pour les faces. */
+function toutesLesNatures(value: StoredToothInfo, etats: ToothStatus[]): Partial<Record<ToothStatus, ToothNature>> {
+  const brut = (value as { p?: Record<string, unknown> } | null)?.p
+  const out: Partial<Record<ToothStatus, ToothNature>> = {}
+  if (!brut || typeof brut !== 'object') return out
+  for (const e of etats) {
+    const v = brut[e]
+    // « constate » n'est pas écrit : c'est le défaut, et l'omettre garde le
+    // jsonb lisible et compatible avec ce qui existait avant les natures.
+    if (typeof v === 'string' && VALID_NATURES.has(v) && v !== 'constate') out[e] = v as ToothNature
+  }
+  return out
+}
+
+/** Les dates de pose, au format YYYY-MM-DD, limitées aux états présents. */
+function toutesLesDates(value: StoredToothInfo, etats: ToothStatus[]): Partial<Record<ToothStatus, string>> {
+  const brut = (value as { d?: Record<string, unknown> } | null)?.d
+  const out: Partial<Record<ToothStatus, string>> = {}
+  if (!brut || typeof brut !== 'object') return out
+  for (const e of etats) {
+    const v = brut[e]
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) out[e] = v
+  }
+  return out
+}
+
 export function normalizeTeeth(raw: StoredDentalTeeth | DentalTeeth | null | undefined): DentalTeeth {
   const out: DentalTeeth = {}
   if (!raw || typeof raw !== 'object') return out
@@ -222,7 +251,18 @@ export function normalizeTeeth(raw: StoredDentalTeeth | DentalTeeth | null | und
     // Les faces suivent leur état : une face rattachée à un état disparu, ou à
     // un état qui n'en accepte pas, n'a plus de sens et n'est pas conservée.
     const faces = allToothFaces(value as StoredToothInfo)
-    out[key] = { s, ...(note ? { n: note } : {}), ...(Object.keys(faces).length > 0 ? { f: faces } : {}) }
+    // Natures et dates suivent elles aussi leur état : garder la nature d'un
+    // état décoché laisserait une trace invisible qui ressortirait le jour où
+    // l'état est recoché, avec une date périmée.
+    const natures = toutesLesNatures(value as StoredToothInfo, s)
+    const dates = toutesLesDates(value as StoredToothInfo, s)
+    out[key] = {
+      s,
+      ...(note ? { n: note } : {}),
+      ...(Object.keys(faces).length > 0 ? { f: faces } : {}),
+      ...(Object.keys(natures).length > 0 ? { p: natures } : {}),
+      ...(Object.keys(dates).length > 0 ? { d: dates } : {}),
+    }
   }
   return out
 }
