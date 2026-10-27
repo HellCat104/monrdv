@@ -434,3 +434,15 @@ pg_dump --schema-only --no-owner "$DATABASE_URL" > supabase/dump.sql
 ```
 
 La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Database.
+
+ 85. `migration_v85_consultation_dentaire.sql`
+     Migration v85 — BRANCHE DENTAIRE. Deux colonnes seulement sur
+     `consultations` (v81), qui portait déjà tout ce qu'une consultation a de
+     commun : `dents text[]` — les dents et secteurs touchés par CETTE séance,
+     distinct du schéma dentaire qui porte l'état du patient dans la durée, en
+     tableau pour pouvoir filtrer « les séances qui ont concerné la 46 » ; et
+     `materiaux` — composite et teinte, ciment, alliage, longueur de travail,
+     ce qu'on cherche trois ans plus tard quand une restauration se descelle.
+     Index GIN sur `dents`. Aucun lien automatique entre consultation et actes
+     facturés : déduire « acte réalisé » d'une consultation enregistrée
+     produirait des doubles facturations. Additive.

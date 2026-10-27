@@ -19,6 +19,7 @@ import DentalChart from '@/components/dashboard/DentalChart'
 import QuotesCard from '@/components/dashboard/QuotesCard'
 import MenuDocuments from '@/components/dashboard/MenuDocuments'
 import BlocGastro from '@/components/gastro/BlocGastro'
+import BlocConsultationsDentaires from '@/components/dashboard/BlocConsultationsDentaires'
 import SuiviPoids from '@/components/gastro/SuiviPoids'
 import SynthesePathologie from '@/components/gastro/SynthesePathologie'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
@@ -244,7 +245,10 @@ export default function PatientDossier({
     // Branche gastro : les actes structurés, pour la chronologie. Requête
     // séparée et silencieuse — pas de migration, pas de ligne, mais jamais de
     // dossier cassé.
-    if (isGastroDoctor(specialties)) {
+    // Les actes structurés des branches qui en ont. Le dentiste n'a pas
+    // d'endoscopie : la requête retourne vide, elle ne coûte rien et évite un
+    // second chemin de code.
+    if (isGastroDoctor(specialties) || isDentalDoctor(specialties)) {
       const [consRes, endoRes] = await Promise.all([
         supabase.from('consultations').select('id, date_consultation, motif, statut').eq('patient_id', patient.id),
         supabase.from('endoscopies').select('id, date_examen, type_examen, conclusion, statut').eq('patient_id', patient.id),
@@ -729,7 +733,11 @@ export default function PatientDossier({
 
   // La chronologie ne coûte aucune requête : elle remet en ordre ce que le
   // dossier a déjà chargé pour ses autres onglets.
-  const chronologie = estGastro
+  // Chronologie : gastro ET dentisterie. Un traitement orthodontique de deux
+  // ans ou une réhabilitation en six séances se lisent dans l'ordre, comme un
+  // suivi de MICI — le besoin n'appartient pas à une spécialité.
+  const avecChronologie = estGastro || estDentiste
+  const chronologie = avecChronologie
     ? construireChronologie({
         notes: consultNotes, prescriptions, certificates,
         documents, vitals, recalls, aujourdhui: todayStr,
@@ -760,7 +768,7 @@ export default function PatientDossier({
     // Le dossier range chaque chose dans son tiroir, ce qui est commode pour
     // saisir et inutilisable pour comprendre : « que s'est-il passé en mars ? »
     // obligeait à ouvrir quatre onglets et à recoller les dates de tête.
-    ...(estGastro ? [{ cle: 'chronologie' as Onglet, titre: 'Chronologie', icone: <History className="h-4 w-4" /> }] : []),
+    ...(avecChronologie ? [{ cle: 'chronologie' as Onglet, titre: 'Chronologie', icone: <History className="h-4 w-4" /> }] : []),
   ]
 
   return (
@@ -1072,6 +1080,11 @@ export default function PatientDossier({
                 été fait. En tête de l'onglet, parce que c'est le premier geste
                 de la consultation. */}
             {estGastro && <BlocGastro patientId={patient.id} doctorId={doctorId} />}
+
+            {/* Dentisterie : par où l'on crée une consultation, et où on les
+                retrouve. En tête de l'onglet, parce que c'est le premier geste
+                de la séance. */}
+            {estDentiste && <BlocConsultationsDentaires patientId={patient.id} />}
 
             {/* La synthèse des maladies suivies et le poids : les deux choses
                 qu'on veut voir AVANT de lire l'historique. Sur un Crohn ou une

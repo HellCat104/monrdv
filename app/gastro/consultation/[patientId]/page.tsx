@@ -10,7 +10,8 @@ import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
 import { isGastroDoctor, VITAL_DEFS, specialitesDu } from '@/types'
 import { formatDateFr } from '@/lib/utils'
-import ConsultationClient from './ConsultationClient'
+import ConsultationStructuree from '@/components/consultation/ConsultationStructuree'
+import { RUBRIQUES_CONSULTATION, TRAMES_CONSULTATION } from '@/lib/gastro'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,12 +86,15 @@ export default async function PageConsultation({
   ].filter(Boolean).join('\n')
 
   return (
-    <ConsultationClient
+    <ConsultationStructuree
       doctorId={doctor.id}
       patient={patient}
       appointmentId={aptId}
       existant={existant}
       dossier={{ antecedents, allergies: (patient.allergies ?? '').trim(), mesures }}
+      rubriques={RUBRIQUES_CONSULTATION}
+      trames={TRAMES_CONSULTATION}
+      retourCr="/gastro/consultation/cr"
     />
   )
 }
