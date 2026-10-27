@@ -196,12 +196,30 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
     const marqueFaces = Array.from(
       new Set(states.flatMap((st) => toothFaces(info, st))),
     ).join('')
+
+    // ── CE QUI RESTE À FAIRE, VU DE LOIN ────────────────────────────────────
+    //
+    // La couleur dit QUEL acte ; elle ne dit pas où il en est. Sur une arcade
+    // de 32 dents, la question du praticien n'est pas « quelle est la couleur
+    // de la 46 » mais « qu'est-ce qu'il me reste à faire sur ce patient ».
+    //
+    // On ne regarde donc PAS seulement l'état dominant : une dent dont la
+    // carie est constatée et l'obturation prévue doit se signaler comme ayant
+    // du travail en attente, alors que c'est la carie qui lui donne sa couleur.
+    const aPlanifie = states.some((st) => natureDe(info, st) === 'planifie')
+    const aRealise = states.some((st) => natureDe(info, st) === 'realise')
     return (
       <button
         type="button"
         onClick={() => setActive(isActive ? null : key)}
         title={states.length > 0 ? `Dent ${n} — ${statesWithFacesLabel(info)}${info?.n ? ` · ${info.n}` : ''}` : `Dent ${n}`}
-        style={color ? { backgroundColor: color, color: '#fff', borderColor: color } : undefined}
+        style={{
+          ...(color ? { backgroundColor: color, color: '#fff', borderColor: color } : {}),
+          // Pointillés = il reste un geste à poser. C'est la bordure qui le
+          // porte : elle est libre, elle fait le tour de la dent, et elle se
+          // lit sur toute l'arcade sans rien recouvrir.
+          ...(aPlanifie ? { borderStyle: 'dashed', borderWidth: 2, borderColor: color ?? '#475569' } : {}),
+        }}
         // ÉLASTIQUE, et c'est le point : à 36 px fixes l'arcade mesure 700 px et
         // se retrouvait COUPÉE dans la colonne de l'écran de consultation — le
         // praticien voyait 18→22 et devait faire glisser pour atteindre 28, sur
@@ -212,6 +230,13 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
         className={`relative flex-1 basis-0 min-w-[20px] max-w-[36px] h-11 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-600 transition ${isActive ? 'ring-2 ring-primary-500 ring-offset-1' : ''} ${extraite ? 'opacity-80' : ''}`}
       >
         <span className={`block leading-tight ${colors.length > 1 ? 'pb-2' : ''} ${extraite ? 'line-through' : ''}`}>{n}</span>
+        {/* La coche : un soin a été fait sur cette dent. Minuscule et dans
+            l'angle, pour ne pas disputer la place au numéro. */}
+        {aRealise && (
+          <span className={`absolute top-[2px] right-[3px] text-[9px] font-bold leading-none ${color ? 'text-white' : 'text-emerald-600'}`}>
+            ✓
+          </span>
+        )}
         {/* Les faces, en toutes petites initiales sous le numéro : « OM » se lit
             d'un coup d'œil sur l'arcade entière, là où il faudrait ouvrir
             chaque dent pour les retrouver. */}
@@ -321,6 +346,25 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
             <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: s.color }} /> {s.label}
           </span>
         ))}
+      </div>
+
+      {/* DEUX LECTURES, DEUX LÉGENDES. La couleur dit l'acte, la bordure et la
+          coche disent où il en est. Sans cette seconde ligne, personne ne
+          devine ce que signifient des pointillés. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 pt-1.5 border-t border-gray-100 text-[11px] text-gray-500">
+        <span className="text-gray-400">Où en est l’acte :</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded border-2 border-gray-400 bg-gray-400 inline-block" />
+          constaté ou diagnostiqué
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded border-2 border-dashed border-gray-500 inline-block" />
+          à faire
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded border-2 border-gray-400 bg-gray-400 inline-flex items-center justify-center text-white text-[9px] font-bold leading-none">✓</span>
+          réalisé
+        </span>
       </div>
 
       {/* Éditeur de la dent sélectionnée */}
