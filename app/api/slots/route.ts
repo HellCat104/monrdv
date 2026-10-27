@@ -139,11 +139,19 @@ export async function GET(req: NextRequest) {
     slots = slots.map((s) => (toMinutes(s.time) < cutoff ? { ...s, available: false } : s))
   }
 
-  // Une réponse qui dépend du poste dépend aussi de QUI demande : elle ne doit
-  // pas être servie en cache partagé à un visiteur de la page publique.
+  // Une adresse qui PORTE un poste n'entre jamais dans un cache partagé —
+  // qu'il ait été honoré ou non.
+  //
+  // J'avais d'abord conditionné cela au poste RETENU, et c'était faux : pour
+  // un visiteur le paramètre est ignoré, la réponse repartait donc en
+  // `public, s-maxage=30`… et se trouvait mise en cache SOUS UNE ADRESSE QUI
+  // CONTIENT LE POSTE. Le praticien qui demandait ensuite la même adresse
+  // recevait la réponse du visiteur : mesuré, 14 créneaux au lieu de 17.
+  // La même réponse pour deux lecteurs qui n'ont pas les mêmes droits ne doit
+  // jamais dépendre de qui est passé en premier.
   return NextResponse.json({ slots }, {
     headers: {
-      'Cache-Control': poste
+      'Cache-Control': posteDemande
         ? 'private, no-store'
         : 'public, s-maxage=30, stale-while-revalidate=60',
     },
