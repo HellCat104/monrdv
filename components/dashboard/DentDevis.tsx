@@ -27,6 +27,10 @@ import { Plus, Check, FileText } from 'lucide-react'
 type Devis = Record<string, any>
 
 interface Acte { label: string; unit_price: number }
+/** Un acte du CATALOGUE du cabinet (v86), par opposition aux libellés appris
+ *  des devis passés. Le catalogue prime : c'est ce que le praticien a décidé,
+ *  l'autre n'est qu'un souvenir de ce qu'il a tapé. */
+interface ActeCatalogue { id: string; name: string; default_price: number | null; categorie: string | null; code: string | null }
 
 export default function DentDevis({
   patientId, dent, etatsPlanifies,
@@ -39,6 +43,7 @@ export default function DentDevis({
 }) {
   const [devis, setDevis] = useState<Devis[]>([])
   const [actes, setActes] = useState<Acte[]>([])
+  const [catalogue, setCatalogue] = useState<ActeCatalogue[]>([])
   const [ouvert, setOuvert] = useState<string | null>(null)
   const [libelle, setLibelle] = useState('')
   const [prix, setPrix] = useState('')
@@ -49,12 +54,16 @@ export default function DentDevis({
 
   const charger = useCallback(async () => {
     try {
-      const [q, a] = await Promise.all([
+      const [q, a, c] = await Promise.all([
         fetch(`/api/quotes?patient_id=${patientId}`).then((r) => (r.ok ? r.json() : { quotes: [] })),
         fetch('/api/quotes/actes').then((r) => (r.ok ? r.json() : { actes: [] })),
+        // Le catalogue du cabinet. Sans la v86 il revient sans catégorie :
+        // l'écran marche quand même, il propose simplement moins.
+        fetch('/api/cabinet/actes').then((r) => (r.ok ? r.json() : { actes: [] })),
       ])
       setDevis(q.quotes ?? [])
       setActes(a.actes ?? [])
+      setCatalogue(c.actes ?? [])
     } catch { /* silencieux : l'odontogramme reste utilisable sans le devis */ }
   }, [patientId])
   useEffect(() => { charger() }, [charger])
@@ -74,9 +83,13 @@ export default function DentDevis({
     setErreur(''); setMessage('')
     setOuvert(cle)
     setLibelle(`${label} — dent ${dent}`)
-    // Le prix du même acte dans un devis précédent, s'il y en a un.
+    // Le prix vient d'abord du CATALOGUE — ce que le praticien a décidé —
+    // puis, à défaut, de ce qu'il a facturé par le passé. Jamais d'ailleurs.
+    const duCatalogue = catalogue.find((a) => a.name.toLowerCase().includes(label.toLowerCase()))
     const connu = actes.find((a) => a.label.toLowerCase().includes(label.toLowerCase()))
-    setPrix(connu ? String(connu.unit_price) : '')
+    const prixPropose = duCatalogue?.default_price ?? connu?.unit_price ?? null
+    if (duCatalogue) setLibelle(`${duCatalogue.name} — dent ${dent}`)
+    setPrix(prixPropose != null ? String(prixPropose) : '')
     setCible(ouverts[0]?.id ?? '')
   }
 
@@ -142,6 +155,8 @@ export default function DentDevis({
                   className="w-24 text-[12px] rounded border border-gray-200 px-2 py-1" placeholder="Prix" />
                 <span className="text-[11px] text-gray-400">DH</span>
                 <datalist id="tarifs-connus">
+                  {catalogue.filter((a) => a.default_price != null).slice(0, 30)
+                    .map((a) => <option key={a.id} value={String(a.default_price)}>{a.name}</option>)}
                   {actes.slice(0, 20).map((a) => <option key={a.label} value={a.unit_price}>{a.label}</option>)}
                 </datalist>
                 {ouverts.length > 0 && (
@@ -165,7 +180,7 @@ export default function DentDevis({
               </div>
               {/* Le prix proposé vient de SES devis, et il reste modifiable. */}
               <p className="text-[10px] text-gray-400">
-                Prix repris de vos devis précédents quand l’acte y figure. Rien n’est imposé.
+                Prix repris de votre catalogue d’actes, à défaut de vos devis précédents. Rien n’est imposé.
               </p>
             </div>
           ) : (

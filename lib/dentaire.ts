@@ -77,3 +77,32 @@ export const TRAMES_CONSULTATION_DENTAIRE: TrameConsultation[] = [
     },
   },
 ]
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// LE CATALOGUE D'ACTES (v86)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Des CATÉGORIES proposées pour ranger, et rien d'autre. Aucun acte n'est
+// livré, aucun tarif n'est suggéré, aucune nomenclature n'est reproduite : les
+// prix d'un cabinet de Rabat ne sont pas ceux d'un cabinet de Taroudant, et
+// les codes de la NGAP ne sont pas à moi de les écrire.
+//
+// Le praticien peut saisir une catégorie qui n'est pas dans cette liste : elle
+// l'aide à ranger, elle ne le contraint pas.
+export const CATEGORIES_ACTES_DENTAIRES = [
+  'Consultation et diagnostic',
+  'Détartrage et prévention',
+  'Soins conservateurs',
+  'Restaurations et composites',
+  'Endodontie',
+  'Extractions',
+  'Chirurgie orale',
+  'Prothèse fixe',
+  'Prothèse amovible',
+  'Implantologie',
+  'Parodontologie',
+  'Orthodontie',
+  'Radiologie',
+  'Actes complémentaires',
+]

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { format, addDays, parseISO } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import { createClient } from '@/lib/supabase/client'
+import { isDentalDoctor } from '@/lib/dental'
+import { CATEGORIES_ACTES_DENTAIRES } from '@/lib/dentaire'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -126,6 +128,17 @@ export default function SettingsPage() {
   const [newTypeName, setNewTypeName] = useState('')
   const [newTypeDuration, setNewTypeDuration] = useState('30')
   const [newTypePrice, setNewTypePrice] = useState('')
+  // Catalogue d'actes (v86) — proposé aux dentistes seulement : un code interne
+  // et une catégorie n'ont pas d'usage pour un généraliste, et trois champs de
+  // plus dans ses réglages seraient trois champs à ignorer.
+  const [newTypeCode, setNewTypeCode] = useState('')
+  const [newTypeCategorie, setNewTypeCategorie] = useState('')
+  const [newTypeLabo, setNewTypeLabo] = useState(false)
+  const [newTypeRdv, setNewTypeRdv] = useState(true)
+  const [catalogueKo, setCatalogueKo] = useState(false)
+  // Le catalogue d'actes est une affaire de dentiste : lui seul range ses
+  // soins par catégorie et leur donne un code interne.
+  const estDentiste = isDentalDoctor([doctor?.specialty, ...((doctor?.specialties as string[] | null) ?? [])])
   const [typeLoading, setTypeLoading] = useState(false)
   // Constantes vitales suivies (clés VITAL_DEFS)
   const [enabledVitals, setEnabledVitals] = useState<string[]>([])
@@ -216,22 +229,44 @@ export default function SettingsPage() {
     if (!doctor || !newTypeName.trim()) return
     setTypeLoading(true)
     const priceNum = parseFloat(newTypePrice.replace(',', '.'))
-    const { data, error } = await supabase
-      .from('consultation_types')
-      .insert({
-        doctor_id: doctor.id,
-        name: newTypeName.trim().substring(0, 80),
-        duration_minutes: parseInt(newTypeDuration, 10) || 30,
-        default_price: !isNaN(priceNum) && priceNum >= 0 ? priceNum : null,
-      })
-      .select()
-      .single()
+    const base = {
+      doctor_id: doctor.id,
+      name: newTypeName.trim().substring(0, 80),
+      duration_minutes: parseInt(newTypeDuration, 10) || 30,
+      default_price: !isNaN(priceNum) && priceNum >= 0 ? priceNum : null,
+    }
+    // Les colonnes du catalogue ne partent QUE si le dentiste les a remplies.
+    // Les envoyer sur une base où la v86 n'est pas passée ferait échouer la
+    // création d'un motif, c'est-à-dire casser un écran qui marchait.
+    const enrichi = estDentiste ? {
+      ...base,
+      code: newTypeCode.trim() || null,
+      categorie: newTypeCategorie.trim() || null,
+      labo: newTypeLabo,
+      rdv: newTypeRdv,
+    } : base
+
+    let { data, error } = await supabase.from('consultation_types').insert(enrichi).select().single()
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      // Migration absente : on réessaie sans le catalogue et on le DIT.
+      const retry = await supabase.from('consultation_types').insert(base).select().single()
+      data = retry.data; error = retry.error
+      if (!error) setCatalogueKo(true)
+    }
     setTypeLoading(false)
     if (!error && data) {
       setConsultTypes((prev) => [...prev, data])
       setNewTypeName('')
       setNewTypeDuration('30')
       setNewTypePrice('')
+      setNewTypeCode('')
+      setNewTypeCategorie('')
+      setNewTypeLabo(false)
+      setNewTypeRdv(true)
+    } else if (error) {
+      alert(error.code === '23505'
+        ? 'Ce code est déjà utilisé par un autre acte de votre cabinet.'
+        : 'L’enregistrement de l’acte a échoué.')
     }
   }
 
@@ -1298,6 +1333,41 @@ export default function SettingsPage() {
                 {typeLoading ? 'Ajout…' : 'Ajouter'}
               </Button>
             </div>
+
+            {/* CATALOGUE D'ACTES — dentistes seulement. Un code interne et une
+                catégorie n'ont pas d'usage pour un généraliste, et trois champs
+                de plus dans ses réglages seraient trois champs à ignorer. */}
+            {estDentiste && (
+              <div className="flex flex-wrap items-center gap-2 pl-1 pt-1">
+                <Input value={newTypeCode} onChange={(e) => setNewTypeCode(e.target.value)}
+                  placeholder="Code interne" className="w-32 h-9 text-sm" maxLength={20} />
+                <Input list="categories-actes" value={newTypeCategorie}
+                  onChange={(e) => setNewTypeCategorie(e.target.value)}
+                  placeholder="Catégorie" className="w-52 h-9 text-sm" maxLength={60} />
+                <datalist id="categories-actes">
+                  {CATEGORIES_ACTES_DENTAIRES.map((c) => <option key={c} value={c} />)}
+                </datalist>
+                <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                  <input type="checkbox" checked={newTypeLabo} onChange={(e) => setNewTypeLabo(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary-500" />
+                  Travail de laboratoire
+                </label>
+                <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                  <input type="checkbox" checked={newTypeRdv} onChange={(e) => setNewTypeRdv(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-primary-500" />
+                  Proposé en rendez-vous
+                </label>
+                <span className="text-[11px] text-gray-400 w-full">
+                  Décochez « proposé en rendez-vous » pour un acte qui se facture sans se réserver —
+                  un composite ne se prend pas en rendez-vous, il se fait pendant la séance.
+                </span>
+                {catalogueKo && (
+                  <span className="text-[11px] text-amber-700 w-full">
+                    Acte enregistré, mais sans code ni catégorie : la migration v86 n’est pas encore passée sur cette base.
+                  </span>
+                )}
+              </div>
+            )}
             <p className="text-xs text-gray-400">
               Le tarif est optionnel — s&apos;il est renseigné, le montant sera pré-rempli à l&apos;encaissement.
             </p>

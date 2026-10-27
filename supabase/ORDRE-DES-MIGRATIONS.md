@@ -446,3 +446,19 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      Index GIN sur `dents`. Aucun lien automatique entre consultation et actes
      facturés : déduire « acte réalisé » d'une consultation enregistrée
      produirait des doubles facturations. Additive.
+
+ 86. `migration_v86_catalogue_actes.sql`
+     Migration v86 — LE CATALOGUE D'ACTES. On ÉTEND `consultation_types`
+     plutôt que de créer une table `actes` : il existait déjà deux sources
+     (cette table, qui porte nom, durée, tarif et actif/inactif, et le
+     catalogue APPRIS des lignes de devis via /api/quotes/actes). Une
+     troisième aurait donné trois endroits où le même acte existe sous trois
+     formes, et trois prix qui divergent.
+     Ajoute `code` (interne au cabinet, aucune nomenclature officielle n'est
+     reproduite), `categorie`, `description`, `labo` (travail de prothèse
+     associé), et deux drapeaux VRAIS par défaut : `rdv` (apparaît comme motif
+     de rendez-vous) et `acte` (utilisable en ligne de devis) — tous les actes
+     ne sont pas des motifs, « composite deux faces » se facture sans se
+     réserver, et les mélanger polluait la page de réservation publique.
+     Index unique partiel sur (doctor_id, code) : deux actes sans code ne sont
+     pas des doublons. Additive, aucune ligne réécrite.
