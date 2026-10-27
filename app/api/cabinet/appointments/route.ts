@@ -66,9 +66,12 @@ export async function GET(req: NextRequest) {
 
   const [aptRes, typesRes, docRes, blocksRes] = await Promise.all([
     aptQuery,
+    // Motifs RÉSERVABLES seulement (v86) : la secrétaire ne doit pas pouvoir
+    // poser « composite 2 faces » comme motif d'un rendez-vous.
     admin.from('consultation_types')
       .select('id, name, duration_minutes, default_price')
-      .eq('doctor_id', ctx.doctor.id).eq('active', true).order('created_at', { ascending: true }),
+      .eq('doctor_id', ctx.doctor.id).eq('active', true).eq('rdv', true)
+      .order('created_at', { ascending: true }),
     // Les horaires d'ouverture servent à dessiner la grille horaire de la
     // secrétaire : sans eux, la grille s'ouvre à 8 h et ferme à 19 h pour tout
     // le monde, et les cases hors ouverture ne se distinguent pas des trous.

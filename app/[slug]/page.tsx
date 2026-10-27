@@ -128,12 +128,25 @@ export default async function BookingPage({ params }: Props) {
   // sont publiques par nature (nom, durée, tarif d'un médecin déjà approuvé),
   // et le filtrage sur ce médecin actif est fait ici.
   const supabase = createAdminClient()
-  const { data: consultationTypes, error: typesError } = await supabase
+  // `rdv = true` : seuls les motifs RÉSERVABLES. Un « composite 2 faces » se
+  // facture mais ne se prend pas en rendez-vous, et il n'a rien à faire sur la
+  // page publique. Sans la migration v86 la colonne n'existe pas : on retombe
+  // alors sur l'ancienne requête, qui montrait tout — le comportement d'avant.
+  const colonnes = 'id, doctor_id, name, duration_minutes, default_price, active, created_at'
+  let { data: consultationTypes, error: typesError } = await supabase
     .from('consultation_types')
-    .select('id, doctor_id, name, duration_minutes, default_price, active, created_at')
+    .select(colonnes)
     .eq('doctor_id', doctor.id)
     .eq('active', true)
+    .eq('rdv', true)
     .order('created_at', { ascending: true })
+  if (typesError && (typesError.code === '42703' || typesError.code === 'PGRST204')) {
+    const repli = await supabase
+      .from('consultation_types').select(colonnes)
+      .eq('doctor_id', doctor.id).eq('active', true)
+      .order('created_at', { ascending: true })
+    consultationTypes = repli.data; typesError = repli.error
+  }
   if (typesError) console.error('[Motifs de consultation]', typesError)
 
   // Liste d'attente (v56) : lue À PART de la fiche. Ajoutée à la projection de

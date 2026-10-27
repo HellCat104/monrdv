@@ -95,8 +95,18 @@ export function AddAppointmentDialog({
       .select('*')
       .eq('doctor_id', doctor.id)
       .eq('active', true)
+      // Motifs réservables seulement (v86). Sans la migration, la requête
+      // échoue sur une colonne inconnue : on retombe sur la liste complète,
+      // qui était le comportement d'avant.
+      .eq('rdv', true)
       .order('created_at', { ascending: true })
-      .then(({ data }) => setConsultTypes(data ?? []))
+      .then(({ data, error }) => {
+        if (!error) { setConsultTypes(data ?? []); return }
+        supabase.from('consultation_types').select('*')
+          .eq('doctor_id', doctor.id).eq('active', true)
+          .order('created_at', { ascending: true })
+          .then(({ data: tout }) => setConsultTypes(tout ?? []))
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, doctor.id])
 
