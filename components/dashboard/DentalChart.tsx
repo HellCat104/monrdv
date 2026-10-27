@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Check } from 'lucide-react'
+import DentDevis from '@/components/dashboard/DentDevis'
 import {
   DENTAL_STATES, DENTAL_COLOR, FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT,
   DENTAL_FACES, ETATS_AVEC_FACES, estDentDeLait,
@@ -453,6 +454,16 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
               })}
             </div>
           )}
+
+          {/* Le pont vers le devis : un soin « à faire » sur cette dent devient
+              une ligne de devis sans changer d'écran. */}
+          <DentDevis
+            patientId={patientId}
+            dent={active}
+            etatsPlanifies={activeStates
+              .filter((st) => natureDe(activeInfo, st) === 'planifie')
+              .map((st) => ({ cle: st, label: DENTAL_STATES.find((x) => x.key === st)?.label ?? st }))}
+          />
 
           {/* Faces — seulement pour les états qui se localisent (carie,
               obturation) : une couronne coiffe la dent entière, proposer des
