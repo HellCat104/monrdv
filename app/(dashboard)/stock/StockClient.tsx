@@ -24,18 +24,20 @@ import {
 } from 'lucide-react'
 import { formatDateShort, getNowInMaroc } from '@/lib/utils'
 import {
-  alertesStock, etatArticle, etatPeremption, ETAT_LABEL, SENS_LABEL,
+  alertesStock, etatArticle, etatPeremption, niveauLigne, ETAT_LABEL, SENS_LABEL,
   UNITES_STOCK, valeurStock, jourMaroc,
-  type ArticleStock, type MouvementStock, type SensMouvement,
+  type ArticleStock, type MouvementStock, type SensMouvement, type NiveauLigne,
 } from '@/lib/stock'
 
 type Filtre = 'commander' | 'tous' | 'peremption'
 
-const COULEUR: Record<string, string> = {
-  negatif: 'text-red-700 bg-red-50 border-red-200',
-  rupture: 'text-red-700 bg-red-50 border-red-200',
-  bas:     'text-amber-700 bg-amber-50 border-amber-200',
-  ok:      'text-gray-600 bg-white border-gray-200',
+// La couleur suit le PIRE des deux soucis, la quantité et la péremption —
+// sans quoi un produit périmé dont il reste quatre seringues s'affichait en
+// blanc, c'est-à-dire comme s'il allait bien.
+const COULEUR: Record<NiveauLigne, string> = {
+  rouge:  'text-red-700 bg-red-50 border-red-200',
+  orange: 'text-amber-700 bg-amber-50 border-amber-200',
+  neutre: 'text-gray-600 bg-white border-gray-200',
 }
 
 export default function StockClient({ categories }: { categories: string[] }) {
@@ -338,7 +340,7 @@ function Ligne({
   }
 
   return (
-    <div className={`border rounded-xl ${COULEUR[etat]}`}>
+    <div className={`border rounded-xl ${COULEUR[niveauLigne(a, aujourdhui)]}`}>
       <div className="flex items-center gap-2 p-2.5 flex-wrap">
         {/* Le nom et ce qui le qualifie */}
         <div className="min-w-0 flex-1">
@@ -375,12 +377,18 @@ function Ligne({
           </button>
         </div>
 
-        {etat !== 'ok' && (
+        {etat !== 'ok' ? (
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
             etat === 'bas' ? 'bg-amber-200 text-amber-900' : 'bg-red-200 text-red-900'}`}>
             {ETAT_LABEL[etat]}
           </span>
-        )}
+        ) : perim === 'perime' ? (
+          // Une ligne rouge sans étiquette laisse chercher POURQUOI elle est
+          // rouge : la quantité va bien, c'est la date qui ne va pas.
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 bg-red-200 text-red-900">
+            Périmé
+          </span>
+        ) : null}
 
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={onMouvement} title="Entrée, sortie, inventaire"
@@ -454,7 +462,7 @@ function PanneauMouvement({
       <div className="flex items-center gap-1.5 flex-wrap">
         <input value={q} onChange={(e) => setQ(e.target.value)} inputMode="decimal"
           placeholder={sens === 'inventaire' ? 'Quantité comptée' : 'Quantité'}
-          className="w-32 text-sm rounded-lg border border-gray-200 px-2 py-1.5" />
+          className="w-44 text-sm rounded-lg border border-gray-200 px-2 py-1.5" />
         <span className="text-[11px] text-gray-400">{a.unite}</span>
         <input value={motif} onChange={(e) => setMotif(e.target.value)}
           placeholder="Motif (livraison, cassé, périmé…)"

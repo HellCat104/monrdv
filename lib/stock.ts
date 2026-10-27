@@ -161,6 +161,23 @@ export function alertesStock(articles: ArticleStock[], aujourdhui: string): Aler
   }
 }
 
+// ── LE NIVEAU D'ALERTE D'UNE LIGNE ──────────────────────────────────────────
+//
+// La quantité et la péremption sont deux soucis distincts, et une ligne n'a
+// qu'une couleur. Elle prend donc le PIRE des deux : un produit périmé dont il
+// reste quatre seringues allait bien à l'œil, alors que c'est le geste à ne
+// pas faire. Périmé et épuisé sont rouges ; au seuil et bientôt périmé sont
+// orange.
+export type NiveauLigne = 'rouge' | 'orange' | 'neutre'
+
+export function niveauLigne(a: ArticleStock, aujourdhui: string): NiveauLigne {
+  const q = etatArticle(a)
+  const p = etatPeremption(a, aujourdhui)
+  if (q === 'negatif' || q === 'rupture' || p === 'perime') return 'rouge'
+  if (q === 'bas' || p === 'proche') return 'orange'
+  return 'neutre'
+}
+
 /** La valeur de ce qui dort sur l'étagère. Seuls les articles dont le prix
  *  d'achat est renseigné y entrent : additionner des zéros pour les autres
  *  donnerait un total faux avec l'autorité d'un chiffre. */
