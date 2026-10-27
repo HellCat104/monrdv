@@ -329,6 +329,10 @@ export interface Appointment {
   consultation_type_id?: string | null
   duration_minutes?: number | null
   specialty?: string | null     // spécialité choisie (médecin multi-spécialités)
+  /** Fauteuil ou salle occupé (v89). NULL = non précisé — ce qui est le cas
+   *  de tous les rendez-vous d'un cabinet à un seul poste, et un poste à part
+   *  entière pour les contraintes de chevauchement. */
+  poste_id?: string | null
   // Paiement
   amount_paid?: number | null   // total déjà encaissé
   amount_due?: number | null    // montant total attendu

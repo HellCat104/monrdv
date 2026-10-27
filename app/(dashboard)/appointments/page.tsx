@@ -8,6 +8,7 @@ import { AppointmentList, type PaymentPayload } from '@/components/dashboard/App
 import { AddAppointmentDialog } from '@/components/dashboard/AddAppointmentDialog'
 import { WeekGrid } from '@/components/dashboard/WeekGrid'
 import { MonthGrid } from '@/components/dashboard/MonthGrid'
+import { posteUtile, posteActifs, type Poste } from '@/lib/postes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,6 +46,11 @@ export default function AppointmentsPage() {
   const [currentDate, setCurrentDate] = useState(getNowInMaroc())
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | 'all'>('all')
+  // Les postes du cabinet (v89) et le filtre par poste. 'all' par défaut :
+  // le matin, on veut la journée entière ; isoler un fauteuil est une
+  // question qu'on pose ensuite.
+  const [postes, setPostes] = useState<Poste[]>([])
+  const [posteFilter, setPosteFilter] = useState<string>('all')
   // Blocage de créneau
   type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
   const [dayBlocks, setDayBlocks] = useState<Block[]>([])
@@ -303,8 +309,24 @@ export default function AppointmentsPage() {
     await loadDayBlocks()
   }
 
+  // Les fauteuils du cabinet, chargés une fois. Une table absente (v89 non
+  // passée) renvoie une liste vide, et tout l'affichage lié aux postes
+  // disparaît de lui-même.
+  useEffect(() => {
+    fetch('/api/postes')
+      .then((r) => (r.ok ? r.json() : { postes: [] }))
+      .then((d) => setPostes(d.postes ?? []))
+      .catch(() => { /* pas de postes : l'agenda est celui d'avant */ })
+  }, [])
+
   // Filtre par recherche côté client
   const filtered = appointments.filter((apt) => {
+    // Filtre par poste. '__aucun__' isole les rendez-vous sans poste précisé,
+    // qui sont une catégorie réelle et pas un oubli.
+    if (posteFilter !== 'all') {
+      const sien = apt.poste_id ?? '__aucun__'
+      if (sien !== posteFilter) return false
+    }
     if (!searchQuery) return true
     const q = searchQuery.toLowerCase()
     const patient = apt.patient
@@ -559,6 +581,20 @@ export default function AppointmentsPage() {
                 <SelectItem value="cancelled">Annulés</SelectItem>
               </SelectContent>
             </Select>
+            {/* Le filtre par poste n'apparaît qu'à partir de DEUX fauteuils :
+                avec un seul, il n'y a rien à trier. */}
+            {posteUtile(postes) && (
+              <Select value={posteFilter} onValueChange={setPosteFilter}>
+                <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les postes</SelectItem>
+                  {posteActifs(postes).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>
+                  ))}
+                  <SelectItem value="__aucun__">Sans poste précisé</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -602,6 +638,7 @@ export default function AppointmentsPage() {
             <WeekGrid
               weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
               appointments={filtered}
+              postes={postes}
               blocks={dayBlocks}
               workingHours={doctor.working_hours}
               defaultDuration={doctor.appointment_duration}
@@ -613,6 +650,7 @@ export default function AppointmentsPage() {
           ) : (
             <AppointmentList
               appointments={filtered}
+              postes={postes}
               onStatusChange={handleStatusChange}
               onAttendanceChange={handleAttendanceChange}
               onPayment={handlePayment}

@@ -25,6 +25,7 @@ import {
 import { format } from 'date-fns'
 import type { Doctor, ConsultationType, TimeSlot } from '@/types'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
+import { posteActifs, posteUtile, type Poste } from '@/lib/postes'
 
 interface AddAppointmentDialogProps {
   open: boolean
@@ -40,6 +41,10 @@ interface AddAppointmentDialogProps {
 
 // Valeur "aucun motif" du Select (durée de base du médecin)
 const NO_TYPE = '__none__'
+// « Sans poste précisé » est une VALEUR, pas une absence de choix : c'est le
+// cas de tous les rendez-vous d'un cabinet à un seul fauteuil, et la base le
+// traite comme un poste à part entière (v89).
+const NO_POSTE = '__aucun__'
 
 async function searchPatients(query: string): Promise<PatientLite[]> {
   const supabase = createClient()
@@ -88,6 +93,18 @@ export function AddAppointmentDialog({
     }
   }, [open, dateInitiale, heureInitiale])
 
+  // Les postes du cabinet (v89). Chargés à l'ouverture : un fauteuil ajouté
+  // dans les Paramètres doit apparaître ici sans recharger l'agenda.
+  const [postes, setPostes] = useState<Poste[]>([])
+  const [posteId, setPosteId] = useState<string>(NO_POSTE)
+  useEffect(() => {
+    if (!open) return
+    fetch('/api/postes')
+      .then((r) => (r.ok ? r.json() : { postes: [] }))
+      .then((d) => setPostes(d.postes ?? []))
+      .catch(() => { /* v89 non passée : le cabinet n'a pas de postes */ })
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     supabase
@@ -110,17 +127,20 @@ export function AddAppointmentDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, doctor.id])
 
-  // Recharge les créneaux quand la date ou le motif change
-  // (durée variable + exclusion des créneaux déjà pris, gérés par l'API)
+  // Recharge les créneaux quand la date, le motif OU LE POSTE change.
+  // Le poste compte autant que la durée : un créneau pris sur le fauteuil 1
+  // reste libre sur le fauteuil 2, et la liste des heures doit le dire — sans
+  // quoi l'écran interdirait ce que la base accepte.
   useEffect(() => {
     if (!form.date) { setSlots([]); return }
     setLoadingSlots(true)
     const typeParam = typeId !== NO_TYPE ? `&type=${typeId}` : ''
-    fetch(`/api/slots?doctor_id=${doctor.id}&date=${form.date}${typeParam}`)
+    const posteParam = posteId !== NO_POSTE ? `&poste=${posteId}` : ''
+    fetch(`/api/slots?doctor_id=${doctor.id}&date=${form.date}${typeParam}${posteParam}`)
       .then((r) => r.json())
       .then((data) => setSlots(data.slots ?? []))
       .finally(() => setLoadingSlots(false))
-  }, [form.date, typeId, doctor.id])
+  }, [form.date, typeId, posteId, doctor.id])
 
   const availableSlots = slots.filter((s) => s.available)
 
@@ -158,6 +178,7 @@ export function AddAppointmentDialog({
             : patient?.newPatient ?? {}),
           doctor_id: doctor.id,
           consultation_type_id: typeId !== NO_TYPE ? typeId : undefined,
+          poste_id: posteId !== NO_POSTE ? posteId : undefined,
           recurrence: recurFreq !== 'none' ? { freq: recurFreq, count: recurCount } : undefined,
           public: false,
         }),
@@ -171,7 +192,7 @@ export function AddAppointmentDialog({
       onSuccess()
       onOpenChange(false)
       setForm({ date: '', time: '', notes: '' }); setPatient(null)
-      setTypeId(NO_TYPE)
+      setTypeId(NO_TYPE); setPosteId(NO_POSTE)
       setRecurFreq('none'); setRecurCount(4)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
@@ -181,6 +202,10 @@ export function AddAppointmentDialog({
   }
 
   const hasTypes = consultTypes.length > 0
+  // Un seul poste déclaré ne mérite pas un sélecteur : il n'y a rien à
+  // choisir, et une liste à une entrée est du bruit sur un formulaire qu'on
+  // remplit vingt fois par jour.
+  const postesChoisissables = posteUtile(postes) ? posteActifs(postes) : []
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -209,6 +234,25 @@ export function AddAppointmentDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {postesChoisissables.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="poste">Fauteuil / salle</Label>
+              <Select value={posteId} onValueChange={setPosteId}>
+                <SelectTrigger id="poste"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_POSTE}>Sans poste précisé</SelectItem>
+                  {postesChoisissables.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-gray-400">
+                Deux rendez-vous à la même heure sont possibles s’ils sont sur deux postes
+                différents.
+              </p>
             </div>
           )}
 

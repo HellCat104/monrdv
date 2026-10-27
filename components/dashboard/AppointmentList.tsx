@@ -9,6 +9,7 @@ import { etatPatient, resumeEchange } from '@/lib/file-attente'
 import PanneauAccueil, { type Mot } from '@/components/dashboard/PanneauAccueil'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, VITAL_DEFS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMethod } from '@/types'
+import { posteUtile, nomPoste, couleurPoste, type Poste } from '@/lib/postes'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -93,9 +94,14 @@ interface AppointmentListProps {
   /** Forfait du médecin : en 'agenda', les actions Cabinet (consultation,
    *  ordonnance, facture, encaissement) sont masquées. Défaut 'complet'. */
   plan?: 'agenda' | 'complet'
+  /** Les fauteuils du cabinet (v89). Vide ou un seul = la liste n'en parle
+   *  pas : un badge « Fauteuil 1 » sur chaque ligne d'un cabinet qui n'en a
+   *  qu'un est du bruit. */
+  postes?: Poste[]
 }
 
-export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, onRefresh, plan = 'complet' }: AppointmentListProps) {
+export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, onRefresh, plan = 'complet', postes = [] }: AppointmentListProps) {
+  const montrerPoste = posteUtile(postes)
   // Forfait Agenda : pas d'encaissement (le reste des actions est filtré plus bas)
   // L'encaissement est ouvert aux deux forfaits : seuls les documents
   // comptables (facture, avoir) restent réservés au Cabinet complet.
@@ -398,6 +404,19 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   {formatDateShort(apt.date)} à {formatTime(apt.time)}
                   {apt.duration_minutes ? ` (${apt.duration_minutes} min)` : ''}
                 </span>
+                {/* Le fauteuil, là où l'on lit déjà l'heure : c'est la même
+                    question — où et quand ce patient est-il attendu. */}
+                {montrerPoste && (() => {
+                  const nom = nomPoste(postes, apt.poste_id)
+                  const c = couleurPoste(postes.find((p) => p.id === apt.poste_id)?.couleur)
+                  return nom ? (
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${c.fond} ${c.texte}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${c.point}`} /> {nom}
+                    </span>
+                  ) : (
+                    <span className="text-gray-300">Sans poste</span>
+                  )
+                })()}
                 {apt.patient && (
                   <span className="flex items-center gap-1">
                     <Phone className="h-3 w-3" />

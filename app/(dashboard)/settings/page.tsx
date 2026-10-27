@@ -22,6 +22,7 @@ import type { BlockedDate } from '@/types'
 import { LogoCabinet } from '@/components/dashboard/LogoCabinet'
 import { PhotosCabinet } from '@/components/dashboard/PhotosCabinet'
 import ReglageBonLabo from '@/components/dashboard/ReglageBonLabo'
+import ReglagePostes from '@/components/dashboard/ReglagePostes'
 import { espaceOccupe, formatOctets, QUOTA_DEFAUT_MO } from '@/lib/stockage'
 
 // Intertitre de section.
@@ -1066,6 +1067,12 @@ export default function SettingsPage() {
         <ReglageBonLabo />
 
         <Groupe id="rdv" numero={2} titre="Vos rendez-vous" sous="Quand et comment vous recevez" />
+
+        {/* Fauteuils et salles (v89). Autonome comme le logo, et muet tant que
+            la migration n'est pas passée. Aucune spécialité n'en est exclue :
+            un généraliste à deux salles a le même besoin qu'un dentiste à deux
+            fauteuils. */}
+        <ReglagePostes />
         {/* Stockage des documents (v63) — informatif : la limite est tenue par
             la base, cette jauge évite seulement de la découvrir au mauvais
             moment, un document à la main. */}

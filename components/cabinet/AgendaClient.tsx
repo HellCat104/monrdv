@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { etatPatient, resumeEchange, retardMinutes } from '@/lib/file-attente'
 import { useRafraichissement } from '@/lib/rafraichissement'
+import { posteUtile, posteActifs, type Poste } from '@/lib/postes'
 import BoutonsFile from '@/components/cabinet/BoutonsFile'
 import { format, addDays, addMonths, startOfWeek, endOfWeek, startOfMonth, eachDayOfInterval, getDay, subDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -38,6 +39,8 @@ type Block = { id: string; date: string; start_time: string | null; end_time: st
 
 interface CType { id: string; name: string; duration_minutes: number | null; default_price: number | null }
 const NO_TYPE = '__none__'
+// « Sans poste précisé » est une valeur, pas une absence de choix (v89).
+const NO_POSTE = '__aucun__'
 
 export default function AgendaClient({ permissions, doctorName = 'Cabinet médical' }: { permissions: StaffPermissions; doctorName?: string }) {
   const [date, setDate] = useState(() => format(getNowInMaroc(), 'yyyy-MM-dd'))
@@ -68,6 +71,10 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
   const [workingHours, setWorkingHours] = useState<WorkingHours | null>(null)
   const [appts, setAppts] = useState<Apt[]>([])
   const [types, setTypes] = useState<CType[]>([])
+  // Les fauteuils du cabinet, renvoyés par l'agenda lui-même : la secrétaire
+  // PLACE un rendez-vous sur un poste, elle ne crée pas les postes.
+  const [postes, setPostes] = useState<Poste[]>([])
+  const [posteId, setPosteId] = useState(NO_POSTE)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -117,6 +124,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
       const data = await res.json()
       setAppts(data.appointments ?? [])
       setTypes(data.consultationTypes ?? [])
+      setPostes(data.postes ?? [])
       if (data.workingHours) setWorkingHours(data.workingHours as WorkingHours)
     } catch {
       setError('Erreur réseau.')
@@ -219,11 +227,14 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
     if (!addOpen || !doctorId) { setSlots([]); return }
     setLoadingSlots(true)
     const typeParam = typeId !== NO_TYPE ? `&type=${typeId}` : ''
-    fetch(`/api/slots?doctor_id=${doctorId}&date=${date}${typeParam}`)
+    // Le poste compte autant que la durée : un créneau pris sur le fauteuil 1
+    // reste libre sur le fauteuil 2.
+    const posteParam = posteId !== NO_POSTE ? `&poste=${posteId}` : ''
+    fetch(`/api/slots?doctor_id=${doctorId}&date=${date}${typeParam}${posteParam}`)
       .then((r) => r.json())
       .then((d) => setSlots(d.slots ?? []))
       .finally(() => setLoadingSlots(false))
-  }, [addOpen, doctorId, date, typeId])
+  }, [addOpen, doctorId, date, typeId, posteId])
 
   const availableSlots = slots.filter((s) => s.available)
 
@@ -243,6 +254,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
             : patient?.newPatient ?? {}),
           date,
           consultation_type_id: typeId !== NO_TYPE ? typeId : undefined,
+          poste_id: posteId !== NO_POSTE ? posteId : undefined,
           recurrence: recurFreq !== 'none' ? { freq: recurFreq, count: recurCount } : undefined,
         }),
       })
@@ -255,7 +267,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
       }
       setAddOpen(false)
       setForm({ time: '', notes: '' }); setPatient(null)
-      setTypeId(NO_TYPE)
+      setTypeId(NO_TYPE); setPosteId(NO_POSTE)
       setRecurFreq('none'); setRecurCount(4)
       await load(date)
     } catch {
@@ -545,7 +557,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
               // droit : sans la permission, la grille reste en lecture.
               onCreate={permissions.manage_appointments ? (jour, heure) => {
                 setDate(jour); setAddError(''); setForm({ time: heure, notes: '' })
-                setPatient(null); setTypeId(NO_TYPE); setAddOpen(true)
+                setPatient(null); setTypeId(NO_TYPE); setPosteId(NO_POSTE); setAddOpen(true)
               } : undefined}
               onMove={permissions.manage_appointments ? (a, jour, heure) => {
                 deplacerDepuisCalendrier(a as unknown as Apt, jour, heure)
@@ -724,6 +736,23 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                     {types.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}{t.duration_minutes ? ` · ${t.duration_minutes} min` : ''}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+            {/* Le fauteuil (v89). Un seul poste déclaré ne mérite pas de
+                sélecteur : il n'y a rien à choisir. */}
+            {posteUtile(postes) && (
+              <div className="space-y-1.5">
+                <Label>Fauteuil / salle</Label>
+                <Select value={posteId} onValueChange={(v) => { setPosteId(v); setForm((f) => ({ ...f, time: '' })) }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_POSTE}>Sans poste précisé</SelectItem>
+                    {posteActifs(postes).map((p) => <SelectItem key={p.id} value={p.id}>{p.nom}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-gray-400">
+                  Les heures proposées tiennent compte du poste choisi.
+                </p>
               </div>
             )}
             <div className="space-y-1.5">

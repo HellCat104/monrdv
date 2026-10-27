@@ -18,9 +18,13 @@ export async function PATCH(
 
   const body = await req.json()
   const { status, date, time, doctor_notes, attendance, amount_paid, amount_due, payment_method } = body
+  // `poste_id` (v89) : déplacer un rendez-vous d'un fauteuil à l'autre. `null`
+  // est une valeur VOULUE — « remettre sans poste » — et doit donc se
+  // distinguer de « champ non envoyé ».
+  const posteFourni = body.poste_id !== undefined
 
   if (!status && date === undefined && time === undefined
-      && doctor_notes === undefined && attendance === undefined
+      && doctor_notes === undefined && attendance === undefined && !posteFourni
       && amount_paid === undefined && amount_due === undefined && payment_method === undefined) {
     return NextResponse.json({ error: 'Paramètre manquant' }, { status: 400 })
   }
@@ -58,7 +62,17 @@ export async function PATCH(
       { error: 'Votre forfait ne permet pas les notes médicales' }, { status: 403 })
   }
 
+  // Le poste est validé contre CEUX DU CABINET, jamais pris sur parole : un
+  // identifiant deviné placerait un rendez-vous dans le fauteuil d'un confrère.
+  if (posteFourni && body.poste_id) {
+    const { data: poste } = await supabase
+      .from('cabinet_postes').select('id')
+      .eq('id', String(body.poste_id)).eq('doctor_id', doctor.id).eq('actif', true).maybeSingle()
+    if (!poste) return NextResponse.json({ error: 'Poste introuvable' }, { status: 404 })
+  }
+
   const updates: Record<string, unknown> = {}
+  if (posteFourni)         updates.poste_id     = body.poste_id ? String(body.poste_id) : null
   if (status)              updates.status       = status
   if (date)                updates.date         = date
   if (time)                updates.time         = time
@@ -188,7 +202,25 @@ export async function PATCH(
     // 23505 / 23P01 : le nouveau créneau (reprogrammation) entre en collision
     // avec un RDV existant — index unique ou contrainte d'exclusion.
     if (error?.code === '23505' || error?.code === '23P01') {
-      return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant' }, { status: 409 })
+      return NextResponse.json({
+        error: updates.poste_id !== undefined && !isReschedule
+          ? 'Ce poste est déjà occupé à cette heure'
+          : 'Ce créneau chevauche un rendez-vous existant',
+      }, { status: 409 })
+    }
+    // 42703 : la v89 n'est pas passée. Le reste de la modification — statut,
+    // présence, encaissement — doit aboutir quand même : un agenda ne se
+    // bloque pas pour un champ que la base ne connaît pas encore.
+    if (error?.code === '42703' && updates.poste_id !== undefined) {
+      delete updates.poste_id
+      if (Object.keys(updates).length === 0) {
+        return NextResponse.json({ error: 'Les postes attendent une migration de la base (v89).' }, { status: 503 })
+      }
+      const repli = await supabase.from('appointments').update(updates)
+        .eq('id', params.id).eq('doctor_id', doctor.id).select('*, patient:patients(*)').single()
+      // Même forme de réponse que le chemin normal : l'appelant ne doit pas
+      // avoir à deviner qu'il a emprunté un repli.
+      if (repli.data) return NextResponse.json(repli.data)
     }
     return NextResponse.json({ error: 'RDV introuvable' }, { status: 404 })
   }

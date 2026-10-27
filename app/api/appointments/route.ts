@@ -1,5 +1,6 @@
 // API : liste et création de rendez-vous
 import { NextRequest, NextResponse } from 'next/server'
+import { memePoste } from '@/lib/postes'
 import { colonneAbsente } from '@/lib/migrations'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendAppointmentConfirmationToPatient } from '@/lib/email'
@@ -235,10 +236,24 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // POSTE (v89) — fauteuil ou salle. Jamais choisi par le patient : la page
+  // publique ne connaît pas les postes, et deux fauteuils ne dédoublent pas le
+  // praticien. Le poste est validé contre CEUX DU CABINET, jamais pris sur
+  // parole : un identifiant deviné placerait un rendez-vous dans le fauteuil
+  // d'un confrère.
+  let posteId: string | null = null
+  if (!isPublic && body.poste_id) {
+    const { data: poste } = await db
+      .from('cabinet_postes').select('id')
+      .eq('id', String(body.poste_id)).eq('doctor_id', doctor_id).eq('actif', true).maybeSingle()
+    if (!poste) return NextResponse.json({ error: 'Poste introuvable' }, { status: 404 })
+    posteId = poste.id
+  }
+
   // RDV existants et blocages du jour, en une seule aller-retour
   const [{ data: dayAppointments }, { data: dayBlocks }] = await Promise.all([
     db.from('appointments')
-      .select('time, duration_minutes')
+      .select('time, duration_minutes, poste_id')
       .eq('doctor_id', doctor_id)
       .eq('date', date)
       .neq('status', 'cancelled'),
@@ -251,6 +266,10 @@ export async function POST(req: NextRequest) {
   const occupied = (dayAppointments ?? []).map((a) => ({
     time: a.time.substring(0, 5),
     duration: a.duration_minutes || doctorCheck.appointment_duration,
+    // `poste_id` n'existe qu'à partir de la v89 : absent, il vaut null pour
+    // tout le monde, et la comparaison ci-dessous retrouve exactement le
+    // comportement d'avant — un seul poste, donc un seul patient à la fois.
+    poste_id: (a as { poste_id?: string | null }).poste_id ?? null,
   }))
   const blocks = dayBlocks ?? []
 
@@ -304,12 +323,20 @@ export async function POST(req: NextRequest) {
     // le chevauchement avec un RDV existant (pas deux patients en même temps).
     const newStart = toMinutes(time)
     const newEnd = newStart + appointmentDuration
-    const overlaps = occupied.some((o) => {
+    // Deux rendez-vous ne se gênent que s'ils occupent LE MÊME poste. Même
+    // calcul que la contrainte d'exclusion de la v89 : l'écran ne doit jamais
+    // refuser ce que la base accepterait, ni promettre ce qu'elle refusera.
+    const concurrents = occupied.filter((o) => memePoste(o.poste_id, posteId))
+    const overlaps = concurrents.some((o) => {
       const s = toMinutes(o.time)
       return newStart < s + o.duration && newEnd > s
     })
     if (overlaps) {
-      return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant' }, { status: 409 })
+      return NextResponse.json({
+        error: posteId
+          ? 'Ce créneau chevauche un rendez-vous déjà posé sur ce poste'
+          : 'Ce créneau chevauche un rendez-vous existant',
+      }, { status: 409 })
     }
   }
 
@@ -463,6 +490,11 @@ export async function POST(req: NextRequest) {
     consent_at: isPublic ? new Date().toISOString() : null,
   }
 
+  // `poste_id` suit la même règle que `channel` juste en dessous : il part
+  // dans l'insertion quand il vaut quelque chose, et une colonne absente
+  // (v89 non passée) ne doit jamais empêcher de poser un rendez-vous.
+  const champsAvecPoste = posteId ? { ...champsRdv, poste_id: posteId } : champsRdv
+
   // `channel` vient de la v73. C'est une donnée de MESURE, pas une donnée
   // métier : la réservation doit aboutir même si la migration n'a pas été
   // lancée. Sans ce repli, une colonne absente ferait échouer TOUTE création de
@@ -470,12 +502,12 @@ export async function POST(req: NextRequest) {
   // de la maison (lib/migrations.ts) appliquée là où elle compte le plus.
   let { data: appointment, error: aptError } = await db
     .from('appointments')
-    .insert({ ...champsRdv, channel: safeChannel })
+    .insert({ ...champsAvecPoste, channel: safeChannel })
     .select('*')
     .single()
 
   if (aptError && colonneAbsente(aptError.code)) {
-    console.warn('[RDV] colonne channel absente (migration v73 non passée) — création sans le canal')
+    console.warn('[RDV] colonne channel ou poste_id absente — création sans elle')
     const repli = await db.from('appointments').insert(champsRdv).select('*').single()
     appointment = repli.data
     aptError = repli.error

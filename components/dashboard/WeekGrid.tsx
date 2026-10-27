@@ -12,6 +12,7 @@ import { Ban } from 'lucide-react'
 import { getDayKey, getDayBreaks, getNowInMaroc, toMinutes } from '@/lib/utils'
 import { estAbsent } from '@/lib/file-attente'
 import type { Appointment, WorkingHours } from '@/types'
+import { posteUtile, nomPoste, couleurPoste, type Poste } from '@/lib/postes'
 
 export interface WeekBlock {
   id: string
@@ -40,6 +41,10 @@ interface WeekGridProps {
    *  même grille sert aux deux : des trous à voir et des chevauchements à
    *  démêler, c'est le même problème sur un jour que sur sept. */
   nbJours?: number
+  /** Les fauteuils du cabinet (v89). Deux rendez-vous à la même heure étaient
+   *  jusqu'ici impossibles ; maintenant qu'ils le sont, la grille doit dire
+   *  LEQUEL est où — sinon deux colonnes côte à côte ne veulent rien dire. */
+  postes?: Poste[]
 }
 
 const HEURE_PX = 56                   // hauteur d'une heure, en pixels
@@ -85,7 +90,10 @@ function repartir(items: { start: number; end: number }[]): { col: number; total
 export function WeekGrid({
   weekStart, appointments, blocks, workingHours,
   defaultDuration, onSelectDay, onSelectAppointment, onCreate, onMove, nbJours = 7,
+  postes = [],
 }: WeekGridProps) {
+  // Avec un seul poste, la grille reste celle d'avant : rien à distinguer.
+  const montrerPoste = posteUtile(postes)
   const jours = Array.from({ length: nbJours }, (_, i) => addDays(weekStart, i))
   // La grille des colonnes et la largeur minimale suivent le nombre de jours :
   // une journée seule étalée sur 760 px de large laissait six colonnes vides.
@@ -349,6 +357,13 @@ export function WeekGrid({
                         absent      ? 'bg-gray-100 border-gray-400 text-gray-500 line-through'
                         : enAttente ? 'bg-amber-50 border-amber-400 text-amber-900'
                                     : 'bg-primary-50 border-primary-500 text-primary-900'
+                      } ${
+                        // Le liseré gauche prend la couleur du fauteuil : deux
+                        // blocs côte à côte sans ce repère laissent deviner
+                        // lequel est où, ce qui est justement la question.
+                        montrerPoste && r.apt.poste_id && !absent
+                          ? couleurPoste(postes.find((p) => p.id === r.apt.poste_id)?.couleur).bord.replace('border-', 'border-l-')
+                          : ''
                       }`}
                       style={{
                         top: y(r.start, debut),
@@ -357,7 +372,8 @@ export function WeekGrid({
                         width: `calc(${largeur}% - 4px)`,
                       }}
                       title={`${r.apt.time.substring(0, 5)} · ${r.apt.patient?.first_name ?? ''} ${r.apt.patient?.last_name ?? ''}${
-                        r.apt.consultation_type?.name ? ` · ${r.apt.consultation_type.name}` : ''}`}
+                        r.apt.consultation_type?.name ? ` · ${r.apt.consultation_type.name}` : ''}${
+                        montrerPoste && nomPoste(postes, r.apt.poste_id) ? ` · ${nomPoste(postes, r.apt.poste_id)}` : ''}`}
                     >
                       <div className="text-[10px] font-semibold leading-tight truncate">
                         {r.apt.time.substring(0, 5)} {r.apt.patient?.first_name ?? 'Patient'}
@@ -365,6 +381,11 @@ export function WeekGrid({
                       {(r.end - r.start) >= 30 && (
                         <div className="text-[10px] leading-tight truncate opacity-75">
                           {r.apt.patient?.last_name ?? ''}
+                        </div>
+                      )}
+                      {montrerPoste && (r.end - r.start) >= 45 && nomPoste(postes, r.apt.poste_id) && (
+                        <div className="text-[9px] leading-tight truncate opacity-60">
+                          {nomPoste(postes, r.apt.poste_id)}
                         </div>
                       )}
                     </button>

@@ -1,16 +1,29 @@
 // API : créneaux horaires disponibles pour une date donnée.
 // Supporte les motifs de consultation à durée variable (?type=<consultation_type_id>).
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getSlotsForDuration, getDayKey, getDayBreaks, getNowInMaroc, toMinutes, isFullDayBlocked, DEFAULT_LEAD_HOURS, blockedIntervals, type OccupiedInterval } from '@/lib/utils'
 import { parseISO, format } from 'date-fns'
 
-// GET /api/slots?doctor_id=...&date=YYYY-MM-DD[&type=<uuid>]
+// GET /api/slots?doctor_id=...&date=YYYY-MM-DD[&type=<uuid>][&poste=<uuid>]
+//
+// ── POURQUOI `poste` EXIGE UNE SESSION ──────────────────────────────────────
+//
+// Avec un poste, un créneau déjà pris SUR UN AUTRE poste redevient libre
+// (v89). C'est juste pour le cabinet, qui sait qui fait quoi ; ce serait
+// trompeur sur la page publique, où la création de rendez-vous ignore les
+// postes et refuserait ensuite le créneau annoncé libre.
+//
+// Cette route est publique et n'avait aucune authentification. Le paramètre
+// n'est donc honoré que si l'appelant est connecté ; sinon il est IGNORÉ, et
+// la réponse reste celle d'avant. Pas d'erreur : un visiteur qui bricole
+// l'adresse obtient simplement les créneaux ordinaires.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const doctorId = searchParams.get('doctor_id')
   const date = searchParams.get('date')
   const typeId = searchParams.get('type')
+  const posteDemande = searchParams.get('poste')
 
   if (!doctorId || !date) {
     return NextResponse.json({ error: 'Paramètres manquants' }, { status: 400 })
@@ -63,6 +76,13 @@ export async function GET(req: NextRequest) {
     if (ctype?.duration_minutes) duration = ctype.duration_minutes
   }
 
+  // Le poste n'est honoré que pour un appelant connecté — voir l'en-tête.
+  let poste: string | null = null
+  if (posteDemande) {
+    const { data: { user } } = await createClient().auth.getUser()
+    if (user) poste = posteDemande
+  }
+
   // Requêtes 2 & 3 en parallèle — blocages (jour entier ou plages) + RDV existants
   const [blockedResult, bookedResult] = await Promise.all([
     supabase
@@ -72,7 +92,7 @@ export async function GET(req: NextRequest) {
       .eq('date', date),
     supabase
       .from('appointments')
-      .select('time, duration_minutes')
+      .select('time, duration_minutes, poste_id')
       .eq('doctor_id', doctorId)
       .eq('date', date)
       .neq('status', 'cancelled'),
@@ -87,7 +107,15 @@ export async function GET(req: NextRequest) {
   }
 
   // Chaque RDV existant occupe [time, time + sa durée) — durée de base si absente
-  const occupied: OccupiedInterval[] = [...blockedIntervals(blocks), ...(bookedResult.data ?? []).map((b) => ({
+  // Avec un poste demandé, seuls les rendez-vous DE CE POSTE occupent le
+  // créneau : c'est tout l'objet de la v89. Les blocages, eux, ferment le
+  // cabinet entier — un congé ne se contourne pas en changeant de fauteuil.
+  //
+  // `poste_id` n'existe qu'à partir de la v89 : absent, il vaut null partout
+  // et la comparaison retrouve exactement le comportement d'avant.
+  const rdvDuJour = (bookedResult.data ?? []) as { time: string; duration_minutes: number | null; poste_id?: string | null }[]
+  const retenus = poste ? rdvDuJour.filter((b) => (b.poste_id ?? null) === poste) : rdvDuJour
+  const occupied: OccupiedInterval[] = [...blockedIntervals(blocks), ...retenus.map((b) => ({
     time: b.time.substring(0, 5),
     duration: b.duration_minutes || doctor.appointment_duration,
   }))]
@@ -111,7 +139,13 @@ export async function GET(req: NextRequest) {
     slots = slots.map((s) => (toMinutes(s.time) < cutoff ? { ...s, available: false } : s))
   }
 
+  // Une réponse qui dépend du poste dépend aussi de QUI demande : elle ne doit
+  // pas être servie en cache partagé à un visiteur de la page publique.
   return NextResponse.json({ slots }, {
-    headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
+    headers: {
+      'Cache-Control': poste
+        ? 'private, no-store'
+        : 'public, s-maxage=30, stale-while-revalidate=60',
+    },
   })
 }

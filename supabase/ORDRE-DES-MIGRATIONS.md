@@ -511,3 +511,32 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      RLS médecin uniquement ; la secrétaire, qui tient souvent l'étagère,
      reste à ouvrir par une permission — une décision à prendre, pas un oubli.
      Additive, deux tables nouvelles, aucune ligne existante touchée.
+
+ 89. `migration_v89_postes.sql`
+     Migration v89 — LES POSTES DE TRAVAIL : fauteuils et salles. Table
+     `cabinet_postes` (nom, ordre, couleur, actif) + `appointments.poste_id`
+     (nullable, `on delete set null` — démonter un fauteuil ne doit pas
+     emporter les rendez-vous qui s'y sont tenus).
+     Un cabinet à deux fauteuils ne POUVAIT PAS planifier deux patients à la
+     même heure : la base le refusait, par `no_overlapping_appointments` (v4,
+     v31). C'était juste quand un cabinet valait un fauteuil, et faux dès
+     qu'il y en a deux — l'anesthésie qui fait effet d'un côté pendant qu'on
+     détartre de l'autre est la journée normale d'un cabinet dentaire.
+     La règle change de GRAIN, elle ne disparaît pas : plus de chevauchement
+     SUR UN MÊME POSTE. `coalesce(poste_id, uuid nul)` fait du « non précisé »
+     un poste à part entière — NULL = NULL est inconnu, et un index unique
+     aurait laissé passer autant de doublons qu'on veut. Un cabinet qui ne
+     déclare aucun poste garde donc exactement le comportement d'avant, sans
+     rien migrer ni choisir.
+     ORDRE DES OPÉRATIONS : on AJOUTE `unique_active_slot_poste` et
+     `no_overlap_poste` AVANT de retirer `unique_active_slot` et
+     `no_overlapping_appointments`. Les nouvelles étant strictement plus
+     permissives, elles s'installent sans conflit tant que les anciennes
+     tiennent ; si elles échouaient, l'agenda n'aurait pas passé une seconde
+     sans protection contre les doubles réservations.
+     Un poste N'EST PAS un second praticien : la réservation en ligne les
+     ignore complètement et continue de ne proposer qu'un patient à la fois.
+     `/api/slots` n'honore `?poste=` que pour un appelant CONNECTÉ, et répond
+     alors en `private, no-store` — sinon un visiteur verrait libre un
+     créneau que la création publique refuserait ensuite.
+     RLS médecin ; rien pour `anon`. Additive.

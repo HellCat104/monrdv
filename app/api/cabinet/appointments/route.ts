@@ -103,9 +103,15 @@ export async function GET(req: NextRequest) {
   // migration n'est pas passée, ces colonnes n'existent pas et l'agenda entier
   // de la secrétaire tomberait en erreur. Règle de la maison — pas de
   // migration, pas de fonctionnalité, mais jamais d'écran cassé.
+  // Les postes (v89), lus eux aussi À PART, et pour la même raison.
+  const postesRes = await admin
+    .from('cabinet_postes').select('id, nom, ordre, couleur')
+    .eq('doctor_id', ctx.doctor.id).eq('actif', true)
+    .order('ordre', { ascending: true }).order('nom', { ascending: true })
+
   const ids = appointments.map((a) => (a as { id: string }).id)
   if (ids.length > 0 && ids.length <= 300) {
-    const [fileRes, ordRes, certRes, motsRes] = await Promise.all([
+    const [fileRes, ordRes, certRes, motsRes, posteRes] = await Promise.all([
       admin.from('appointments')
         .select('id, queue_arrived_at, queue_started_at, reprogrammer_jours, appel_suivant_le')
         .in('id', ids),
@@ -120,6 +126,10 @@ export async function GET(req: NextRequest) {
         .select('id, appointment_id, auteur, auteur_nom, contenu, created_at')
         .in('appointment_id', ids)
         .order('created_at', { ascending: true }),
+      // Requête à part et non colonne ajoutée au select principal : sans la
+      // v89, `poste_id` n'existe pas et c'est TOUT l'agenda de la secrétaire
+      // qui tomberait pour une colonne d'affichage.
+      admin.from('appointments').select('id, poste_id').in('id', ids),
     ])
 
     const file = new Map<string, Record<string, unknown>>()
@@ -142,11 +152,17 @@ export async function GET(req: NextRequest) {
       mots.set(m.appointment_id, l)
     }
 
+    const postes = new Map<string, string | null>()
+    for (const r of (posteRes.data ?? []) as { id: string; poste_id: string | null }[]) {
+      postes.set(r.id, r.poste_id)
+    }
+
     appointments = appointments.map((a) => {
       const id = (a as { id: string }).id
       return {
         ...a,
         ...(file.get(id) ?? {}),
+        poste_id: postes.get(id) ?? null,
         documents_a_remettre: (nbOrd.get(id) ?? 0) + (nbCert.get(id) ?? 0),
         mots: mots.get(id) ?? [],
       }
@@ -161,6 +177,9 @@ export async function GET(req: NextRequest) {
     blocks: blocksRes.data ?? [],
     permissions: ctx.permissions,
     confidential: ctx.confidential,
+    // Les fauteuils du cabinet. Vide = cabinet à un seul poste, et l'écran
+    // n'en parle pas : une colonne unique n'apprend rien.
+    postes: postesRes.data ?? [],
     // Pour signer les mots du médecin sur l'écran de la secrétaire.
     doctorName: ctx.doctor.name,
   })
@@ -327,6 +346,19 @@ export async function POST(req: NextRequest) {
     occurrences.push(format(d, 'yyyy-MM-dd'))
   }
 
+  // POSTE (v89) : la secrétaire PLACE un rendez-vous sur un fauteuil, elle ne
+  // crée pas les fauteuils. L'identifiant est validé contre ceux du cabinet —
+  // le client admin court-circuite la RLS, et un identifiant deviné poserait
+  // un rendez-vous dans le fauteuil d'un confrère.
+  let postePose: string | null = null
+  if (body.poste_id) {
+    const { data: poste } = await admin
+      .from('cabinet_postes').select('id')
+      .eq('id', String(body.poste_id)).eq('doctor_id', doctorId).eq('actif', true).maybeSingle()
+    if (!poste) return NextResponse.json({ error: 'Poste introuvable' }, { status: 404 })
+    postePose = poste.id
+  }
+
   const created: Record<string, unknown>[] = []
   const skipped: string[] = []
   let hardError = false
@@ -345,6 +377,7 @@ export async function POST(req: NextRequest) {
         duration_minutes: duration,
         consent_at: null,
         recurrence_group_id: groupId,
+        ...(postePose ? { poste_id: postePose } : {}),
       })
       .select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
     if (e || !appt) {
