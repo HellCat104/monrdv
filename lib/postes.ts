@@ -25,14 +25,23 @@ export interface Poste {
 }
 
 /** Les couleurs proposées pour distinguer les colonnes. Des teintes douces :
- *  une colonne d'agenda se regarde toute la journée. */
+ *  une colonne d'agenda se regarde toute la journée.
+ *
+ *  ── POURQUOI `bordG` EST ÉCRIT EN TOUTES LETTRES ───────────────────────────
+ *
+ *  J'avais d'abord dérivé le liseré gauche du cadre, par un `.replace()` à
+ *  l'exécution. Tailwind ne génère que les classes qu'il VOIT dans le code :
+ *  un nom fabriqué au moment du rendu n'existe nulle part dans la feuille de
+ *  style, et les deux rendez-vous côte à côte ressortaient du même bleu — sans
+ *  la moindre erreur pour le dire. Chaque classe est donc écrite entière, et
+ *  aucune ne se construit par calcul. */
 export const COULEURS_POSTE = [
-  { cle: 'ardoise',   label: 'Ardoise',   point: 'bg-slate-400',   fond: 'bg-slate-50',   bord: 'border-slate-300',   texte: 'text-slate-700' },
-  { cle: 'ciel',      label: 'Ciel',      point: 'bg-sky-400',     fond: 'bg-sky-50',     bord: 'border-sky-300',     texte: 'text-sky-700' },
-  { cle: 'menthe',    label: 'Menthe',    point: 'bg-emerald-400', fond: 'bg-emerald-50', bord: 'border-emerald-300', texte: 'text-emerald-700' },
-  { cle: 'ambre',     label: 'Ambre',     point: 'bg-amber-400',   fond: 'bg-amber-50',   bord: 'border-amber-300',   texte: 'text-amber-700' },
-  { cle: 'violet',    label: 'Violet',    point: 'bg-violet-400',  fond: 'bg-violet-50',  bord: 'border-violet-300',  texte: 'text-violet-700' },
-  { cle: 'rose',      label: 'Rose',      point: 'bg-rose-400',    fond: 'bg-rose-50',    bord: 'border-rose-300',    texte: 'text-rose-700' },
+  { cle: 'ardoise',   label: 'Ardoise',   point: 'bg-slate-400',   fond: 'bg-slate-50',   bord: 'border-slate-300',   bordG: 'border-l-slate-400',   texte: 'text-slate-700' },
+  { cle: 'ciel',      label: 'Ciel',      point: 'bg-sky-400',     fond: 'bg-sky-50',     bord: 'border-sky-300',     bordG: 'border-l-sky-400',     texte: 'text-sky-700' },
+  { cle: 'menthe',    label: 'Menthe',    point: 'bg-emerald-400', fond: 'bg-emerald-50', bord: 'border-emerald-300', bordG: 'border-l-emerald-400', texte: 'text-emerald-700' },
+  { cle: 'ambre',     label: 'Ambre',     point: 'bg-amber-400',   fond: 'bg-amber-50',   bord: 'border-amber-300',   bordG: 'border-l-amber-400',   texte: 'text-amber-700' },
+  { cle: 'violet',    label: 'Violet',    point: 'bg-violet-400',  fond: 'bg-violet-50',  bord: 'border-violet-300',  bordG: 'border-l-violet-400',  texte: 'text-violet-700' },
+  { cle: 'rose',      label: 'Rose',      point: 'bg-rose-400',    fond: 'bg-rose-50',    bord: 'border-rose-300',    bordG: 'border-l-rose-400',    texte: 'text-rose-700' },
 ]
 
 export function couleurPoste(cle?: string | null) {

@@ -362,7 +362,7 @@ export function WeekGrid({
                         // blocs côte à côte sans ce repère laissent deviner
                         // lequel est où, ce qui est justement la question.
                         montrerPoste && r.apt.poste_id && !absent
-                          ? couleurPoste(postes.find((p) => p.id === r.apt.poste_id)?.couleur).bord.replace('border-', 'border-l-')
+                          ? couleurPoste(postes.find((p) => p.id === r.apt.poste_id)?.couleur).bordG
                           : ''
                       }`}
                       style={{
