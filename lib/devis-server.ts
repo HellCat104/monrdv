@@ -176,19 +176,52 @@ export async function enregistrerVersement(
     }
   }
 
-  const { data, error } = await db
+  // ── DOUBLE SOUMISSION (v92) ───────────────────────────────────────────────
+  //
+  // La CLÉ DE SAISIE est tirée par l'écran au moment où le formulaire s'arme.
+  // Deux envois du même geste — double clic, réseau lent où l'on reclique,
+  // second onglet — la partagent ; deux encaissements réellement distincts en
+  // portent deux différentes.
+  //
+  // Mesuré avant ce garde-fou : deux requêtes identiques lancées ensemble
+  // étaient TOUTES LES DEUX acceptées, et consommaient deux numéros de facture
+  // légaux pour le même argent. Un bouton grisé ne protège que du clic ; il ne
+  // dit rien du second onglet ni de la requête rejouée.
+  const cle = typeof body.cle_saisie === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(body.cle_saisie)
+    ? body.cle_saisie : null
+
+  const champs = {
+    quote_id: quote.id,
+    doctor_id: doctorId,        // recalé sur le devis parent par le trigger v54
+    patient_id: quote.patient_id,
+    amount,
+    payment_method: method,
+    paid_at: paidAt,
+    note: body.note ? String(body.note).slice(0, 300) : null,
+  }
+
+  let { data, error } = await db
     .from('quote_payments')
-    .insert({
-      quote_id: quote.id,
-      doctor_id: doctorId,        // recalé sur le devis parent par le trigger v54
-      patient_id: quote.patient_id,
-      amount,
-      payment_method: method,
-      paid_at: paidAt,
-      note: body.note ? String(body.note).slice(0, 300) : null,
-    })
+    .insert(cle ? { ...champs, cle_saisie: cle } : champs)
     .select('*')
     .single()
+
+  // 23505 : l'index unique de la v92 a reconnu le même geste. Le versement
+  // existe DÉJÀ — on le renvoie tel quel. L'utilisateur voit un succès, parce
+  // que c'en est un : son argent est saisi, une seule fois.
+  if (error?.code === '23505' && cle) {
+    const { data: existant } = await db
+      .from('quote_payments').select('*')
+      .eq('quote_id', quote.id).eq('cle_saisie', cle).maybeSingle()
+    if (existant) return { payment: existant as Record<string, unknown> }
+  }
+
+  // 42703 : la v92 n'est pas passée. Pas de migration, pas de protection —
+  // mais jamais d'encaissement refusé pour une colonne absente.
+  if (error && cle && (error.code === '42703' || error.code === 'PGRST204')) {
+    console.warn('[Devis] colonne cle_saisie absente (migration v92 non passée) — versement sans protection')
+    ;({ data, error } = await db.from('quote_payments').insert(champs).select('*').single())
+  }
 
   if (error || !data) {
     console.error('[Devis] versement impossible :', error?.message)

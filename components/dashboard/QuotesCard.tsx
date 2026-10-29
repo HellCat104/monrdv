@@ -74,6 +74,17 @@ function grouperParSeance(items: QuoteItem[]): {
     }))
 }
 
+
+/** Une clé de geste. `crypto.randomUUID` n'existe pas partout (anciens
+ *  navigateurs, contextes non sécurisés) : on retombe alors sur deux tirages
+ *  aléatoires, ce qui suffit largement à distinguer deux clics. */
+function nouvelleCle(): string {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  } catch { /* contexte non sécurisé */ }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export default function QuotesCard({
   patientId,
   dental,
@@ -126,6 +137,9 @@ export default function QuotesCard({
   const [itPrice, setItPrice] = useState('')
   const [itQty, setItQty] = useState('1')
   const [payAmount, setPayAmount] = useState('')
+  // La clé du geste d'encaissement (v92). Tirée une fois à l'ouverture, puis
+  // renouvelée après chaque versement réellement enregistré.
+  const [cleSaisie, setCleSaisie] = useState(() => nouvelleCle())
   const [payMethod, setPayMethod] = useState<PaymentMethod>('especes')
   const [payDate, setPayDate] = useState('')
   const [echCount, setEchCount] = useState('3')
@@ -329,6 +343,12 @@ export default function QuotesCard({
       // Date laissée vide = aujourd'hui. Le champ existe pour le chèque
       // encaissé lundi et saisi mercredi.
       paid_at: payDate ? `${payDate}T12:00:00` : undefined,
+      // Clé du GESTE (v92) : elle ne change qu'après un enregistrement réussi.
+      // Un double clic, un reclic sur réseau lent ou un second onglet
+      // renvoient donc la MÊME clé, et la base ne retient qu'un versement.
+      // Sans cela, mesuré : deux requêtes simultanées passaient toutes les
+      // deux et consommaient deux numéros de facture pour le même argent.
+      cle_saisie: cleSaisie,
     }
     const data = secretaire
       ? await call('/api/cabinet/quotes', {
@@ -337,6 +357,8 @@ export default function QuotesCard({
       : await call(`/api/quotes/${q.id}/payments`, { method: 'POST', body: JSON.stringify(corps) })
     if (!data) return
     setPayAmount(''); setPayDate('')
+    // Le geste est consommé : le suivant mérite sa propre clé.
+    setCleSaisie(nouvelleCle())
     await refresh(q.id)
   }
 

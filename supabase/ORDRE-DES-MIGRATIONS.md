@@ -587,3 +587,26 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      passage.
      Sans elle, l'effacement purge tout le reste et annonce honnêtement que
      l'historique dentaire n'a pas pu l'être. Additive.
+
+ 92. `migration_v92_double_encaissement.sql`
+     Migration v92 — LA DOUBLE SOUMISSION D'UN VERSEMENT. Ajoute
+     `quote_payments.cle_saisie` + index unique partiel sur (quote_id,
+     cle_saisie).
+     Trouvé par le scénario E du cahier des charges : deux requêtes
+     d'encaissement identiques lancées ENSEMBLE étaient toutes les deux
+     acceptées. Mesuré en base — deux versements de 300 DH au lieu d'un, et
+     surtout DEUX NUMÉROS DE FACTURE LÉGAUX consommés pour le même argent. Un
+     double clic, un réseau lent où l'on reclique, un second onglet : le
+     chiffre d'affaires gonfle d'un paiement qui n'a jamais eu lieu.
+     La parade est une CLÉ DE GESTE tirée par l'écran quand le formulaire
+     s'arme, renouvelée seulement après un enregistrement réussi. Deux envois
+     du même clic la partagent ; l'index la rejette, et l'application renvoie
+     le versement DÉJÀ enregistré — l'utilisateur voit un succès, parce que
+     c'en est un.
+     PAS une fenêtre de temps : deux versements du même montant à dix secondes
+     d'intervalle sont légitimes, et une heuristique sur la durée aurait fini
+     par refuser un vrai paiement. La clé dit si c'est LE MÊME GESTE, pas si
+     c'est le même montant.
+     NULL permis : les versements antérieurs n'en ont pas, l'index partiel les
+     ignore. Sans la migration, l'encaissement fonctionne sans la protection
+     plutôt que d'échouer. Additive.
