@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ClipboardList, PhoneCall } from 'lucide-react'
 import { formatDateShort, getNowInMaroc } from '@/lib/utils'
 import {
-  jourDe, joursEntre, nomPatientDevis, JOURS_SANS_REPONSE,
+  jourEntree, joursEntre, nomPatientDevis, JOURS_SANS_REPONSE,
   type RapportDevis,
 } from '@/lib/rapport-devis'
 import { jourMaroc } from '@/lib/stock'
@@ -58,10 +58,11 @@ export default function RapportPlansTraitement({
         {/* ── Ce qui est proposé, et ce qu'il devient ──────────────────── */}
         <div>
           <p className="text-xs text-gray-500 mb-2">
-            Devis <strong>proposés</strong> pendant la période, et ce qu’ils sont devenus depuis.
+            Devis <strong>établis</strong> pendant la période, et ce qu’ils sont devenus depuis.
+            Un plan accepté au fauteuil le jour même y figure comme les autres.
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Chiffre libelle="Proposés" valeur={String(r.proposes)} detail={dh(r.proposesMontant)} />
+            <Chiffre libelle="Établis" valeur={String(r.proposes)} detail={dh(r.proposesMontant)} />
             <Chiffre libelle="Acceptés" valeur={String(r.acceptes)} detail={dh(r.acceptesMontant)} ton="vert" />
             <Chiffre libelle="Refusés" valeur={String(r.refuses)} detail={dh(r.refusesMontant)} ton="rouge" />
             <Chiffre libelle="Sans réponse" valeur={String(r.enAttente)} detail={dh(r.enAttenteMontant)} ton="orange" />
@@ -107,13 +108,13 @@ export default function RapportPlansTraitement({
             </p>
             <ul className="space-y-0.5">
               {r.aRelancer.slice(0, 8).map((d) => {
-                const j = jourDe(d.proposed_at)
+                const j = jourEntree(d)
                 return (
                   <li key={d.id} className="flex items-center gap-2 text-sm">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                     <span className="font-medium text-gray-800 truncate">{nomPatientDevis(d)}</span>
                     <span className="text-gray-400 text-[11px] truncate">
-                      {d.label || 'Plan de traitement'} · proposé le {j ? formatDateShort(j) : '—'}
+                      {d.label || 'Plan de traitement'} · établi le {j ? formatDateShort(j) : '—'}
                     </span>
                     <span className="ml-auto shrink-0 text-[12px] text-amber-700 tabular-nums">
                       {j ? `${joursEntre(j, aujourdhui)} j` : ''}

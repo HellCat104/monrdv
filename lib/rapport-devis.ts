@@ -10,10 +10,18 @@
 //
 // ── TROIS NOMBRES, ET LEURS PIÈGES ──────────────────────────────────────────
 //
-// • Le TAUX D'ACCEPTATION ne se calcule que sur les devis PROPOSÉS dans la
-//   période, en suivant ce qu'ils sont devenus depuis. Compter les acceptés
-//   d'un mois contre les refusés du même mois mélangerait des devis proposés
-//   des mois plus tôt et donnerait un taux qui n'a aucun sens.
+// • Le TAUX D'ACCEPTATION se calcule sur les devis ENTRÉS dans la période, en
+//   suivant ce qu'ils sont devenus depuis. Compter les acceptés d'un mois
+//   contre les refusés du même mois mélangerait des devis établis des mois
+//   plus tôt et donnerait un taux qui n'a aucun sens.
+//
+//   « Entré » et non « proposé » : un plan discuté au fauteuil et accepté
+//   dans la foulée passe directement à « accepté », sans jamais porter de
+//   date de proposition. C'est le cas le plus fréquent en cabinet dentaire,
+//   et il m'avait d'abord échappé — un cabinet aux cinquante plans acceptés
+//   lisait « Proposés 0, Acceptés 0 », ce qui ressemble à une panne. On prend
+//   donc la date de proposition quand elle existe, et celle de création
+//   sinon : tout devis est compté une fois, au jour où il est né.
 //
 // • L'ENCOURS n'est pas du chiffre d'affaires : c'est du travail vendu et pas
 //   encore fait. Il n'est encaissé ni maintenant ni forcément un jour. Le
@@ -67,6 +75,13 @@ function dansLaPeriode(jour: string | null, debut: string, fin: string): boolean
   return !!jour && jour >= debut && jour <= fin
 }
 
+/** Le jour où le devis est ENTRÉ dans le circuit. Voir l'en-tête : la date de
+ *  proposition manque sur tout plan accepté sur-le-champ, et la date de
+ *  création, elle, existe toujours. */
+export function jourEntree(d: DevisRapport): string | null {
+  return jourDe(d.proposed_at) ?? jourDe(d.created_at)
+}
+
 /** Au-delà de ce délai, un devis proposé et resté sans réponse mérite un
  *  appel. Trois semaines : le temps qu'un patient prend pour y réfléchir, et
  *  au-delà duquel il a souvent consulté ailleurs. */
@@ -108,8 +123,8 @@ export function rapportDevis(
 ): RapportDevis {
   const vivants = devis.filter((d) => d.status !== 'annule' && d.status !== 'brouillon')
 
-  // Les devis PROPOSÉS dans la période — suivis jusqu'à aujourd'hui.
-  const proposes = vivants.filter((d) => dansLaPeriode(jourDe(d.proposed_at), debut, fin))
+  // Les devis ENTRÉS dans la période — suivis jusqu'à aujourd'hui.
+  const proposes = vivants.filter((d) => dansLaPeriode(jourEntree(d), debut, fin))
   const acceptes = proposes.filter((d) => d.status === 'accepte' || d.status === 'termine')
   const refuses = proposes.filter((d) => d.status === 'refuse')
   const enAttente = proposes.filter((d) => d.status === 'propose')
@@ -145,13 +160,15 @@ export function rapportDevis(
   // À RELANCER : proposés, sans réponse, et assez vieux pour qu'un appel se
   // justifie. Indépendant de la période affichée — un devis oublié en mars
   // reste à rappeler quand on regarde les chiffres de juin.
+  // Même repli : un devis marqué « proposé » sans date de proposition ne doit
+  // pas échapper à la relance pour un horodatage manquant.
   const aRelancer = vivants
     .filter((d) => d.status === 'propose')
     .filter((d) => {
-      const j = jourDe(d.proposed_at)
+      const j = jourEntree(d)
       return !!j && joursEntre(j, aujourdhui) >= JOURS_SANS_REPONSE
     })
-    .sort((a, b) => (jourDe(a.proposed_at) ?? '').localeCompare(jourDe(b.proposed_at) ?? ''))
+    .sort((a, b) => (jourEntree(a) ?? '').localeCompare(jourEntree(b) ?? ''))
 
   return {
     proposes: proposes.length,
