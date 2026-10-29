@@ -24,6 +24,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if ('error' in auth) return auth.error
   const { supabase, doctor } = auth.ctx
 
+  // L'article d'abord : sans ce contrôle, un identifiant inconnu — ou celui
+  // d'un autre cabinet — recevait un journal vide avec un 200, là où toutes
+  // les autres adresses répondent « introuvable ». Aucune donnée ne fuyait
+  // (la requête est cloisonnée), mais deux réponses différentes pour la même
+  // situation finissent par tromper celui qui relit le code.
+  const { data: article } = await supabase
+    .from('stock_articles').select('id')
+    .eq('id', params.id).eq('doctor_id', doctor.id).maybeSingle()
+  if (!article) return NextResponse.json({ error: 'Article introuvable' }, { status: 404 })
+
   const { data, error } = await supabase
     .from('stock_mouvements')
     .select('id, article_id, sens, quantite, quantite_apres, motif, created_at')
