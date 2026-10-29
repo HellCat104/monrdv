@@ -21,6 +21,7 @@ import {
   BellRing,
   ClipboardList,
   Package,
+  Receipt as ReceiptIcon,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -41,6 +42,9 @@ const navItems = [
   // l'instant parce que c'est là qu'il a été demandé et éprouvé — l'ouvrir à
   // une autre branche est un mot à ajouter ici, rien de plus.
   { href: '/stock',         label: 'Stock',             icon: Package, branches: ['dentaire'] },
+  // Les feuilles de soins ne sont pas une affaire de spécialité : la CNSS et
+  // le CNOPS concernent tous les cabinets. Entrée commune, donc.
+  { href: '/remboursements', label: 'Remboursements',   icon: ReceiptIcon },
   { href: '/equipe',        label: 'Mon équipe',        icon: Users2 },
   { href: '/settings',      label: 'Paramètres',        icon: Settings },
   { href: '/abonnement',    label: 'Abonnement',        icon: CreditCard },
@@ -90,7 +94,9 @@ export function Sidebar() {
   // (Patients reste visible : fiche réduite nom/prénom/tél/notes en mode agenda.)
   // En forfait Agenda, les écrans de branche n'existent pas : leurs pages
   // redirigent déjà côté serveur, le menu ne doit pas y mener.
-  const planHidden = plan === 'agenda' ? ['/factures', '/gastro/suivis', '/modeles', '/stock'] : []
+  const planHidden = plan === 'agenda'
+    ? ['/factures', '/gastro/suivis', '/modeles', '/stock', '/remboursements']
+    : []
   const visibleItems = navItems.filter((i) => {
     if (planHidden.includes(i.href)) return false
     // Une entrée sans branche est commune ; sinon elle n'apparaît que chez les

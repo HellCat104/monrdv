@@ -540,3 +540,26 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      alors en `private, no-store` — sinon un visiteur verrait libre un
      créneau que la création publique refuserait ensuite.
      RLS médecin ; rien pour `anon`. Additive.
+
+ 90. `migration_v90_suivi_remboursement.sql`
+     Migration v90 — LE SUIVI DU REMBOURSEMENT. Ajoute à `care_sheets` :
+     `remise_le` (date), `rembourse_le` (date) et `montant_rembourse`
+     (numeric, contrainte de positivité posée à part pour rester rejouable).
+     La v65 avait donné trois ÉTATS à une feuille de soins — établie, remise,
+     remboursée — et aucune date ni aucun montant. Or la seule question qu'on
+     se pose devant une feuille partie est « depuis quand attend-elle ? » :
+     déposée il y a huit semaines, c'est un dossier à relancer ; déposée
+     avant-hier, cela ne regarde personne. Sans date, les deux se
+     ressemblaient. Et « remboursée » sans montant n'apprend rien non plus,
+     les organismes marocains remboursant une PART : le patient qui demande
+     ce qui lui reste à charge n'obtenait aucune réponse.
+     AUCUN RATTRAPAGE : les feuilles déjà marquées « remise » gardent une date
+     vide, parce qu'inventer un jour écrirait une information fausse dans un
+     dossier. L'écran se rabat sur la date des SOINS — borne certaine, une
+     feuille ne peut pas être partie avant les soins — et annonce « au plus
+     tôt ».
+     Ces colonnes NE SONT PAS une créance du cabinet et n'entrent dans aucun
+     total comptable : le patient a déjà réglé, et c'est LUI que l'organisme
+     rembourse. Index partiel sur les feuilles non remboursées (celles qu'on
+     relance) et index de suivi (doctor_id, status, care_date desc).
+     Additive. Sans elle, l'écran de suivi fonctionne en se passant des dates.

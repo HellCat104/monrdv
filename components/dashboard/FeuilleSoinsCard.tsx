@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
-import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, type StatutFeuille } from '@/lib/feuilles-soins'
+import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, resteACharge, type StatutFeuille, type FeuilleSuivi } from '@/lib/feuilles-soins'
 import { FileSpreadsheet, Plus, Printer, Trash2 } from 'lucide-react'
 
 const inputCls = 'text-xs border border-gray-200 rounded-lg px-2 py-1.5'
@@ -260,7 +260,18 @@ export default function FeuilleSoinsCard({
                 {(f.items ?? []).length} acte{(f.items ?? []).length > 1 ? 's' : ''}
                 {f.insurer ? ` · ${f.insurer}` : ''}
               </span>
-              <span className="text-sm font-semibold text-gray-800 shrink-0">{Number(f.total).toLocaleString('fr-FR')} DH</span>
+              <span className="text-sm font-semibold text-gray-800 shrink-0">
+                {Number(f.total).toLocaleString('fr-FR')} DH
+                {/* Le reste à charge, là où le patient pose la question : au
+                    comptoir, sa fiche ouverte. Affiché seulement quand le
+                    montant versé est connu — présenter le total comme reste à
+                    charge laisserait croire que l'organisme n'a rien versé. */}
+                {resteACharge(f as unknown as FeuilleSuivi) != null && (
+                  <span className="block text-[10px] font-normal text-gray-400 text-right">
+                    reste {resteACharge(f as unknown as FeuilleSuivi)!.toLocaleString('fr-FR')} DH
+                  </span>
+                )}
+              </span>
               <select value={f.status} onChange={(e) => changerStatut(f, e.target.value as StatutFeuille)}
                 className="text-[11px] border border-gray-200 rounded-lg px-1.5 py-1 bg-white shrink-0">
                 {STATUTS_FEUILLE.map((s) => <option key={s} value={s}>{STATUT_FEUILLE_LABELS[s]}</option>)}
