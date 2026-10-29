@@ -243,7 +243,9 @@ function Ligne({
                 <Clock className="h-3 w-3 inline -mt-0.5 mr-0.5" />
                 {/* « au plus tôt » quand la date de remise manque : la date des
                     soins est une borne sûre, pas le jour réel du dépôt. */}
-                en attente depuis {depart.estime ? 'au plus tôt ' : ''}{jours} jour{jours > 1 ? 's' : ''}
+                {jours === 0 && !depart.estime
+                  ? 'remise aujourd’hui'
+                  : `en attente depuis ${depart.estime ? 'au plus tôt ' : ''}${jours} jour${jours > 1 ? 's' : ''}`}
               </span>
             )}
             {f.status === 'remboursee' && f.rembourse_le && (
@@ -323,10 +325,20 @@ function Ligne({
                 <button type="button" disabled={occupe}
                   onClick={async () => {
                     setOccupe(true)
+                    // Un champ de date LAISSÉ VIDE n'est pas envoyé : le
+                    // serveur note alors le jour du geste. L'envoyer à vide
+                    // lui disait « efface cette date », et « Marquer
+                    // remboursée » perdait en silence le jour du
+                    // remboursement — six mois plus tard, on ne savait plus
+                    // quand l'organisme avait payé.
+                    //
+                    // Effacer une date reste possible : c'est le bouton
+                    // « Enregistrer sans changer le statut », qui corrige la
+                    // fiche au lieu de constater un fait du jour.
                     const ok = await onModifier(f, {
                       status: 'remboursee',
-                      remise_le: remiseLe || null,
-                      rembourse_le: leJour || null,
+                      ...(remiseLe ? { remise_le: remiseLe } : {}),
+                      ...(leJour ? { rembourse_le: leJour } : {}),
                       montant_rembourse: montant,
                     })
                     setOccupe(false)
