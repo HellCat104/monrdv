@@ -29,6 +29,22 @@ export async function PATCH(
     return NextResponse.json({ error: 'Paramètre manquant' }, { status: 400 })
   }
 
+  // Un statut hors liste était accepté par la route, refusé par la contrainte
+  // de la base, et l'échec remontait en « RDV introuvable » — un message qui
+  // envoie chercher un rendez-vous manquant alors que c'est la VALEUR qui est
+  // mauvaise. On le dit ici, où on le sait.
+  //
+  // Les trois seuls statuts d'un rendez-vous. Un rendez-vous « terminé » n'en
+  // est pas un quatrième : la fin de séance se note par la PRÉSENCE
+  // (`attendance`), parce qu'un rendez-vous honoré et un rendez-vous manqué
+  // sont tous deux passés, et qu'un statut unique les confondrait.
+  const STATUTS_RDV = ['pending', 'confirmed', 'cancelled']
+  if (status !== undefined && !STATUTS_RDV.includes(String(status))) {
+    return NextResponse.json({
+      error: `Statut inconnu : « ${String(status)} ». Attendu : ${STATUTS_RDV.join(', ')}. Une séance terminée se note par la présence du patient.`,
+    }, { status: 400 })
+  }
+
   // Déplacement d'un RDV : formats validés ici, le chevauchement est bloqué par
   // la contrainte d'exclusion en base (remontée en 409 plus bas).
   if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
