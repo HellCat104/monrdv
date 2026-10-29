@@ -763,6 +763,18 @@ export default function StatistiquesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Les plans de traitement : proposés, acceptés, et ce qui reste à
+          faire. Ici et non en Comptabilité : l'encours est du travail vendu,
+          pas une recette, et le ranger parmi les chiffres d'argent lui
+          donnerait précisément le sens que le bloc s'emploie à écarter.
+          Autonome — il charge lui-même et ne rend rien pour un cabinet sans
+          devis. */}
+      <RapportPlansTraitement
+        debut={periodRange(period, getNowInMaroc()).start}
+        fin={periodRange(period, getNowInMaroc()).end}
+        libellePeriode={PERIOD_LABELS[period]}
+      />
         </div>
       ) : (
         <div className="space-y-6">
@@ -1015,15 +1027,6 @@ export default function StatistiquesPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Les plans de traitement : proposés, acceptés, et ce qui reste à
-          faire. Autonome et silencieux pour un cabinet sans devis — il charge
-          lui-même et ne rend rien s'il n'a rien à dire. */}
-      <RapportPlansTraitement
-        debut={periodRange(period, getNowInMaroc()).start}
-        fin={periodRange(period, getNowInMaroc()).end}
-        libellePeriode={PERIOD_LABELS[period]}
-      />
 
       {/* CA par mois */}
       {d.revenueByMonth.length > 0 && (
