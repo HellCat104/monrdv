@@ -31,13 +31,21 @@ export async function GET() {
 
   // Fiche complète : l'identité étendue et le contenu médical saisi par le
   // cabinet font partie des données personnelles du patient.
+  //
+  // CETTE LISTE EST À TENIR À JOUR. Énumérer les colonnes protège des fuites
+  // involontaires, mais elle se périme en silence : cinq colonnes ajoutées
+  // depuis — l'anamnèse structurée et sa date, les étiquettes de pathologie,
+  // les antécédents familiaux, les données d'organisme — n'étaient pas
+  // remises au patient qui demandait son dossier. Toute colonne ajoutée à
+  // `patients` doit arriver ici le même jour.
   const { data: patients } = await adminDb
     .from('patients')
     .select(`id, first_name, last_name, phone, email, is_child, created_at,
              birth_date, age, sex, blood_group, cin, mutuelle, address, notes,
              allergies, chronic_conditions, current_treatments, surgeries,
              vaccines, vaccinations, milestones, gestational_age_weeks,
-             parent1_name, parent2_name, parent1_phone, parent2_phone`)
+             parent1_name, parent2_name, parent1_phone, parent2_phone,
+             anamnese, anamnese_maj, conditions, family_history, insurer_data`)
     .eq('user_id', user.id)
 
   const patientIds = (patients ?? []).map((p: any) => p.id)
@@ -204,14 +212,48 @@ export async function DELETE() {
     // Anonymise les données patient (ne supprime pas les RDV passés pour le médecin).
     // Efface aussi tout le dossier médical enrichi (loi 09-08 : suppression réelle
     // des données personnelles à la demande de la personne concernée).
-    await adminDb
+    //
+    // ── CE QUI SURVIVAIT À UNE DEMANDE D'EFFACEMENT ────────────────────────
+    //
+    // La liste s'arrêtait à trois champs médicaux. Tout le reste restait en
+    // base sous le nom « Supprimé » : le NUMÉRO DE CIN, la date de naissance,
+    // l'adresse, le sexe, le groupe sanguin, les chirurgies, les antécédents
+    // familiaux, l'anamnèse structurée, les coordonnées des parents. Avec un
+    // numéro de carte d'identité nationale et une date de naissance, la
+    // personne était ré-identifiable immédiatement : l'anonymisation n'en
+    // était pas une.
+    //
+    // Les colonnes NOT NULL reprennent leur valeur par défaut plutôt que NULL,
+    // qui serait refusé par la base — et un refus silencieux ici laisserait
+    // tout en place.
+    const { error: errAnonymisation } = await adminDb
       .from('patients')
       .update({
         first_name: 'Supprimé', last_name: '', phone: '', email: null, user_id: null,
-        age: null, notes: null,
+        // Identité
+        age: null, birth_date: null, sex: null, cin: null, address: null,
+        blood_group: null, mutuelle: null, gestational_age_weeks: null,
+        family_id: null,
+        parent1_name: null, parent2_name: null, parent1_phone: null, parent2_phone: null,
+        email_bounced_at: null, email_bounce_reason: null,
+        // Dossier médical porté par la fiche elle-même
+        notes: null,
         allergies: null, chronic_conditions: null, current_treatments: null,
+        surgeries: null, family_history: null, vaccinations: null,
+        anamnese: null, anamnese_maj: null,
+        milestones: {}, vaccines: {}, conditions: [], insurer_data: {},
       })
       .in('id', patientIds)
+    // L'erreur n'était pas regardée : l'anonymisation pouvait échouer pendant
+    // que la suite détruisait le dossier, et la réponse annonçait un succès.
+    // On ne s'arrête pas pour autant — les rendez-vous futurs sont déjà
+    // annulés — mais la trace existe, et le patient n'est pas trompé.
+    if (errAnonymisation) {
+      console.error('[effacement] anonymisation de la fiche :', errAnonymisation.message)
+      return NextResponse.json({
+        error: 'La suppression n\'a pas pu aboutir entièrement. Contactez le cabinet.',
+      }, { status: 500 })
+    }
 
     // Efface tout le dossier médical rattaché (loi 09-08 : suppression réelle)
     await adminDb.from('consultation_notes').delete().in('patient_id', patientIds)
