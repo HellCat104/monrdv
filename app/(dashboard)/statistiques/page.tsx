@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canAccess } from '@/lib/plan'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import RapportPlansTraitement from '@/components/dashboard/RapportPlansTraitement'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -1014,6 +1015,15 @@ export default function StatistiquesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Les plans de traitement : proposés, acceptés, et ce qui reste à
+          faire. Autonome et silencieux pour un cabinet sans devis — il charge
+          lui-même et ne rend rien s'il n'a rien à dire. */}
+      <RapportPlansTraitement
+        debut={periodRange(period, getNowInMaroc()).start}
+        fin={periodRange(period, getNowInMaroc()).end}
+        libellePeriode={PERIOD_LABELS[period]}
+      />
 
       {/* CA par mois */}
       {d.revenueByMonth.length > 0 && (
