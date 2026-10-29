@@ -242,6 +242,11 @@ export async function DELETE() {
         surgeries: null, family_history: null, vaccinations: null,
         anamnese: null, anamnese_maj: null,
         milestones: {}, vaccines: {}, conditions: [], insurer_data: {},
+        // Marqueur d'effacement (v91). Il est posé AVANT la purge : c'est lui
+        // qui autorise la suppression de l'historique dentaire, journal
+        // append-only qui refuse toute autre main. Sans la migration, la
+        // colonne n'existe pas et l'écriture échouerait pour tout le reste :
+        // elle part donc dans une seconde écriture, juste après.
       })
       .in('id', patientIds)
     // L'erreur n'était pas regardée : l'anonymisation pouvait échouer pendant
@@ -252,6 +257,61 @@ export async function DELETE() {
       console.error('[effacement] anonymisation de la fiche :', errAnonymisation.message)
       return NextResponse.json({
         error: 'La suppression n\'a pas pu aboutir entièrement. Contactez le cabinet.',
+      }, { status: 500 })
+    }
+
+    // Le marqueur, à part : sans la v91 la colonne n'existe pas, et la
+    // joindre à l'écriture ci-dessus aurait fait échouer TOUTE
+    // l'anonymisation pour un champ qui n'en est pas une.
+    const { error: errMarqueur } = await adminDb
+      .from('patients').update({ efface_le: new Date().toISOString() }).in('id', patientIds)
+    const marqueurPose = !errMarqueur
+    if (errMarqueur) {
+      console.warn('[effacement] marqueur efface_le absent (migration v91 non passée) :', errMarqueur.message)
+    }
+
+    // ── LA PURGE DU DOSSIER MÉDICAL ───────────────────────────────────────
+    //
+    // Le principe est celui que ce fichier applique déjà : LE MÉDICAL PART,
+    // LE COMPTABLE RESTE. Les devis, leurs versements, les factures et les
+    // rendez-vous passés appartiennent à la comptabilité du cabinet et
+    // survivent, rattachés à une fiche devenue anonyme. Tout ce qui décrit un
+    // corps s'en va.
+    //
+    // Une table ABSENTE n'est pas une erreur : toutes les migrations ne sont
+    // pas passées sur toutes les bases, et une branche non installée ne doit
+    // pas faire échouer l'effacement d'un patient. Un échec RÉEL, lui, est
+    // retenu et annoncé : mieux vaut dire « contactez le cabinet » que
+    // promettre une suppression qui n'a pas eu lieu.
+    const tablesMedicales = [
+      'consultations',         // la consultation structurée (toutes branches)
+      'dental_charts',         // l'odontogramme
+      'tooth_history',         // son journal — n'ouvre que sur `efface_le` (v91)
+      'perio_charts',          // les relevés parodontaux
+      'ortho_treatments',      // l'orthodontie (ses visites partent en cascade)
+      'patient_pathologies',   // les pathologies suivies
+      'vaccinations',          // le calendrier vaccinal
+      'endoscopies',           // les examens endoscopiques
+      'resultats',             // les résultats d'examens
+      'certificates',          // les certificats — le patient en a sa copie
+      'care_sheets',           // les feuilles de soins (leurs actes en cascade)
+      'lab_works',             // les travaux de prothèse ; la DÉPENSE reste
+      'whatsapp_conversations',// les échanges (leurs messages en cascade)
+    ]
+    const echecs: string[] = []
+    for (const table of tablesMedicales) {
+      const { error } = await adminDb.from(table).delete().in('patient_id', patientIds)
+      if (!error) continue
+      // 42P01 / PGRST205 : la table n'existe pas sur cette base.
+      if (error.code === '42P01' || error.code === 'PGRST205') continue
+      console.error(`[effacement] purge de ${table} impossible :`, error.message)
+      echecs.push(table)
+    }
+    if (echecs.length > 0) {
+      return NextResponse.json({
+        error: marqueurPose
+          ? 'Une partie du dossier médical n\'a pas pu être supprimée. Contactez le cabinet.'
+          : 'Une partie du dossier médical n\'a pas pu être supprimée (migration v91 en attente). Contactez le cabinet.',
       }, { status: 500 })
     }
 

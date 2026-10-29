@@ -563,3 +563,27 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      rembourse. Index partiel sur les feuilles non remboursées (celles qu'on
      relance) et index de suivi (doctor_id, status, care_date desc).
      Additive. Sans elle, l'écran de suivi fonctionne en se passant des dates.
+
+ 91. `migration_v91_effacement_complet.sql`
+     Migration v91 — L'EFFACEMENT COMPLET. Ajoute `patients.efface_le`
+     (timestamptz, NULL = fiche vivante) et réécrit le déclencheur
+     `tooth_history_append_only()` de la v55.
+     Deux bonnes intentions se contredisaient. `tooth_history` est un journal
+     APPEND-ONLY : une ligne écrite ne s'efface pas, et son déclencheur
+     n'autorisait la suppression que si la fiche patient n'existait DÉJÀ PLUS
+     — pendant une cascade. Or le droit à l'effacement (loi 09-08) ANONYMISE
+     la fiche sans la détruire, parce que les rendez-vous passés et leur
+     comptabilité appartiennent au cabinet. La fiche restait, donc le journal
+     aussi : l'historique dentaire d'une personne effacée était INEFFAÇABLE,
+     par un contrôle écrit pour bien faire.
+     Le journal reste inaltérable pour toute fiche VIVANTE — aucune route,
+     aucun éditeur SQL, aucun service_role n'en retire une ligne. On ouvre une
+     seule porte, nommée : une fiche portant `efface_le`. Le marqueur est une
+     COLONNE et non une devinette sur le nom « Supprimé » : comparer des
+     chaînes pour décider d'un droit est un contrôle qui cède au premier
+     patient qui s'appelle autrement.
+     La fonction est reprise MOT POUR MOT sauf la branche DELETE : une
+     migration qui réécrit un contrôle de sécurité ne doit rien emporter au
+     passage.
+     Sans elle, l'effacement purge tout le reste et annonce honnêtement que
+     l'historique dentaire n'a pas pu l'être. Additive.
