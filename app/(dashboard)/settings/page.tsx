@@ -23,6 +23,7 @@ import { LogoCabinet } from '@/components/dashboard/LogoCabinet'
 import { PhotosCabinet } from '@/components/dashboard/PhotosCabinet'
 import ReglageBonLabo from '@/components/dashboard/ReglageBonLabo'
 import ReglagePostes from '@/components/dashboard/ReglagePostes'
+import ReglageLaboratoires from '@/components/dashboard/ReglageLaboratoires'
 import { espaceOccupe, formatOctets, QUOTA_DEFAUT_MO } from '@/lib/stockage'
 
 // Intertitre de section.
@@ -1065,6 +1066,11 @@ export default function SettingsPage() {
 
         {/* Bon de laboratoire — dentistes. Autonome, comme le logo. */}
         <ReglageBonLabo />
+
+        {/* L'annuaire des prothésistes (v93). Il ne se remplit PAS ici — les
+            laboratoires s'y inscrivent seuls au premier travail ; cet écran
+            sert à leur ajouter le téléphone, le contact et le délai. */}
+        <ReglageLaboratoires />
 
         <Groupe id="rdv" numero={2} titre="Vos rendez-vous" sous="Quand et comment vous recevez" />
 

@@ -16,7 +16,8 @@ import {
   LAB_STATUTS, LAB_STATUT_LABELS, LAB_STATUT_COULEURS, LAB_TYPES,
   enRetard, titreTravail, type LabStatut, type LabWork,
 } from '@/lib/labo'
-import { FlaskConical, Plus, Printer, Trash2, X } from 'lucide-react'
+import { FlaskConical, Plus, Printer, Trash2, X, Phone } from 'lucide-react'
+import { labosActifs, laboDuTravail, type Laboratoire } from '@/lib/laboratoires'
 
 const inputCls = 'text-xs border border-gray-200 rounded-lg px-2 py-1.5'
 
@@ -35,7 +36,12 @@ export default function LabWorksCard({
   const [travaux, setTravaux] = useState<LabWork[]>([])
   const [activee, setActivee] = useState(true)
   const [actes, setActes] = useState<ActeDevis[]>([])
-  const [labosConnus, setLabosConnus] = useState<string[]>([])
+  // L'ANNUAIRE DU CABINET (v93), et non plus un carnet déduit des travaux du
+  // patient affiché. L'ancien se disait « ceux que ce cabinet a déjà
+  // utilisés » mais ne listait que les laboratoires déjà employés POUR CE
+  // PATIENT : sur une fiche neuve il était vide, on retapait le nom de zéro,
+  // et « Prothèse Atlas » / « Prothese Atlas » devenaient deux prothésistes.
+  const [annuaire, setAnnuaire] = useState<Laboratoire[]>([])
   const [ouvert, setOuvert] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -57,10 +63,15 @@ export default function LabWorksCard({
     const liste = (data.travaux ?? []) as LabWork[]
     setTravaux(liste)
     setActivee(data.activee !== false)
-    // Carnet de laboratoires : ceux que ce cabinet a déjà utilisés. Rien à
-    // paramétrer, comme pour les actes et les codes.
-    setLabosConnus(Array.from(new Set(liste.map((t) => t.lab_name).filter((n): n is string => !!n))))
   }, [patientId])
+
+  // L'annuaire, chargé une fois : il ne dépend pas du patient affiché.
+  useEffect(() => {
+    fetch('/api/laboratoires')
+      .then((r) => (r.ok ? r.json() : { laboratoires: [] }))
+      .then((d) => setAnnuaire(d.laboratoires ?? []))
+      .catch(() => { /* v93 non passée : la saisie libre reste possible */ })
+  }, [])
 
   useEffect(() => { charger() }, [charger])
 
@@ -93,18 +104,39 @@ export default function LabWorksCard({
     if (!type.trim() && dents.length === 0) { alert('Indiquez au moins le type de travail.'); return }
     setBusy(true)
     try {
+      // L'annuaire d'abord : on veut que le travail NAISSE relié à son
+      // laboratoire, pas qu'on le raccroche après coup. Un échec ici n'arrête
+      // rien — le travail s'enregistre quand même, rattaché par son nom.
+      let laboId: string | null = null
+      const nomLabo = labo.trim()
+      if (nomLabo) {
+        const connu = labosActifs(annuaire).find((l) => l.nom.trim().toLowerCase() === nomLabo.toLowerCase())
+        if (connu) laboId = connu.id
+        else {
+          try {
+            const r = await fetch('/api/laboratoires', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nom: nomLabo }),
+            })
+            const d = await r.json().catch(() => ({}))
+            if (d.laboratoire) { laboId = d.laboratoire.id; setAnnuaire((xs) => [...xs, d.laboratoire]) }
+          } catch { /* l'annuaire attendra */ }
+        }
+      }
+
       const res = await fetch('/api/lab-works', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           patient_id: patientId,
           quote_item_id: acteId || null,
           appointment_id: rdvPose || null,
-          work_type: type, teeth: dents, lab_name: labo, shade: teinte,
+          work_type: type, teeth: dents, lab_name: labo, laboratoire_id: laboId, shade: teinte,
           material: matiere, instructions, due_at: retour || null,
         }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { alert(data.error || "Le travail n'a pas pu être enregistré."); return }
+
       setType(''); setDents([]); setTeinte(''); setMatiere(''); setInstructions('')
       setRetour(''); setActeId(''); setRdvPose(''); setOuvert(false)
       await charger()
@@ -170,7 +202,7 @@ export default function LabWorksCard({
             <datalist id="labo-types">{LAB_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
             <input value={labo} onChange={(e) => setLabo(e.target.value)} placeholder="Laboratoire"
               list="labo-noms" className={`${inputCls} flex-1 min-w-[130px]`} />
-            <datalist id="labo-noms">{labosConnus.map((n) => <option key={n} value={n} />)}</datalist>
+            <datalist id="labo-noms">{labosActifs(annuaire).map((l) => <option key={l.id} value={l.nom} />)}</datalist>
           </div>
 
           {/* Dents : on ajoute, on retire. Un bridge en porte plusieurs. */}
@@ -232,6 +264,19 @@ export default function LabWorksCard({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-gray-800">{titreTravail(t)}</span>
                   {t.lab_name && <span className="text-[11px] text-gray-400">{t.lab_name}</span>}
+                  {/* Le numéro du prothésiste, à un clic du travail en retard :
+                      un travail de laboratoire se relance au téléphone, et
+                      c'est pour cela que l'annuaire existe. */}
+                  {(() => {
+                    const l = laboDuTravail(annuaire, (t as { laboratoire_id?: string | null }).laboratoire_id, t.lab_name)
+                    return l?.telephone ? (
+                      <a href={`tel:${l.telephone.replace(/\s/g, '')}`}
+                        className="text-[11px] text-primary-600 hover:underline inline-flex items-center gap-1"
+                        title={l.contact ? `Demander ${l.contact}` : 'Appeler le laboratoire'}>
+                        <Phone className="h-3 w-3" /> {l.telephone}
+                      </a>
+                    ) : null
+                  })()}
                   <select
                     value={t.status}
                     onChange={(e) => majTravail(t, { status: e.target.value as LabStatut })}

@@ -66,17 +66,43 @@ export async function POST(req: NextRequest) {
     appointmentId = apt.id
   }
 
-  const { data, error } = await supabase
+  // Lien vers l'annuaire (v93), validé contre CELUI DU CABINET : un
+  // identifiant deviné rattacherait le bon de travail au prothésiste d'un
+  // confrère. `lab_name` reste recopié à côté — un laboratoire renommé ne
+  // doit pas réécrire les bons déjà partis.
+  let laboratoireId: string | null = null
+  if (body.laboratoire_id) {
+    const { data: labo } = await supabase
+      .from('cabinet_laboratoires').select('id')
+      .eq('id', String(body.laboratoire_id)).eq('doctor_id', doctor.id).maybeSingle()
+    if (labo) laboratoireId = labo.id
+  }
+
+  // `Record<string, unknown>` : `laboratoire_id` n'existe pas encore dans les
+  // types engendrés depuis le schéma, et la colonne est précisément ce que la
+  // v93 ajoute. Le contrôle utile — l'appartenance au cabinet — est fait
+  // au-dessus, pas par le typage.
+  const champs: Record<string, unknown> = {
+    doctor_id: doctor.id,
+    patient_id: patient.id,
+    quote_item_id: quoteItemId,
+    appointment_id: appointmentId,
+    ...nettoyerTravail(body),
+  }
+
+  let { data, error } = await supabase
     .from('lab_works')
-    .insert({
-      doctor_id: doctor.id,
-      patient_id: patient.id,
-      quote_item_id: quoteItemId,
-      appointment_id: appointmentId,
-      ...nettoyerTravail(body),
-    })
+    .insert(laboratoireId ? { ...champs, laboratoire_id: laboratoireId } : champs)
     .select('*')
     .single()
+
+  // Colonne absente (v93 non passée) : le travail s'enregistre sans le lien.
+  // Pas de migration, pas de fonctionnalité — mais jamais un bon de
+  // laboratoire perdu pour un rattachement.
+  if (error && laboratoireId && (error.code === '42703' || error.code === 'PGRST204')) {
+    console.warn('[Laboratoire] colonne laboratoire_id absente (v93 non passée)')
+    ;({ data, error } = await supabase.from('lab_works').insert(champs).select('*').single())
+  }
 
   if (error || !data) {
     if (tableAbsente(error?.code)) return NextResponse.json({ error: LABO_NON_ACTIVE }, { status: 503 })

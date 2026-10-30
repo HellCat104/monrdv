@@ -610,3 +610,32 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      NULL permis : les versements antérieurs n'en ont pas, l'index partiel les
      ignore. Sans la migration, l'encaissement fonctionne sans la protection
      plutôt que d'échouer. Additive.
+
+ 93. `migration_v93_annuaire_laboratoires.sql`
+     Migration v93 — L'ANNUAIRE DES LABORATOIRES. Table
+     `cabinet_laboratoires` (nom, téléphone, contact, e-mail, adresse,
+     `delai_jours`, notes, actif) + `lab_works.laboratoire_id`.
+     Le nom du prothésiste se tapait à la main sur chaque travail. Un carnet
+     de suggestions existait pourtant, et son commentaire annonçait « ceux que
+     ce cabinet a déjà utilisés » — mais il était construit à partir des
+     travaux DU SEUL PATIENT affiché : sur une fiche neuve il était toujours
+     vide, on retapait le nom de zéro, et « Prothèse Atlas » / « Prothese
+     Atlas » devenaient deux prothésistes qu'aucun écran ne rapprochait.
+     L'annuaire ne sert pas qu'à une liste déroulante : un travail de prothèse
+     se relance AU TÉLÉPHONE, et le numéro doit être à un clic du travail en
+     retard. Il figure donc sur la ligne du travail.
+     Il se remplit TOUT SEUL — enregistrer un travail avec un nom inconnu y
+     crée l'entrée. Un annuaire qu'il faut peupler avant de s'en servir reste
+     vide, ce qui est précisément arrivé au carnet qu'il remplace. L'écran des
+     Paramètres sert à AJOUTER ce que la saisie ne donne pas : téléphone,
+     personne à demander, délai habituel.
+     `lab_works.lab_name` est CONSERVÉ à côté du lien : un laboratoire renommé
+     ou retiré ne doit pas réécrire les bons déjà partis (même règle que
+     l'organisme recopié sur une feuille de soins, v65).
+     REPRISE DE L'EXISTANT : les noms déjà écrits à la main entrent dans
+     l'annuaire (`distinct on` le nom normalisé) et les travaux y sont
+     rattachés. Les variantes orthographiques restent DISTINCTES — le logiciel
+     ne peut pas deviner que deux graphies désignent le même prothésiste, et
+     les fusionner d'autorité réécrirait des bons de laboratoire. Le praticien
+     désactive les doublons lui-même.
+     RLS médecin ; rien pour `anon`. Additive.
