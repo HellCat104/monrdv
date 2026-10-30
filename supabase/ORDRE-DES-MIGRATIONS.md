@@ -639,3 +639,33 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      les fusionner d'autorité réécrirait des bons de laboratoire. Le praticien
      désactive les doublons lui-même.
      RLS médecin ; rien pour `anon`. Additive.
+
+ 94. `migration_v94_imagerie_dentaire.sql`
+     Migration v94 — L'IMAGERIE RATTACHÉE À LA DENT. Ajoute à
+     `patient_documents` : `dents` (text[], index GIN), `type_image` et
+     `date_examen`.
+     Une radio était un fichier dans un tas : la table portait un nom, un type
+     MIME, une taille et une date d'ENVOI, rien d'autre. Une rétro-alvéolaire
+     de la 46 déposée en mars se retrouvait entre une attestation de mutuelle
+     et une photo de CIN, et trois ans plus tard personne ne savait plus de
+     quelle dent elle parlait.
+     PAS de table « imagerie » séparée : quatre mécanismes travaillent déjà sur
+     `patient_documents` — le quota de stockage (v63), la purge à l'effacement
+     (loi 09-08), l'export du droit d'accès, et le dépôt `patient-documents`
+     avec ses politiques. Une seconde table aurait obligé à refaire les quatre,
+     et à en oublier un ; la liste de colonnes périmée du droit d'accès,
+     corrigée deux jours plus tôt, montre comment cet oubli se produit.
+     `date_examen` n'est PAS la date d'envoi : une radio prise lundi peut être
+     importée jeudi, et c'est le jour de la prise de vue qui fait la
+     chronologie clinique. NULL = inconnue, l'écran se rabat sur `created_at`
+     et l'annonce.
+     `dents` vide = image non ciblée : une panoramique couvre les deux arcades,
+     en lister trente-deux ne serait que du bruit — et elle remonte pour
+     n'importe quelle dent interrogée. `type_image` est contrôlé côté
+     application (lib/imagerie.ts) et non par un check en base : la liste des
+     examens s'allonge avec les habitudes du cabinet.
+     AUCUNE CAPTURE : un navigateur ne parle pas à un capteur intra-oral, dont
+     le pilote est un composant Windows. Ces colonnes servent l'image déjà
+     produite par le logiciel du capteur. Et aucune compression — une image de
+     diagnostic ne se redimensionne pas, contrairement aux photos du cabinet.
+     Additive.

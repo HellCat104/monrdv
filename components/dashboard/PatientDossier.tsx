@@ -16,6 +16,8 @@ import GrowthChart from '@/components/dashboard/GrowthChart'
 import VaccinationCard from '@/components/dashboard/VaccinationCard'
 import MilestonesCard from '@/components/dashboard/MilestonesCard'
 import DentalChart from '@/components/dashboard/DentalChart'
+import ImagerieDentaire from '@/components/dashboard/ImagerieDentaire'
+import { dentsAvecImage as calculerDentsAvecImage, type ImageDentaire } from '@/lib/imagerie'
 import AnamneseDentaire from '@/components/dashboard/AnamneseDentaire'
 import BandeauRisques from '@/components/dashboard/BandeauRisques'
 import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne, type Anamnese } from '@/lib/anamnese'
@@ -141,6 +143,9 @@ export default function PatientDossier({
   // l'odontogramme lisent la même valeur et doivent changer ensemble.
   const [editAnamnese, setEditAnamnese] = useState<Anamnese>((patient.anamnese ?? {}) as Anamnese)
   const [editAnamneseMaj, setEditAnamneseMaj] = useState<string | null>(patient.anamnese_maj ?? null)
+  // Les clichés du patient (v94), chargés par le bloc d'imagerie et partagés
+  // avec l'odontogramme, qui en tire ses repères.
+  const [imagerie, setImagerie] = useState<ImageDentaire[]>([])
   const [ouvrirAnamnese, setOuvrirAnamnese] = useState(false)
   const [editChronic, setEditChronic] = useState(patient.chronic_conditions ?? '')
   // Étiquettes de pathologie (v72). Elles ne doublent pas le texte libre
@@ -1335,7 +1340,14 @@ export default function PatientDossier({
                 ancienne={anamneseAncienne(editAnamneseMaj)}
                 maj={editAnamneseMaj}
               />
-              <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />
+              {/* L'odontogramme reçoit les dents qui portent un cliché : le
+                  repère se lit en balayant l'arcade, sans ouvrir quoi que ce
+                  soit. Les images sont chargées UNE fois, par le bloc
+                  d'imagerie ci-dessous, et remontées ici — deux requêtes
+                  finiraient par afficher deux vérités sur la même arcade. */}
+              <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId}
+                dentsAvecImage={calculerDentsAvecImage(imagerie)} />
+              <ImagerieDentaire patientId={patient.id} doctorId={doctorId} onImages={setImagerie} />
             </div>
           )}
           {suiviEnfant && (

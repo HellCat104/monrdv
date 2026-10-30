@@ -82,7 +82,7 @@ export async function GET() {
       // reproduirait la panne : toute modification de cette projection doit
       // s'accompagner d'une migration.
       adminDb.from('patient_documents')
-        .select('id, file_name, file_type, file_size, created_at')
+        .select('id, file_name, file_type, file_size, created_at, dents, type_image, date_examen')
         .in('patient_id', patientIds).order('created_at', { ascending: false }),
       adminDb.from('recalls')
         .select('id, due_date, reason, status, sent_at, created_at')

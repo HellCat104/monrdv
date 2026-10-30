@@ -36,7 +36,16 @@ import {
   type ToothEvent,
 } from '@/lib/dental-history'
 
-export default function DentalChart({ patientId }: { patientId: string; doctorId: string }) {
+export default function DentalChart({ patientId, dentsAvecImage }: {
+  patientId: string
+  doctorId: string
+  /** Les dents qui portent au moins un cliché ciblé (v94). Le parent les
+   *  calcule une fois à partir des images déjà chargées : deux requêtes
+   *  finiraient par afficher deux vérités sur la même arcade.
+   *  Les panoramiques en sont exclues — elles marqueraient les trente-deux
+   *  dents, et un repère qui s'allume partout ne signale plus rien. */
+  dentsAvecImage?: Set<string>
+}) {
   const supabase = createClient()
   const [teeth, setTeeth] = useState<DentalTeeth>({})
   const [history, setHistory] = useState<ToothEvent[]>([])
@@ -213,7 +222,8 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
       <button
         type="button"
         onClick={() => setActive(isActive ? null : key)}
-        title={states.length > 0 ? `Dent ${n} — ${statesWithFacesLabel(info)}${info?.n ? ` · ${info.n}` : ''}` : `Dent ${n}`}
+        title={`${states.length > 0 ? `Dent ${n} — ${statesWithFacesLabel(info)}${info?.n ? ` · ${info.n}` : ''}` : `Dent ${n}`}${
+          dentsAvecImage?.has(key) ? ' · image au dossier' : ''}`}
         style={{
           ...(color ? { backgroundColor: color, color: '#fff', borderColor: color } : {}),
           // Pointillés = il reste un geste à poser. C'est la bordure qui le
@@ -231,6 +241,14 @@ export default function DentalChart({ patientId }: { patientId: string; doctorId
         className={`relative flex-1 basis-0 min-w-[20px] max-w-[36px] h-11 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-600 transition ${isActive ? 'ring-2 ring-primary-500 ring-offset-1' : ''} ${extraite ? 'opacity-80' : ''}`}
       >
         <span className={`block leading-tight ${colors.length > 1 ? 'pb-2' : ''} ${extraite ? 'line-through' : ''}`}>{n}</span>
+        {/* Le repère d'imagerie : cette dent a un cliché au dossier. En haut
+            à GAUCHE, parce que la coche « réalisé » occupe déjà la droite — et
+            les deux doivent pouvoir coexister sur une dent soignée et
+            radiographiée. Un carré de cinq pixels : on le voit en balayant
+            l'arcade, il ne dispute rien au numéro. */}
+        {dentsAvecImage?.has(key) && (
+          <span className={`absolute top-[3px] left-[3px] w-[5px] h-[5px] rounded-[1px] ${color ? 'bg-white/90' : 'bg-sky-500'}`} />
+        )}
         {/* La coche : un soin a été fait sur cette dent. Minuscule et dans
             l'angle, pour ne pas disputer la place au numéro. */}
         {aRealise && (
