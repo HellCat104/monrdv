@@ -25,6 +25,7 @@ import type {
   ActeImprime, BeneficiaireImprime, FeuilleImprimee, PraticienImprime,
 } from '@/lib/feuilles-soins'
 import type { Organisme } from '@/lib/organismes'
+import { fichierPublic } from '@/lib/fichiers-publics'
 
 export interface Props {
   organisme: Organisme
@@ -148,10 +149,10 @@ export default function GabaritFAR({ praticien, patientId, feuille, actes }: Pro
   ]
 
   const pages: PageFormulaire[] = [
-    { image: '/formulaires/far-1.jpg', largeur: L, hauteur: H, marques: page1 },
-    { image: '/formulaires/far-2.jpg', largeur: L, hauteur: H, marques: [] },
-    { image: '/formulaires/far-3.jpg', largeur: L, hauteur: H, marques: page3 },
-    { image: '/formulaires/far-4.jpg', largeur: L, hauteur: H, marques: page4 },
+    { image: fichierPublic('/formulaires/far-1.jpg'), largeur: L, hauteur: H, marques: page1 },
+    { image: fichierPublic('/formulaires/far-2.jpg'), largeur: L, hauteur: H, marques: [] },
+    { image: fichierPublic('/formulaires/far-3.jpg'), largeur: L, hauteur: H, marques: page3 },
+    { image: fichierPublic('/formulaires/far-4.jpg'), largeur: L, hauteur: H, marques: page4 },
   ]
 
   return <FormulaireImprime pages={pages} orientation="portrait" retourHref={`/patients/${patientId}`} />
