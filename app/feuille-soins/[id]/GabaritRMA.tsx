@@ -11,10 +11,11 @@
 //   · il ne demande AUCUN code d'acte : une nature d'intervention écrite en
 //     toutes lettres et un coefficient, rien de plus.
 //
-// Ce qui n'est PAS reproduit : le cadre « Partie réservée à RMA » (dates de
-// réception, n° de sinistre, ordonnancement) qui appartient au gestionnaire,
-// et le tableau « Pharmacie », qui est au pharmacien. Les imprimer vides sur
-// une feuille blanche serait du bruit.
+// L'imprimé est reproduit ENTIER, cadres du gestionnaire compris : « Partie
+// réservée à RMA » (dates de réception, n° de sinistre, ordonnancement) et le
+// tableau « Pharmacie ». Ils n'appartiennent pas au praticien, mais ils
+// appartiennent au formulaire : une déclaration remise sans eux n'est pas la
+// déclaration de RMA, c'est un extrait.
 import SchemaDentaireFormulaire from '@/components/shared/SchemaDentaireFormulaire'
 import { Cases, Champ, Pastille, jourFr } from '@/components/shared/traits-formulaire'
 import { estProtheseOuOdf } from '@/lib/nomenclature-anam'
@@ -60,6 +61,26 @@ function LignesLibres({ colonnes, nombre }: { colonnes: number; nombre: number }
   )
 }
 
+/** Un cadre vide que RMA remplit elle-même : un titre, des colonnes
+ *  étiquetées, et de la place. Le praticien n'y écrit rien. */
+function CadreGestionnaire({ titre, colonnes, hauteur }: {
+  titre: string; colonnes: string[]; hauteur: number
+}) {
+  return (
+    <div className="border border-gray-500 rounded-sm">
+      <p className="text-[10px] font-bold px-2 py-[3px] border-b border-gray-400">{titre}</p>
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${colonnes.length}, 1fr)` }}>
+        {colonnes.map((c) => (
+          <span key={c} className="text-[9px] text-center py-[2px] border-r border-b border-gray-300 last:border-r-0">{c}</span>
+        ))}
+        {colonnes.map((c) => (
+          <span key={`v-${c}`} className="border-r border-gray-300 last:border-r-0" style={{ height: hauteur }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Titre({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-gray-200 border border-gray-500 px-2 py-[3px] text-[10px] font-bold text-gray-900">
@@ -90,8 +111,30 @@ export default function GabaritRMA({
         <PrintButton />
       </div>
 
-      {/* ══ PAGE 1 — la déclaration ════════════════════════════════════════ */}
-      <section className="saut max-w-[1050px] mx-auto bg-white shadow-sm print:shadow-none p-6 print:p-0 mb-6 print:mb-0">
+      {/* ══ PAGE 1 — le cadre du gestionnaire, puis la déclaration ═════════ */}
+      <section className="saut max-w-[1050px] mx-auto bg-white shadow-sm print:shadow-none p-6 print:p-0 mb-6 print:mb-0 flex gap-5">
+
+        {/* ── Ce que RMA remplit elle-même à l'arrivée du courrier ────── */}
+        <div className="w-[33%] shrink-0 space-y-3">
+          <p className="text-[12px] font-bold text-gray-900">Partie réservée à RMA</p>
+          <CadreGestionnaire titre="Date(s) de réception du courrier" colonnes={['1', '2', '3', '4']} hauteur={150} />
+          <div className="border border-gray-500 rounded-sm">
+            <p className="text-[10px] font-bold px-2 py-[3px] border-b border-gray-400">Identification</p>
+            <div className="flex">
+              <span className="w-[110px] shrink-0 border-r border-gray-400 flex items-center justify-center text-[9px] px-1">N° du sinistre</span>
+              <span className="flex-1 px-2 py-2 space-y-2">
+                <Cases nombre={7} />
+                <span className="flex items-center gap-2">
+                  <Cases nombre={7} />
+                  <span className="text-[9px]">CP</span>
+                </span>
+              </span>
+            </div>
+          </div>
+          <CadreGestionnaire titre="Ordonnancement" colonnes={['I.C.', 'D.D', 'D', 'C.C']} hauteur={130} />
+        </div>
+
+        <div className="flex-1 min-w-0">
         <header className="flex items-start justify-between gap-6 pb-2 border-b border-gray-400">
           <div className="text-[8.5px] leading-snug text-gray-800">
             <p className="font-bold">Siège social</p>
@@ -157,6 +200,7 @@ export default function GabaritRMA({
           </div>
         </div>
         <p className="text-[7.5px] text-gray-500 mt-2">FOR-GM-022 — Code GP 001 — Version 2019</p>
+        </div>
       </section>
 
       {/* ══ PAGE 2 — ce que remplit le praticien ═══════════════════════════ */}
@@ -247,6 +291,24 @@ export default function GabaritRMA({
                     })
                   })}
                 </tbody>
+              </table>
+            </div>
+
+            {/* ── Pharmacie ────────────────────────────────────────────────
+                Ce tableau n'est pas au dentiste : c'est le pharmacien qui le
+                remplit, quand l'ordonnance suit la déclaration. Il reste sur
+                l'imprimé, vide, parce qu'il y est sur le papier. */}
+            <div>
+              <Titre>Pharmacie</Titre>
+              <table className="w-full border-collapse text-[9px]">
+                <thead>
+                  <tr>
+                    {['Date', 'Montant', 'Signature et cachet'].map((t) => (
+                      <th key={t} className="border border-gray-500 px-1 py-[3px] font-semibold bg-gray-50">{t}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody><LignesLibres colonnes={3} nombre={2} /></tbody>
               </table>
             </div>
 

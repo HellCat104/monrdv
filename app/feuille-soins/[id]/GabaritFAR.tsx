@@ -6,13 +6,14 @@
 // feuille de maladie commune à tout le corps de santé, en quatre pages.
 //
 //   page 1 — l'adhérent, le bénéficiaire, l'INPE du médecin traitant
-//   page 2 — l'ORDONNANCE, et le cachet du pharmacien : pas la nôtre
+//   page 2 — l'ORDONNANCE, remplie par le pharmacien
 //   page 3 — le relevé commun : médecin, labo, imagerie, para-médical, optique
 //   page 4 — « SOINS ET PROTHESE DENTAIRE (INPE) », la page du dentiste
 //
-// On imprime les pages 1, 3 et 4, dans l'ordre du carnet, chacune avec son
-// numéro pour que l'agent de la mutuelle la reconnaisse. La page 2 est laissée
-// au pharmacien.
+// Les quatre sortent, dans l'ordre du carnet, chacune avec son numéro pour que
+// l'agent de la mutuelle la reconnaisse. La page 2 n'est pas celle du dentiste
+// — il n'y porte que le nom du malade et son cachet s'il prescrit — mais elle
+// fait partie du carnet : un carnet amputé d'une page n'est plus le carnet.
 //
 // ── CE QUE CET IMPRIMÉ DEMANDE QUE LES AUTRES NE DEMANDENT PAS ──────────────
 //
@@ -188,6 +189,43 @@ export default function GabaritFAR({
           À faire à la main avant de déposer : l&apos;identité du malade doit être portée de la main
           du médecin traitant.
         </p>
+      </section>
+
+      {/* ══ PAGE 2 — l'ordonnance ══════════════════════════════════════════ */}
+      <section className="saut max-w-[780px] mx-auto bg-white shadow-sm print:shadow-none p-8 print:p-0 mb-6 print:mb-0">
+        <div className="border border-gray-700 flex flex-col" style={{ minHeight: 760 }}>
+          <div className="flex items-stretch border-b border-gray-700">
+            {['P.U', 'Nbr', 'Prix total'].map((t) => (
+              <div key={t} className="w-[70px] border-r border-gray-700 flex items-center justify-center text-[10px] font-bold text-center px-1">{t}</div>
+            ))}
+            <div className="flex-1 flex items-center justify-center text-[11px] font-bold">ORDONNANCE</div>
+            <div className="w-[70px] border-l border-gray-700 bg-gray-200 flex items-center justify-center text-[10px] font-semibold text-gray-700">Page 2</div>
+          </div>
+
+          <div className="flex flex-1">
+            {['', '', ''].map((_, i) => (
+              <div key={i} className="w-[70px] border-r border-gray-700" />
+            ))}
+            <div className="flex-1 p-3 flex flex-col">
+              <p className="text-[10px]">Nom et prénom du malade : <span className="font-semibold">{beneficiaire.nom}</span></p>
+              <div className="flex-1" />
+              <div className="flex items-end justify-between">
+                <p className="text-[10px]">À ……………………… , Le {jourFr(feuille.jour)}</p>
+                <span className="w-[110px] h-[110px] rounded-full border border-gray-600 flex items-center justify-center text-[9px] text-center text-gray-600 leading-tight px-2">
+                  Cachet du Médecin avec INPE
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-stretch border-t border-gray-700">
+            <div className="w-[140px] border-r border-gray-700 px-1 py-2 text-center text-[10px] font-bold">Montant Global</div>
+            <div className="w-[70px] border-r border-gray-700" />
+            <div className="flex-1 px-2 py-2 text-[10px] font-bold">
+              Cachet et Signature du Pharmacien : <span className="font-normal">Avec INPE</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* ══ PAGE 3 — le relevé du corps de santé ═══════════════════════════ */}
