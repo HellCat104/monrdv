@@ -18,6 +18,7 @@ import { colonneAbsente } from '@/lib/migrations'
 import { FeuilleDocument, type LigneSoin } from './FeuilleDocument'
 import { type ActeImprime } from '@/lib/feuilles-soins'
 import GabaritANAM from './GabaritANAM'
+import GabaritCNSS from './GabaritCNSS'
 import GabaritFAR from './GabaritFAR'
 import GabaritRMA from './GabaritRMA'
 
@@ -138,6 +139,9 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
 
     if (organisme.gabarit === 'rma') return <GabaritRMA {...commun} />
     if (organisme.gabarit === 'far') return <GabaritFAR {...commun} />
+    // La CNSS sort sur SON imprimé, scanné et rempli. Le CNOPS garde encore
+    // la reproduction : son formulaire est en cours de calage, case par case.
+    if (organisme.cle === 'cnss') return <GabaritCNSS {...commun} />
     return <GabaritANAM {...commun} />
   }
 
