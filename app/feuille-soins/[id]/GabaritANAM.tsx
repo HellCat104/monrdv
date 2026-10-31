@@ -21,6 +21,19 @@
 // compris, et les DEUX volets de la page : les instructions à l'assuré et le
 // cadre de l'organisme à gauche, le formulaire à droite.
 //
+// ── CE QUE LE LOGICIEL NE REMPLIT PAS ───────────────────────────────────────
+//
+// « Partie réservée à l'assuré(e) » : son nom, son immatriculation, sa CIN,
+// son adresse, le lien de parenté, le montant des frais, le nombre de pièces
+// jointes. C'est l'assuré qui l'écrit, de sa main, et qui signe dessous. Le
+// logiciel imprimait ces cases remplies — et demandait donc au cabinet de
+// saisir une identité qui n'est pas la sienne à déclarer.
+//
+// Le praticien remplit sa DÉCLARATION — qui il a soigné, et son identité au
+// sens de l'imprimé : « Le nom et prénom de la personne soignée doivent être
+// portés par les praticiens eux mêmes sur chaque feuille de soins. » — son
+// IDENTIFICATION, les actes, et il signe son cadre à lui. Rien d'autre.
+//
 // Trois champs manquaient aussi, et ils sont sur les deux imprimés : le cadre
 // « En cas d'accident », la grille « CIN - 10 » du volet des actes, et les
 // renvois de bas de page. À l'inverse, l'ICE et l'identifiant fiscal du
@@ -47,8 +60,6 @@ export interface Props {
   organisme: Organisme
   praticien: PraticienImprime
   patientId: string
-  /** L'assuré, dans les champs que CET organisme demande. */
-  assure: Record<string, string>
   beneficiaire: BeneficiaireImprime
   feuille: FeuilleImprimee
   actes: ActeImprime[]
@@ -105,7 +116,7 @@ function L({ fr, ar, children, pointille = true }: {
 }
 
 export default function GabaritANAM({
-  organisme, praticien, patientId, assure, beneficiaire, feuille, actes,
+  organisme, praticien, patientId, beneficiaire, feuille, actes,
 }: Props) {
   const cnops = organisme.cle === 'cnops'
   const nom = cnops ? 'CNOPS' : 'CNSS'
@@ -221,36 +232,28 @@ export default function GabaritANAM({
               </div>
             )}
 
+            {/* Vierge, en entier : c'est l'assuré qui l'écrit et qui signe
+                dessous. Les cases sont dessinées, rien n'est rempli. */}
             <Bandeau fr="Partie réservée à l'assuré(e)" ar="خاص بالمؤمن له (لها)" />
             <div className="px-2 py-[2px]">
-              <L fr="Nom et prénom" ar="الإسم العائلي و الشخصي">{assure.assure || beneficiaire.nom}</L>
-              {cnops && (
-                <L fr="N° Affiliation" ar="رقم الانخراط" pointille={false}><Cases valeur={assure.affiliation} nombre={8} /></L>
-              )}
-              <L fr="N° Immatriculation" ar="رقم التسجيل" pointille={false}><Cases valeur={assure.immatriculation} nombre={10} /></L>
-              <L fr={libelleCin} ar="رقم بطاقة التعريف الوطنية" pointille={false}>
-                <Cases valeur={assure.cin_assure} nombre={10} />
-              </L>
+              <L fr="Nom et prénom" ar="الإسم العائلي و الشخصي" />
+              {cnops && <L fr="N° Affiliation" ar="رقم الانخراط" pointille={false}><Cases nombre={8} /></L>}
+              <L fr="N° Immatriculation" ar="رقم التسجيل" pointille={false}><Cases nombre={10} /></L>
+              <L fr={libelleCin} ar="رقم بطاقة التعريف الوطنية" pointille={false}><Cases nombre={10} /></L>
               <div className="flex items-center gap-3 py-[2px]">
                 <span className="text-[9px] shrink-0">Lien de parenté du bénéficiaire avec l&apos;assuré(e)*</span>
                 {organisme.liens.map((l) => (
-                  <span key={l} className="flex items-center gap-1 text-[9px]">
-                    {l} <Case cochee={(assure.lien ?? '').toLowerCase() === l.toLowerCase()} />
-                  </span>
+                  <span key={l} className="flex items-center gap-1 text-[9px]">{l} <Case cochee={false} /></span>
                 ))}
                 <span className="flex-1" />
                 <span className="text-[8px] text-gray-800" dir="rtl">علاقة القرابة بين المستفيد و المؤمن له*</span>
               </div>
               <div className="flex items-start gap-1.5 py-[2px]">
                 <span className="text-[9px] shrink-0">Adresse :</span>
-                <span className="flex-1 border border-gray-500 min-h-[26px] px-1 text-[9.5px] font-semibold">
-                  {assure.adresse_assure}
-                </span>
+                <span className="flex-1 border border-gray-500 min-h-[26px]" />
                 <span className="text-[9px] shrink-0 w-[150px] text-right" dir="rtl">العنوان :</span>
               </div>
-              <L fr="Montant des frais" ar="مبلغ المصاريف">
-                {feuille.total.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} Dhs.
-              </L>
+              <L fr="Montant des frais" ar="مبلغ المصاريف" />
               <L fr="Nombre de pièces jointes" ar="عدد الوثائق المرفقة" />
             </div>
 
@@ -318,11 +321,11 @@ export default function GabaritANAM({
                 <p className="text-[7.5px] text-right" dir="rtl">أشهد بصحة كل ما ذكر أعلاه.</p>
                 <p className="text-[7.5px] text-gray-900">J&apos;atteste sur l&apos;honneur l&apos;exactitude des renseignements portés ci-avant.</p>
                 <p className="text-[8px] mt-2 flex items-center">
-                  <span>Fait à : <span className="font-semibold">{praticien.ville ?? ''}</span></span>
+                  <span>Fait à : …………………</span>
                   <span className="flex-1" /><span dir="rtl">حرر ب :</span>
                 </p>
                 <p className="text-[8px] mt-1 flex items-center gap-1">
-                  Le : <Cases valeur={chiffresDate(feuille.jour)} nombre={8} /><span className="flex-1" /><span dir="rtl">في :</span>
+                  Le : <Cases nombre={8} /><span className="flex-1" /><span dir="rtl">في :</span>
                 </p>
                 <p className="text-[7.5px] text-center mt-2" dir="rtl">توقيع المؤمن له (لها)</p>
                 <p className="text-[7.5px] text-center">Signature de l&apos;assuré (e)</p>

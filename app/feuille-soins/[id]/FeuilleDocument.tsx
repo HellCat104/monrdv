@@ -31,8 +31,6 @@ interface Props {
   organisme: string | null
   /** Intitulé imprimé du régime (« CNSS — Assurance Maladie Obligatoire »). */
   intituleOrganisme: string | null
-  /** Champs propres à l'organisme, déjà filtrés : libellé + valeur. */
-  champsAssure: { label: string; valeur: string }[]
   dateSoins: string
   items: LigneSoin[]
 }
@@ -41,17 +39,11 @@ const dh = (n: number) => `${n.toLocaleString('fr-FR')} DH`
 
 export function FeuilleDocument({
   lignes, logoUrl, ville, patientId, patientNom, patientCin,
-  organisme, intituleOrganisme, champsAssure, dateSoins, items: itemsBruts,
+  organisme, intituleOrganisme, dateSoins, items: itemsBruts,
 }: Props) {
   const items = itemsBruts.slice().sort((a, b) => a.position - b.position)
   const total = items.reduce((t, i) => t + Number(i.amount || 0), 0)
   const avecDents = items.some((i) => !!i.tooth)
-  // L'assuré, c'est le patient lui-même tant qu'on n'a pas dit le contraire :
-  // le champ « nom de l'assuré » reste vide dans ce cas, et on l'affiche ici
-  // plutôt que de laisser la case blanche sur un document remis à une caisse.
-  const nomAssureSaisi = champsAssure.find((c) => /assur/i.test(c.label))?.valeur
-  const assure = nomAssureSaisi || patientNom
-  const autresChamps = champsAssure.filter((c) => !/assur/i.test(c.label))
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
@@ -70,17 +62,17 @@ export function FeuilleDocument({
           Document à joindre à votre demande de remboursement
         </p>
 
-        {/* Assuré et bénéficiaire : les deux lignes que l'organisme lit en
-            premier, et la cause numéro un des dossiers renvoyés. */}
+        {/* L'assuré écrit lui-même sa partie, et signe dessous : le cabinet
+            n'a pas à déclarer une identité qui n'est pas la sienne. On laisse
+            donc des lignes, pas des valeurs. */}
         <div className="grid grid-cols-2 gap-6 text-sm mb-8">
           <div>
             <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">
               Assuré(e){intituleOrganisme ? ` · ${intituleOrganisme}` : organisme ? ` · ${organisme}` : ''}
             </p>
-            <p className="font-semibold text-gray-900">{assure}</p>
-            {autresChamps.map((c) => (
-              <p key={c.label} className="text-gray-600">{c.label} : {c.valeur}</p>
-            ))}
+            <p className="text-gray-400">Nom, n° d&apos;assuré et adresse : à compléter par l&apos;assuré(e).</p>
+            <p className="border-b border-dotted border-gray-400 h-5 mt-2" />
+            <p className="border-b border-dotted border-gray-400 h-5 mt-2" />
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Bénéficiaire des soins</p>

@@ -13,7 +13,7 @@ import { canAccess } from '@/lib/plan'
 import { FEUILLE_FONCTION } from '@/lib/feuilles-soins-server'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
-import { champsRenseignes, organismePour } from '@/lib/organismes'
+import { organismePour } from '@/lib/organismes'
 import { colonneAbsente } from '@/lib/migrations'
 import { FeuilleDocument, type LigneSoin } from './FeuilleDocument'
 import { type ActeImprime } from '@/lib/feuilles-soins'
@@ -106,7 +106,8 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
         ville: doctor.city ?? null,
       },
       patientId: feuille.patient_id as string,
-      assure: (feuille.insurer_data as Record<string, string> | null) ?? {},
+      // Rien de l'assuré n'est transmis aux gabarits : sa partie du formulaire
+      // s'imprime vierge, il la remplit de sa main et signe dessous.
       beneficiaire: {
         nom: patientNom,
         dateNaissance: patient?.birth_date ?? null,
@@ -137,11 +138,6 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
       patientNom={patientNom}
       patientCin={patient?.cin ?? null}
       organisme={(feuille.insurer as string | null) ?? null}
-      // Les champs que CET organisme demande, dans son ordre (lib/organismes.ts).
-      champsAssure={champsRenseignes(
-        feuille.insurer as string | null,
-        (feuille.insurer_data as Record<string, unknown> | null) ?? null,
-      )}
       intituleOrganisme={organisme?.intitule ?? null}
       dateSoins={feuille.care_date as string}
       items={(feuille.items ?? []) as LigneSoin[]}

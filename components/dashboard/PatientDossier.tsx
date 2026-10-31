@@ -137,10 +137,12 @@ export default function PatientDossier({
     : null)
   const [editAddress, setEditAddress] = useState(patient.address ?? '')
   const [editMutuelle, setEditMutuelle] = useState(patient.mutuelle ?? '')
-  // L'assuré n'est pas toujours le patient : un enfant est soigné sous le
-  // numéro de son père ou de sa mère. Les champs demandés dépendent de
-  // l'organisme (lib/organismes.ts), d'où un objet plutôt que des colonnes.
-  const [assureData, setAssureData] = useState<Record<string, string>>(
+  // Les renseignements de l'assuré. PLUS AUCUN ÉCRAN NE LES SAISIT — c'est
+  // l'assuré qui remplit sa partie du formulaire, de sa main — mais cet état
+  // reste, et il est réenregistré tel quel : sans lui, le premier
+  // enregistrement de la fiche effacerait ce que les cabinets ont déjà saisi
+  // sous l'ancienne version. On conserve, on ne demande plus.
+  const [assureData] = useState<Record<string, string>>(
     ((patient as { insurer_data?: Record<string, string> | null }).insurer_data ?? {}) as Record<string, string>,
   )
   const [mutuelleOther, setMutuelleOther] = useState(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
@@ -1024,45 +1026,16 @@ export default function PatientDossier({
                 </Select>
                 {mutuelleOther && <Input value={editMutuelle} onChange={(e) => setEditMutuelle(e.target.value)} placeholder="Précisez" className="h-9 mt-1.5" />}
               </div>
-              {/* Couverture — les champs demandés par CET organisme, dans son
-                  ordre. Un patient sans mutuelle n'a rien à saisir ici. */}
-              {(() => {
-                const org = organismePour(editMutuelle)
-                if (!org) return null
-                return (
-                  <div className="space-y-2 bg-gray-50 rounded-lg p-2.5">
-                    <p className="text-[11px] font-semibold text-gray-500">{org.intitule}</p>
-                    {org.champs.map((c) => (
-                      <div key={c.cle} className="space-y-1">
-                        <Label className="text-[11px] text-gray-400">{c.label}</Label>
-                        {/* Le lien de parenté n'est pas un champ libre sur les
-                            formulaires : c'est une case à cocher parmi deux ou
-                            trois. « Épouse » écrit à la main dans une case
-                            « Conjoint » fait revenir le dossier. */}
-                        {c.cle === 'lien' && org.liens.length > 0 ? (
-                          <Select
-                            value={assureData[c.cle] || undefined}
-                            onValueChange={(v) => setAssureData((prev) => ({ ...prev, [c.cle]: v === '—' ? '' : v }))}
-                          >
-                            <SelectTrigger className="h-9"><SelectValue placeholder="—" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="—">—</SelectItem>
-                              {org.liens.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Input
-                            value={assureData[c.cle] ?? ''}
-                            onChange={(e) => setAssureData((prev) => ({ ...prev, [c.cle]: e.target.value }))}
-                            className="h-9"
-                          />
-                        )}
-                        {c.aide && <p className="text-[10px] text-gray-400">{c.aide}</p>}
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
+              {/* Les champs de l'assuré — nom, immatriculation, CIN, adresse,
+                  lien de parenté — ne sont plus demandés. Ils ne servaient
+                  qu'à remplir « Partie réservée à l'assuré(e) » sur la feuille
+                  de soins, et cette partie-là, c'est l'assuré qui l'écrit de
+                  sa main et qui signe dessous. Le cabinet saisissait donc une
+                  identité qu'il n'a pas à déclarer, pour qu'elle ne soit
+                  finalement pas opposable. Ce qui était déjà saisi reste en
+                  base, intact.
+                  Seule la mutuelle compte encore : elle choisit le formulaire
+                  imprimé. */}
               {!isPsy && (
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Groupe sanguin</Label>
                   <Select value={editBloodGroup || undefined} onValueChange={setEditBloodGroup}>

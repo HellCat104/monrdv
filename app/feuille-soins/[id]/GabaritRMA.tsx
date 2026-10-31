@@ -11,6 +11,17 @@
 //   · il ne demande AUCUN code d'acte : une nature d'intervention écrite en
 //     toutes lettres et un coefficient, rien de plus.
 //
+// ── CE QUE LE LOGICIEL NE REMPLIT PAS ───────────────────────────────────────
+//
+// Toute la première page. Elle se termine par « Signature de l'assuré(e) » :
+// c'est SA déclaration — affiliation, souscripteur, police, adresse, identité
+// du malade, montant engagé. Il l'écrit de sa main. La seule case que le
+// logiciel y coche est « Type de déclaration », Devis ou Exécution : elle ne
+// dit rien de l'assuré, elle dit ce que le praticien a fait ou propose de
+// faire, et lui seul peut la remplir.
+//
+// La page 2 est « Partie réservée au praticien » : elle, est remplie.
+//
 // L'imprimé est reproduit ENTIER, cadres du gestionnaire compris : « Partie
 // réservée à RMA » (dates de réception, n° de sinistre, ordonnancement) et le
 // tableau « Pharmacie ». Ils n'appartiennent pas au praticien, mais ils
@@ -29,7 +40,6 @@ export interface Props {
   organisme: Organisme
   praticien: PraticienImprime
   patientId: string
-  assure: Record<string, string>
   beneficiaire: BeneficiaireImprime
   feuille: FeuilleImprimee
   actes: ActeImprime[]
@@ -90,7 +100,7 @@ function Titre({ children }: { children: React.ReactNode }) {
 }
 
 export default function GabaritRMA({
-  organisme, praticien, patientId, assure, beneficiaire, feuille, actes,
+  organisme, praticien, patientId, beneficiaire, feuille, actes,
 }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
   // Les deux tableaux de l'imprimé. Un acte sans code part avec les soins :
@@ -161,13 +171,13 @@ export default function GabaritRMA({
           </div>
           <div className="flex items-baseline gap-2 py-[3px]">
             <span className="text-[9.5px] shrink-0">N° d&apos;affiliation :</span>
-            <Cases valeur={assure.affiliation} nombre={16} />
+            <Cases nombre={16} />
           </div>
           <div className="flex gap-8">
             <div className="flex-1">
-              <Champ fr="Souscripteur">{assure.souscripteur}</Champ>
-              <Champ fr="N° de police">{assure.police}</Champ>
-              <Champ fr="Adresse">{assure.adresse_assure}</Champ>
+              <Champ fr="Souscripteur" large />
+              <Champ fr="N° de police" large />
+              <Champ fr="Adresse" large />
             </div>
             <div className="w-[240px] border border-gray-400 h-[74px] p-1">
               <p className="text-[8.5px] text-gray-600">Cachet du souscripteur</p>
@@ -177,24 +187,24 @@ export default function GabaritRMA({
 
         <Titre>Renseignements concernant l&apos;assuré(e)</Titre>
         <div className="border border-t-0 border-gray-500 px-3 py-2 mb-3">
-          <Champ fr="Nom et prénom">{assure.assure || beneficiaire.nom}</Champ>
-          <Champ fr="Adresse">{assure.adresse_assure}</Champ>
+          <Champ fr="Nom et prénom" large />
+          <Champ fr="Adresse" large />
         </div>
 
         <Titre>Renseignements concernant le malade</Titre>
         <div className="border border-t-0 border-gray-500 px-3 py-2 mb-3 flex gap-8">
-          <div className="flex-1"><Champ fr="Nom et Prénom">{beneficiaire.nom}</Champ></div>
-          <div className="w-[320px]"><Champ fr="Lien de parenté">{assure.lien}</Champ></div>
+          <div className="flex-1"><Champ fr="Nom et Prénom" large /></div>
+          <div className="w-[320px]"><Champ fr="Lien de parenté" large /></div>
         </div>
 
         <div className="border border-gray-500 px-3 py-2">
-          <Champ fr="Montant des frais engagés">{dh(feuille.total)} DHS</Champ>
+          <Champ fr="Montant des frais engagés" large />
           <p className="text-[9.5px] font-semibold text-gray-900 mt-3">
             J&apos;atteste sur l&apos;honneur l&apos;exactitude des renseignements portés sur la présente déclaration
           </p>
           <div className="flex items-end gap-8 mt-3">
-            <span className="text-[9.5px]">Fait à : <span className="font-medium">{praticien.ville ?? ''}</span></span>
-            <span className="text-[9.5px]">, le : <span className="font-medium">{jourFr(feuille.jour)}</span></span>
+            <span className="text-[9.5px]">Fait à : ……………………………</span>
+            <span className="text-[9.5px]">, le : ………………………</span>
             <span className="flex-1" />
             <span className="text-[9.5px] font-semibold">Signature de l&apos;assuré(e)</span>
           </div>

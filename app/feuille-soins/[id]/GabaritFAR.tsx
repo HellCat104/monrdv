@@ -15,6 +15,18 @@
 // — il n'y porte que le nom du malade et son cachet s'il prescrit — mais elle
 // fait partie du carnet : un carnet amputé d'une page n'est plus le carnet.
 //
+// ── CE QUE LE LOGICIEL NE REMPLIT PAS ───────────────────────────────────────
+//
+// Toute la page 1 : l'adhérent l'écrit de sa main et signe dessous. Et ici,
+// contrairement à la CNSS, l'identité du MALADE n'est pas imprimée non plus —
+// l'imprimé l'interdit en toutes lettres : « L'identité du malade doit être
+// portée de la main du médecin traitant. » Une identité imprimée n'est pas
+// portée de la main de qui que ce soit.
+//
+// Le logiciel ne renseigne, sur cette page, que le N° INPE du praticien : le
+// cadre s'appelle « Identification du médecin traitant », et c'est le seul.
+// Les pages 3 et 4 sont les siennes, et elles sont remplies.
+//
 // ── CE QUE CET IMPRIMÉ DEMANDE QUE LES AUTRES NE DEMANDENT PAS ──────────────
 //
 //   · aucun code d'acte — « Natures des actes & coefficients », en toutes
@@ -39,7 +51,6 @@ export interface Props {
   organisme: Organisme
   praticien: PraticienImprime
   patientId: string
-  assure: Record<string, string>
   beneficiaire: BeneficiaireImprime
   feuille: FeuilleImprimee
   actes: ActeImprime[]
@@ -84,17 +95,12 @@ function Cadre({ titre, ar, children }: { titre: string; ar?: string; children: 
 }
 
 export default function GabaritFAR({
-  organisme, praticien, patientId, assure, beneficiaire, feuille, actes,
+  organisme, praticien, patientId, beneficiaire, feuille, actes,
 }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
   const croix = items.filter((a) => dentCroisee(a.code)).map((a) => a.tooth ?? '').filter(Boolean)
   const cercles = items.filter((a) => !dentCroisee(a.code)).map((a) => a.tooth ?? '').filter(Boolean)
   const devis = feuille.nature === 'entente_prealable'
-  const lien = (assure.lien ?? '').toLowerCase()
-  // Le cadre « Maladie / Maternité / Accident ». Sans réponse sur la fiche, on
-  // coche Maladie : c'est le cas de tous les soins dentaires sauf le trauma,
-  // et une feuille qui ne coche rien revient au cabinet.
-  const cas = (assure.cas ?? '').toLowerCase().trim() || 'maladie'
   // Les cases « Soins ? » et « Prothèse ? » de la page 4. Le praticien les a
   // cochées à l'écran ; à défaut, la nomenclature des actes répond pour lui.
   const coche = (t: string) => feuille.typesSoins.includes(t)
@@ -131,31 +137,30 @@ export default function GabaritFAR({
 
         <EnTetePage titre="Feuille de maladie (*)" ar="ورقة المرض" numero={1} />
 
+        {/* Vierge : l'adhérent l'écrit, et signe plus bas. */}
         <Cadre titre="Renseignements relatifs à l'adhérent" ar="معلومات خاصة بالمنخرط">
-          <Champ fr="N° Carte Nationale d'Identité" ar="رقم بطاقة التعريف الوطنية">{assure.cin_assure}</Champ>
-          <Champ fr="N° de Compte" ar="رقم الحساب البنكي">{assure.compte_bancaire}</Champ>
-          <Champ fr="N° de Téléphone" ar="رقم الهاتف">{assure.telephone_assure}</Champ>
-          <Champ fr="Nom et Prénom" ar="الاسم العائلي والشخصي">{assure.assure}</Champ>
-          <Champ fr="Grade" ar="الرتبة">{assure.grade}</Champ>
-          <Champ fr="Unité" ar="الوحدة">{assure.unite}</Champ>
-          <Champ fr="Adresse" ar="العنوان الشخصي">{assure.adresse_assure}</Champ>
+          <Champ fr="N° Carte Nationale d'Identité" ar="رقم بطاقة التعريف الوطنية" large />
+          <Champ fr="N° de Compte" ar="رقم الحساب البنكي" large />
+          <Champ fr="N° de Téléphone" ar="رقم الهاتف" large />
+          <Champ fr="Nom et Prénom" ar="الاسم العائلي والشخصي" large />
+          <Champ fr="Grade" ar="الرتبة" large />
+          <Champ fr="Unité" ar="الوحدة" large />
+          <Champ fr="Adresse" ar="العنوان الشخصي" large />
         </Cadre>
 
+        {/* Vierge aussi, et ce n'est pas un oubli : « L'identité du malade
+            doit être portée de la main du médecin traitant. » */}
         <Cadre titre="Partie réservée au bénéficiaire" ar="خاص بالمستفيد">
-          <Champ fr="Nom et Prénom" ar="الاسم العائلي والشخصي">{beneficiaire.nom}</Champ>
-          <Champ fr="Date de Naissance" ar="تاريخ الازدياد">{jourFr(beneficiaire.dateNaissance)}</Champ>
+          <Champ fr="Nom et Prénom" ar="الاسم العائلي والشخصي" large />
+          <Champ fr="Date de Naissance" ar="تاريخ الازدياد" large />
           <div className="flex items-center gap-8 py-1 border-t border-gray-300 mt-1">
             {organisme.liens.map((l) => (
-              <span key={l} className="flex items-center gap-1.5 text-[10px]">
-                <Case cochee={lien === l.toLowerCase()} /> {l}
-              </span>
+              <span key={l} className="flex items-center gap-1.5 text-[10px]"><Case cochee={false} /> {l}</span>
             ))}
           </div>
           <div className="flex items-center gap-8 py-1 border-t border-gray-300">
-            {[['mal', 'Maladie'], ['mat', 'Maternité'], ['acc', 'Accident']].map(([debut, lib]) => (
-              <span key={lib} className="flex items-center gap-1.5 text-[10px]">
-                <Case cochee={cas.startsWith(debut)} /> {lib}
-              </span>
+            {['Maladie', 'Maternité', 'Accident'].map((lib) => (
+              <span key={lib} className="flex items-center gap-1.5 text-[10px]"><Case cochee={false} /> {lib}</span>
             ))}
           </div>
         </Cadre>
@@ -167,8 +172,8 @@ export default function GabaritFAR({
         <div className="border border-gray-700 border-t-0 grid grid-cols-3 text-[10px]">
           <div className="border-r border-gray-400 p-2">
             <p>Frais engagés</p>
-            <p className="font-semibold mt-1">{dh(feuille.total)} Dh</p>
-            <p className="mt-3">Le : {jourFr(feuille.jour)}</p>
+            <p className="mt-1">…………… Dh</p>
+            <p className="mt-3">Le : ………………</p>
           </div>
           <div className="border-r border-gray-400 p-2">
             <p>Nombre prospectus :</p>
@@ -207,10 +212,10 @@ export default function GabaritFAR({
               <div key={i} className="w-[70px] border-r border-gray-700" />
             ))}
             <div className="flex-1 p-3 flex flex-col">
-              <p className="text-[10px]">Nom et prénom du malade : <span className="font-semibold">{beneficiaire.nom}</span></p>
+              <p className="text-[10px]">Nom et prénom du malade : ……………………………………………</p>
               <div className="flex-1" />
               <div className="flex items-end justify-between">
-                <p className="text-[10px]">À ……………………… , Le {jourFr(feuille.jour)}</p>
+                <p className="text-[10px]">À ……………………… , Le ………………………</p>
                 <span className="w-[110px] h-[110px] rounded-full border border-gray-600 flex items-center justify-center text-[9px] text-center text-gray-600 leading-tight px-2">
                   Cachet du Médecin avec INPE
                 </span>

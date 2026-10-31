@@ -18,6 +18,17 @@
 // seuls de leur espèce, et « neutre » est la feuille MonRDV d'avant — celle
 // qu'on imprime quand on n'a pas le formulaire de l'organisme.
 //
+// ── CE QUE LE REGISTRE NE DÉCRIT PLUS ───────────────────────────────────────
+//
+// Les CHAMPS de l'assuré — son nom, son immatriculation, sa CIN, son adresse,
+// son lien de parenté. Ils étaient demandés au cabinet, puis imprimés dans le
+// cadre « Partie réservée à l'assuré(e) ». Or ce cadre, l'assuré le remplit de
+// sa main et signe dessous : le cabinet déclarait une identité qui n'est pas
+// la sienne à déclarer. Le formulaire sort désormais vierge de ce côté-là.
+//
+// `liens` reste, lui : il ne sert plus à cocher, mais à DESSINER les bonnes
+// cases — la CNSS en propose trois, le CNOPS deux, les FAR trois autres.
+//
 // ── CE QUE LE LOGICIEL N'INVENTE PAS ────────────────────────────────────────
 //
 // Ni les codes de la nomenclature, ni la valeur de la clé. Le praticien les
@@ -33,16 +44,6 @@ export type CleOrganisme = 'cnss' | 'cnops' | 'far' | 'rma' | 'prive' | 'autre'
 /** Le gabarit imprimé. « neutre » = la feuille MonRDV, à agrafer au
  *  formulaire de l'organisme : le repli quand on n'a pas son imprimé. */
 export type Gabarit = 'anam' | 'rma' | 'far' | 'neutre'
-
-export interface ChampOrganisme {
-  cle: string
-  label: string
-  /** Aide affichée sous le champ, quand le mot du formulaire n'est pas évident. */
-  aide?: string
-  /** Le formulaire présente ce champ en cases à un chiffre : on imprime alors
-   *  la valeur chiffre par chiffre, dans la grille. */
-  cases?: number
-}
 
 export type TypeSoin = 'soins' | 'prothese' | 'orthodontie' | 'autres'
 
@@ -69,8 +70,6 @@ export interface Organisme {
   /** Intitulé imprimé en tête du bloc « Assuré ». */
   intitule: string
   gabarit: Gabarit
-  /** Les champs demandés par le formulaire, dans son ordre. */
-  champs: ChampOrganisme[]
   /** Les cases « lien de parenté » du formulaire. Vide = champ libre. */
   liens: string[]
   /** Les cases « Type de soins ». null = le formulaire n'en a pas. */
@@ -99,31 +98,6 @@ export interface Organisme {
   accordPrealable: string[]
 }
 
-// ── Champs communs ──────────────────────────────────────────────────────────
-// Les clés sont celles déjà stockées dans `patients.insurer_data` quand elles
-// existaient : renommer une clé ferait disparaître une valeur déjà saisie.
-
-const NOM_ASSURE: ChampOrganisme = {
-  cle: 'assure',
-  label: 'Nom et prénom de l\'assuré',
-  aide: 'Laisser vide si c\'est le patient lui-même.',
-}
-const CIN_ASSURE: ChampOrganisme = {
-  cle: 'cin_assure',
-  label: 'CIN de l\'assuré',
-  cases: 10,
-}
-const ADRESSE_ASSURE: ChampOrganisme = {
-  cle: 'adresse_assure',
-  label: 'Adresse de l\'assuré',
-  aide: 'Celle du formulaire. Laisser vide pour reprendre l\'adresse du patient.',
-}
-const LIEN: ChampOrganisme = {
-  cle: 'lien',
-  label: 'Lien avec l\'assuré',
-  aide: 'Laisser vide si l\'assuré est le patient.',
-}
-
 /** Les quatre cases « Type de soins » du formulaire ANAM. Le CNOPS écrit
  *  « Orthodentie et O.D.F », la CNSS « Orthodontie faciale » : même case. */
 const TYPES_ANAM: { cle: TypeSoin; label: string }[] = [
@@ -141,13 +115,6 @@ export const ORGANISMES: Organisme[] = [
     alias: ['cnss', 'amo', 'cnss amo'],
     intitule: 'CNSS — Assurance Maladie Obligatoire',
     gabarit: 'anam',
-    champs: [
-      NOM_ASSURE,
-      { cle: 'immatriculation', label: 'N° d\'immatriculation CNSS', aide: 'Celui qui figure sur la carte de l\'assuré.', cases: 10 },
-      CIN_ASSURE,
-      ADRESSE_ASSURE,
-      LIEN,
-    ],
     liens: ['Conjoint', 'Enfant', 'Lui même'],
     typesSoins: TYPES_ANAM,
     colonneCode: true,
@@ -176,15 +143,6 @@ export const ORGANISMES: Organisme[] = [
     alias: ['cnops', 'cnops (secteur public)'],
     intitule: 'CNOPS — secteur public',
     gabarit: 'anam',
-    champs: [
-      NOM_ASSURE,
-      { cle: 'affiliation', label: 'N° d\'affiliation', cases: 8 },
-      { cle: 'immatriculation', label: 'N° d\'immatriculation', cases: 10 },
-      CIN_ASSURE,
-      { cle: 'mutuelle_rattachement', label: 'Mutuelle de rattachement', aide: 'Celle qui gère le dossier et appose son cachet.' },
-      ADRESSE_ASSURE,
-      LIEN,
-    ],
     // Le formulaire du CNOPS n'offre que deux cases : pas de « Lui même ».
     liens: ['Conjoint', 'Enfant'],
     typesSoins: TYPES_ANAM,
@@ -219,17 +177,6 @@ export const ORGANISMES: Organisme[] = [
     alias: ['far', 'mutuelle des far', 'forces armées royales', 'mutuelle far'],
     intitule: 'Mutuelle des Forces Armées Royales',
     gabarit: 'far',
-    champs: [
-      NOM_ASSURE,
-      CIN_ASSURE,
-      { cle: 'compte_bancaire', label: 'N° de compte de l\'adhérent', aide: 'Le formulaire de la mutuelle le demande pour le virement.' },
-      { cle: 'telephone_assure', label: 'Téléphone de l\'adhérent' },
-      { cle: 'grade', label: 'Grade' },
-      { cle: 'unite', label: 'Unité' },
-      { cle: 'cas', label: 'Maladie, maternité ou accident', aide: 'Ce que déclare la feuille. Sans réponse, elle sort cochée « Maladie ».' },
-      ADRESSE_ASSURE,
-      LIEN,
-    ],
     liens: ['Adhérent', 'Conjoint', 'Enfant'],
     // La page 4 de l'imprimé est une page DENTAIRE à part entière — ce que la
     // première lecture, faite sur les pages 1 et 3, avait manqué. Elle porte
@@ -263,14 +210,6 @@ export const ORGANISMES: Organisme[] = [
     alias: ['rma', 'rma watanya', 'royale marocaine d\'assurance'],
     intitule: 'RMA Watanya',
     gabarit: 'rma',
-    champs: [
-      { cle: 'affiliation', label: 'N° d\'affiliation', cases: 16 },
-      { cle: 'souscripteur', label: 'Souscripteur', aide: 'L\'employeur ou l\'organisme qui a souscrit le contrat.' },
-      { cle: 'police', label: 'N° de police' },
-      NOM_ASSURE,
-      ADRESSE_ASSURE,
-      LIEN,
-    ],
     liens: [],
     typesSoins: null,
     colonneCode: false,
@@ -300,14 +239,6 @@ export const ORGANISMES: Organisme[] = [
     alias: ['privée', 'privee', 'assurance', 'mutuelle privée'],
     intitule: 'Assurance privée',
     gabarit: 'neutre',
-    champs: [
-      { cle: 'compagnie', label: 'Compagnie', aide: 'Le nom de l\'assureur, tel qu\'il figure sur la carte.' },
-      NOM_ASSURE,
-      { cle: 'police', label: 'N° de police / contrat' },
-      { cle: 'adherent', label: 'N° d\'adhérent', aide: 'S\'il est distinct du numéro de police.' },
-      ADRESSE_ASSURE,
-      LIEN,
-    ],
     liens: [],
     typesSoins: null,
     colonneCode: false,
@@ -343,7 +274,6 @@ export function organismePour(mutuelle: string | null | undefined): Organisme | 
     nom: m,
     intitule: m,
     gabarit: 'neutre',
-    champs: [NOM_ASSURE, { cle: 'reference', label: 'N° d\'assuré / référence' }, ADRESSE_ASSURE, LIEN],
     liens: [],
     typesSoins: null,
     colonneCode: false,
@@ -363,35 +293,4 @@ export function organismePour(mutuelle: string | null | undefined): Organisme | 
 export function organismeParCle(cle: string | null | undefined): Organisme | null {
   if (!cle) return null
   return ORGANISMES.find((o) => o.cle === cle) ?? null
-}
-
-/** Une clé stockée en base → un libellé lisible, sans déclaration. Sert aux
- *  valeurs saisies sous une version antérieure du registre : les retirer du
- *  tableau ci-dessus ne doit pas les faire DISPARAÎTRE du document. */
-function humaniser(cle: string): string {
-  const mot = cle.replace(/_/g, ' ')
-  return mot.charAt(0).toUpperCase() + mot.slice(1)
-}
-
-/** Les champs renseignés, prêts à être imprimés : libellé + valeur, dans
- *  l'ordre du formulaire, sans les cases laissées vides.
- *
- *  Les valeurs stockées sous une clé que le registre ne déclare plus sont
- *  imprimées À LA SUITE, sous un libellé déduit de la clé. Une information
- *  saisie par le praticien ne disparaît jamais d'un document parce que le
- *  logiciel a changé d'avis sur la liste des champs. */
-export function champsRenseignes(
-  mutuelle: string | null | undefined,
-  donnees: Record<string, unknown> | null | undefined,
-): { label: string; valeur: string }[] {
-  const org = organismePour(mutuelle)
-  if (!org || !donnees) return []
-  const declares = org.champs
-    .map((c) => ({ label: c.label, valeur: String(donnees[c.cle] ?? '').trim() }))
-    .filter((c) => c.valeur !== '')
-  const vus = new Set(org.champs.map((c) => c.cle))
-  const orphelins = Object.entries(donnees)
-    .filter(([cle, v]) => !vus.has(cle) && String(v ?? '').trim() !== '')
-    .map(([cle, v]) => ({ label: humaniser(cle), valeur: String(v).trim() }))
-  return [...declares, ...orphelins]
 }
