@@ -10,21 +10,63 @@
 // ne peut pas deviner — le code de nomenclature de chaque acte — et encore :
 // une seule fois, puisqu'il est ensuite proposé avec l'acte.
 //
-// Les lignes arrivent pré-remplies avec les actes marqués « réalisés » du jour
-// (plan de traitement), à défaut avec le montant de la consultation. Le
-// praticien relit, corrige s'il le faut, et imprime.
+// ── ON COCHE, ON NE SAISIT PAS ──────────────────────────────────────────────
+//
+// La première version pré-remplissait des lignes et ouvrait un éditeur. Ce
+// n'est pas le même geste : le praticien sortait de son fauteuil pour relire
+// un tableau. Ici il voit ses actes terminés, il coche ceux qui partent sur
+// cette feuille, et c'est tout. L'éditeur reste, derrière « ajouter un acte
+// hors plan de traitement », pour ce qui n'était pas prévu.
+//
+// Le reste vient du dossier et des paramètres : identité, organisme, numéros
+// de l'assuré, INPE, ville, date. Le formulaire de l'organisme se remplit
+// seul et sort sur une feuille A4 blanche.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, resteACharge, type StatutFeuille, type FeuilleSuivi } from '@/lib/feuilles-soins'
-import { FileSpreadsheet, Plus, Printer, Trash2 } from 'lucide-react'
+import { organismePour } from '@/lib/organismes'
+import { alertesFeuille, type AlerteFeuille } from '@/lib/feuille-regles'
+import type { ImageDentaire } from '@/lib/imagerie'
+import { AlertTriangle, FileSpreadsheet, Info, Plus, Printer, Trash2, XCircle } from 'lucide-react'
 
 const inputCls = 'text-xs border border-gray-200 rounded-lg px-2 py-1.5'
 
 export interface ActeSuggere { tooth?: string | null; label: string; amount: number }
 
-interface Ligne { tooth: string; code: string; label: string; amount: string }
+interface Ligne {
+  /** L'acte du plan de traitement dont vient cette ligne, quand elle a été
+   *  cochée plutôt que tapée. Sert à décocher. */
+  origine?: string
+  tooth: string
+  code: string
+  label: string
+  amount: string
+  acteDate: string
+  lettreCle: string
+  coefficient: string
+  valeurCle: string
+}
+
+/** Un acte terminé du plan de traitement, proposé à cocher. */
+interface Candidat {
+  cle: string
+  tooth: string | null
+  label: string
+  amount: number
+  jour: string
+}
+
+const LIGNE_VIDE: Ligne = {
+  tooth: '', code: '', label: '', amount: '',
+  acteDate: '', lettreCle: '', coefficient: '', valeurCle: '',
+}
+
+/** Au-delà, l'acte est trop ancien pour partir sur une feuille neuve : tous
+ *  les organismes ont déjà fermé leur délai de dépôt. L'afficher ne ferait
+ *  qu'allonger la liste à cocher. */
+const JOURS_CANDIDATS = 120
 
 interface Feuille {
   id: string
@@ -37,20 +79,31 @@ interface Feuille {
 
 export default function FeuilleSoinsCard({
   patientId, appointmentId = null, dental = false, mutuelle = null, suggestions = [],
+  images = [], inpe = null,
 }: {
   patientId: string
   appointmentId?: string | null
   /** Dentiste : la colonne « dent » n'a de sens que là. */
   dental?: boolean
-  /** Organisme de la fiche patient, repris tel quel sur la feuille. */
+  /** Organisme de la fiche patient : il commande le formulaire imprimé. */
   mutuelle?: string | null
-  /** Actes du jour, pré-remplis : le praticien relit au lieu de ressaisir. */
+  /** Actes du jour calculés côté serveur — le repli quand le plan de
+   *  traitement n'est pas lisible depuis le navigateur. */
   suggestions?: ActeSuggere[]
+  /** L'imagerie du patient, pour vérifier la règle des six mois de l'ANAM. */
+  images?: ImageDentaire[]
+  /** L'INPE du praticien : obligatoire sur tout imprimé AMO. */
+  inpe?: string | null
 }) {
+  const organisme = organismePour(mutuelle)
   const [feuilles, setFeuilles] = useState<Feuille[]>([])
   const [activee, setActivee] = useState(true)
   const [actes, setActes] = useState<{ label: string; code: string | null; amount: number }[]>([])
   const [lignes, setLignes] = useState<Ligne[]>([])
+  const [candidats, setCandidats] = useState<Candidat[]>([])
+  const [nature, setNature] = useState<'execution' | 'entente_prealable'>('execution')
+  const [typesSoins, setTypesSoins] = useState<string[]>([])
+  const [ententeNo, setEntenteNo] = useState('')
   const [busy, setBusy] = useState(false)
   const [ouvert, setOuvert] = useState(false)
   const [erreur, setErreur] = useState(false)
@@ -76,49 +129,88 @@ export default function FeuilleSoinsCard({
       .catch(() => { /* catalogue vide : on saisit à la main */ })
   }, [])
 
-  /** Actes du plan marqués « réalisés » AUJOURD'HUI, relus à l'instant où l'on
-   *  ouvre la feuille.
+  /** Les actes du plan marqués « réalisés », du plus récent au plus ancien.
    *
-   *  POURQUOI NE PAS SE CONTENTER DE `suggestions` : elles sont calculées sur le
-   *  SERVEUR au chargement de l'écran de consultation. Or l'ordre réel est
-   *  l'inverse — le praticien soigne, coche ses actes dans « Actes du jour »,
-   *  PUIS établit la feuille. Les actes cochés depuis l'affichage de la page
-   *  manquaient donc toujours : la feuille s'ouvrait sur « Consultation · 0 DH »
-   *  et il fallait recharger l'écran pour qu'elle se remplisse — ce que
-   *  personne ne devine. */
-  async function actesDuJour(): Promise<ActeSuggere[] | null> {
+   *  Relus à l'instant où l'on ouvre la feuille, et non reçus du serveur au
+   *  chargement de l'écran : l'ordre réel est l'inverse — le praticien soigne,
+   *  coche ses actes dans « Actes du jour », PUIS établit la feuille. Les
+   *  actes cochés depuis l'affichage de la page manquaient donc toujours.
+   *
+   *  On remonte quatre mois et non le jour même : une feuille porte couramment
+   *  plusieurs séances, et c'est bien ce que demandent les formulaires, qui
+   *  ont une colonne « Dates des actes » sur CHAQUE ligne. */
+  async function chargerCandidats(): Promise<Candidat[]> {
     try {
       const res = await fetch(`/api/quotes?patient_id=${encodeURIComponent(patientId)}`)
-      if (!res.ok) return null
-      const data = (await res.json()) as { quotes?: { status?: string; items?: { tooth: string | null; label: string; unit_price: number; quantity: number; done: boolean; done_at: string | null }[] }[] }
-      const aujourdhui = new Date().toISOString().slice(0, 10)
-      const faits = (data.quotes ?? [])
+      if (!res.ok) return []
+      const data = (await res.json()) as { quotes?: { id?: string; status?: string; items?: { id?: string; tooth: string | null; label: string; unit_price: number; quantity: number; done: boolean; done_at: string | null }[] }[] }
+      const limite = new Date(Date.now() - JOURS_CANDIDATS * 86400000).toISOString().slice(0, 10)
+      return (data.quotes ?? [])
         .filter((q) => q.status !== 'refuse' && q.status !== 'annule')
-        .flatMap((q) => q.items ?? [])
-        .filter((it) => it.done && (it.done_at ?? '').slice(0, 10) === aujourdhui)
-        .map((it) => ({ tooth: it.tooth, label: it.label, amount: Number(it.unit_price) * (it.quantity || 1) }))
-      return faits.length > 0 ? faits : null
+        .flatMap((q) => (q.items ?? []).map((it, i) => ({ it, cle: it.id ?? `${q.id ?? 'q'}-${i}` })))
+        .filter(({ it }) => it.done && (it.done_at ?? '').slice(0, 10) >= limite)
+        .map(({ it, cle }) => ({
+          cle,
+          tooth: it.tooth,
+          label: it.label,
+          amount: Number(it.unit_price) * (it.quantity || 1),
+          jour: (it.done_at ?? '').slice(0, 10),
+        }))
+        .sort((a, b) => b.jour.localeCompare(a.jour))
     } catch {
-      // Lecture impossible : on garde ce que le serveur avait préparé.
-      return null
+      return []
     }
   }
 
-  /** Première ouverture : les actes du jour deviennent les lignes. */
+  /** Une ligne construite à partir d'un acte coché. Le code et le tarif
+   *  viennent du catalogue : saisis une fois, ils reviennent tout seuls. */
+  function ligneDepuis(c: Candidat): Ligne {
+    const connu = actes.find((a) => a.label.toLowerCase().replace(/\s+/g, ' ') === c.label.toLowerCase().replace(/\s+/g, ' '))
+    return {
+      ...LIGNE_VIDE,
+      origine: c.cle,
+      tooth: c.tooth ?? '',
+      code: connu?.code ?? '',
+      label: c.label,
+      amount: String(c.amount || connu?.amount || ''),
+      acteDate: c.jour,
+      lettreCle: dental ? 'D' : '',
+    }
+  }
+
+  /** Première ouverture : on charge les actes terminés et on coche ceux du
+   *  jour. Le praticien décoche ce qui ne part pas sur cette feuille. */
   async function ouvrir() {
     setOuvert(true)
-    if (lignes.length > 0) return
-    const source = (await actesDuJour()) ?? suggestions
-    const depart: Ligne[] = source.map((s) => {
-      const connu = actes.find((a) => a.label.toLowerCase() === s.label.toLowerCase())
-      return {
-        tooth: s.tooth ?? '',
-        code: connu?.code ?? '',
-        label: s.label,
-        amount: String(s.amount || connu?.amount || ''),
-      }
-    })
-    setLignes(depart.length > 0 ? depart : [{ tooth: '', code: '', label: '', amount: '' }])
+    if (lignes.length > 0 || candidats.length > 0) return
+    const liste = await chargerCandidats()
+    setCandidats(liste)
+    const aujourdhui = new Date().toLocaleDateString('en-CA')
+    const duJour = liste.filter((c) => c.jour === aujourdhui)
+    if (duJour.length > 0) {
+      setLignes(duJour.map(ligneDepuis))
+    } else if (liste.length === 0 && suggestions.length > 0) {
+      // Plan de traitement illisible : on garde ce que le serveur avait
+      // préparé plutôt que d'ouvrir une feuille vide.
+      setLignes(suggestions.map((sg) => ({
+        ...LIGNE_VIDE,
+        tooth: sg.tooth ?? '',
+        label: sg.label,
+        amount: String(sg.amount || ''),
+        acteDate: aujourdhui,
+        lettreCle: dental ? 'D' : '',
+      })))
+    }
+  }
+
+  /** Cocher ou décocher un acte terminé. Décocher n'efface que la ligne qui
+   *  en vient : un acte tapé à la main reste. */
+  function basculer(c: Candidat) {
+    setLignes((prev) => (
+      prev.some((l) => l.origine === c.cle)
+        ? prev.filter((l) => l.origine !== c.cle)
+        : [...prev, ligneDepuis(c)]
+    ))
   }
 
   function majLigne(i: number, champ: keyof Ligne, valeur: string) {
@@ -143,17 +235,30 @@ export default function FeuilleSoinsCard({
   async function etablir() {
     const items = lignes
       .filter((l) => l.label.trim())
-      .map((l) => ({ tooth: l.tooth || null, code: l.code || null, label: l.label.trim(), amount: Number(String(l.amount || '0').replace(',', '.')) }))
-    if (items.length === 0) { alert('Ajoutez au moins un acte.'); return }
+      .map((l) => ({
+        tooth: l.tooth || null,
+        code: l.code || null,
+        label: l.label.trim(),
+        amount: Number(String(l.amount || '0').replace(',', '.')),
+        acte_date: l.acteDate || null,
+        lettre_cle: l.lettreCle || null,
+        coefficient: l.coefficient || null,
+        valeur_cle: l.valeurCle || null,
+      }))
+    if (items.length === 0) { alert('Cochez au moins un acte.'); return }
     setBusy(true)
     try {
       const res = await fetch('/api/feuilles-soins', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patient_id: patientId, appointment_id: appointmentId, items }),
+        body: JSON.stringify({
+          patient_id: patientId, appointment_id: appointmentId, items,
+          nature, types_soins: typesSoins, entente_no: ententeNo.trim() || null,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { alert(data.error || "La feuille n'a pas pu être établie."); return }
-      setLignes([]); setOuvert(false)
+      setLignes([]); setCandidats([]); setTypesSoins([]); setEntenteNo(''); setNature('execution')
+      setOuvert(false)
       await charger()
       // Le document s'ouvre tout de suite : c'est pour l'imprimer qu'on l'établit.
       window.open(`/feuille-soins/${data.id}`, '_blank', 'noopener')
@@ -179,6 +284,33 @@ export default function FeuilleSoinsCard({
 
   const total = totalFeuille(lignes.map((l) => ({ amount: l.amount })))
 
+  // Ce qui ferait revenir le dossier, calculé à chaque frappe sur les lignes
+  // retenues. Rien n'est bloqué : le praticien connaît son dossier mieux que
+  // le logiciel, et une alerte fausse qui empêche d'imprimer est pire que pas
+  // d'alerte du tout.
+  const aujourdhui = new Date().toLocaleDateString('en-CA')
+  const alertes: AlerteFeuille[] = ouvert && organisme
+    ? alertesFeuille({
+        organisme,
+        actes: lignes.filter((l) => l.label.trim()).map((l) => ({
+          tooth: l.tooth || null,
+          code: l.code || null,
+          label: l.label.trim(),
+          amount: Number(String(l.amount || '0').replace(',', '.')),
+          acte_date: l.acteDate || null,
+          lettre_cle: l.lettreCle || null,
+          coefficient: l.coefficient || null,
+          valeur_cle: l.valeurCle || null,
+        })),
+        jourFeuille: aujourdhui,
+        aujourdhui,
+        images,
+        inpe,
+        ententePrealable: nature === 'entente_prealable',
+        ententeNo,
+      })
+    : []
+
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
@@ -194,52 +326,170 @@ export default function FeuilleSoinsCard({
       </div>
 
       {ouvert && (
-        <div className="space-y-2 mb-4">
-          {lignes.map((l, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-1.5">
-              {dental && (
-                <select value={l.tooth} onChange={(e) => majLigne(i, 'tooth', e.target.value)}
-                  className={`${inputCls} w-[72px] bg-white`} title="Dent (FDI)">
-                  <option value="">Dent</option>
-                  <optgroup label="Haut">{FDI_UPPER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
-                  <optgroup label="Bas">{FDI_LOWER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
-                  <optgroup label="Lait — haut">{FDI_UPPER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
-                  <optgroup label="Lait — bas">{FDI_LOWER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
-                </select>
-              )}
-              <input value={l.label} onChange={(e) => choisirActe(i, e.target.value)} placeholder="Acte"
-                list="feuille-actes" autoComplete="off" className={`${inputCls} flex-1 min-w-[140px]`} />
-              <input value={l.code} onChange={(e) => majLigne(i, 'code', e.target.value.toUpperCase())}
-                placeholder="Code" title="Code de nomenclature, tel que vous l'écrivez sur vos feuilles"
-                className={`${inputCls} w-24 uppercase`} />
-              <input value={l.amount} onChange={(e) => majLigne(i, 'amount', e.target.value)} type="number" min="0"
-                placeholder="DH" className={`${inputCls} w-20`} />
-              <button onClick={() => setLignes((prev) => prev.filter((_, j) => j !== i))}
-                className="text-gray-300 hover:text-red-500" title="Retirer cette ligne">
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+        <div className="space-y-3 mb-4">
+          {/* ── Ce qui part sur la feuille ──────────────────────────────── */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 mb-1.5">
+              Actes terminés — cochez ceux qui partent sur cette feuille
+            </p>
+            {candidats.length === 0 ? (
+              <p className="text-[11px] text-gray-400 italic">
+                Aucun acte marqué « réalisé » dans le plan de traitement. Ajoutez-les ci-dessous.
+              </p>
+            ) : (
+              <ul className="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-56 overflow-auto">
+                {candidats.map((c) => {
+                  const coche = lignes.some((l) => l.origine === c.cle)
+                  // Indice, pas verdict : deux séances identiques sur la même
+                  // dent existent. On signale, on n'empêche pas.
+                  const deja = feuilles.some((f) => (f.items ?? []).some(
+                    (i) => (i.tooth ?? '') === (c.tooth ?? '') && i.label === c.label,
+                  ))
+                  return (
+                    <li key={c.cle}>
+                      <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" checked={coche} onChange={() => basculer(c)}
+                          className="h-3.5 w-3.5 accent-primary-600" />
+                        {c.tooth && (
+                          <span className="text-[10px] font-semibold text-gray-500 tabular-nums w-6 shrink-0">{c.tooth}</span>
+                        )}
+                        <span className="text-xs text-gray-800 truncate flex-1">{c.label}</span>
+                        {deja && !coche && (
+                          <span className="text-[9.5px] text-amber-600 shrink-0">déjà porté sur une feuille</span>
+                        )}
+                        <span className="text-[10px] text-gray-400 tabular-nums shrink-0">{formatDateShort(c.jour)}</span>
+                        <span className="text-xs font-medium text-gray-700 tabular-nums shrink-0 w-16 text-right">
+                          {c.amount.toLocaleString('fr-FR')} DH
+                        </span>
+                      </label>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* ── Les lignes retenues, avec ce que le formulaire exige ─────── */}
+          {lignes.length > 0 && (
+            <div className="space-y-1.5">
+              {lignes.map((l, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-1.5">
+                  {dental && (
+                    <select value={l.tooth} onChange={(e) => majLigne(i, 'tooth', e.target.value)}
+                      className={`${inputCls} w-[68px] bg-white`} title="Dent (FDI)">
+                      <option value="">Dent</option>
+                      <optgroup label="Haut">{FDI_UPPER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
+                      <optgroup label="Bas">{FDI_LOWER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
+                      <optgroup label="Lait — haut">{FDI_UPPER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
+                      <optgroup label="Lait — bas">{FDI_LOWER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
+                    </select>
+                  )}
+                  <input value={l.label} onChange={(e) => choisirActe(i, e.target.value)} placeholder="Acte"
+                    list="feuille-actes" autoComplete="off" className={`${inputCls} flex-1 min-w-[130px]`} />
+                  <input value={l.acteDate} onChange={(e) => majLigne(i, 'acteDate', e.target.value)} type="date"
+                    title="Date de cet acte" className={`${inputCls} w-[125px]`} />
+                  <input value={l.code} onChange={(e) => majLigne(i, 'code', e.target.value.toUpperCase())}
+                    placeholder="Code" title="Code de l'acte (D726…)" className={`${inputCls} w-20 uppercase`} />
+                  {/* La cotation : lettre clé, coefficient, valeur de la clé.
+                      Trois colonnes distinctes sur le formulaire, et sans
+                      elles le dossier revient au cabinet. */}
+                  {organisme?.colonneCotation && (
+                    <>
+                      <input value={l.lettreCle} onChange={(e) => majLigne(i, 'lettreCle', e.target.value.toUpperCase())}
+                        placeholder="D" title="Lettre clé" className={`${inputCls} w-10 uppercase text-center`} />
+                      <input value={l.coefficient} onChange={(e) => majLigne(i, 'coefficient', e.target.value)} type="number" min="0"
+                        placeholder="Coef." title="Coefficient" className={`${inputCls} w-16`} />
+                      <input value={l.valeurCle} onChange={(e) => majLigne(i, 'valeurCle', e.target.value)} type="number" min="0"
+                        placeholder="Val. clé" title="Valeur de la clé, en dirhams" className={`${inputCls} w-20`} />
+                    </>
+                  )}
+                  <input value={l.amount} onChange={(e) => majLigne(i, 'amount', e.target.value)} type="number" min="0"
+                    placeholder="DH" className={`${inputCls} w-20`} />
+                  <button onClick={() => setLignes((prev) => prev.filter((_, j) => j !== i))}
+                    className="text-gray-300 hover:text-red-500" title="Retirer cette ligne">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
           <datalist id="feuille-actes">
             {actes.map((a) => (
               <option key={a.label} value={a.label}>{a.code ? `${a.code} · ` : ''}{a.amount} DH</option>
             ))}
           </datalist>
 
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <button onClick={() => setLignes((prev) => [...prev, { tooth: '', code: '', label: '', amount: '' }])}
-              className="text-xs font-medium text-primary-600 hover:text-primary-700">＋ Ajouter un acte</button>
+          <div className="flex items-center justify-between gap-2">
+            <button onClick={() => setLignes((prev) => [...prev, { ...LIGNE_VIDE, lettreCle: dental ? 'D' : '' }])}
+              className="text-xs font-medium text-primary-600 hover:text-primary-700">
+              ＋ Ajouter un acte hors plan de traitement
+            </button>
             <span className="text-sm font-semibold text-gray-800">Total {total.toLocaleString('fr-FR')} DH</span>
           </div>
 
-          <div className="flex items-center gap-2 pt-1">
+          {/* ── Ce que le formulaire de CET organisme demande en plus ────── */}
+          {organisme && (organisme.ententePrealable || organisme.typesSoins) && (
+            <div className="bg-gray-50 rounded-lg p-2.5 space-y-2">
+              {organisme.ententePrealable && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500">Cette feuille déclare</span>
+                  {([['execution', 'des actes faits'], ['entente_prealable', 'une demande d\u2019accord préalable']] as const).map(([v, lib]) => (
+                    <button key={v} onClick={() => setNature(v)}
+                      className={`text-[11px] px-2 py-1 rounded-lg border ${nature === v ? 'bg-primary-500 text-white border-transparent' : 'bg-white text-gray-600 border-gray-200'}`}>
+                      {lib}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {organisme.typesSoins && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-semibold text-gray-500">Type de soins</span>
+                  {organisme.typesSoins.map((t) => (
+                    <label key={t.cle} className="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer">
+                      <input type="checkbox" checked={typesSoins.includes(t.cle)} className="h-3.5 w-3.5 accent-primary-600"
+                        onChange={() => setTypesSoins((prev) => prev.includes(t.cle) ? prev.filter((x) => x !== t.cle) : [...prev, t.cle])} />
+                      {t.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+              {organisme.ententePrealable && nature === 'execution' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-500 shrink-0">N° d&apos;entente préalable</span>
+                  <input value={ententeNo} onChange={(e) => setEntenteNo(e.target.value)}
+                    placeholder="s&apos;il y en a une" className={`${inputCls} w-44`} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Ce qui ferait revenir le dossier ─────────────────────────── */}
+          {alertes.length > 0 && (
+            <ul className="space-y-1">
+              {alertes.map((al, i) => (
+                <li key={i} className={`flex items-start gap-1.5 rounded-lg px-2 py-1.5 text-[11px] border ${
+                  al.niveau === 'bloquant' ? 'bg-red-50 border-red-100 text-red-800'
+                  : al.niveau === 'attention' ? 'bg-amber-50 border-amber-100 text-amber-800'
+                  : 'bg-gray-50 border-gray-100 text-gray-600'}`}>
+                  {al.niveau === 'bloquant' ? <XCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                    : al.niveau === 'attention' ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                    : <Info className="h-3.5 w-3.5 shrink-0 mt-px" />}
+                  <span><span className="font-semibold">{al.titre}.</span> {al.detail}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex items-center gap-2">
             <Button size="sm" onClick={etablir} disabled={busy}>
               {busy ? 'Établissement…' : 'Établir et imprimer'}
             </Button>
             <Button size="sm" variant="outline" onClick={() => setOuvert(false)}>Annuler</Button>
           </div>
           <p className="text-[11px] text-gray-400">
-            Le code est celui que vous portez sur vos feuilles : saisi une fois, il revient tout seul avec l&apos;acte.
+            {organisme
+              ? `Le formulaire ${organisme.nom} se remplit seul avec le dossier et vos paramètres, et s\u2019imprime sur une feuille A4 blanche.`
+              : 'Ce patient n\u2019a pas d\u2019organisme sur sa fiche : la feuille sortira sous sa forme neutre.'}
           </p>
         </div>
       )}

@@ -826,7 +826,7 @@ export const STAFF_PERMISSION_GROUPS: {
 export const STAFF_PERMISSION_LABELS = STAFF_PERMISSION_GROUPS.flatMap((g) => g.items)
 
 // Types de mutuelle courants au Maroc (fiche patient)
-export const MUTUELLES_MAROC = ['CNSS (AMO)', 'CNOPS', 'FAR', 'Assurance privée', 'Aucune'] as const
+export const MUTUELLES_MAROC = ['CNSS (AMO)', 'CNOPS', 'FAR', 'RMA Watanya', 'Assurance privée', 'Aucune'] as const
 
 // Groupes sanguins (fiche patient)
 export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const

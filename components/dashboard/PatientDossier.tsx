@@ -74,6 +74,7 @@ const ACTIONS_LISIBLES: Record<string, string> = {"dossier_consulte": "Dossier c
 
 export default function PatientDossier({
   doctorId, doctorName, doctorSlug, specialties, enabledVitals, vitalDefsAll, initialPatient,
+  doctorInpe = null,
 }: {
   doctorId: string
   doctorName: string
@@ -82,6 +83,9 @@ export default function PatientDossier({
   enabledVitals: string[]
   vitalDefsAll: VitalDef[]
   initialPatient: Patient
+  /** L'INPE du praticien : obligatoire sur tout imprimé de l'assurance
+   *  maladie obligatoire, et donc vérifié avant d'établir une feuille. */
+  doctorInpe?: string | null
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -950,11 +954,28 @@ export default function PatientDossier({
                     {org.champs.map((c) => (
                       <div key={c.cle} className="space-y-1">
                         <Label className="text-[11px] text-gray-400">{c.label}</Label>
-                        <Input
-                          value={assureData[c.cle] ?? ''}
-                          onChange={(e) => setAssureData((prev) => ({ ...prev, [c.cle]: e.target.value }))}
-                          className="h-9"
-                        />
+                        {/* Le lien de parenté n'est pas un champ libre sur les
+                            formulaires : c'est une case à cocher parmi deux ou
+                            trois. « Épouse » écrit à la main dans une case
+                            « Conjoint » fait revenir le dossier. */}
+                        {c.cle === 'lien' && org.liens.length > 0 ? (
+                          <Select
+                            value={assureData[c.cle] || undefined}
+                            onValueChange={(v) => setAssureData((prev) => ({ ...prev, [c.cle]: v === '—' ? '' : v }))}
+                          >
+                            <SelectTrigger className="h-9"><SelectValue placeholder="—" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="—">—</SelectItem>
+                              {org.liens.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            value={assureData[c.cle] ?? ''}
+                            onChange={(e) => setAssureData((prev) => ({ ...prev, [c.cle]: e.target.value }))}
+                            className="h-9"
+                          />
+                        )}
                         {c.aide && <p className="text-[10px] text-gray-400">{c.aide}</p>}
                       </div>
                     ))}
@@ -1428,6 +1449,11 @@ export default function PatientDossier({
                 patientId={patient.id}
                 dental={isDentalDoctor(specialties)}
                 mutuelle={editMutuelle}
+                inpe={doctorInpe}
+                // L'imagerie sert à vérifier la règle des six mois de l'ANAM :
+                // une radio « avant » plus ancienne que six mois ne justifie
+                // plus l'acte, et celui-ci n'est pas remboursé.
+                images={imagerie}
               />
             )}
             {/* Forfaits de séances prépayées.

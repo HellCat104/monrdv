@@ -75,6 +75,7 @@ export default function SettingsPage() {
     bio: '',
     ice: '',
     inpe: '',
+    identifiant_fiscal: '',
     cnom_number: '',
     appointment_duration: 30,
     booking_lead_hours: 3,
@@ -179,6 +180,7 @@ export default function SettingsPage() {
           bio: data.bio ?? '',
           ice: data.ice ?? '',
           inpe: data.inpe ?? '',
+          identifiant_fiscal: data.identifiant_fiscal ?? '',
           cnom_number: data.cnom_number ?? '',
           appointment_duration: data.appointment_duration,
           booking_lead_hours: data.booking_lead_hours ?? 3,
@@ -398,6 +400,20 @@ export default function SettingsPage() {
           confidential_mode: form.confidential_mode,
         })
         .eq('id', doctor.id)
+
+      // L'identifiant fiscal arrive avec la v95. Enregistré À PART, pour
+      // qu'une migration en retard ne fasse pas échouer TOUS les paramètres :
+      // le médecin verrait « L'enregistrement a échoué » sur un changement
+      // d'adresse sans comprendre pourquoi.
+      if (!error) {
+        const { error: errFisc } = await supabase
+          .from('doctors')
+          .update({ identifiant_fiscal: form.identifiant_fiscal.trim() || null })
+          .eq('id', doctor.id)
+        if (errFisc && errFisc.code !== '42703' && errFisc.code !== 'PGRST204') {
+          console.error('[Paramètres] identifiant fiscal non enregistré :', errFisc.message)
+        }
+      }
 
       if (error) {
         // Sans ce message, un échec laissait le médecin convaincu d'avoir
@@ -989,6 +1005,15 @@ export default function SettingsPage() {
                   value={form.inpe}
                   onChange={(e) => setForm({ ...form, inpe: e.target.value })}
                   placeholder="N° professionnel de santé"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="s_if">Identifiant fiscal (optionnel)</Label>
+                <Input
+                  id="s_if"
+                  value={form.identifiant_fiscal}
+                  onChange={(e) => setForm({ ...form, identifiant_fiscal: e.target.value })}
+                  placeholder="I.F — exigé avec l'ICE sur la feuille de soins"
                 />
               </div>
               <div className="space-y-1.5">

@@ -4,9 +4,13 @@
 // sous sa signature. La secrétaire peut en revanche la retrouver dans le
 // dossier (lecture) une fois qu'elle existe — ce n'est pas cette route.
 import { NextRequest, NextResponse } from 'next/server'
-import { normaliserLigne, totalFeuille, nettoyerDonneesAssure, type LigneFeuille } from '@/lib/feuilles-soins'
+import {
+  normaliserLigne, normaliserCotation, normaliserTypesSoins, totalFeuille,
+  nettoyerDonneesAssure, type LigneFeuille, type CotationLigne,
+} from '@/lib/feuilles-soins'
+import { organismePour } from '@/lib/organismes'
 import { requireFeuilleDoctor, FEUILLE_NON_ACTIVEE } from '@/lib/feuilles-soins-server'
-import { tableAbsente, lienAbsent } from '@/lib/migrations'
+import { tableAbsente, lienAbsent, colonneAbsente } from '@/lib/migrations'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest) {
     ? String(body.care_date)
     : new Date().toISOString().slice(0, 10)
 
-  const { data: feuille, error } = await supabase
+  const base = supabase
     .from('care_sheets')
     .insert({
       doctor_id: doctor.id,
@@ -124,8 +128,45 @@ export async function POST(req: NextRequest) {
       total: totalFeuille(lignes),
       notes: body.notes ? String(body.notes).slice(0, 500) : null,
     })
-    .select('*')
-    .single()
+
+  // ── Ce que la v95 ajoute ──────────────────────────────────────────────────
+  // La nature (exécution ou entente préalable), les cases « Type de soins »,
+  // le numéro d'accord, et la clé de l'organisme qui commande le gabarit
+  // imprimé. Écrits À PART, puis essayés d'un bloc : si la migration n'est pas
+  // passée, la feuille s'établit quand même, sous sa forme d'avant. Une
+  // migration en retard ne doit jamais empêcher un praticien d'imprimer.
+  const insurerNom = body.insurer ? String(body.insurer).slice(0, 60) : (patient.mutuelle ?? null)
+  const extras = {
+    nature: body.nature === 'entente_prealable' ? 'entente_prealable' : 'execution',
+    types_soins: normaliserTypesSoins(body.types_soins),
+    entente_no: body.entente_no ? String(body.entente_no).trim().slice(0, 40) || null : null,
+    organisme: organismePour(insurerNom)?.cle ?? null,
+  }
+
+  let { data: feuille, error } = await base.select('*').single()
+  if (error && colonneAbsente(error.code)) {
+    // Jamais vu : `base` n'envoie pas les extras. Garde-fou si un jour on les
+    // y fond par inadvertance.
+    console.error('[Feuille de soins] colonne inconnue sur le tronc commun :', error.message)
+  }
+  if (!error && feuille) {
+    const { data: enrichie, error: errExtras } = await supabase
+      .from('care_sheets')
+      .update(extras)
+      .eq('id', (feuille as { id: string }).id)
+      .eq('doctor_id', doctor.id)
+      .select('*')
+      .single()
+    if (errExtras) {
+      if (!colonneAbsente(errExtras.code)) {
+        console.error('[Feuille de soins] nature et type de soins non enregistrés :', errExtras.message)
+      }
+      // Migration v95 absente : la feuille existe, sans sa nature. L'écran le
+      // déduira, et le document s'imprimera sous sa forme neutre.
+    } else if (enrichie) {
+      feuille = enrichie
+    }
+  }
 
   if (error || !feuille) {
     if (tableAbsente(error?.code)) return NextResponse.json({ error: FEUILLE_NON_ACTIVEE }, { status: 503 })
@@ -133,9 +174,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "La feuille n'a pas pu être créée" }, { status: 500 })
   }
 
-  const { error: errItems } = await supabase.from('care_sheet_items').insert(
-    lignes.map((l: LigneFeuille) => ({ ...l, sheet_id: feuille.id, doctor_id: doctor.id })),
+  // ── Les actes ─────────────────────────────────────────────────────────────
+  // Même précaution : on essaie avec la cotation, on retombe sur la ligne
+  // seule si la base ne connaît pas encore ces colonnes.
+  const sheetId = (feuille as { id: string }).id
+  const cotations: CotationLigne[] = brutes.map((l: unknown) => normaliserCotation(l))
+  const sansCotation: Record<string, unknown>[] = lignes.map(
+    (l: LigneFeuille) => ({ ...l, sheet_id: sheetId, doctor_id: doctor.id }),
   )
+  const avecCotation = sansCotation.map((l, i) => ({ ...l, ...cotations[i] }))
+
+  let { error: errItems } = await supabase.from('care_sheet_items').insert(avecCotation)
+  if (errItems && colonneAbsente(errItems.code)) {
+    ;({ error: errItems } = await supabase.from('care_sheet_items').insert(sansCotation))
+  }
   if (errItems) {
     // Une feuille sans ses actes est un document faux : on ne la laisse pas
     // derrière nous.

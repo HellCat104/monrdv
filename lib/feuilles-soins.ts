@@ -21,6 +21,19 @@ export interface LigneFeuille {
   position?: number
 }
 
+/** Ce que la v95 ajoute à une ligne : la date de l'acte et sa cotation.
+ *
+ *  À part, et non fondu dans LigneFeuille, parce que ces colonnes peuvent ne
+ *  pas exister : la feuille doit rester établissable tant que la migration
+ *  n'est pas passée. La route essaie d'écrire l'ensemble, et retombe sur la
+ *  ligne seule si la base ne connaît pas encore ces colonnes. */
+export interface CotationLigne {
+  acte_date: string | null
+  lettre_cle: string | null
+  coefficient: number | null
+  valeur_cle: number | null
+}
+
 /** Montant d'une feuille : la somme de ses lignes, jamais un total saisi à
  *  part — un total qui ne correspond pas au détail fait rejeter le dossier. */
 export function totalFeuille(lignes: { amount: number | string }[]): number {
@@ -41,6 +54,42 @@ export function normaliserLigne(brut: unknown, position: number): LigneFeuille |
     amount: Number.isFinite(montant) && montant >= 0 ? Math.round(montant * 100) / 100 : 0,
     position,
   }
+}
+
+/** Un nombre venu du navigateur, strictement positif, ou null.
+ *  Zéro vaut null : un coefficient de 0 ne veut rien dire, et la contrainte
+ *  de la v95 le refuserait — autant ne pas l'envoyer. */
+function nombrePositif(v: unknown): number | null {
+  const n = Number(String(v ?? '').replace(',', '.'))
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null
+}
+
+/** La cotation d'une ligne, nettoyée. Tout y est facultatif : un praticien
+ *  qui ne cote pas ses actes doit pouvoir imprimer sa feuille quand même. */
+export function normaliserCotation(brut: unknown): CotationLigne {
+  const l = (brut && typeof brut === 'object' ? brut : {}) as Record<string, unknown>
+  const date = String(l.acte_date ?? '').slice(0, 10)
+  const lettre = String(l.lettre_cle ?? '').trim().toUpperCase()
+  return {
+    acte_date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
+    lettre_cle: /^[A-Z]{1,3}$/.test(lettre) ? lettre : null,
+    coefficient: nombrePositif(l.coefficient),
+    valeur_cle: nombrePositif(l.valeur_cle),
+  }
+}
+
+/** Les cases « Type de soins » venues du navigateur. */
+export const TYPES_SOINS = ['soins', 'prothese', 'orthodontie', 'autres'] as const
+export type TypeSoinFeuille = (typeof TYPES_SOINS)[number]
+
+export function normaliserTypesSoins(brut: unknown): TypeSoinFeuille[] {
+  if (!Array.isArray(brut)) return []
+  const vus = new Set<TypeSoinFeuille>()
+  for (const v of brut) {
+    const t = String(v ?? '').trim().toLowerCase()
+    if ((TYPES_SOINS as readonly string[]).includes(t)) vus.add(t as TypeSoinFeuille)
+  }
+  return Array.from(vus)
 }
 
 /** Champs de l'assuré venus du navigateur : on garde des paires texte courtes,

@@ -17,7 +17,7 @@ export default async function PatientDossierPage({ params }: { params: { id: str
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, slug, specialty, specialties, enabled_vitals, custom_vitals, plan')
+    .select('id, name, slug, specialty, specialties, enabled_vitals, custom_vitals, plan, inpe')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -54,6 +54,7 @@ export default async function PatientDossierPage({ params }: { params: { id: str
       enabledVitals={enabledVitals}
       vitalDefsAll={vitalDefsAll}
       initialPatient={patient}
+      doctorInpe={doctor.inpe ?? null}
     />
   )
 }
