@@ -83,6 +83,16 @@ export interface Organisme {
   schemaDentaire: boolean
   /** Le formulaire porte la case « Entente préalable / Devis ». */
   ententePrealable: boolean
+  /** Les mots de CE formulaire pour cette case. L'ANAM écrit « Entente
+   *  préalable » et « Exécution », RMA « Devis » et « Exécution », les FAR
+   *  « Devis ? » et « Reçus ? ». L'écran les cite au lieu d'inventer un
+   *  vocabulaire commun : le praticien doit reconnaître son imprimé. */
+  motsNature?: { execution: string; entente: string }
+  /** Le formulaire a une case « N° Entente préalable ». Seuls les imprimés de
+   *  l'ANAM en ont une : RMA et les FAR posent la question du devis sans
+   *  demander de numéro en retour, et proposer la case ferait saisir un
+   *  renseignement qui n'a nulle part où aller. */
+  numeroEntente?: boolean
   delai: DelaiDepot
   /** Ce qui, chez cet organisme, exige un accord AVANT d'être posé. Les mots
    *  sont ceux du formulaire : on les cite, on ne les reformule pas. */
@@ -144,6 +154,8 @@ export const ORGANISMES: Organisme[] = [
     colonneCotation: true,
     schemaDentaire: true,
     ententePrealable: true,
+    motsNature: { execution: 'Exécution', entente: 'Entente préalable' },
+    numeroEntente: true,
     delai: {
       mois: 2,
       depuis: 'premier_acte',
@@ -180,6 +192,8 @@ export const ORGANISMES: Organisme[] = [
     colonneCotation: true,
     schemaDentaire: true,
     ententePrealable: true,
+    motsNature: { execution: 'Exécution', entente: 'Entente préalable' },
+    numeroEntente: true,
     delai: {
       mois: 2,
       depuis: 'premier_acte',
@@ -194,9 +208,11 @@ export const ORGANISMES: Organisme[] = [
   },
 
   // ── Mutuelle des FAR ──────────────────────────────────────────────────────
-  // Son imprimé n'est pas une feuille de soins dentaires mais une « feuille de
-  // maladie » commune à toutes les spécialités : une seule colonne « Natures
-  // des actes & coefficients », pas de code d'acte, pas de schéma dentaire.
+  // Son imprimé est une « feuille de maladie » commune à toutes les
+  // spécialités — quatre pages, dont une seule est celle du dentiste. La
+  // page 1 identifie l'adhérent et le bénéficiaire, la page 2 est
+  // l'ordonnance du pharmacien, la page 3 le relevé commun à tout le corps de
+  // santé, et la page 4 « SOINS ET PROTHESE DENTAIRE (INPE) » est la nôtre.
   {
     cle: 'far',
     nom: 'FAR',
@@ -210,15 +226,28 @@ export const ORGANISMES: Organisme[] = [
       { cle: 'telephone_assure', label: 'Téléphone de l\'adhérent' },
       { cle: 'grade', label: 'Grade' },
       { cle: 'unite', label: 'Unité' },
+      { cle: 'cas', label: 'Maladie, maternité ou accident', aide: 'Ce que déclare la feuille. Sans réponse, elle sort cochée « Maladie ».' },
       ADRESSE_ASSURE,
       LIEN,
     ],
     liens: ['Adhérent', 'Conjoint', 'Enfant'],
-    typesSoins: null,
+    // La page 4 de l'imprimé est une page DENTAIRE à part entière — ce que la
+    // première lecture, faite sur les pages 1 et 3, avait manqué. Elle porte
+    // ses deux cases « Soins ? » et « Prothèse ? », sa question « DEVIS ? —
+    // REÇUS ? », et une grille de dents numérotées.
+    typesSoins: [
+      { cle: 'soins', label: 'Soins' },
+      { cle: 'prothese', label: 'Prothèse' },
+    ],
+    // Pas de colonne « code » : la mutuelle demande « Nature des travaux » et
+    // un coefficient, jamais le numéro ANAM de l'acte.
     colonneCode: false,
     colonneCotation: true,
-    schemaDentaire: false,
-    ententePrealable: false,
+    // Une grille de numéros, pas l'arcade dessinée des autres imprimés : on
+    // croise la dent extraite ou appareillée, on entoure la dent soignée.
+    schemaDentaire: true,
+    ententePrealable: true,
+    motsNature: { execution: 'Reçus', entente: 'Devis' },
     delai: {
       mois: 3,
       depuis: 'premier_acte',
@@ -248,6 +277,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCotation: true,
     schemaDentaire: true,
     ententePrealable: true,
+    motsNature: { execution: 'Exécution', entente: 'Devis' },
     delai: {
       mois: 3,
       depuis: 'dernier_acte',

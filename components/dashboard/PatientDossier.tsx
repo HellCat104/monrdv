@@ -1453,7 +1453,12 @@ export default function PatientDossier({
                 // L'imagerie sert à vérifier la règle des six mois de l'ANAM :
                 // une radio « avant » plus ancienne que six mois ne justifie
                 // plus l'acte, et celui-ci n'est pas remboursé.
-                images={imagerie}
+                //
+                // Vide, on passe `null` plutôt que la liste : le bloc
+                // d'imagerie ne s'est peut-être pas encore annoncé, et une
+                // liste vide voudrait dire « ce patient n'a aucun cliché ».
+                // L'encart va alors les chercher lui-même.
+                images={imagerie.length > 0 ? imagerie : null}
               />
             )}
             {/* Forfaits de séances prépayées.

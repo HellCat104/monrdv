@@ -18,7 +18,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
 
   const { data: doctor } = await supabase
     .from('doctors')
-    .select('id, name, enabled_vitals, specialty, specialties, custom_vitals, plan')
+    .select('id, name, enabled_vitals, specialty, specialties, custom_vitals, plan, inpe')
     .eq('email', user.email)
     .single()
   if (!doctor) notFound()
@@ -174,6 +174,10 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       // encombrerait l'écran de consultation pour rien.
       mutuelle={(patient.mutuelle as string | null) ?? null}
       suggestionsFeuille={suggestionsFeuille}
+      // L'INPE du praticien. Sans lui, la feuille de soins établie au fauteuil
+      // alertait sur un INPE manquant qui était en réalité renseigné : l'écran
+      // de consultation ne le lisait simplement pas.
+      doctorInpe={doctor.inpe ?? null}
       // Ce qui doit se voir pendant que le patient est AU FAUTEUIL. La fiche
       // patient porte la même bannière, mais on n'y est pas à ce moment-là.
       alertes={{

@@ -184,7 +184,12 @@ export function alertesFeuille(ctx: ContexteFeuille): AlerteFeuille[] {
     alertes.push({
       niveau: 'attention',
       titre: 'Ces actes passent normalement par un accord préalable',
-      detail: `${sousAccord.join(', ')}. Portez le numéro de l'accord obtenu sur la feuille, ou établissez d'abord une demande d'entente préalable.`,
+      // Le geste à faire dépend de l'imprimé : celui de l'ANAM a une case
+      // pour le numéro de l'accord obtenu, ceux de RMA et des FAR n'en ont
+      // pas et attendent qu'on leur envoie d'abord un devis.
+      detail: `${sousAccord.join(', ')}. ${org.numeroEntente
+        ? 'Portez le numéro de l\'accord obtenu sur la feuille, ou demandez-le d\'abord.'
+        : `Déclarez d'abord cette feuille comme « ${org.motsNature?.entente ?? 'demande d\'accord préalable'} ».`}`,
     })
   }
 

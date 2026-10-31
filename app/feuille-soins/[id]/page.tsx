@@ -16,7 +16,10 @@ import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
 import { champsRenseignes, organismePour } from '@/lib/organismes'
 import { colonneAbsente } from '@/lib/migrations'
 import { FeuilleDocument, type LigneSoin } from './FeuilleDocument'
-import GabaritANAM, { type ActeImprime } from './GabaritANAM'
+import { type ActeImprime } from '@/lib/feuilles-soins'
+import GabaritANAM from './GabaritANAM'
+import GabaritFAR from './GabaritFAR'
+import GabaritRMA from './GabaritRMA'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,7 +74,7 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
   }
 
   const gabaritDisponible = !!v95 && !errV95
-  if (gabaritDisponible && organisme && organisme.gabarit === 'anam') {
+  if (gabaritDisponible && organisme && organisme.gabarit !== 'neutre') {
     // L'identifiant fiscal arrive avec la même migration : on est ici, donc
     // elle est passée. Lu à part tout de même, pour ne pas alourdir la requête
     // du tronc commun d'une colonne dont six autres écrans n'ont que faire.
@@ -88,37 +91,41 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
       ...(cotations.get((it as unknown as { position?: number }).position ?? i) ?? {}),
     })) as ActeImprime[]
 
-    return (
-      <GabaritANAM
-        organisme={organisme}
-        praticien={{
-          nom: lignesEnTete(doctor).nom,
-          specialite: doctor.specialty ?? null,
-          adresse: lignesEnTete(doctor).adresse,
-          telephone: lignesEnTete(doctor).telephone,
-          inpe: doctor.inpe ?? null,
-          ice: doctor.ice ?? null,
-          identifiantFiscal: (fisc?.identifiant_fiscal as string | null) ?? null,
-          ville: doctor.city ?? null,
-        }}
-        patientId={feuille.patient_id as string}
-        assure={(feuille.insurer_data as Record<string, string> | null) ?? {}}
-        beneficiaire={{
-          nom: patientNom,
-          dateNaissance: patient?.birth_date ?? null,
-          cin: patient?.cin ?? null,
-          sexe: patient?.sex ?? null,
-        }}
-        feuille={{
-          jour: feuille.care_date as string,
-          nature: v95.nature === 'entente_prealable' ? 'entente_prealable' : 'execution',
-          typesSoins: (v95.types_soins as string[] | null) ?? [],
-          ententeNo: (v95.entente_no as string | null) ?? null,
-          total: Number(feuille.total ?? 0),
-        }}
-        actes={actes}
-      />
-    )
+    // Les trois gabarits reçoivent exactement la même chose : seuls la trame
+    // et l'ordre des blocs changent d'un organisme à l'autre.
+    const commun = {
+      organisme,
+      praticien: {
+        nom: lignesEnTete(doctor).nom,
+        specialite: doctor.specialty ?? null,
+        adresse: lignesEnTete(doctor).adresse,
+        telephone: lignesEnTete(doctor).telephone,
+        inpe: doctor.inpe ?? null,
+        ice: doctor.ice ?? null,
+        identifiantFiscal: (fisc?.identifiant_fiscal as string | null) ?? null,
+        ville: doctor.city ?? null,
+      },
+      patientId: feuille.patient_id as string,
+      assure: (feuille.insurer_data as Record<string, string> | null) ?? {},
+      beneficiaire: {
+        nom: patientNom,
+        dateNaissance: patient?.birth_date ?? null,
+        cin: patient?.cin ?? null,
+        sexe: patient?.sex ?? null,
+      },
+      feuille: {
+        jour: feuille.care_date as string,
+        nature: (v95.nature === 'entente_prealable' ? 'entente_prealable' : 'execution') as 'execution' | 'entente_prealable',
+        typesSoins: (v95.types_soins as string[] | null) ?? [],
+        ententeNo: (v95.entente_no as string | null) ?? null,
+        total: Number(feuille.total ?? 0),
+      },
+      actes,
+    }
+
+    if (organisme.gabarit === 'rma') return <GabaritRMA {...commun} />
+    if (organisme.gabarit === 'far') return <GabaritFAR {...commun} />
+    return <GabaritANAM {...commun} />
   }
 
   return (

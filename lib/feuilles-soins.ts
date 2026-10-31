@@ -211,3 +211,52 @@ export function nomPatient(f: FeuilleSuivi): string {
   const p = f.patient
   return `${p?.first_name ?? ''} ${p?.last_name ?? ''}`.trim() || 'Patient'
 }
+
+// ── Ce qu'un gabarit imprimé reçoit ─────────────────────────────────────────
+//
+// Les quatre imprimés diffèrent par leur trame, pas par leurs données : les
+// mêmes actes, le même praticien, le même bénéficiaire. Ces formes sont donc
+// communes aux gabarits ANAM, RMA et FAR.
+
+/** Un acte tel qu'il part à l'impression : la ligne de la feuille, plus sa
+ *  cotation quand la v95 est passée. */
+export interface ActeImprime {
+  tooth: string | null
+  code: string | null
+  label: string
+  amount: number
+  position: number
+  acte_date?: string | null
+  lettre_cle?: string | null
+  coefficient?: number | string | null
+  valeur_cle?: number | string | null
+}
+
+/** Le praticien, tel que les formulaires l'identifient. */
+export interface PraticienImprime {
+  nom: string
+  specialite: string | null
+  adresse: string | null
+  telephone: string | null
+  inpe: string | null
+  ice: string | null
+  identifiantFiscal: string | null
+  ville: string | null
+}
+
+/** Le bénéficiaire des soins — le patient. */
+export interface BeneficiaireImprime {
+  nom: string
+  dateNaissance: string | null
+  cin: string | null
+  sexe: string | null
+}
+
+/** Ce que la feuille elle-même déclare. */
+export interface FeuilleImprimee {
+  jour: string
+  nature: 'execution' | 'entente_prealable'
+  typesSoins: string[]
+  ententeNo: string | null
+  total: number
+}

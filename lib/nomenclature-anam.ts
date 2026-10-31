@@ -223,3 +223,36 @@ export function actesSousAccord(codes: (string | null | undefined)[]): string[] 
   }
   return Array.from(vus)
 }
+
+/** Les familles que les imprimés traitent à part des soins courants :
+ *  prothèse, chirurgie préprothétique, maxillo-facial et orthodontie.
+ *
+ *  RMA leur donne son second tableau, « ODF & Prothèses dentaires », avec ses
+ *  propres lignes Proposition et Exécution ; les FAR leur donnent la case
+ *  « Prothèse ? » de la page 4. */
+const FAMILLES_PROTHESE_ODF = new Set([
+  'preprothetique', 'prothese_conjointe', 'prothese_adjointe',
+  'maxillo', 'odf_bilan', 'odf_traitement',
+])
+
+/** Cet acte relève-t-il de la prothèse ou de l'orthodontie ?
+ *
+ *  Sans code, non : un acte que le praticien n'a pas coté part avec les soins
+ *  courants, là où l'organisme s'attend à trouver le gros des lignes. */
+export function estProtheseOuOdf(code: string | null | undefined): boolean {
+  const f = familleDuCode(code)
+  return !!f && FAMILLES_PROTHESE_ODF.has(f.cle)
+}
+
+/** La dent porte-t-elle une croix plutôt qu'un cercle sur la grille des FAR ?
+ *
+ *  « Le praticien met une croix sur la dent objet de la prothèse ou de
+ *  l'extraction. Il encercle la dent soignée ou couronnée. » — l'imprimé
+ *  lui-même. Une couronne est donc entourée bien qu'elle soit une prothèse,
+ *  d'où l'exception sur la prothèse conjointe. */
+export function dentCroisee(code: string | null | undefined): boolean {
+  const f = familleDuCode(code)
+  if (!f) return false
+  if (f.cle === 'extractions' || f.cle === 'extractions_chir') return true
+  return FAMILLES_PROTHESE_ODF.has(f.cle) && f.cle !== 'prothese_conjointe'
+}

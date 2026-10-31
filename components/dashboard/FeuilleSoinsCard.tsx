@@ -21,8 +21,9 @@
 // Le reste vient du dossier et des paramètres : identité, organisme, numéros
 // de l'assuré, INPE, ville, date. Le formulaire de l'organisme se remplit
 // seul et sort sur une feuille A4 blanche.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { createClient } from '@/lib/supabase/client'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, resteACharge, type StatutFeuille, type FeuilleSuivi } from '@/lib/feuilles-soins'
@@ -79,7 +80,7 @@ interface Feuille {
 
 export default function FeuilleSoinsCard({
   patientId, appointmentId = null, dental = false, mutuelle = null, suggestions = [],
-  images = [], inpe = null,
+  images = null, inpe = null, declencheur = 0,
 }: {
   patientId: string
   appointmentId?: string | null
@@ -90,10 +91,19 @@ export default function FeuilleSoinsCard({
   /** Actes du jour calculés côté serveur — le repli quand le plan de
    *  traitement n'est pas lisible depuis le navigateur. */
   suggestions?: ActeSuggere[]
-  /** L'imagerie du patient, pour vérifier la règle des six mois de l'ANAM. */
-  images?: ImageDentaire[]
+  /** L'imagerie du patient, pour vérifier la règle des six mois de l'ANAM.
+   *  Le dossier patient l'a déjà sous la main et la passe ; la consultation ne
+   *  l'affiche pas, et laisse donc l'encart la chercher lui-même — à `null`,
+   *  et non à `[]`, qui voudrait dire « ce patient n'a aucun cliché » et ferait
+   *  conclure à tort que la radio manque. */
+  images?: ImageDentaire[] | null
   /** L'INPE du praticien : obligatoire sur tout imprimé AMO. */
   inpe?: string | null
+  /** Compteur qu'un écran extérieur incrémente pour ouvrir la feuille et
+   *  l'amener sous les yeux. L'écran de consultation s'en sert : son bouton
+   *  « Feuille de soins » est dans la colonne d'actions, à droite, alors que
+   *  l'encart est au milieu, sous le reste du dossier. */
+  declencheur?: number
 }) {
   const organisme = organismePour(mutuelle)
   const [feuilles, setFeuilles] = useState<Feuille[]>([])
@@ -107,6 +117,10 @@ export default function FeuilleSoinsCard({
   const [busy, setBusy] = useState(false)
   const [ouvert, setOuvert] = useState(false)
   const [erreur, setErreur] = useState(false)
+  /** Les clichés, quand l'écran appelant ne les a pas. */
+  const [imagesLues, setImagesLues] = useState<ImageDentaire[]>([])
+  const cliches = images ?? imagesLues
+  const bloc = useRef<HTMLDivElement>(null)
 
   const charger = useCallback(async () => {
     const res = await fetch(`/api/feuilles-soins?patient_id=${patientId}`)
@@ -178,10 +192,27 @@ export default function FeuilleSoinsCard({
     }
   }
 
+  /** Les clichés du patient, lus seulement si personne ne nous les a donnés
+   *  et seulement à l'ouverture de la feuille : un écran de consultation ne
+   *  doit pas payer cette requête tant qu'on n'établit rien.
+   *
+   *  Une lecture en échec — la v94 n'est pas passée — laisse la liste vide, ce
+   *  qui n'affirme rien : `alertesFeuille` ne conclut à la radio manquante que
+   *  sur une imagerie réellement présente. */
+  async function chargerCliches() {
+    const { data, error } = await createClient()
+      .from('patient_documents')
+      .select('id, file_path, file_name, file_type, file_size, created_at, dents, type_image, date_examen')
+      .eq('patient_id', patientId)
+      .not('type_image', 'is', null)
+    if (!error) setImagesLues((data ?? []) as ImageDentaire[])
+  }
+
   /** Première ouverture : on charge les actes terminés et on coche ceux du
    *  jour. Le praticien décoche ce qui ne part pas sur cette feuille. */
   async function ouvrir() {
     setOuvert(true)
+    if (images === null) chargerCliches()
     if (lignes.length > 0 || candidats.length > 0) return
     const liste = await chargerCandidats()
     setCandidats(liste)
@@ -202,6 +233,18 @@ export default function FeuilleSoinsCard({
       })))
     }
   }
+
+  // Ouverture demandée de l'extérieur : on ouvre, puis on amène l'encart sous
+  // les yeux. Sans le défilement, le praticien cliquerait sur un bouton de la
+  // colonne de droite et rien ne bougerait à l'écran.
+  useEffect(() => {
+    if (declencheur === 0 || ouvert) return
+    ouvrir()
+    bloc.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // `ouvrir` lit l'état du moment : le relancer à chaque rendu rechargerait
+    // les actes cochés et effacerait la saisie en cours.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [declencheur])
 
   /** Cocher ou décocher un acte terminé. Décocher n'efface que la ligne qui
    *  en vient : un acte tapé à la main reste. */
@@ -304,7 +347,7 @@ export default function FeuilleSoinsCard({
         })),
         jourFeuille: aujourdhui,
         aujourdhui,
-        images,
+        images: cliches,
         inpe,
         ententePrealable: nature === 'entente_prealable',
         ententeNo,
@@ -312,7 +355,7 @@ export default function FeuilleSoinsCard({
     : []
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-4">
+    <div ref={bloc} className="bg-white border border-gray-100 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-primary-600 flex items-center gap-1.5">
           <FileSpreadsheet className="h-4 w-4" /> Feuille de soins
@@ -432,8 +475,13 @@ export default function FeuilleSoinsCard({
             <div className="bg-gray-50 rounded-lg p-2.5 space-y-2">
               {organisme.ententePrealable && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold text-gray-500">Cette feuille déclare</span>
-                  {([['execution', 'des actes faits'], ['entente_prealable', 'une demande d\u2019accord préalable']] as const).map(([v, lib]) => (
+                  {/* Les mots de l'imprimé, pas les nôtres : le praticien doit
+                      retrouver à l'écran ce qu'il coche sur le papier. */}
+                  <span className="text-[11px] font-semibold text-gray-500">Type de déclaration</span>
+                  {([
+                    ['execution', organisme.motsNature?.execution ?? 'Actes exécutés'],
+                    ['entente_prealable', organisme.motsNature?.entente ?? 'Demande d\u2019accord préalable'],
+                  ] as const).map(([v, lib]) => (
                     <button key={v} onClick={() => setNature(v)}
                       className={`text-[11px] px-2 py-1 rounded-lg border ${nature === v ? 'bg-primary-500 text-white border-transparent' : 'bg-white text-gray-600 border-gray-200'}`}>
                       {lib}
@@ -453,7 +501,7 @@ export default function FeuilleSoinsCard({
                   ))}
                 </div>
               )}
-              {organisme.ententePrealable && nature === 'execution' && (
+              {organisme.numeroEntente && nature === 'execution' && (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-gray-500 shrink-0">N° d&apos;entente préalable</span>
                   <input value={ententeNo} onChange={(e) => setEntenteNo(e.target.value)}

@@ -22,97 +22,22 @@
 // paysage : la trame tient à l'identique avec une réduction d'environ un
 // cinquième, et le praticien imprime sur du papier ordinaire.
 import SchemaDentaireFormulaire from '@/components/shared/SchemaDentaireFormulaire'
+import { Case, Cases, Champ, chiffresDate, jourFr } from '@/components/shared/traits-formulaire'
 import type { Organisme } from '@/lib/organismes'
+import type {
+  ActeImprime, BeneficiaireImprime, FeuilleImprimee, PraticienImprime,
+} from '@/lib/feuilles-soins'
 import { PrintButton } from '../../facture/[id]/PrintButton'
-
-export interface ActeImprime {
-  tooth: string | null
-  code: string | null
-  label: string
-  amount: number
-  position: number
-  acte_date?: string | null
-  lettre_cle?: string | null
-  coefficient?: number | string | null
-  valeur_cle?: number | string | null
-}
-
-export interface Praticien {
-  nom: string
-  specialite: string | null
-  adresse: string | null
-  telephone: string | null
-  inpe: string | null
-  ice: string | null
-  identifiantFiscal: string | null
-  ville: string | null
-}
 
 export interface Props {
   organisme: Organisme
-  praticien: Praticien
+  praticien: PraticienImprime
   patientId: string
   /** L'assuré, dans les champs que CET organisme demande. */
   assure: Record<string, string>
-  beneficiaire: { nom: string; dateNaissance: string | null; cin: string | null; sexe: string | null }
-  feuille: {
-    jour: string
-    nature: 'execution' | 'entente_prealable'
-    typesSoins: string[]
-    ententeNo: string | null
-    total: number
-  }
+  beneficiaire: BeneficiaireImprime
+  feuille: FeuilleImprimee
   actes: ActeImprime[]
-}
-
-const jourFr = (j?: string | null) => {
-  const s = String(j ?? '').slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''
-  const [a, m, d] = s.split('-')
-  return `${d}/${m}/${a}`
-}
-
-/** Une valeur écrite chiffre par chiffre dans la grille du formulaire.
- *  Les cases non remplies restent vides — on ne complète pas un numéro
- *  d'immatriculation avec des zéros qu'on aurait inventés. */
-function Cases({ valeur, nombre }: { valeur?: string | null; nombre: number }) {
-  const car = String(valeur ?? '').replace(/\s/g, '').split('')
-  return (
-    <span className="inline-flex align-middle">
-      {Array.from({ length: nombre }).map((_, i) => (
-        <span
-          key={i}
-          className="w-[13px] h-[16px] border border-gray-500 border-l-0 first:border-l text-[9px] leading-[15px] text-center font-mono"
-        >
-          {car[i] ?? ''}
-        </span>
-      ))}
-    </span>
-  )
-}
-
-/** Une case à cocher du formulaire, cochée ou non. */
-function Case({ cochee }: { cochee: boolean }) {
-  return (
-    <span className="inline-block w-[12px] h-[12px] border border-gray-700 align-middle text-[10px] leading-[10px] text-center font-bold">
-      {cochee ? '×' : ''}
-    </span>
-  )
-}
-
-/** Une ligne « Libellé : valeur » du formulaire, avec ses pointillés. */
-function Champ({ fr, ar, children, large = false }: {
-  fr: string; ar?: string; children?: React.ReactNode; large?: boolean
-}) {
-  return (
-    <div className="flex items-baseline gap-2 py-[3px]">
-      <span className="text-[9.5px] text-gray-900 shrink-0">{fr} :</span>
-      <span className={`flex-1 border-b border-dotted border-gray-400 text-[10px] font-medium text-gray-900 ${large ? 'min-h-[13px]' : ''}`}>
-        {children}
-      </span>
-      {ar && <span className="text-[9px] text-gray-700 shrink-0" dir="rtl">{ar}</span>}
-    </div>
-  )
 }
 
 function Bandeau({ fr, ar }: { fr: string; ar: string }) {
@@ -202,7 +127,7 @@ export default function GabaritANAM({
         <div className="px-2">
           <Champ fr="Bénéficiaire des soins — Nom et prénom" ar="المستفيد من العلاجات">{beneficiaire.nom}</Champ>
           <Champ fr="Date de naissance" ar="تاريخ الازدياد">
-            <Cases valeur={jourFr(beneficiaire.dateNaissance).replace(/\//g, '')} nombre={8} />
+            <Cases valeur={chiffresDate(beneficiaire.dateNaissance)} nombre={8} />
           </Champ>
           <Champ fr="N° de la Carte d'Identité Nationale" ar="رقم بطاقة التعريف الوطنية">
             <Cases valeur={beneficiaire.cin} nombre={10} />
@@ -241,13 +166,13 @@ export default function GabaritANAM({
           <div className="border border-gray-700 p-2 h-[90px]">
             <p className="text-[8.5px] text-gray-800">J&apos;atteste sur l&apos;honneur l&apos;exactitude des renseignements portés ci-avant.</p>
             <p className="text-[9px] mt-2">Fait à : {praticien.ville ?? ''}</p>
-            <p className="text-[9px]">Le : <Cases valeur={jourFr(feuille.jour).replace(/\//g, '')} nombre={8} /></p>
+            <p className="text-[9px]">Le : <Cases valeur={chiffresDate(feuille.jour)} nombre={8} /></p>
             <p className="text-[8px] text-gray-600 mt-1">Signature de l&apos;assuré(e)</p>
           </div>
           <div className="border border-gray-700 p-2 h-[90px]">
             <p className="text-[8.5px] text-gray-800">Je déclare les informations ci-dessus sincères et véritables.</p>
             <p className="text-[9px] mt-2">Fait à : {praticien.ville ?? ''}</p>
-            <p className="text-[9px]">Le : <Cases valeur={jourFr(feuille.jour).replace(/\//g, '')} nombre={8} /></p>
+            <p className="text-[9px]">Le : <Cases valeur={chiffresDate(feuille.jour)} nombre={8} /></p>
             <p className="text-[8px] text-gray-600 mt-1">Cachet et Signature du Chirurgien Dentiste</p>
           </div>
         </div>

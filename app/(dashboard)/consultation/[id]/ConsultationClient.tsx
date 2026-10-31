@@ -17,7 +17,7 @@ import OrthoCard from '@/components/dashboard/OrthoCard'
 import PerioCard from '@/components/dashboard/PerioCard'
 import ActesDuJourCard from './ActesDuJourCard'
 import {
-  ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, Wallet, Printer,
+  ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, FileSpreadsheet, Wallet, Printer,
   AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw, CalendarPlus, CalendarClock, BellRing, MessageSquare,
 } from 'lucide-react'
 
@@ -57,7 +57,7 @@ export default function ConsultationClient({
   consultationTypeId = null, queueStatus = null, attendanceActuelle = null, reprogrammerJours = null, v76 = false,
   prochainRdv = null, mots: motsInitiaux = [], v77 = false, doctorName = '',
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
-  isDental = false, mutuelle = null, suggestionsFeuille = [], regleSurDevis = false, alertes,
+  isDental = false, mutuelle = null, suggestionsFeuille = [], doctorInpe = null, regleSurDevis = false, alertes,
 }: {
   doctorId: string
   appointmentId: string
@@ -111,6 +111,7 @@ export default function ConsultationClient({
   }
   mutuelle?: string | null
   suggestionsFeuille?: ActeSuggere[]
+  doctorInpe?: string | null
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -127,6 +128,10 @@ export default function ConsultationClient({
   // quatre titres vides dans le dossier.
   const trameNote = isPsy ? PSY_NOTE_TEMPLATE : isDental ? '' : NOTE_TEMPLATE
   const estTrameVierge = (t: string) => t === PSY_NOTE_TEMPLATE || t === NOTE_TEMPLATE
+  // Le bouton « Feuille de soins » de la colonne d'actions : il ouvre l'encart
+  // qui est au milieu de l'écran, loin sous le dossier. Un compteur, et non un
+  // booléen, pour qu'un second clic rouvre une feuille qu'on vient de fermer.
+  const [ouvrirFeuille, setOuvrirFeuille] = useState(0)
   const [note, setNote] = useState(existingNote || trameNote)
   const [noteId, setNoteId] = useState<string | null>(existingNoteId)
   const [noteState, setNoteState] = useState<'idle' | 'saving' | 'saved'>('idle')
@@ -876,6 +881,8 @@ export default function ConsultationClient({
               dental={isDental}
               mutuelle={mutuelle}
               suggestions={suggestionsFeuille}
+              inpe={doctorInpe}
+              declencheur={ouvrirFeuille}
             />
           )}
 
@@ -893,6 +900,18 @@ export default function ConsultationClient({
             <button onClick={() => goTo(`/certificat/nouveau/${patient.id}?apt=${appointmentId}&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
               <FileText className="h-4 w-4 text-primary-500" /> Certificat
             </button>
+
+            {/* La feuille de soins s'établit au fauteuil, pendant que le
+                patient est là pour signer. Elle n'existait qu'au milieu de
+                l'écran, sous le plan de traitement et le suivi : en pratique
+                le praticien la faisait plus tard, dans le dossier, et les
+                actes du jour n'y étaient plus pré-cochés. */}
+            {mutuelle && mutuelle !== 'Aucune' && (
+              <button onClick={() => setOuvrirFeuille((n) => n + 1)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+                <FileSpreadsheet className="h-4 w-4 text-primary-500" /> Feuille de soins
+                <span className="ml-auto text-[10px] text-gray-400 truncate max-w-[90px]">{mutuelle}</span>
+              </button>
+            )}
 
             {/* ── Vers l'accueil ─────────────────────────────────────────
                 Deux consignes qui se perdaient entre la porte du bureau et le
