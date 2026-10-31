@@ -534,11 +534,24 @@ export default function FeuilleSoinsCard({
             </Button>
             <Button size="sm" variant="outline" onClick={() => setOuvert(false)}>Annuler</Button>
           </div>
-          <p className="text-[11px] text-gray-400">
-            {organisme
-              ? `Le formulaire ${organisme.nom} se remplit seul avec le dossier et vos paramètres, et s\u2019imprime sur une feuille A4 blanche.`
-              : 'Ce patient n\u2019a pas d\u2019organisme sur sa fiche : la feuille sortira sous sa forme neutre.'}
-          </p>
+          {organisme ? (
+            <p className="text-[11px] text-gray-400">
+              Le formulaire {organisme.nom} se remplit seul avec le dossier et vos paramètres,
+              et s&apos;imprime sur une feuille A4 blanche.
+            </p>
+          ) : (
+            // Sans organisme, on ne se contente pas de le constater : le champ
+            // qui manque est à un clic, et c'est lui qui commande le
+            // formulaire imprimé.
+            <p className="text-[11px] text-amber-700">
+              Ce patient n&apos;a pas d&apos;organisme sur sa fiche : la feuille sortira sous sa
+              forme neutre, à agrafer à l&apos;imprimé de l&apos;assureur.{' '}
+              <a href={`/patients/${patientId}`} className="font-medium underline hover:text-amber-800">
+                Renseigner l&apos;organisme
+              </a>{' '}
+              pour que le bon formulaire sorte rempli.
+            </p>
+          )}
         </div>
       )}
 

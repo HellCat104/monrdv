@@ -132,6 +132,17 @@ export default function ConsultationClient({
   // qui est au milieu de l'écran, loin sous le dossier. Un compteur, et non un
   // booléen, pour qu'un second clic rouvre une feuille qu'on vient de fermer.
   const [ouvrirFeuille, setOuvrirFeuille] = useState(0)
+  // Qui a une feuille de soins à faire.
+  //
+  // La couverture du patient ne suffit pas comme condition : une fiche où la
+  // mutuelle n'a pas été saisie faisait disparaître la feuille de l'écran de
+  // consultation, SANS RIEN DIRE. Le praticien cherchait un bouton qui
+  // n'existait pas, et n'avait aucun moyen de deviner qu'il tenait à un champ
+  // vide dans le dossier. Un dentiste voit donc toujours la feuille — l'encart
+  // explique alors qu'elle sortira sous sa forme neutre, et le dit en une
+  // phrase au lieu de se taire.
+  const porteUneCouverture = !!mutuelle && mutuelle !== 'Aucune'
+  const feuillePossible = porteUneCouverture || isDental
   const [note, setNote] = useState(existingNote || trameNote)
   const [noteId, setNoteId] = useState<string | null>(existingNoteId)
   const [noteState, setNoteState] = useState<'idle' | 'saving' | 'saved'>('idle')
@@ -871,10 +882,9 @@ export default function ConsultationClient({
             </div>
           )}
 
-          {/* Feuille de soins — seulement si le patient a une couverture.
-              Les actes du jour y sont déjà inscrits : il reste à vérifier les
-              codes, et à imprimer. */}
-          {mutuelle && mutuelle !== 'Aucune' && (
+          {/* Feuille de soins. Les actes du jour y sont déjà inscrits : il
+              reste à vérifier les codes, et à imprimer. */}
+          {feuillePossible && (
             <FeuilleSoinsCard
               patientId={patient.id}
               appointmentId={appointmentId}
@@ -906,10 +916,12 @@ export default function ConsultationClient({
                 l'écran, sous le plan de traitement et le suivi : en pratique
                 le praticien la faisait plus tard, dans le dossier, et les
                 actes du jour n'y étaient plus pré-cochés. */}
-            {mutuelle && mutuelle !== 'Aucune' && (
+            {feuillePossible && (
               <button onClick={() => setOuvrirFeuille((n) => n + 1)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
                 <FileSpreadsheet className="h-4 w-4 text-primary-500" /> Feuille de soins
-                <span className="ml-auto text-[10px] text-gray-400 truncate max-w-[90px]">{mutuelle}</span>
+                <span className={`ml-auto text-[10px] truncate max-w-[100px] ${porteUneCouverture ? 'text-gray-400' : 'text-amber-600'}`}>
+                  {porteUneCouverture ? mutuelle : 'organisme à saisir'}
+                </span>
               </button>
             )}
 
