@@ -55,6 +55,9 @@ export default async function PatientDossierPage({ params }: { params: { id: str
       vitalDefsAll={vitalDefsAll}
       initialPatient={patient}
       doctorInpe={doctor.inpe ?? null}
+      // Pour n'offrir « Facture » que si le forfait la porte : le lien
+      // conduirait sinon à une redirection muette.
+      facturation={canAccess(doctor.plan, 'invoicing')}
     />
   )
 }

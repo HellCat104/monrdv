@@ -22,7 +22,6 @@ import AnamneseDentaire from '@/components/dashboard/AnamneseDentaire'
 import BandeauRisques from '@/components/dashboard/BandeauRisques'
 import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne, type Anamnese } from '@/lib/anamnese'
 import QuotesCard from '@/components/dashboard/QuotesCard'
-import MenuDocuments from '@/components/dashboard/MenuDocuments'
 import BlocGastro from '@/components/gastro/BlocGastro'
 import BlocConsultationsDentaires from '@/components/dashboard/BlocConsultationsDentaires'
 import SuiviPoids from '@/components/gastro/SuiviPoids'
@@ -49,13 +48,13 @@ import { BLOOD_GROUPS, MUTUELLES_MAROC, PAYMENT_METHOD_LABELS, RECALL_OUVERTS, i
   type Patient, type Appointment, type AppointmentStatus, type AppointmentAttendance, type ConsultationNote, type Prescription, type Recall, type PatientDocument, type VitalSign, type VitalDef, type SessionPackage } from '@/types'
 import { ArrowLeft, Phone, Mail, MapPin, CreditCard, ShieldCheck, Save, Check, Plus, X, BellRing,
   Pill, FileText, Paperclip, Download, Trash2, Activity, HeartPulse, Printer, RefreshCw, Calendar, Users, Ticket,
-  Pencil, Wallet, AlertTriangle, History } from 'lucide-react'
+  Pencil, Wallet, AlertTriangle, History, UserRound, FileSignature, ChevronDown, Syringe, FlaskConical } from 'lucide-react'
 import { messageQuota } from '@/lib/stockage'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
 
 const DOC_BUCKET = 'patient-documents'
 
-type Onglet = 'suivi' | 'soins' | 'argent' | 'dossier' | 'chronologie'
+type Onglet = 'suivi' | 'soins' | 'argent' | 'dossier' | 'infos' | 'chronologie'
 
 // Une couleur par nature d'événement : la chronologie se parcourt à l'œil
 // avant de se lire, et c'est la pastille qui guide.
@@ -75,6 +74,7 @@ const ACTIONS_LISIBLES: Record<string, string> = {"dossier_consulte": "Dossier c
 export default function PatientDossier({
   doctorId, doctorName, doctorSlug, specialties, enabledVitals, vitalDefsAll, initialPatient,
   doctorInpe = null,
+  facturation = false,
 }: {
   doctorId: string
   doctorName: string
@@ -86,6 +86,8 @@ export default function PatientDossier({
   /** L'INPE du praticien : obligatoire sur tout imprimé de l'assurance
    *  maladie obligatoire, et donc vérifié avant d'établir une feuille. */
   doctorInpe?: string | null
+  /** Le forfait porte-t-il la facturation ? */
+  facturation?: boolean
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -150,6 +152,7 @@ export default function PatientDossier({
   // Les clichés du patient (v94), chargés par le bloc d'imagerie et partagés
   // avec l'odontogramme, qui en tire ses repères.
   const [imagerie, setImagerie] = useState<ImageDentaire[]>([])
+  const [suivisOuverts, setSuivisOuverts] = useState(false)
   const [ouvrirAnamnese, setOuvrirAnamnese] = useState(false)
   const [editChronic, setEditChronic] = useState(patient.chronic_conditions ?? '')
   // Étiquettes de pathologie (v72). Elles ne doublent pas le texte libre
@@ -782,11 +785,89 @@ export default function PatientDossier({
       : []),
     { cle: 'argent', titre: 'Paiements', icone: <Wallet className="h-4 w-4" /> },
     { cle: 'dossier', titre: 'Documents', icone: <Paperclip className="h-4 w-4" /> },
+    // « Infos patient » : qui il est, ce qu'il a eu, qui a ouvert son dossier.
+    // Ces trois choses étaient dispersées — les antécédents au dos des
+    // consultations, l'anamnèse au milieu du schéma dentaire, la fusion des
+    // doublons et le journal d'accès au fond des documents. Rien de clinique
+    // ne se décide là : c'est la carte d'identité du dossier.
+    { cle: 'infos', titre: 'Infos patient', icone: <UserRound className="h-4 w-4" /> },
     // Le dossier range chaque chose dans son tiroir, ce qui est commode pour
     // saisir et inutilisable pour comprendre : « que s'est-il passé en mars ? »
     // obligeait à ouvrir quatre onglets et à recoller les dates de tête.
     ...(avecChronologie ? [{ cle: 'chronologie' as Onglet, titre: 'Chronologie', icone: <History className="h-4 w-4" /> }] : []),
   ]
+
+  /** Où revenir après avoir établi un document : ici, l'onglet d'où l'on part. */
+  const retourIci = encodeURIComponent(`/patients/${patient.id}`)
+
+  // ── Deux cartes qui servent à plusieurs endroits ────────────────────────
+  //
+  // Les antécédents se lisent dans « Infos patient », et la note s'écrit
+  // aussi bien devant l'arcade que depuis les documents. Déclarées ici une
+  // fois, elles ne peuvent pas diverger d'un onglet à l'autre.
+  const carteAntecedents = (
+    <>
+    {/* Antécédents en lecture : on les voit sans pouvoir les
+        effacer d'un clic malheureux ; « Modifier » ouvre la fiche. */}
+    {(editAllergies || editChronic || editSurgeries || editTreatments || editConditions.length > 0) && (
+      <div className={sec}>
+        <div className={secTitle}>
+          <span className="flex items-center gap-1.5"><HeartPulse className="h-4 w-4" /> Antécédents</span>
+          <button onClick={() => setEdition(true)} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">Modifier</button>
+        </div>
+        <div className="space-y-2 text-sm">
+          {/* Les étiquettes se LISENT hors du mode modification :
+              c'est une information clinique, pas un réglage. En
+              tête de carte, parce qu'elles disent en trois mots ce
+              qu'on suit chez ce patient. Rien du tout quand il n'y
+              en a pas : pas de libellé vide, pas de place prise. */}
+          {editConditions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {editConditions.map((e) => (
+                <span key={e} className="bg-gray-100 text-gray-600 text-[11px] rounded-full px-2 py-0.5">{e}</span>
+              ))}
+            </div>
+          )}
+          {editChronic && <div><p className="text-[11px] text-gray-400">Maladies chroniques</p><p className="text-gray-700 whitespace-pre-wrap">{editChronic}</p></div>}
+          {editTreatments && <div><p className="text-[11px] text-gray-400">Traitements de fond</p><p className="text-gray-700 whitespace-pre-wrap">{editTreatments}</p></div>}
+          {editSurgeries && <div><p className="text-[11px] text-gray-400">Antécédents chirurgicaux</p><p className="text-gray-700 whitespace-pre-wrap">{editSurgeries}</p></div>}
+          {!isPsy && editVaccinations && <div><p className="text-[11px] text-gray-400">Vaccins</p><p className="text-gray-700 whitespace-pre-wrap">{editVaccinations}</p></div>}
+        </div>
+      </div>
+    )}
+    </>
+  )
+
+  const carteNotes = (
+    <>
+    {/* Notes */}
+    <div className={sec}>
+      <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Notes ({consultNotes.length})</span></div>
+      <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} rows={isPsy ? 6 : 3}
+        placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Ajouter une note datée…'}
+        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 mb-2" />
+      <Button size="sm" onClick={addConsultNote} disabled={addingNote || !newNote.trim() || newNote === PSY_NOTE_TEMPLATE} className="w-full"><Plus className="h-4 w-4 mr-1" /> Ajouter la note</Button>
+      <div className="space-y-2 mt-3">
+        {consultNotes.slice(0, 8).map((n) => (
+          <div key={n.id} className={`rounded-lg p-2.5 ${n.signed_at ? 'bg-green-50/70 border border-green-100' : 'bg-gray-50'}`}>
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <p className="text-[11px] font-medium text-gray-500">Note du {formatDateTimeFr(n.created_at)}</p>
+              {n.signed_at ? (
+                <span className="text-[10px] text-green-600 font-medium flex items-center gap-0.5"><Check className="h-3 w-3" /> Signée</span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <button onClick={() => signNote(n.id)} className="text-[10px] text-primary-600 hover:underline">Signer</button>
+                  <button onClick={() => deleteNote(n.id)} className="text-gray-300 hover:text-red-500" title="Supprimer"><X className="h-3 w-3" /></button>
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">{n.note}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+    </>
+  )
 
   return (
     <div className="space-y-4">
@@ -830,12 +911,12 @@ export default function PatientDossier({
           ancienne={anamneseAncienne(editAnamneseMaj)}
           maj={editAnamneseMaj}
           onOuvrir={() => {
-            // Le questionnaire vit dans l'onglet des soins : sans ce passage
+            // Le questionnaire vit dans « Infos patient » : sans ce passage
             // d'onglet, le lien promettait une action et ne faisait rien —
             // l'élément visé n'était même pas rendu. On change d'onglet, PUIS
             // on fait défiler, une fois le bloc à l'écran.
             setOuvrirAnamnese(true)
-            setOnglet('soins')
+            setOnglet('infos')
             requestAnimationFrame(() => {
               document.getElementById('bloc-anamnese')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             })
@@ -1163,21 +1244,6 @@ export default function PatientDossier({
                 <SuiviPoids vitals={vitals} />
               </div>
             )}
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* BRANCHE GÉNÉRALISTE : un seul bouton « Documents » pour les
-                  cinq choses qu'il remet au patient. Le dentiste et le
-                  pédiatre gardent leurs deux boutons — leurs documents ne sont
-                  pas les mêmes, et cette liste n'a pas été pensée pour eux. */}
-              {isGeneralDoctor(specialties) ? (
-                <MenuDocuments patientId={patient.id} backHref={`/patients/${patient.id}`} />
-              ) : (
-                <>
-                  <a href={`/ordonnance/patient/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-3 py-2"><Pill className="h-4 w-4" /> Nouvelle ordonnance</a>
-                  <a href={`/certificat/nouveau/${patient.id}?back=${encodeURIComponent(`/patients/${patient.id}`)}`} className="flex items-center gap-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg px-3 py-2 hover:bg-primary-50"><FileText className="h-4 w-4" /> Nouveau certificat</a>
-                </>
-              )}
-              <a href={`/dossier/${patient.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50"><Printer className="h-4 w-4" /> Imprimer</a>
-            </div>
             <div className={sec}>
               <div className={secTitle}><span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Historique des rendez-vous ({appts.length})</span></div>
               {loading ? <p className="text-sm text-gray-400">Chargement…</p> : appts.length === 0 ? (
@@ -1232,34 +1298,6 @@ export default function PatientDossier({
             )}
               </div>
               <div className="space-y-4">
-                {/* Antécédents en lecture : on les voit sans pouvoir les
-                    effacer d'un clic malheureux ; « Modifier » ouvre la fiche. */}
-                {(editAllergies || editChronic || editSurgeries || editTreatments || editConditions.length > 0) && (
-                  <div className={sec}>
-                    <div className={secTitle}>
-                      <span className="flex items-center gap-1.5"><HeartPulse className="h-4 w-4" /> Antécédents</span>
-                      <button onClick={() => setEdition(true)} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">Modifier</button>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                      {/* Les étiquettes se LISENT hors du mode modification :
-                          c'est une information clinique, pas un réglage. En
-                          tête de carte, parce qu'elles disent en trois mots ce
-                          qu'on suit chez ce patient. Rien du tout quand il n'y
-                          en a pas : pas de libellé vide, pas de place prise. */}
-                      {editConditions.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {editConditions.map((e) => (
-                            <span key={e} className="bg-gray-100 text-gray-600 text-[11px] rounded-full px-2 py-0.5">{e}</span>
-                          ))}
-                        </div>
-                      )}
-                      {editChronic && <div><p className="text-[11px] text-gray-400">Maladies chroniques</p><p className="text-gray-700 whitespace-pre-wrap">{editChronic}</p></div>}
-                      {editTreatments && <div><p className="text-[11px] text-gray-400">Traitements de fond</p><p className="text-gray-700 whitespace-pre-wrap">{editTreatments}</p></div>}
-                      {editSurgeries && <div><p className="text-[11px] text-gray-400">Antécédents chirurgicaux</p><p className="text-gray-700 whitespace-pre-wrap">{editSurgeries}</p></div>}
-                      {!isPsy && editVaccinations && <div><p className="text-[11px] text-gray-400">Vaccins</p><p className="text-gray-700 whitespace-pre-wrap">{editVaccinations}</p></div>}
-                    </div>
-                  </div>
-                )}
             {/* Prochaine visite */}
             <div className={sec}>
               <div className={secTitle}><span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Prochaine visite</span></div>
@@ -1286,70 +1324,15 @@ export default function PatientDossier({
                 <Input value={recallReason} onChange={(e) => setRecallReason(e.target.value)} placeholder="Motif (optionnel)" className="h-9 text-xs mt-1.5" />
               </div>
             </div>
-            {/* Notes */}
-            <div className={sec}>
-              <div className={secTitle}><span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> Notes ({consultNotes.length})</span></div>
-              <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} rows={isPsy ? 6 : 3}
-                placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Ajouter une note datée…'}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 mb-2" />
-              <Button size="sm" onClick={addConsultNote} disabled={addingNote || !newNote.trim() || newNote === PSY_NOTE_TEMPLATE} className="w-full"><Plus className="h-4 w-4 mr-1" /> Ajouter la note</Button>
-              <div className="space-y-2 mt-3">
-                {consultNotes.slice(0, 8).map((n) => (
-                  <div key={n.id} className={`rounded-lg p-2.5 ${n.signed_at ? 'bg-green-50/70 border border-green-100' : 'bg-gray-50'}`}>
-                    <div className="flex items-center justify-between gap-2 mb-0.5">
-                      <p className="text-[11px] font-medium text-gray-500">Note du {formatDateTimeFr(n.created_at)}</p>
-                      {n.signed_at ? (
-                        <span className="text-[10px] text-green-600 font-medium flex items-center gap-0.5"><Check className="h-3 w-3" /> Signée</span>
-                      ) : (
-                        <span className="flex items-center gap-1.5">
-                          <button onClick={() => signNote(n.id)} className="text-[10px] text-primary-600 hover:underline">Signer</button>
-                          <button onClick={() => deleteNote(n.id)} className="text-gray-300 hover:text-red-500" title="Supprimer"><X className="h-3 w-3" /></button>
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">{n.note}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
               </div>
             </div>
           )}
 
           {onglet === 'soins' && (
             <div className="space-y-4">
-              {/* Orthodontie — dentistes. Un traitement se mesure en mois,
-                  pas en séances : l'écran répond d'abord à « où en est-on ». */}
-              {isDentalDoctor(specialties) && <OrthoCard patientId={patient.id} />}
-
-              {/* Parodonte — dentistes. Un relevé par date, jamais écrasé :
-                  c'est l'écart entre deux dates qui soigne, pas le chiffre. */}
-              {isDentalDoctor(specialties) && <PerioCard patientId={patient.id} />}
-
-              {/* Travaux de laboratoire — dentistes. La couronne qui n'est pas
-                  revenue le jour de la pose est le premier rendez-vous perdu
-                  d'un cabinet dentaire ; elle se suit donc dans le dossier. */}
-              {isDentalDoctor(specialties) && (
-                <LabWorksCard
-                  patientId={patient.id}
-                  rdvs={appts
-                    .filter((a) => a.date >= todayStr && a.status !== 'cancelled')
-                    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
-                    .slice(0, 12)
-                    .map((a) => ({ id: a.id, date: a.date, time: String(a.time) }))}
-                />
-              )}
           {/* Sections spécialité */}
           {isDentalDoctor(specialties) && (
-            <div id="bloc-anamnese" className="space-y-3">
-              <AnamneseDentaire
-                key={`an-${patient.id}`}
-                patientId={patient.id}
-                valeur={editAnamnese}
-                maj={editAnamneseMaj}
-                ouvertParDefaut={ouvrirAnamnese}
-                onEnregistre={(a, jour) => { setEditAnamnese(a); setEditAnamneseMaj(jour) }}
-              />
+            <div className="space-y-3">
               {/* La même bannière, en une ligne, JUSTE au-dessus de l'arcade :
                   celle du haut de page est à plusieurs écrans de la dent sur
                   laquelle on va cliquer. */}
@@ -1369,6 +1352,48 @@ export default function PatientDossier({
               <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId}
                 dentsAvecImage={calculerDentsAvecImage(imagerie)} />
               <ImagerieDentaire patientId={patient.id} doctorId={doctorId} onImages={setImagerie} />
+              {/* La note se prend devant l'arcade, pas trois onglets plus
+                  loin : c'est en regardant la dent qu'on écrit ce qu'on en
+                  pense. C'est la MÊME note que celle des documents. */}
+              {carteNotes}
+
+              {/* Orthodontie, parodonte, laboratoire : ils étaient au-dessus
+                  de l'arcade, et il fallait les dépasser pour arriver au
+                  schéma — qui est pourtant ce qu'on vient voir. Repliés, et
+                  sous lui. */}
+              <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+                <button onClick={() => setSuivisOuverts((v) => !v)}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50">
+                  <span className="text-sm font-semibold text-gray-700">Orthodontie, parodonte, laboratoire</span>
+                  <span className="ml-auto text-[11px] text-gray-400">{suivisOuverts ? 'Masquer' : 'Afficher'}</span>
+                  <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${suivisOuverts ? 'rotate-180' : ''}`} />
+                </button>
+                {suivisOuverts && (
+                  <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
+    {/* Orthodontie — dentistes. Un traitement se mesure en mois,
+        pas en séances : l'écran répond d'abord à « où en est-on ». */}
+    {isDentalDoctor(specialties) && <OrthoCard patientId={patient.id} />}
+
+    {/* Parodonte — dentistes. Un relevé par date, jamais écrasé :
+        c'est l'écart entre deux dates qui soigne, pas le chiffre. */}
+    {isDentalDoctor(specialties) && <PerioCard patientId={patient.id} />}
+
+    {/* Travaux de laboratoire — dentistes. La couronne qui n'est pas
+        revenue le jour de la pose est le premier rendez-vous perdu
+        d'un cabinet dentaire ; elle se suit donc dans le dossier. */}
+    {isDentalDoctor(specialties) && (
+      <LabWorksCard
+        patientId={patient.id}
+        rdvs={appts
+          .filter((a) => a.date >= todayStr && a.status !== 'cancelled')
+          .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+          .slice(0, 12)
+          .map((a) => ({ id: a.id, date: a.date, time: String(a.time) }))}
+      />
+    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
           {suiviEnfant && (
@@ -1423,6 +1448,25 @@ export default function PatientDossier({
           )}
 
           {onglet === 'argent' && (
+            <>
+            {/* ── Ce que ce patient doit encore ────────────────────────────
+                La somme existait, en petit, au-dessus de la liste des
+                encaissements, dans la colonne de droite : il fallait dérouler
+                tout l'onglet pour savoir si quelqu'un devait de l'argent. */}
+            <div className={`rounded-xl border px-4 py-3 mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 ${totalDue > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+              {totalDue > 0 ? (
+                <>
+                  <span className="text-sm font-semibold text-red-700">Reste à payer : {totalDue.toLocaleString('fr-FR')} DH</span>
+                  <span className="text-[11px] text-red-600">
+                    Sur {appts.filter((a) => a.amount_due != null && (a.amount_paid ?? 0) < a.amount_due).length} rendez-vous.
+                    Le détail et le bouton « Encaisser » sont dans la colonne de droite.
+                  </span>
+                </>
+              ) : (
+                <span className="text-sm font-semibold text-green-700">Ce patient est à jour.</span>
+              )}
+              <span className="ml-auto text-sm text-gray-500">{totalPaid.toLocaleString('fr-FR')} DH encaissés en tout</span>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
               <div className="space-y-4 min-w-0">
             {/* Devis / plan de traitement chiffré.
@@ -1601,7 +1645,22 @@ export default function PatientDossier({
                               </button>
                             </span>
                           ) : (
-                            <span className="text-green-600 font-semibold">{a.amount_paid ?? 0} DH</span>
+                            <span className="flex items-center gap-2">
+                              <span className="text-green-600 font-semibold">{a.amount_paid ?? 0} DH</span>
+                              {/* La facture d'un acte réglé il y a trois
+                                  semaines, que le patient réclame aujourd'hui
+                                  pour son assurance ou sa comptabilité. Elle
+                                  n'était atteignable que depuis l'agenda, en
+                                  retrouvant le bon rendez-vous à la bonne
+                                  date. */}
+                              {facturation && a.amount_paid != null && (
+                                <a href={`/facture/${a.id}`} target="_blank" rel="noopener noreferrer"
+                                  title="Établir la facture de cet acte"
+                                  className="text-gray-400 hover:text-primary-600 shrink-0">
+                                  <Printer className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+                            </span>
                           )}
                         </div>
 
@@ -1633,6 +1692,121 @@ export default function PatientDossier({
                 </div>
               )}
             </div>
+              </div>
+            </div>
+            </>
+          )}
+
+          {/* ── INFOS PATIENT ──────────────────────────────────────────────
+              Ce que le dossier sait de la personne, et ce qui se fait au
+              dossier lui-même. Rien de clinique ne s'y décide : on y vient
+              pour vérifier une allergie, remplir le questionnaire médical,
+              recoller deux fiches du même patient, ou voir qui a ouvert le
+              dossier. */}
+          {onglet === 'infos' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div className="space-y-4">
+                <div className={sec}>
+                  <div className={secTitle}>
+                    <span className="flex items-center gap-1.5"><UserRound className="h-4 w-4" /> Identité</span>
+                    <button onClick={() => setEdition(true)} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">Modifier la fiche</button>
+                  </div>
+                  <dl className="text-sm space-y-1.5">
+                    {([
+                      ['Nom', `${patient.first_name} ${patient.last_name}`],
+                      ['Âge', ageLisible],
+                      ['Téléphone', editPhone],
+                      ['CIN', editCin],
+                      ['Organisme', editMutuelle],
+                      ['Adresse', editAddress],
+                    ] as [string, string][]).filter(([, v]) => String(v ?? '').trim()).map(([k, v]) => (
+                      <div key={k} className="flex gap-2">
+                        <dt className="text-[11px] text-gray-400 w-24 shrink-0 pt-0.5">{k}</dt>
+                        <dd className="text-gray-700 min-w-0">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+                {carteAntecedents}
+                {/* Le questionnaire médical. Il était au milieu du schéma
+                    dentaire, entre l'arcade et les radios : on le remplissait
+                    en cherchant autre chose, ou jamais. */}
+                {isDentalDoctor(specialties) && (
+                  <div id="bloc-anamnese">
+                    <AnamneseDentaire
+                      key={`an-${patient.id}`}
+                      patientId={patient.id}
+                      valeur={editAnamnese}
+                      maj={editAnamneseMaj}
+                      ouvertParDefaut={ouvrirAnamnese}
+                      onEnregistre={(a, jour) => { setEditAnamnese(a); setEditAnamneseMaj(jour) }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="space-y-4">
+                  {/* Fusionner un doublon */}
+                  <div className={sec}>
+                    <div className={secTitle}><span className="flex items-center gap-1.5"><Users className="h-4 w-4" /> Fusionner un doublon</span></div>
+                    <p className="text-[11px] text-gray-400 mb-1.5">Deux fiches pour le même patient ? Recherchez l&apos;autre fiche pour tout regrouper ici.</p>
+                    <Input value={mergeSearch} onChange={(e) => setMergeSearch(e.target.value)} placeholder="Nom du doublon…" className="h-9" />
+                    {mergeResults.length > 0 && (
+                      <div className="mt-1.5 border border-gray-100 rounded-lg divide-y divide-gray-50">
+                        {mergeResults.map((p) => (
+                          <button key={p.id} onClick={() => mergeDuplicate(p.id, `${p.first_name} ${p.last_name}`)}
+                            className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between gap-2">
+                            <span>{p.first_name} {p.last_name}{p.phone ? ` · ${p.phone}` : ''}</span>
+                            <span className="text-primary-600 font-medium shrink-0">Fusionner</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                <button onClick={deletePatient} className="w-full text-xs text-gray-400 hover:text-red-500 flex items-center justify-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Supprimer ce patient</button>
+                {/* Qui a consulté ce dossier */}
+                <div className={sec}>
+                  <div className={secTitle}>
+                    <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> Accès au dossier</span>
+                    {!accesCharge && (
+                      <button onClick={chargerAcces} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">
+                        Afficher
+                      </button>
+                    )}
+                  </div>
+
+                  {!accesCharge ? (
+                    <p className="text-xs text-gray-400 italic">
+                      Qui a ouvert ce dossier, et quand. Conservé pour vous permettre de répondre
+                      si un patient s&apos;en inquiète.
+                    </p>
+                  ) : acces === null ? (
+                    <p className="text-xs text-gray-400">Chargement…</p>
+                  ) : acces.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">Aucun accès enregistré pour l&apos;instant.</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {acces.map((a) => {
+                        const role = String((a.metadata as Record<string, unknown>)?.role ?? '')
+                        const email = String((a.metadata as Record<string, unknown>)?.email ?? '')
+                        return (
+                          <li key={a.id} className="flex items-start justify-between gap-3 text-xs">
+                            <span className="min-w-0">
+                              <span className="text-gray-700">{ACTIONS_LISIBLES[a.action] ?? a.action}</span>
+                              <span className="block text-gray-400 truncate">
+                                {role === 'secretaire' ? 'Secrétaire' : 'Vous'}{email ? ` · ${email}` : ''}
+                              </span>
+                            </span>
+                            <span className="text-gray-400 shrink-0 tabular-nums">
+                              {new Date(a.created_at).toLocaleString('fr-FR', {
+                                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                              })}
+                            </span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1667,6 +1841,38 @@ export default function PatientDossier({
           {onglet === 'dossier' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <div className="space-y-4">
+            {/* ── Ce qu'on remet au patient ────────────────────────────────
+                Les boutons « Nouvelle ordonnance » et « Nouveau certificat »
+                étaient en tête des CONSULTATIONS, c'est-à-dire au-dessus de
+                l'historique des rendez-vous : on venait y lire ce qui s'était
+                passé, et on y trouvait d'abord deux boutons pour écrire. Ils
+                sont ici, avec les deux autres documents qui manquaient — le
+                courrier au confrère et la fiche de synthèse — parce que c'est
+                la même question : « qu'est-ce que je lui remets ? » */}
+            <div className={sec}>
+              <div className={secTitle}><span className="flex items-center gap-1.5"><FileSignature className="h-4 w-4" /> Établir un document</span></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { label: 'Ordonnance', aide: 'Médicaments à délivrer', icone: <Pill className="h-4 w-4" />, href: `/ordonnance/patient/${patient.id}?back=${retourIci}`, masque: nonPrescriber, nouvelOnglet: false },
+                  { label: 'Certificat', aide: 'Repos, sport, scolaire, consentement', icone: <FileText className="h-4 w-4" />, href: `/certificat/nouveau/${patient.id}?famille=certificat&back=${retourIci}`, masque: false, nouvelOnglet: false },
+                  { label: 'Courrier à un confrère', aide: "Demande d'avis, adressage, résumé", icone: <Mail className="h-4 w-4" />, href: `/certificat/nouveau/${patient.id}?famille=courrier&back=${retourIci}`, masque: false, nouvelOnglet: false },
+                  { label: "Demande d'examen", aide: 'Analyses, imagerie', icone: <FlaskConical className="h-4 w-4" />, href: `/certificat/nouveau/${patient.id}?famille=examen&back=${retourIci}`, masque: nonPrescriber, nouvelOnglet: false },
+                  // Le carnet de vaccination n'a de sens que là où on vaccine.
+                  { label: 'Vaccin', aide: 'Enregistrer et remettre le certificat', icone: <Syringe className="h-4 w-4" />, href: `/vaccin/${patient.id}?back=${retourIci}`, masque: !(isGeneralDoctor(specialties) || estPediatre), nouvelOnglet: false },
+                  { label: 'Fiche de synthèse', aide: 'Antécédents, allergies, consultations passées', icone: <Printer className="h-4 w-4" />, href: `/dossier/${patient.id}`, masque: false, nouvelOnglet: true },
+                ].filter((d) => !d.masque).map((d) => (
+                  <a key={d.label} href={d.href}
+                    {...(d.nouvelOnglet ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                    className="flex items-start gap-2.5 rounded-lg border border-gray-200 px-3 py-2.5 hover:border-primary-300 hover:bg-primary-50/60 transition">
+                    <span className="text-primary-500 mt-0.5 shrink-0">{d.icone}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-gray-800">{d.label}</span>
+                      <span className="block text-[11px] text-gray-400 leading-snug">{d.aide}</span>
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
             {/* Documents */}
             <div className={sec}>
               <div className={secTitle}><span className="flex items-center gap-1.5"><Paperclip className="h-4 w-4" /> Documents ({documents.length})</span>
@@ -1714,70 +1920,9 @@ export default function PatientDossier({
                 </ul>
               )}
             </div>
-            {/* Fusionner un doublon */}
-            <div className={sec}>
-              <div className={secTitle}><span className="flex items-center gap-1.5"><Users className="h-4 w-4" /> Fusionner un doublon</span></div>
-              <p className="text-[11px] text-gray-400 mb-1.5">Deux fiches pour le même patient ? Recherchez l&apos;autre fiche pour tout regrouper ici.</p>
-              <Input value={mergeSearch} onChange={(e) => setMergeSearch(e.target.value)} placeholder="Nom du doublon…" className="h-9" />
-              {mergeResults.length > 0 && (
-                <div className="mt-1.5 border border-gray-100 rounded-lg divide-y divide-gray-50">
-                  {mergeResults.map((p) => (
-                    <button key={p.id} onClick={() => mergeDuplicate(p.id, `${p.first_name} ${p.last_name}`)}
-                      className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-50 flex items-center justify-between gap-2">
-                      <span>{p.first_name} {p.last_name}{p.phone ? ` · ${p.phone}` : ''}</span>
-                      <span className="text-primary-600 font-medium shrink-0">Fusionner</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          <button onClick={deletePatient} className="w-full text-xs text-gray-400 hover:text-red-500 flex items-center justify-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Supprimer ce patient</button>
               </div>
               <div className="space-y-4">
-            {/* Qui a consulté ce dossier */}
-            <div className={sec}>
-              <div className={secTitle}>
-                <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> Accès au dossier</span>
-                {!accesCharge && (
-                  <button onClick={chargerAcces} className="text-[11px] font-medium text-gray-500 hover:text-primary-600">
-                    Afficher
-                  </button>
-                )}
-              </div>
-
-              {!accesCharge ? (
-                <p className="text-xs text-gray-400 italic">
-                  Qui a ouvert ce dossier, et quand. Conservé pour vous permettre de répondre
-                  si un patient s&apos;en inquiète.
-                </p>
-              ) : acces === null ? (
-                <p className="text-xs text-gray-400">Chargement…</p>
-              ) : acces.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">Aucun accès enregistré pour l&apos;instant.</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {acces.map((a) => {
-                    const role = String((a.metadata as Record<string, unknown>)?.role ?? '')
-                    const email = String((a.metadata as Record<string, unknown>)?.email ?? '')
-                    return (
-                      <li key={a.id} className="flex items-start justify-between gap-3 text-xs">
-                        <span className="min-w-0">
-                          <span className="text-gray-700">{ACTIONS_LISIBLES[a.action] ?? a.action}</span>
-                          <span className="block text-gray-400 truncate">
-                            {role === 'secretaire' ? 'Secrétaire' : 'Vous'}{email ? ` · ${email}` : ''}
-                          </span>
-                        </span>
-                        <span className="text-gray-400 shrink-0 tabular-nums">
-                          {new Date(a.created_at).toLocaleString('fr-FR', {
-                            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-                          })}
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
+                {carteNotes}
               </div>
             </div>
           )}
