@@ -168,6 +168,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // L'organisme choisi devant la feuille s'inscrit sur la fiche quand elle
+  // n'en portait aucun : sans cela, le praticien le rechoisirait à chaque
+  // feuille, et la fiche continuerait de dire « pas de couverture » alors
+  // qu'on vient d'établir une feuille CNSS. On n'ÉCRASE jamais une couverture
+  // déjà saisie — la feuille peut porter un autre organisme sans que la fiche
+  // change de régime.
+  if (!error && feuille && insurerNom && !patient.mutuelle) {
+    const { error: errFiche } = await supabase
+      .from('patients').update({ mutuelle: insurerNom })
+      .eq('id', patient.id).eq('doctor_id', doctor.id)
+    if (errFiche) console.error('[Feuille de soins] organisme non reporté sur la fiche :', errFiche.message)
+  }
+
   if (error || !feuille) {
     if (tableAbsente(error?.code)) return NextResponse.json({ error: FEUILLE_NON_ACTIVEE }, { status: 503 })
     console.error('[Feuille de soins] création impossible :', error?.message)

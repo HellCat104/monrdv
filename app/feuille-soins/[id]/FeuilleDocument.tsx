@@ -33,13 +33,16 @@ interface Props {
   intituleOrganisme: string | null
   dateSoins: string
   items: LigneSoin[]
+  /** Pourquoi c'est la feuille neutre qui sort, quand l'organisme a pourtant
+   *  son propre imprimé. Null le reste du temps. */
+  raisonNeutre?: string | null
 }
 
 const dh = (n: number) => `${n.toLocaleString('fr-FR')} DH`
 
 export function FeuilleDocument({
   lignes, logoUrl, ville, patientId, patientNom, patientCin,
-  organisme, intituleOrganisme, dateSoins, items: itemsBruts,
+  organisme, intituleOrganisme, dateSoins, items: itemsBruts, raisonNeutre = null,
 }: Props) {
   const items = itemsBruts.slice().sort((a, b) => a.position - b.position)
   const total = items.reduce((t, i) => t + Number(i.amount || 0), 0)
@@ -51,6 +54,12 @@ export function FeuilleDocument({
         <a href={`/patients/${patientId}`} className="text-sm text-gray-500 hover:text-gray-700">← Retour au patient</a>
         <PrintButton />
       </div>
+
+      {raisonNeutre && (
+        <div className="max-w-2xl mx-auto mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 print:hidden">
+          {raisonNeutre}
+        </div>
+      )}
 
       <div className="max-w-2xl mx-auto bg-white shadow-sm print:shadow-none p-10 print:p-0">
         <EnTeteDocument lignes={lignes} logoUrl={logoUrl} disposition="centree" />

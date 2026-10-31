@@ -27,7 +27,7 @@ import { createClient } from '@/lib/supabase/client'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, resteACharge, type StatutFeuille, type FeuilleSuivi } from '@/lib/feuilles-soins'
-import { organismePour } from '@/lib/organismes'
+import { ORGANISMES, organismePour } from '@/lib/organismes'
 import { alertesFeuille, type AlerteFeuille } from '@/lib/feuille-regles'
 import type { ImageDentaire } from '@/lib/imagerie'
 import { AlertTriangle, FileSpreadsheet, Info, Plus, Printer, Trash2, XCircle } from 'lucide-react'
@@ -105,7 +105,18 @@ export default function FeuilleSoinsCard({
    *  l'encart est au milieu, sous le reste du dossier. */
   declencheur?: number
 }) {
-  const organisme = organismePour(mutuelle)
+  // L'organisme de CETTE feuille.
+  //
+  // Il venait uniquement de la fiche patient. Un patient dont la case
+  // « Mutuelle » n'avait pas été remplie — le cas de toute fiche créée à la
+  // volée au comptoir — ressortait donc avec la feuille neutre de MonRDV au
+  // lieu de l'imprimé de sa caisse, sans que rien n'explique pourquoi. Le
+  // praticien devait deviner qu'il fallait d'abord aller modifier la fiche.
+  //
+  // Il se choisit maintenant devant la feuille, et c'est lui qui commande le
+  // formulaire imprimé.
+  const [organismeChoisi, setOrganismeChoisi] = useState(mutuelle ?? '')
+  const organisme = organismePour(organismeChoisi)
   const [feuilles, setFeuilles] = useState<Feuille[]>([])
   const [activee, setActivee] = useState(true)
   const [actes, setActes] = useState<{ label: string; code: string | null; amount: number }[]>([])
@@ -295,6 +306,7 @@ export default function FeuilleSoinsCard({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           patient_id: patientId, appointment_id: appointmentId, items,
+          insurer: organismeChoisi || null,
           nature, types_soins: typesSoins, entente_no: ententeNo.trim() || null,
         }),
       })
@@ -370,6 +382,42 @@ export default function FeuilleSoinsCard({
 
       {ouvert && (
         <div className="space-y-3 mb-4">
+          {/* ── Pour quel organisme ? ─────────────────────────────────────
+              Première question, et la seule qui change le document : c'est
+              elle qui décide si l'on imprime l'imprimé de la CNSS, celui du
+              CNOPS, de RMA, des FAR, ou la feuille neutre de MonRDV. */}
+          <div className={`rounded-lg p-2.5 ${organisme ? 'bg-gray-50' : 'bg-amber-50 border border-amber-200'}`}>
+            <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+              Organisme — il commande le formulaire imprimé
+            </label>
+            <select value={organismeChoisi} onChange={(e) => setOrganismeChoisi(e.target.value)}
+              className={`${inputCls} w-full bg-white`}>
+              <option value="">— à choisir —</option>
+              {ORGANISMES.map((o) => <option key={o.cle} value={o.nom}>{o.nom}</option>)}
+              {/* L'organisme déjà inscrit sur la fiche, s'il sort de la liste :
+                  une saisie libre d'hier ne doit pas disparaître du menu. */}
+              {organismeChoisi && !ORGANISMES.some((o) => o.nom === organismeChoisi) && (
+                <option value={organismeChoisi}>{organismeChoisi}</option>
+              )}
+            </select>
+            {!organisme && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                Sans organisme, la feuille sort sous la forme neutre de MonRDV, à agrafer à
+                l&apos;imprimé de l&apos;assureur.
+              </p>
+            )}
+            {organisme && organisme.gabarit !== 'neutre' && (
+              <p className="text-[11px] text-gray-500 mt-1">
+                Le formulaire {organisme.nom} sortira rempli, prêt à imprimer sur une A4 blanche.
+              </p>
+            )}
+            {!mutuelle && organismeChoisi && (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Il sera aussi inscrit sur la fiche du patient : vous ne le choisirez qu&apos;une fois.
+              </p>
+            )}
+          </div>
+
           {/* ── Ce qui part sur la feuille ──────────────────────────────── */}
           <div>
             <p className="text-[11px] font-semibold text-gray-500 mb-1.5">
@@ -534,24 +582,6 @@ export default function FeuilleSoinsCard({
             </Button>
             <Button size="sm" variant="outline" onClick={() => setOuvert(false)}>Annuler</Button>
           </div>
-          {organisme ? (
-            <p className="text-[11px] text-gray-400">
-              Le formulaire {organisme.nom} se remplit seul avec le dossier et vos paramètres,
-              et s&apos;imprime sur une feuille A4 blanche.
-            </p>
-          ) : (
-            // Sans organisme, on ne se contente pas de le constater : le champ
-            // qui manque est à un clic, et c'est lui qui commande le
-            // formulaire imprimé.
-            <p className="text-[11px] text-amber-700">
-              Ce patient n&apos;a pas d&apos;organisme sur sa fiche : la feuille sortira sous sa
-              forme neutre, à agrafer à l&apos;imprimé de l&apos;assureur.{' '}
-              <a href={`/patients/${patientId}`} className="font-medium underline hover:text-amber-800">
-                Renseigner l&apos;organisme
-              </a>{' '}
-              pour que le bon formulaire sorte rempli.
-            </p>
-          )}
         </div>
       )}
 

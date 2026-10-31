@@ -36,7 +36,7 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
 
   const { data: feuille } = await supabase
     .from('care_sheets')
-    .select('*, items:care_sheet_items(tooth, code, label, amount, position), patient:patients(first_name, last_name, cin, birth_date, sex)')
+    .select('*, items:care_sheet_items(tooth, code, label, amount, position), patient:patients(first_name, last_name, cin, birth_date, sex, mutuelle)')
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .maybeSingle()
@@ -44,9 +44,21 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
 
   const logoUrl = await getCabinetLogoUrl(supabase, doctor.id)
   const patient = (Array.isArray(feuille.patient) ? feuille.patient[0] : feuille.patient) as
-    { first_name?: string; last_name?: string; cin?: string | null; birth_date?: string | null; sex?: string | null } | null
+    { first_name?: string; last_name?: string; cin?: string | null; birth_date?: string | null; sex?: string | null; mutuelle?: string | null } | null
   const patientNom = patient ? `${patient.first_name ?? ''} ${patient.last_name ?? ''}`.trim() : ''
-  const organisme = organismePour(feuille.insurer as string | null)
+  // L'organisme du document.
+  //
+  // Celui ENREGISTRÉ SUR LA FEUILLE d'abord : rouvrir une feuille de mars ne
+  // doit pas la réécrire avec la couverture d'octobre (v65). Mais quand la
+  // feuille n'en porte AUCUN — elle a été établie avant que la case
+  // « Mutuelle » ne soit remplie sur la fiche —, on prend celui du patient
+  // aujourd'hui. Sans ce repli, ces feuilles-là sortaient en version neutre
+  // pour toujours, alors que la caisse du patient était connue : le praticien
+  // voyait « FAR » sur la fiche et recevait un imprimé MonRDV.
+  // Une chaîne vide compte comme une absence : une feuille ancienne peut
+  // porter '' là où une récente porte null.
+  const organismeNom = String(feuille.insurer ?? '').trim() || patient?.mutuelle || null
+  const organisme = organismePour(organismeNom)
 
   // ── Ce que la v95 ajoute, lu À PART ───────────────────────────────────────
   //
@@ -131,13 +143,19 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
 
   return (
     <FeuilleDocument
+      // Le gabarit de cet organisme existe, mais la base n'a pas ses colonnes :
+      // le document sort sous sa forme neutre et l'explique, au lieu de
+      // laisser croire que MonRDV n'a pas l'imprimé de cette caisse.
+      raisonNeutre={organisme && organisme.gabarit !== 'neutre'
+        ? `L'imprimé ${organisme.nom} n'a pas pu être produit : la base de données n'est pas à jour (migration v95).`
+        : null}
       lignes={lignesEnTete(doctor)}
       logoUrl={logoUrl}
       ville={doctor.city ?? null}
       patientId={feuille.patient_id as string}
       patientNom={patientNom}
       patientCin={patient?.cin ?? null}
-      organisme={(feuille.insurer as string | null) ?? null}
+      organisme={organismeNom}
       intituleOrganisme={organisme?.intitule ?? null}
       dateSoins={feuille.care_date as string}
       items={(feuille.items ?? []) as LigneSoin[]}
