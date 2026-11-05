@@ -1,40 +1,38 @@
-// La « Déclaration dentaire » de RMA Watanya, imprimée remplie.
+// La « Déclaration dentaire » de RMA Watanya — FOR-GM-022, version 2019.
 //
-// Imprimé FOR-GM-022, Code GP 001, version 2019. Il ne ressemble pas à celui
-// de l'ANAM, et la différence n'est pas qu'esthétique :
+// Le formulaire officiel lui-même, scanné, rempli par-dessus : voir
+// components/shared/FormulaireImprime.tsx. Ce fichier ne contient pas de mise
+// en page, seulement OÙ chaque valeur se pose, en millièmes de la largeur de
+// la page.
 //
-//   · il sépare les SOINS des PROTHÈSES ET DE L'ODF, en deux tableaux qui ne
-//     demandent pas les mêmes colonnes ;
-//   · le tableau des prothèses distingue ce qu'on PROPOSE de ce qu'on EXÉCUTE,
-//     en deux groupes de lignes — c'est la demande d'accord préalable de RMA,
-//     et elle se lit sur la même page que les travaux faits ;
-//   · il ne demande AUCUN code d'acte : une nature d'intervention écrite en
-//     toutes lettres et un coefficient, rien de plus.
+// ── CE QUE CET IMPRIMÉ A DE PARTICULIER ────────────────────────────────────
 //
-// ── CE QUE LE LOGICIEL NE REMPLIT PAS ───────────────────────────────────────
+// Il sépare les SOINS des PROTHÈSES ET DE L'ODF, en deux tableaux qui ne
+// demandent pas les mêmes colonnes ; et le second distingue ce qu'on PROPOSE
+// de ce qu'on EXÉCUTE, en deux groupes de lignes. C'est la demande d'accord
+// préalable de RMA, sur la même page que les travaux faits.
 //
-// Toute la première page. Elle se termine par « Signature de l'assuré(e) » :
-// c'est SA déclaration — affiliation, souscripteur, police, adresse, identité
-// du malade, montant engagé. Il l'écrit de sa main. La seule case que le
-// logiciel y coche est « Type de déclaration », Devis ou Exécution : elle ne
-// dit rien de l'assuré, elle dit ce que le praticien a fait ou propose de
-// faire, et lui seul peut la remplir.
+// ── CE QUE LE LOGICIEL N'ÉCRIT PAS ──────────────────────────────────────────
 //
-// La page 2 est « Partie réservée au praticien » : elle, est remplie.
+// Toute la page 1, sauf une case. Elle se termine par « Signature de
+// l'assuré(e) » : affiliation, souscripteur, police, adresse, identité du
+// malade, montant engagé, c'est SA déclaration, qu'il écrit de sa main. La
+// seule case que le logiciel y coche est « Type de déclaration », Devis ou
+// Exécution : elle ne dit rien de l'assuré, elle dit ce que le praticien a
+// fait ou propose de faire, et lui seul peut la remplir.
 //
-// L'imprimé est reproduit ENTIER, cadres du gestionnaire compris : « Partie
-// réservée à RMA » (dates de réception, n° de sinistre, ordonnancement) et le
-// tableau « Pharmacie ». Ils n'appartiennent pas au praticien, mais ils
-// appartiennent au formulaire : une déclaration remise sans eux n'est pas la
-// déclaration de RMA, c'est un extrait.
-import SchemaDentaireFormulaire from '@/components/shared/SchemaDentaireFormulaire'
-import { Cases, Champ, Pastille, jourFr } from '@/components/shared/traits-formulaire'
+// Et pas le SCHÉMA DENTAIRE. L'arcade de RMA n'est pas celle de l'ANAM : ses
+// deux rangées ont d'autres proportions, et la caler depuis celle de la CNSS
+// place les cercles sur la rangée intérieure — essayé, vérifié, écarté. Le
+// numéro de la dent part dans la colonne « Dents traitées », qui est ce que
+// l'assureur lit ; le praticien entoure la dent au stylo.
+import FormulaireImprime, { type MarqueFormulaire, type PageFormulaire } from '@/components/shared/FormulaireImprime'
+import { fichierPublic } from '@/lib/fichiers-publics'
 import { estProtheseOuOdf } from '@/lib/nomenclature-anam'
 import type {
   ActeImprime, BeneficiaireImprime, FeuilleImprimee, PraticienImprime,
 } from '@/lib/feuilles-soins'
 import type { Organisme } from '@/lib/organismes'
-import { PrintButton } from '../../facture/[id]/PrintButton'
 
 export interface Props {
   organisme: Organisme
@@ -45,301 +43,77 @@ export interface Props {
   actes: ActeImprime[]
 }
 
+const L = 1700
+const H = 1236
+
+const jour = (j?: string | null) => {
+  const s = String(j ?? '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''
+  const [a, m, d] = s.split('-')
+  return `${d}/${m}/${a}`
+}
 const dh = (n: number) => Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 2 })
 
-/** La cotation d'une ligne, telle que l'imprimé la veut : RMA écrit
- *  « Coefficients » là où l'ANAM écrit « Lettre clé + Cotation », mais c'est
- *  la même chose, et le praticien a saisi les deux parties. */
-function cotation(a: ActeImprime): string {
-  if (!a.coefficient) return ''
-  return `${a.lettre_cle ?? ''} ${a.coefficient}`.trim()
+/** Coupe un libellé qui ne tiendrait pas dans sa colonne : déborder serait
+ *  pire, le texte passerait sous la colonne voisine. */
+function tronque(texte: string, largeur: number, taille: number): string {
+  const max = Math.floor(largeur / (taille * 0.5))
+  return texte.length <= max ? texte : `${texte.slice(0, max - 1).trimEnd()}…`
 }
 
-/** Une rangée de cases vides, pour que le praticien ajoute au stylo ce qui
- *  n'était pas prévu. Tous les imprimés en ménagent. */
-function LignesLibres({ colonnes, nombre }: { colonnes: number; nombre: number }) {
-  return (
-    <>
-      {Array.from({ length: Math.max(0, nombre) }).map((_, i) => (
-        <tr key={`libre-${i}`}>
-          {Array.from({ length: colonnes }).map((__, j) => (
-            <td key={j} className="border border-gray-500 h-[20px]" />
-          ))}
-        </tr>
-      ))}
-    </>
-  )
-}
+/** Les lignes d'écriture, relevées sur les pointillés de chaque tableau. */
+const SOINS = [453, 470, 487, 504, 521, 538, 554, 571, 588, 606, 622, 639, 656]
+const PROPOSITION = [133, 151, 165, 183, 201, 218]
+const EXECUTION = [251, 268, 286, 302, 318]
 
-/** Un cadre vide que RMA remplit elle-même : un titre, des colonnes
- *  étiquetées, et de la place. Le praticien n'y écrit rien. */
-function CadreGestionnaire({ titre, colonnes, hauteur }: {
-  titre: string; colonnes: string[]; hauteur: number
-}) {
-  return (
-    <div className="border border-gray-500 rounded-sm">
-      <p className="text-[10px] font-bold px-2 py-[3px] border-b border-gray-400">{titre}</p>
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${colonnes.length}, 1fr)` }}>
-        {colonnes.map((c) => (
-          <span key={c} className="text-[9px] text-center py-[2px] border-r border-b border-gray-300 last:border-r-0">{c}</span>
-        ))}
-        {colonnes.map((c) => (
-          <span key={`v-${c}`} className="border-r border-gray-300 last:border-r-0" style={{ height: hauteur }} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function Titre({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-gray-200 border border-gray-500 px-2 py-[3px] text-[10px] font-bold text-gray-900">
-      {children}
-    </div>
-  )
-}
-
-export default function GabaritRMA({
-  organisme, praticien, patientId, beneficiaire, feuille, actes,
-}: Props) {
+export default function GabaritRMA({ praticien, patientId, feuille, actes }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
+  const devis = feuille.nature === 'entente_prealable'
   // Les deux tableaux de l'imprimé. Un acte sans code part avec les soins :
-  // c'est là que l'assureur s'attend à trouver le gros des lignes, et une
-  // prothèse mal classée se corrige d'un trait de stylo, pas une ligne
-  // perdue au milieu d'un tableau qu'il ne lit pas.
+  // c'est là que l'assureur s'attend à trouver le gros des lignes.
   const soins = items.filter((a) => !estProtheseOuOdf(a.code))
   const protheses = items.filter((a) => estProtheseOuOdf(a.code))
-  const dents = items.map((i) => i.tooth ?? '').filter(Boolean)
-  const devis = feuille.nature === 'entente_prealable'
 
-  return (
-    <div className="bg-gray-100 print:bg-white py-6 print:py-0">
-      <style>{`@page { size: A4 landscape; margin: 8mm; } @media print { .saut { break-after: page; } }`}</style>
+  const page1: MarqueFormulaire[] = [
+    devis
+      ? { x: 690, y: 195, signe: 'croix', largeur: 11 }
+      : { x: 846, y: 195, signe: 'croix', largeur: 11 },
+  ]
 
-      <div className="max-w-[1050px] mx-auto mb-3 flex items-center justify-between print:hidden px-4">
-        <a href={`/patients/${patientId}`} className="text-sm text-gray-500 hover:text-gray-700">← Retour au patient</a>
-        <PrintButton />
-      </div>
+  const page2: MarqueFormulaire[] = [
+    // ── Soins dentaires ────────────────────────────────────────────────
+    ...soins.slice(0, SOINS.length).flatMap((a, i): MarqueFormulaire[] => {
+      const y = SOINS[i] - 3
+      return [
+        { x: 537, y, texte: jour(a.acte_date) || jour(feuille.jour), taille: 10, ancre: 'middle' },
+        { x: 599, y, texte: a.tooth ?? '', taille: 11, ancre: 'middle' },
+        { x: 628, y, texte: tronque(a.label, 88, 10), taille: 10 },
+        { x: 740, y, texte: a.coefficient ? `${a.lettre_cle ?? ''} ${a.coefficient}`.trim() : '', taille: 11, ancre: 'middle' },
+        { x: 830, y, texte: dh(a.amount), taille: 11, ancre: 'end' },
+      ]
+    }),
 
-      {/* ══ PAGE 1 — le cadre du gestionnaire, puis la déclaration ═════════ */}
-      <section className="saut max-w-[1050px] mx-auto bg-white shadow-sm print:shadow-none p-6 print:p-0 mb-6 print:mb-0 flex gap-5">
+    // ── ODF & Prothèses dentaires ──────────────────────────────────────
+    // Une déclaration de devis remplit « Proposition », une déclaration
+    // d'exécution remplit « Exécution ». Jamais les deux.
+    ...protheses.slice(0, (devis ? PROPOSITION : EXECUTION).length)
+      .flatMap((a, i): MarqueFormulaire[] => {
+        const y = (devis ? PROPOSITION : EXECUTION)[i] - 3
+        const cotation = a.coefficient ? `${a.lettre_cle ?? ''} ${a.coefficient}`.trim() : ''
+        return [
+          // Les trois colonnes sont serrées : à pleine taille, la date mord
+          // sur le libellé. On rétrécit plutôt que de laisser se chevaucher.
+          { x: 102, y, texte: jour(a.acte_date) || jour(feuille.jour), taille: 9, ancre: 'middle' },
+          { x: 170, y, texte: tronque(`${a.label}${a.tooth ? ` (${a.tooth})` : ''}${cotation ? ` — ${cotation}` : ''}`, 68, 9), taille: 9, ancre: 'middle' },
+          { x: 265, y, texte: dh(a.amount), taille: 10, ancre: 'end' },
+        ]
+      }),
+  ]
 
-        {/* ── Ce que RMA remplit elle-même à l'arrivée du courrier ────── */}
-        <div className="w-[33%] shrink-0 space-y-3">
-          <p className="text-[12px] font-bold text-gray-900">Partie réservée à RMA</p>
-          <CadreGestionnaire titre="Date(s) de réception du courrier" colonnes={['1', '2', '3', '4']} hauteur={150} />
-          <div className="border border-gray-500 rounded-sm">
-            <p className="text-[10px] font-bold px-2 py-[3px] border-b border-gray-400">Identification</p>
-            <div className="flex">
-              <span className="w-[110px] shrink-0 border-r border-gray-400 flex items-center justify-center text-[9px] px-1">N° du sinistre</span>
-              <span className="flex-1 px-2 py-2 space-y-2">
-                <Cases nombre={7} />
-                <span className="flex items-center gap-2">
-                  <Cases nombre={7} />
-                  <span className="text-[9px]">CP</span>
-                </span>
-              </span>
-            </div>
-          </div>
-          <CadreGestionnaire titre="Ordonnancement" colonnes={['I.C.', 'D.D', 'D', 'C.C']} hauteur={130} />
-        </div>
+  const pages: PageFormulaire[] = [
+    { image: fichierPublic('/formulaires/rma-1.jpg'), largeur: L, hauteur: H, marques: page1 },
+    { image: fichierPublic('/formulaires/rma-2.jpg'), largeur: L, hauteur: H, marques: page2 },
+  ]
 
-        <div className="flex-1 min-w-0">
-        <header className="flex items-start justify-between gap-6 pb-2 border-b border-gray-400">
-          <div className="text-[8.5px] leading-snug text-gray-800">
-            <p className="font-bold">Siège social</p>
-            <p>83, avenue de l&apos;Armée Royale — Casablanca — Maroc</p>
-            <p>Tél. : 0522 31 21 63 — 0522 31 01 69 — Fax : 0522 31 38 84</p>
-            <p>www.rmaassurance.com</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[15px] font-bold tracking-wide text-gray-900">RMA</p>
-            <p className="text-[8px] leading-tight text-gray-700">ROYALE MAROCAINE D&apos;ASSURANCE</p>
-          </div>
-        </header>
-
-        <div className="text-center my-3">
-          <p className="text-[12px] font-bold text-gray-900" dir="rtl">تصريح معالجة الأسنان</p>
-          <p className="text-[14px] font-bold text-gray-900">Déclaration dentaire</p>
-        </div>
-
-        <div className="border border-gray-500 rounded-sm p-3 mb-3">
-          <div className="flex items-center gap-10 border-b border-gray-300 pb-2 mb-2">
-            <span className="text-[10px] font-bold text-gray-900">Type de déclaration</span>
-            <span className="flex items-center gap-1.5 text-[10px]"><Pastille cochee={devis} /> Devis</span>
-            <span className="flex items-center gap-1.5 text-[10px]"><Pastille cochee={!devis} /> Exécution</span>
-          </div>
-          <div className="flex items-baseline gap-2 py-[3px]">
-            <span className="text-[9.5px] shrink-0">N° d&apos;affiliation :</span>
-            <Cases nombre={16} />
-          </div>
-          <div className="flex gap-8">
-            <div className="flex-1">
-              <Champ fr="Souscripteur" large />
-              <Champ fr="N° de police" large />
-              <Champ fr="Adresse" large />
-            </div>
-            <div className="w-[240px] border border-gray-400 h-[74px] p-1">
-              <p className="text-[8.5px] text-gray-600">Cachet du souscripteur</p>
-            </div>
-          </div>
-        </div>
-
-        <Titre>Renseignements concernant l&apos;assuré(e)</Titre>
-        <div className="border border-t-0 border-gray-500 px-3 py-2 mb-3">
-          <Champ fr="Nom et prénom" large />
-          <Champ fr="Adresse" large />
-        </div>
-
-        <Titre>Renseignements concernant le malade</Titre>
-        <div className="border border-t-0 border-gray-500 px-3 py-2 mb-3 flex gap-8">
-          <div className="flex-1"><Champ fr="Nom et Prénom" large /></div>
-          <div className="w-[320px]"><Champ fr="Lien de parenté" large /></div>
-        </div>
-
-        <div className="border border-gray-500 px-3 py-2">
-          <Champ fr="Montant des frais engagés" large />
-          <p className="text-[9.5px] font-semibold text-gray-900 mt-3">
-            J&apos;atteste sur l&apos;honneur l&apos;exactitude des renseignements portés sur la présente déclaration
-          </p>
-          <div className="flex items-end gap-8 mt-3">
-            <span className="text-[9.5px]">Fait à : ……………………………</span>
-            <span className="text-[9.5px]">, le : ………………………</span>
-            <span className="flex-1" />
-            <span className="text-[9.5px] font-semibold">Signature de l&apos;assuré(e)</span>
-          </div>
-        </div>
-        <p className="text-[7.5px] text-gray-500 mt-2">FOR-GM-022 — Code GP 001 — Version 2019</p>
-        </div>
-      </section>
-
-      {/* ══ PAGE 2 — ce que remplit le praticien ═══════════════════════════ */}
-      <section className="max-w-[1050px] mx-auto bg-white shadow-sm print:shadow-none p-6 print:p-0">
-        <div className="flex gap-4">
-          {/* ── Le schéma, et la consigne de l'imprimé ─────────────────── */}
-          <div className="w-[290px] shrink-0">
-            <Titre>Partie réservée au praticien</Titre>
-            <div className="border border-t-0 border-gray-500 p-2">
-              <SchemaDentaireFormulaire dents={dents} largeur={250} />
-              <p className="text-[8.5px] text-gray-800 leading-snug mt-2">
-                Le praticien est prié de préciser la dent traitée, l&apos;acte pratiqué en indiquant la
-                nature des soins et leur coefficient d&apos;après la Nomenclature Générale des Actes
-                Professionnels.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex-1 space-y-3">
-            {/* ── Soins dentaires ──────────────────────────────────────── */}
-            <div>
-              <Titre>Soins dentaires</Titre>
-              <table className="w-full border-collapse text-[9px]">
-                <thead>
-                  <tr>
-                    {['Date', 'Dents traitées', 'Nature de l’intervention', 'Coefficients', 'Honoraires', 'Avis du médecin conseil'].map((t) => (
-                      <th key={t} className="border border-gray-500 px-1 py-[3px] font-semibold bg-gray-50">{t}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {soins.map((a, i) => (
-                    <tr key={i}>
-                      <td className="border border-gray-500 px-1 py-[3px] text-center tabular-nums w-[70px]">{jourFr(a.acte_date) || jourFr(feuille.jour)}</td>
-                      <td className="border border-gray-500 px-1 py-[3px] text-center tabular-nums w-[60px]">{a.tooth ?? ''}</td>
-                      <td className="border border-gray-500 px-1 py-[3px]">{a.label}</td>
-                      <td className="border border-gray-500 px-1 py-[3px] text-center w-[65px]">{cotation(a)}</td>
-                      <td className="border border-gray-500 px-1 py-[3px] text-right tabular-nums w-[70px]">{dh(a.amount)}</td>
-                      <td className="border border-gray-500 w-[120px]" />
-                    </tr>
-                  ))}
-                  <LignesLibres colonnes={6} nombre={4 - soins.length} />
-                </tbody>
-              </table>
-            </div>
-
-            {/* ── ODF & Prothèses ──────────────────────────────────────────
-                Deux groupes de lignes, et c'est tout l'intérêt du tableau :
-                ce qu'on propose à l'accord de l'assureur, et ce qu'on a
-                exécuté. La feuille remplit celui que sa nature désigne. */}
-            <div>
-              <Titre>ODF &amp; Prothèses dentaires</Titre>
-              <table className="w-full border-collapse text-[9px]">
-                <thead>
-                  <tr>
-                    <th className="border border-gray-500 w-[70px] bg-gray-50" />
-                    {['Date', 'Coefficient des travaux', 'Honoraires', 'Cachet du praticien', 'Avis du médecin conseil'].map((t) => (
-                      <th key={t} className="border border-gray-500 px-1 py-[3px] font-semibold bg-gray-50">{t}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(['Proposition', 'Exécution'] as const).map((groupe) => {
-                    const pourCeGroupe = (groupe === 'Proposition') === devis ? protheses : []
-                    const lignes = Math.max(2, pourCeGroupe.length)
-                    return Array.from({ length: lignes }).map((_, i) => {
-                      const a = pourCeGroupe[i]
-                      return (
-                        <tr key={`${groupe}-${i}`}>
-                          {i === 0 && (
-                            <td rowSpan={lignes} className="border border-gray-500 px-1 text-center font-semibold bg-gray-50">
-                              {groupe}
-                            </td>
-                          )}
-                          <td className="border border-gray-500 px-1 py-[3px] text-center tabular-nums h-[20px] w-[70px]">
-                            {a ? (jourFr(a.acte_date) || jourFr(feuille.jour)) : ''}
-                          </td>
-                          <td className="border border-gray-500 px-1 py-[3px]">
-                            {a ? `${a.label}${cotation(a) ? ` — ${cotation(a)}` : ''}${a.tooth ? ` (dent ${a.tooth})` : ''}` : ''}
-                          </td>
-                          <td className="border border-gray-500 px-1 py-[3px] text-right tabular-nums w-[70px]">
-                            {a ? dh(a.amount) : ''}
-                          </td>
-                          <td className="border border-gray-500 w-[110px]" />
-                          <td className="border border-gray-500 w-[120px]" />
-                        </tr>
-                      )
-                    })
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* ── Pharmacie ────────────────────────────────────────────────
-                Ce tableau n'est pas au dentiste : c'est le pharmacien qui le
-                remplit, quand l'ordonnance suit la déclaration. Il reste sur
-                l'imprimé, vide, parce qu'il y est sur le papier. */}
-            <div>
-              <Titre>Pharmacie</Titre>
-              <table className="w-full border-collapse text-[9px]">
-                <thead>
-                  <tr>
-                    {['Date', 'Montant', 'Signature et cachet'].map((t) => (
-                      <th key={t} className="border border-gray-500 px-1 py-[3px] font-semibold bg-gray-50">{t}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody><LignesLibres colonnes={3} nombre={2} /></tbody>
-              </table>
-            </div>
-
-            {/* ── Les recommandations de l'imprimé, citées ──────────────── */}
-            <div>
-              <Titre>Recommandations importantes</Titre>
-              <div className="border border-t-0 border-gray-500 px-3 py-2">
-                <ul className="text-[8.5px] text-gray-800 leading-snug space-y-[2px] list-disc pl-4">
-                  <li>La déclaration doit être accompagnée de toutes les pièces justificatives (ordonnances médicales, résultats des examens de radiologie etc…).</li>
-                  {organisme.accordPrealable.map((r) => <li key={r}>{r}</li>)}
-                  <li>{organisme.delai.texte}</li>
-                  <li>Toute fausse déclaration est passible des sanctions prévues par la loi n° 17-99 portant code des assurances.</li>
-                </ul>
-                <p className="text-[9px] font-bold text-red-700 mt-2">
-                  ← Toute réclamation doit être formulée au plus tard dans un délai de deux mois.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  )
+  return <FormulaireImprime pages={pages} orientation="landscape" retourHref={`/patients/${patientId}`} />
 }

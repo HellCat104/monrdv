@@ -19,6 +19,7 @@ import { FeuilleDocument, type LigneSoin } from './FeuilleDocument'
 import { type ActeImprime } from '@/lib/feuilles-soins'
 import GabaritANAM from './GabaritANAM'
 import GabaritCNSS from './GabaritCNSS'
+import GabaritCNOPS from './GabaritCNOPS'
 import GabaritFAR from './GabaritFAR'
 import GabaritRMA from './GabaritRMA'
 
@@ -139,8 +140,10 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
 
     if (organisme.gabarit === 'rma') return <GabaritRMA {...commun} />
     if (organisme.gabarit === 'far') return <GabaritFAR {...commun} />
-    // La CNSS sort sur SON imprimé, scanné et rempli. Le CNOPS garde encore
-    // la reproduction : son formulaire est en cours de calage, case par case.
+    // Les quatre organismes sortent désormais sur LEUR imprimé, scanné et
+    // rempli. GabaritANAM, la reproduction en HTML, ne sert plus qu'aux
+    // mutuelles dont on n'a pas le formulaire.
+    if (organisme.cle === 'cnops') return <GabaritCNOPS {...commun} />
     if (organisme.cle === 'cnss') return <GabaritCNSS {...commun} />
     return <GabaritANAM {...commun} />
   }
