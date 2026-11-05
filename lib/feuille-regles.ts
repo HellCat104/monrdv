@@ -28,6 +28,7 @@ import type { Organisme } from '@/lib/organismes'
 import {
   MOIS_VALIDITE_RADIO, actesSousAccord, familleDuCode, piecesAJoindre,
 } from '@/lib/nomenclature-anam'
+import { acteParCode, manquePourActe } from '@/lib/actes-dentaires'
 import { imagesDeLaDent, jourImage, type ImageDentaire } from '@/lib/imagerie'
 
 export interface ActeFeuille {
@@ -204,6 +205,38 @@ export function alertesFeuille(ctx: ContexteFeuille): AlerteFeuille[] {
         detail: `Exigé pour : ${piece.pour.join(', ')}.`,
       })
     }
+  }
+
+  // 4 bis. La dent, quand l'acte l'exige.
+  //
+  //    « Les règles de validation "Code Dent" et "Code Face" doivent être
+  //    intégrées comme contraintes bloquantes [...] pour prémunir les
+  //    praticiens contre les rejets automatiques. » C'est le référentiel des
+  //    codes qui le dit, et il a raison : une obturation sans numéro de dent
+  //    revient du guichet sans qu'on sache pourquoi.
+  const sansDent = actes
+    .map((a) => ({ a, manque: manquePourActe(a.code, a.tooth) }))
+    .filter((x) => x.manque !== null)
+  if (sansDent.length > 0) {
+    alertes.push({
+      niveau: 'bloquant',
+      titre: sansDent.length > 1
+        ? `${sansDent.length} actes sans numéro de dent`
+        : 'Un acte sans numéro de dent',
+      detail: `${sansDent.map((x) => `${x.a.code} ${x.a.label}`).join(', ')} — l'organisme exige ${sansDent[0].manque}. Sans elle, le dossier est rejeté automatiquement.`,
+    })
+  }
+
+  // 4 ter. La face traitée, pour les obturations. L'imprimé n'a pas de
+  //    colonne pour elle : on le signale sans pouvoir l'imprimer, et le
+  //    praticien l'écrit à côté du numéro de dent si sa caisse la réclame.
+  const avecFace = actes.filter((a) => acteParCode(a.code)?.face)
+  if (avecFace.length > 0) {
+    alertes.push({
+      niveau: 'info',
+      titre: 'Face traitée à préciser à la main',
+      detail: `${avecFace.map((a) => a.code).join(', ')} : certains organismes demandent la face obturée (mésiale, occlusale, distale…). L'imprimé n'a pas de colonne pour elle — écrivez-la à côté du numéro de dent.`,
+    })
   }
 
   // 5. La cotation. Les formulaires de l'ANAM et de RMA ont une colonne

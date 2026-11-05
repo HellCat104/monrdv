@@ -1,3 +1,5 @@
+import { acteParCode } from '@/lib/actes-dentaires'
+
 // Le référentiel médico-administratif des actes dentaires de l'ANAM.
 //
 // ── CE QUE C'EST, ET CE QUE CE N'EST PAS ────────────────────────────────────
@@ -218,6 +220,14 @@ export function piecesAJoindre(
 export function actesSousAccord(codes: (string | null | undefined)[]): string[] {
   const vus = new Set<string>()
   for (const code of codes) {
+    // Le catalogue nomme l'acte, le référentiel ne connaît qu'une plage :
+    // quand les deux parlent du même code, le catalogue est plus précis. Un
+    // stellite passe par l'accord préalable, pas toute sa plage de numéros.
+    const connu = acteParCode(code)
+    if (connu) {
+      if (connu.accord) vus.add(connu.libelle)
+      continue
+    }
     const famille = familleDuCode(code)
     if (famille?.accordPrealable) vus.add(famille.libelle)
   }
@@ -238,8 +248,18 @@ const FAMILLES_PROTHESE_ODF = new Set([
 /** Cet acte relève-t-il de la prothèse ou de l'orthodontie ?
  *
  *  Sans code, non : un acte que le praticien n'a pas coté part avec les soins
- *  courants, là où l'organisme s'attend à trouver le gros des lignes. */
+ *  courants, là où l'organisme s'attend à trouver le gros des lignes.
+ *
+ *  Le CATALOGUE prime sur les plages : il nomme l'acte, là où le référentiel
+ *  ne connaît qu'un numéro. D748 à D752 sont des prothèses ADJOINTES, alors
+ *  que la plage 748–760 les rangerait en conjointes. */
 export function estProtheseOuOdf(code: string | null | undefined): boolean {
+  const connu = acteParCode(code)
+  if (connu?.famille) {
+    return connu.famille === 'prothese_conjointe'
+      || connu.famille === 'prothese_adjointe'
+      || connu.famille === 'odf'
+  }
   const f = familleDuCode(code)
   return !!f && FAMILLES_PROTHESE_ODF.has(f.cle)
 }
@@ -251,6 +271,12 @@ export function estProtheseOuOdf(code: string | null | undefined): boolean {
  *  lui-même. Une couronne est donc entourée bien qu'elle soit une prothèse,
  *  d'où l'exception sur la prothèse conjointe. */
 export function dentCroisee(code: string | null | undefined): boolean {
+  const connu = acteParCode(code)
+  if (connu?.famille) {
+    // Une couronne s'entoure (« la dent couronnée »), une extraction et une
+    // prothèse amovible se croisent (« la dent objet de la prothèse »).
+    return connu.famille === 'extraction' || connu.famille === 'prothese_adjointe'
+  }
   const f = familleDuCode(code)
   if (!f) return false
   if (f.cle === 'extractions' || f.cle === 'extractions_chir') return true

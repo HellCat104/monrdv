@@ -24,6 +24,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
+import ChoixActesNgap, { type ActeRecent } from '@/components/dashboard/ChoixActesNgap'
+import type { ActeDentaire } from '@/lib/actes-dentaires'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, resteACharge, type StatutFeuille, type FeuilleSuivi } from '@/lib/feuilles-soins'
@@ -120,6 +122,8 @@ export default function FeuilleSoinsCard({
   const [feuilles, setFeuilles] = useState<Feuille[]>([])
   const [activee, setActivee] = useState(true)
   const [actes, setActes] = useState<{ label: string; code: string | null; amount: number }[]>([])
+  /** Les derniers actes cotés par ce cabinet, pour la rangée de raccourcis. */
+  const [recents, setRecents] = useState<ActeRecent[]>([])
   const [lignes, setLignes] = useState<Ligne[]>([])
   const [candidats, setCandidats] = useState<Candidat[]>([])
   const [nature, setNature] = useState<'execution' | 'entente_prealable'>('execution')
@@ -150,7 +154,7 @@ export default function FeuilleSoinsCard({
   useEffect(() => {
     fetch('/api/feuilles-soins/actes')
       .then((r) => (r.ok ? r.json() : { actes: [] }))
-      .then((d) => setActes(d.actes ?? []))
+      .then((d) => { setActes(d.actes ?? []); setRecents(d.recents ?? []) })
       .catch(() => { /* catalogue vide : on saisit à la main */ })
   }, [])
 
@@ -256,6 +260,23 @@ export default function FeuilleSoinsCard({
     // les actes cochés et effacerait la saisie en cours.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [declencheur])
+
+  /** Un acte coché au catalogue devient une ligne de la feuille.
+   *
+   *  Le code et la lettre clé viennent du catalogue, le tarif du dernier
+   *  qu'on a pratiqué pour cet acte. La dent reste vide : c'est la seule
+   *  chose que le logiciel ne peut pas savoir, et `alertesFeuille` la
+   *  réclamera avant l'impression quand l'acte l'exige. */
+  function ajouterActe(acte: ActeDentaire, montant?: number) {
+    setLignes((prev) => [...prev, {
+      ...LIGNE_VIDE,
+      code: acte.code,
+      label: acte.libelle,
+      amount: montant ? String(montant) : '',
+      acteDate: new Date().toLocaleDateString('en-CA'),
+      lettreCle: dental ? 'D' : '',
+    }])
+  }
 
   /** Cocher ou décocher un acte terminé. Décocher n'efface que la ligne qui
    *  en vient : un acte tapé à la main reste. */
@@ -459,6 +480,17 @@ export default function FeuilleSoinsCard({
               </ul>
             )}
           </div>
+
+          {/* ── Le catalogue coté ────────────────────────────────────────
+              Là où le praticien dit ce qu'il a fait. Le code de nomenclature
+              ne se tape plus : il vient avec l'acte. */}
+          {dental && (
+            <ChoixActesNgap
+              recents={recents}
+              onChoisir={ajouterActe}
+              dejaChoisis={lignes.map((l) => l.code.toUpperCase()).filter(Boolean)}
+            />
+          )}
 
           {/* ── Les lignes retenues, avec ce que le formulaire exige ─────── */}
           {lignes.length > 0 && (
