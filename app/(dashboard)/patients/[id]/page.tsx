@@ -2,7 +2,7 @@
 // Forfait Agenda : fiche minimale (nom, prénom, téléphone, notes) sans données de santé.
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { allVitalDefs, resolveEnabledVitals, type VitalDef, specialitesDu } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, isGeneralDoctor, type VitalDef, specialitesDu } from '@/types'
 import { canAccess } from '@/lib/plan'
 import PatientDossier from '@/components/dashboard/PatientDossier'
 import ResumePatient from '@/components/dashboard/ResumePatient'
@@ -53,9 +53,14 @@ export default async function PatientDossierPage({ params }: { params: { id: str
   // lectures, et un dossier qui attend cinq allers-retours depuis le
   // navigateur s'ouvre une seconde plus tard. Il rend null si le dossier n'a
   // rien à résumer.
-  const preparation = await preparerUn(
-    supabase, doctor.id, patient.id, format(getNowInMaroc(), 'yyyy-MM-dd'),
-  )
+  //
+  // Réservé au généraliste pour l'instant : ses règles sont celles de la
+  // médecine générale, et chez un dentiste la moitié des constats ne le
+  // concernent pas. Le jour où chaque branche a les siennes, le garde-fou
+  // saute — il est ici, en un seul endroit.
+  const preparation = isGeneralDoctor(specialties)
+    ? await preparerUn(supabase, doctor.id, patient.id, format(getNowInMaroc(), 'yyyy-MM-dd'))
+    : null
 
   return (
     <div className="space-y-4">

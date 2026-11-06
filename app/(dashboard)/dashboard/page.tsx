@@ -11,6 +11,7 @@ import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
 import { isDentalDoctor } from '@/lib/dental'
+import { isGeneralDoctor, specialitesDu } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, CheckCircle, AlertTriangle, ChevronRight, Banknote } from 'lucide-react'
 import Link from 'next/link'
@@ -117,6 +118,7 @@ export default async function DashboardPage() {
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
   const estDentiste = isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])
+  const estGeneraliste = isGeneralDoctor(specialitesDu(doctor))
 
   // Calcul jours restants d'abonnement
   let daysLeft: number | null = null
@@ -190,8 +192,15 @@ export default async function DashboardPage() {
 
           Réservé au forfait qui porte le dossier médical : il lit des
           antécédents et des constantes, qui n'ont rien à faire dans un
-          forfait Agenda. */}
-      {acces && (
+          forfait Agenda.
+
+          Et réservé au GÉNÉRALISTE, pour l'instant. Ses règles sont celles de
+          la médecine générale : « dernier bilan il y a 18 mois », « ordonnance
+          de fond à renouveler ». Chez un dentiste, qui ne prescrit pas de
+          bilan biologique, ce sont des constats qui ne le concernent pas — et
+          un briefing qu'on n'a pas de raison de lire, on cesse de le lire. On
+          ouvrira aux autres branches quand leurs règles à elles existeront. */}
+      {acces && estGeneraliste && (
         <MaJournee
           doctorId={doctor.id}
           rendezVous={(todayAppointments ?? []) as RdvDuJour[]}

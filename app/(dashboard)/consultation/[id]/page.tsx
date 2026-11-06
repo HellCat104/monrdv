@@ -69,9 +69,12 @@ export default async function ConsultationPage({ params }: { params: { id: strin
     isGeneralDoctor(specialites) ? `/generaliste/consultation/${patient.id}?apt=${apt.id}`
     : isGastroDoctor(specialites) ? `/gastro/consultation/${patient.id}?apt=${apt.id}`
     : null
-  const preparation = await preparerUn(
-    supabase, doctor.id, patient.id as string, format(getNowInMaroc(), 'yyyy-MM-dd'),
-  )
+  // Généraliste seulement, même raison que dans le dossier : les règles du
+  // moteur sont celles de la médecine générale. Les autres branches gardent
+  // leur panneau d'identité, inchangé.
+  const preparation = isGeneralDoctor(specialites)
+    ? await preparerUn(supabase, doctor.id, patient.id as string, format(getNowInMaroc(), 'yyyy-MM-dd'))
+    : null
 
   // Feuille de soins : les lignes arrivent pré-remplies avec les actes du plan
   // de traitement marqués « réalisés » AUJOURD'HUI. À défaut, l'acte du jour
