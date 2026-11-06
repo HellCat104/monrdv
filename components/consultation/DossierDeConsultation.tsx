@@ -36,7 +36,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   Stethoscope, UserRound, ShieldAlert, Pill, BellRing, History,
   FlaskConical, Activity, Syringe, FileText, ExternalLink, ArrowLeft,
-  Printer, Mail, Download,
+  Printer, Mail, Download, Phone,
 } from 'lucide-react'
 import { formatDateFr, formatDateShort } from '@/lib/utils'
 import { CATEGORIES_DOCUMENT, type CategorieDocument } from '@/types'
@@ -44,13 +44,34 @@ import { CATEGORIES_DOCUMENT, type CategorieDocument } from '@/types'
 const DOC_BUCKET = 'patient-documents'
 
 export type CleRubrique =
-  | 'consultation' | 'administratif' | 'antecedents' | 'traitements'
-  | 'rappels' | 'passees' | 'examens' | 'constantes' | 'vaccins' | 'documents'
+  | 'consultation' | 'documents'
+  | 'identite' | 'contact'
+  | 'antecedents' | 'traitements' | 'constantes' | 'passees' | 'examens'
+  | 'vaccins' | 'rappels'
+
+/** Un intitulé et sa valeur, déjà mis en forme côté serveur. Le composant
+ *  n'interprète aucune donnée patient. */
+export interface Champ { label: string; valeur: string }
 
 export interface DonneesDossier {
-  /** État civil et couverture : des couples intitulé / valeur, déjà mis en
-   *  forme côté serveur. Le composant n'interprète aucune donnée patient. */
-  administratif: { label: string; valeur: string }[]
+  // ── CE QUI EST ADMINISTRATIF ──────────────────────────────────────────
+  //
+  // Qui est la personne, comment on la joint, qui prévenir, qui paie. Rien
+  // de clinique : pas une allergie, pas une constante, pas un antécédent.
+  /** Nom, naissance, âge, sexe, CIN. */
+  identite: Champ[]
+  /** Téléphone, e-mail, adresse. */
+  contact: Champ[]
+  /** Qui prévenir, et à quel numéro (v97). */
+  urgence: Champ[]
+  /** Mutuelle et organisme. */
+  couverture: Champ[]
+
+  // ── CE QUI EST MÉDICAL ────────────────────────────────────────────────
+  //
+  // Le groupe sanguin est ici et non dans l'état civil : c'est une donnée de
+  // santé, qu'on cherche avant un geste, pas en remplissant une facture.
+  groupeSanguin: string
   allergies: string
   etiquettes: string[]
   chroniques: string
@@ -92,6 +113,11 @@ export default function DossierDeConsultation({
   const dossierHref = `/patients/${patient.id}`
   const echus = donnees.rappels.filter((r) => r.due_date <= donnees.aujourdhui).length
 
+  // DEUX DOSSIERS, DEUX GROUPES. L'administratif (qui est la personne,
+  // comment on la joint, qui paie) et le médical (ce qu'elle a, ce qu'elle
+  // prend, ce qu'on lui a trouvé) ne se mélangent pas : on ne cherche pas
+  // une mutuelle en ouvrant un dossier médical, et une allergie n'a rien à
+  // faire à côté d'un numéro de téléphone.
   const groupes: { titre: string; items: { cle: CleRubrique; label: string; icone: ReactNode; compte?: number; alerte?: boolean }[] }[] = [
     {
       titre: 'Aujourd’hui',
@@ -101,34 +127,58 @@ export default function DossierDeConsultation({
       ],
     },
     {
-      titre: 'Dossier médical',
+      titre: 'Dossier administratif',
       items: [
-        { cle: 'administratif', label: 'Dossier administratif', icone: <UserRound className="h-4 w-4" /> },
-        { cle: 'antecedents', label: 'Allergies, antécédents', icone: <ShieldAlert className="h-4 w-4" />, alerte: !!donnees.allergies.trim() },
-        { cle: 'traitements', label: 'Traitements', icone: <Pill className="h-4 w-4" /> },
-        { cle: 'rappels', label: 'Rappels', icone: <BellRing className="h-4 w-4" />, compte: donnees.rappels.length, alerte: echus > 0 },
+        { cle: 'identite', label: 'Identité', icone: <UserRound className="h-4 w-4" /> },
+        { cle: 'contact', label: 'Contact et couverture', icone: <Phone className="h-4 w-4" /> },
       ],
     },
     {
-      titre: 'Historique',
+      titre: 'Dossier médical',
       items: [
+        { cle: 'antecedents', label: 'Allergies, antécédents', icone: <ShieldAlert className="h-4 w-4" />, alerte: !!donnees.allergies.trim() },
+        { cle: 'traitements', label: 'Traitements', icone: <Pill className="h-4 w-4" /> },
+        { cle: 'constantes', label: 'Constantes', icone: <Activity className="h-4 w-4" /> },
         { cle: 'passees', label: 'Consultations', icone: <History className="h-4 w-4" />, compte: donnees.consultations.length },
         { cle: 'examens', label: 'Résultats d’examens', icone: <FlaskConical className="h-4 w-4" />, compte: donnees.documents.length },
-        { cle: 'constantes', label: 'Constantes', icone: <Activity className="h-4 w-4" /> },
         { cle: 'vaccins', label: 'Vaccins', icone: <Syringe className="h-4 w-4" />, compte: donnees.vaccins.length },
+        { cle: 'rappels', label: 'Rappels', icone: <BellRing className="h-4 w-4" />, compte: donnees.rappels.length, alerte: echus > 0 },
       ],
     },
   ]
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 items-start">
-      {/* LE RAIL. En colonne sur grand écran, en bandeau qui défile sur
-          téléphone — où les intitulés de groupe disparaissent : à 375 px ils
-          coûteraient une ligne chacun pour ne rien apprendre. */}
-      <nav className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 w-full lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:mx-0 lg:px-0 lg:sticky lg:top-4">
+      {/* TÉLÉPHONE : une liste déroulante, pas un bandeau de onze pastilles.
+          Alignées à la file, elles font se toucher « Identité » et « Allergies »
+          et la séparation des deux dossiers disparaît — or c'est précisément
+          ce qui ne doit jamais se confondre. La liste native, elle, garde les
+          deux intitulés, tient sur une ligne et s'ouvre en plein écran. */}
+      <div className="lg:hidden w-full">
+        <select
+          value={rubrique}
+          onChange={(e) => setRubrique(e.target.value as CleRubrique)}
+          aria-label="Rubrique du dossier"
+          className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800"
+        >
+          {groupes.map((g) => (
+            <optgroup key={g.titre} label={g.titre}>
+              {g.items.map((it) => (
+                <option key={it.cle} value={it.cle}>
+                  {it.label}{it.compte ? ` (${it.compte})` : ''}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      {/* GRAND ÉCRAN : le rail, toujours visible, qui montre le classement
+          sans qu'on ait à l'ouvrir. */}
+      <nav className="hidden lg:flex w-full lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0.5 lg:sticky lg:top-4">
         {groupes.map((g) => (
           <Fragment key={g.titre}>
-            <p className="hidden lg:block text-[10.5px] font-semibold uppercase tracking-wide text-gray-400 px-2 pt-3 pb-1">
+            <p className="text-[10.5px] font-semibold uppercase tracking-wide text-gray-400 px-2 pt-3 pb-1">
               {g.titre}
             </p>
             {g.items.map((it) => {
@@ -138,16 +188,16 @@ export default function DossierDeConsultation({
                   key={it.cle}
                   type="button"
                   onClick={() => setRubrique(it.cle)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] whitespace-nowrap border transition shrink-0 lg:w-full lg:border-transparent ${
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-[13px] border transition ${
                     actif
-                      ? 'bg-primary-500 text-white border-primary-500 font-medium lg:bg-primary-50 lg:text-primary-700 lg:border-primary-100'
-                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 lg:bg-transparent'
+                      ? 'bg-primary-50 text-primary-700 border-primary-100 font-medium'
+                      : 'text-gray-600 border-transparent hover:bg-gray-50'
                   }`}
                 >
-                  <span className={actif ? 'text-white lg:text-primary-600' : 'text-gray-400'}>{it.icone}</span>
+                  <span className={actif ? 'text-primary-600' : 'text-gray-400'}>{it.icone}</span>
                   <span className="min-w-0 truncate">{it.label}</span>
                   {it.compte != null && it.compte > 0 && (
-                    <span className={`ml-auto text-[10px] rounded-full px-1.5 py-0.5 shrink-0 ${actif ? 'bg-white/20 lg:bg-primary-100 lg:text-primary-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`ml-auto text-[10px] rounded-full px-1.5 py-0.5 shrink-0 ${actif ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-500'}`}>
                       {it.compte}
                     </span>
                   )}
@@ -176,19 +226,28 @@ export default function DossierDeConsultation({
               <ArrowLeft className="h-3.5 w-3.5" /> Revenir à la consultation du jour
             </button>
 
-            {rubrique === 'administratif' && (
-              <Carte titre="Dossier administratif" href={dossierHref} lien="Modifier dans le dossier">
-                {donnees.administratif.length === 0 ? <Vide quoi="Aucune information d’état civil renseignée." /> : (
-                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-                    {donnees.administratif.map((c) => (
-                      <div key={c.label} className="flex items-baseline gap-2 min-w-0">
-                        <dt className="text-[11px] text-gray-400 w-28 shrink-0">{c.label}</dt>
-                        <dd className="text-sm text-gray-900 min-w-0 break-words">{c.valeur}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-              </Carte>
+            {rubrique === 'identite' && (
+              <>
+                <Administratif />
+                <Carte titre="Identité" href={dossierHref} lien="Modifier dans le dossier">
+                  <Liste champs={donnees.identite} vide="Aucune information d’état civil renseignée." />
+                </Carte>
+              </>
+            )}
+
+            {rubrique === 'contact' && (
+              <>
+                <Administratif />
+                <Carte titre="Coordonnées" href={dossierHref} lien="Modifier dans le dossier">
+                  <Liste champs={donnees.contact} vide="Aucune coordonnée renseignée." />
+                </Carte>
+                <Carte titre="Contact d’urgence">
+                  <Liste champs={donnees.urgence} vide="Aucun contact d’urgence renseigné." />
+                </Carte>
+                <Carte titre="Couverture">
+                  <Liste champs={donnees.couverture} vide="Aucune mutuelle renseignée." />
+                </Carte>
+              </>
             )}
 
             {rubrique === 'antecedents' && (
@@ -201,6 +260,12 @@ export default function DossierDeConsultation({
                   ) : <Vide quoi="Aucune allergie connue au dossier." />}
                 </Carte>
                 <Carte titre="Antécédents">
+                  {donnees.groupeSanguin && (
+                    <p className="text-sm text-gray-900 mb-2">
+                      <span className="text-[11px] text-gray-400">Groupe sanguin</span>{' '}
+                      <b>{donnees.groupeSanguin}</b>
+                    </p>
+                  )}
                   {donnees.etiquettes.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {donnees.etiquettes.map((e) => (
@@ -211,7 +276,7 @@ export default function DossierDeConsultation({
                   <Bloc titre="Pathologies chroniques" texte={donnees.chroniques} />
                   <Bloc titre="Chirurgicaux" texte={donnees.chirurgies} />
                   <Bloc titre="Familiaux" texte={donnees.familiaux} />
-                  {donnees.etiquettes.length === 0 && !donnees.chroniques.trim() && !donnees.chirurgies.trim() && !donnees.familiaux.trim() && (
+                  {donnees.etiquettes.length === 0 && !donnees.groupeSanguin && !donnees.chroniques.trim() && !donnees.chirurgies.trim() && !donnees.familiaux.trim() && (
                     <Vide quoi="Aucun antécédent renseigné." />
                   )}
                   {donnees.anamneseMaj && (
@@ -409,6 +474,32 @@ function Carte({
       </div>
       {children}
     </section>
+  )
+}
+
+/** Dit, en une ligne, qu'on est du côté administratif. La séparation des deux
+ *  dossiers ne se voit que dans le rail ; un praticien qui arrive ici par le
+ *  bandeau d'un téléphone, où les titres de groupe sont masqués, ne la verrait
+ *  pas du tout. */
+function Administratif() {
+  return (
+    <p className="text-[11px] text-gray-400">
+      Dossier administratif — rien de clinique ne figure ici.
+    </p>
+  )
+}
+
+function Liste({ champs, vide }: { champs: Champ[]; vide: string }) {
+  if (champs.length === 0) return <Vide quoi={vide} />
+  return (
+    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+      {champs.map((c) => (
+        <div key={c.label} className="flex items-baseline gap-2 min-w-0">
+          <dt className="text-[11px] text-gray-400 w-28 shrink-0">{c.label}</dt>
+          <dd className="text-sm text-gray-900 min-w-0 break-words">{c.valeur}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 

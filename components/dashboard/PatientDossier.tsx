@@ -143,6 +143,10 @@ export default function PatientDossier({
     ? { raison: patient.email_bounce_reason, depuis: patient.email_bounced_at ?? null, adresse: patient.email ?? '' }
     : null)
   const [editAddress, setEditAddress] = useState(patient.address ?? '')
+  // Contact d'urgence (v97) : administratif, jamais clinique. Qui prévenir si
+  // le patient ne peut pas répondre lui-même.
+  const [editUrgence, setEditUrgence] = useState((patient as { emergency_contact?: string | null }).emergency_contact ?? '')
+  const [editUrgencePhone, setEditUrgencePhone] = useState((patient as { emergency_phone?: string | null }).emergency_phone ?? '')
   const [editMutuelle, setEditMutuelle] = useState(patient.mutuelle ?? '')
   // Les renseignements de l'assuré. PLUS AUCUN ÉCRAN NE LES SAISIT — c'est
   // l'assuré qui remplit sa partie du formulaire, de sa main — mais cet état
@@ -182,6 +186,7 @@ export default function PatientDossier({
   // Colonnes dont dépend l'enregistrement : présentes sur la fiche LUE, donc
   // présentes en base. C'est le seul test fiable côté navigateur.
   const couvertureDisponible = (patient as { insurer_data?: unknown }).insurer_data !== undefined
+  const urgenceDisponible = (patient as { emergency_contact?: unknown }).emergency_contact !== undefined
   const etiquettesDisponibles = Array.isArray(patient.conditions)
   // Antécédents FAMILIAUX (v80). Distincts des maladies du patient : les
   // écrire dans « maladies chroniques » revenait à lui prêter celle de son
@@ -426,6 +431,13 @@ export default function PatientDossier({
       email: editEmail.trim() || null,
       address: editAddress.trim() || null,
       mutuelle: editMutuelle.trim() || null,
+      // Contact d'urgence (v97) : même prudence que la couverture ci-dessous.
+      // Écrite en dur, une colonne absente ferait échouer TOUT
+      // l'enregistrement de la fiche, allergies comprises.
+      ...(urgenceDisponible ? {
+        emergency_contact: editUrgence.trim() || null,
+        emergency_phone: editUrgencePhone.trim() || null,
+      } : {}),
       // Couverture (v65) : même règle que les étiquettes ci-dessous. Écrite en
       // dur, cette clé faisait échouer TOUT l'enregistrement d'une fiche sur
       // une base où la migration n'est pas passée — allergies comprises, et
@@ -461,10 +473,12 @@ export default function PatientDossier({
       delete sansRecentes.conditions
       delete sansRecentes.insurer_data
       delete sansRecentes.family_history
+      delete sansRecentes.emergency_contact
+      delete sansRecentes.emergency_phone
       const retry = await supabase.from('patients').update(sansRecentes).eq('id', patient.id)
       error = retry.error
       if (!error) {
-        alert("Fiche enregistrée, sauf les étiquettes de pathologie, les informations d'assuré et les antécédents familiaux : une migration n'est pas encore passée sur cette base.")
+        alert("Fiche enregistrée, sauf les étiquettes de pathologie, les informations d'assuré, les antécédents familiaux et le contact d'urgence : une migration n'est pas encore passée sur cette base.")
       }
     }
     setSaving(false)
@@ -1045,6 +1059,16 @@ export default function PatientDossier({
                   : <p className="text-[11px] text-amber-700">Nouvelle adresse : cliquez sur « Enregistrer la fiche » pour qu&apos;elle remplace l&apos;ancienne.</p>)}
               </div>
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><MapPin className="h-3 w-3" /> Adresse</Label><Input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} placeholder="Quartier, ville" className="h-9" /></div>
+              {/* CONTACT D'URGENCE (v97). Administratif, pas clinique : qui
+                  prévenir si le patient ne peut pas répondre. Absent tant que
+                  la migration n'est pas passée — le champ ne s'affiche alors
+                  pas, plutôt que de faire échouer tout l'enregistrement. */}
+              {urgenceDisponible && (
+                <>
+                  <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><UserRound className="h-3 w-3" /> Contact d&apos;urgence</Label><Input value={editUrgence} onChange={(e) => setEditUrgence(e.target.value)} placeholder="Nom et lien (ex. sa fille)" className="h-9" /></div>
+                  <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><Phone className="h-3 w-3" /> Téléphone d&apos;urgence</Label><Input type="tel" value={editUrgencePhone} onChange={(e) => setEditUrgencePhone(e.target.value)} placeholder="06 12 34 56 78" className="h-9" /></div>
+                </>
+              )}
               <div className="space-y-1"><Label className="text-[11px] text-gray-400 flex items-center gap-1"><CreditCard className="h-3 w-3" /> CIN</Label><Input value={editCin} onChange={(e) => setEditCin(e.target.value.toUpperCase())} placeholder="AB123456" className="h-9" /></div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-gray-400 flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> Mutuelle</Label>
@@ -1723,8 +1747,10 @@ export default function PatientDossier({
                       ['Âge', ageLisible],
                       ['Téléphone', editPhone],
                       ['CIN', editCin],
+                      ['E-mail', editEmail],
                       ['Organisme', editMutuelle],
                       ['Adresse', editAddress],
+                      ['Urgence', [editUrgence, editUrgencePhone].filter((x) => x.trim()).join(' · ')],
                     ] as [string, string][]).filter(([, v]) => String(v ?? '').trim()).map(([k, v]) => (
                       <div key={k} className="flex gap-2">
                         <dt className="text-[11px] text-gray-400 w-24 shrink-0 pt-0.5">{k}</dt>

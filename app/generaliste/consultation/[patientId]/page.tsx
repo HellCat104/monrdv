@@ -87,8 +87,12 @@ export default async function PageConsultationGeneraliste({
   // Tout le dossier en une fois. Les colonnes de v72 (`conditions`) et v87
   // (`anamnese_maj`) sont lues À PART : sur une base pas à jour, leur absence
   // viderait sinon toute la fiche patient.
-  const [recentes, cst, rappels, consultations, documents, vaccins, ordonnances] = await Promise.all([
+  const [recentes, urgence, cst, rappels, consultations, documents, vaccins, ordonnances] = await Promise.all([
     supabase.from('patients').select('conditions, anamnese_maj').eq('id', patient.id).eq('doctor_id', doctor.id).maybeSingle(),
+    // Encore à part, et pas avec les précédentes : la v97 peut être passée
+    // sans la v72, ou l'inverse. Groupées, l'absence d'une colonne viderait
+    // l'autre.
+    supabase.from('patients').select('emergency_contact, emergency_phone').eq('id', patient.id).eq('doctor_id', doctor.id).maybeSingle(),
     supabase.from('vital_signs').select('values, measured_at')
       .eq('doctor_id', doctor.id).eq('patient_id', patient.id)
       .order('measured_at', { ascending: false }).limit(2),
@@ -137,25 +141,44 @@ export default async function PageConsultationGeneraliste({
 
   const preparation = await preparerUn(supabase, doctor.id, patient.id, aujourdhui)
 
-  // L'état civil : seulement ce qui est renseigné. Une ligne « Mutuelle : — »
-  // occupe autant de place qu'une vraie et n'apprend rien.
-  const administratif = [
+  // L'ADMINISTRATIF, en quatre listes. Seulement ce qui est renseigné : une
+  // ligne « Mutuelle : — » occupe autant de place qu'une vraie et n'apprend
+  // rien.
+  //
+  // Le groupe sanguin n'est pas ici : c'est une donnée de santé, elle se lit
+  // avec les antécédents. L'état civil et la mutuelle, eux, ne disent rien
+  // de ce que le patient a.
+  const renseignes = (champs: { label: string; valeur: string }[]) =>
+    champs.filter((c) => c.valeur.trim())
+
+  const identite = renseignes([
     { label: 'Nom', valeur: `${patient.last_name ?? ''} ${patient.first_name ?? ''}`.trim() },
     { label: 'Né(e) le', valeur: patient.birth_date ? formatDateFr(patient.birth_date) : '' },
     { label: 'Âge', valeur: patient.age != null ? `${patient.age} ans` : '' },
     { label: 'Sexe', valeur: patient.sex === 'M' ? 'Masculin' : patient.sex === 'F' ? 'Féminin' : '' },
     { label: 'CIN', valeur: patient.cin ?? '' },
+  ])
+  const contact = renseignes([
     { label: 'Téléphone', valeur: patient.phone ?? '' },
     { label: 'E-mail', valeur: patient.email ?? '' },
     { label: 'Adresse', valeur: patient.address ?? '' },
+  ])
+  const contactUrgence = renseignes([
+    { label: 'Personne', valeur: (urgence.data?.emergency_contact as string | null) ?? '' },
+    { label: 'Téléphone', valeur: (urgence.data?.emergency_phone as string | null) ?? '' },
+  ])
+  const couverture = renseignes([
     { label: 'Mutuelle', valeur: patient.mutuelle ?? '' },
-    { label: 'Groupe sanguin', valeur: patient.blood_group ?? '' },
-  ].filter((c) => c.valeur.trim())
+  ])
 
   const donnees: DonneesDossier = {
-    administratif,
+    identite,
+    contact,
+    urgence: contactUrgence,
+    couverture,
     allergies: (patient.allergies ?? '').trim(),
     etiquettes: ((recentes.data?.conditions ?? []) as string[]).filter((e) => typeof e === 'string' && e.trim()),
+    groupeSanguin: (patient.blood_group ?? '').trim(),
     chroniques: (patient.chronic_conditions ?? '').trim(),
     chirurgies: (patient.surgeries ?? '').trim(),
     familiaux: (patient.family_history ?? '').trim(),

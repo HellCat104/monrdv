@@ -63,16 +63,24 @@ const BERRADA = preparer({
 /** Le dossier de la même patiente, inventé de bout en bout. Il sert à
  *  regarder le rangement des rubriques, pas à juger des données. */
 const DOSSIER: DonneesDossier = {
-  administratif: [
+  identite: [
     { label: 'Nom', valeur: 'BERRADA Fatima' },
     { label: 'Né(e) le', valeur: '14/03/1968' },
     { label: 'Âge', valeur: '58 ans' },
     { label: 'Sexe', valeur: 'Féminin' },
     { label: 'CIN', valeur: 'BK 418 332' },
-    { label: 'Téléphone', valeur: '06 61 00 00 00' },
-    { label: 'Adresse', valeur: '12 rue Ibn Batouta, Casablanca' },
-    { label: 'Mutuelle', valeur: 'CNSS' },
   ],
+  contact: [
+    { label: 'Téléphone', valeur: '06 61 00 00 00' },
+    { label: 'E-mail', valeur: 'f.berrada@example.ma' },
+    { label: 'Adresse', valeur: '12 rue Ibn Batouta, Casablanca' },
+  ],
+  urgence: [
+    { label: 'Personne', valeur: 'Youssef Berrada, son fils' },
+    { label: 'Téléphone', valeur: '06 62 11 11 11' },
+  ],
+  couverture: [{ label: 'Mutuelle', valeur: 'CNSS' }],
+  groupeSanguin: 'O+',
   allergies: 'Sulfamides (éruption, 2009)',
   etiquettes: ['Hypertension artérielle', 'Diabète de type 2'],
   chroniques: 'Dyslipidémie',
