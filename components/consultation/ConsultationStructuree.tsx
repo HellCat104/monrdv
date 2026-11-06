@@ -45,7 +45,7 @@ type Existant = Record<string, any> | null
 export default function ConsultationStructuree({
   doctorId, patient, appointmentId, existant, dossier,
   rubriques, trames, retourCr, dentaire = false, alertes,
-  colonnesFacultatives = [],
+  colonnesFacultatives = [], pleineLargeur = false,
 }: {
   doctorId: string
   patient: PatientLite
@@ -79,6 +79,13 @@ export default function ConsultationStructuree({
    *
    *  Ex. « arret_travail » (v96) chez le généraliste. */
   colonnesFacultatives?: string[]
+  /** Le formulaire occupe toute la place qu'on lui donne, au lieu de se
+   *  centrer dans une colonne de 48 rem.
+   *
+   *  Chez le généraliste il vit à côté d'un rail de navigation : la colonne
+   *  centrée laissait alors une bande blanche à droite, et les rubriques
+   *  devenaient plus étroites à mesure qu'on élargissait la fenêtre. */
+  pleineLargeur?: boolean
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -258,7 +265,7 @@ export default function ConsultationStructuree({
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4 pb-16">
+    <div className={`space-y-4 pb-16 ${pleineLargeur ? '' : 'max-w-3xl mx-auto'}`}>
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => router.back()} className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowLeft className="h-4 w-4" /></button>
         <div className="min-w-0">
