@@ -77,6 +77,13 @@ export default function ChoixActesNgap({
             {a.horsNomenclature && `${a.dent || a.accord ? ' · ' : ''}non remboursé`}
           </span>
         )}
+        {/* Un code dont le numéro contredit le référentiel officiel. On ne
+            l'interdit pas — on ne le laisse pas passer en silence. */}
+        {a.aVerifier && (
+          <span className="block text-[10px] text-amber-600 leading-snug" title={a.aVerifier}>
+            ⚠ code à confirmer
+          </span>
+        )}
       </span>
       {porte(a.code) && <span className="text-[9.5px] text-gray-400 shrink-0 mt-0.5">déjà porté</span>}
     </button>

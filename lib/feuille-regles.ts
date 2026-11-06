@@ -239,6 +239,27 @@ export function alertesFeuille(ctx: ContexteFeuille): AlerteFeuille[] {
     })
   }
 
+  // 4 quater. Les codes dont le numéro contredit le référentiel officiel.
+  //
+  //    Le catalogue des actes vient d'un document qui porte lui-même la
+  //    mention « AI responses may include mistakes ». Dix-huit de ses codes
+  //    tombent, au référentiel de l'ANAM, dans une plage qui désigne autre
+  //    chose. On ne les interdit pas — un référentiel peut avoir changé
+  //    depuis — mais on ne laisse pas partir une feuille qui en porte un
+  //    sans que le praticien l'ait lu.
+  const douteux = actes
+    .map((a) => ({ code: a.code, raison: acteParCode(a.code)?.aVerifier }))
+    .filter((x): x is { code: string | null; raison: string } => !!x.raison)
+  if (douteux.length > 0) {
+    alertes.push({
+      niveau: 'attention',
+      titre: douteux.length > 1
+        ? `${douteux.length} codes à confirmer`
+        : `Code ${douteux[0].code} à confirmer`,
+      detail: Array.from(new Set(douteux.map((x) => `${x.code} — ${x.raison}`))).join(' '),
+    })
+  }
+
   // 5. La cotation. Les formulaires de l'ANAM et de RMA ont une colonne
   //    « Lettre clé + Cotation » et une colonne « Valeur Clé ». Une ligne
   //    sans coefficient part avec des cases vides, et c'est le premier motif

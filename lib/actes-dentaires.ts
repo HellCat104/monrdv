@@ -20,20 +20,30 @@
 // que le cabinet coche au quotidien, dressée depuis le dossier technique
 // « Mode ia code dentiste ».
 //
-// ⚠ LES DEUX SE CONTREDISENT SUR SIX CODES, et il faut le savoir :
+// ⚠ DIX-HUIT CODES SUR CINQUANTE-QUATRE SONT DOUTEUX, et il faut le savoir.
 //
-//     code   ici                            référentiel ANAM (plages)
-//     D707   coiffage pulpaire              ancrage radiculaire
-//     D716   urgence / pulpite aiguë        extractions (713–719)
-//     D719   fluor, scellement de sillons   extractions (713–719)
-//     D626   traitement ODF actif           bilan orthodontique (626–627)
-//     D630   forfait de fin de traitement   traitement ODF (628–641)
-//     D748→D752  prothèse ADJOINTE          prothèse CONJOINTE (748–760)
+// Le croisement a été fait code par code : pour chacun, on a regardé dans
+// quelle PLAGE du référentiel officiel son numéro tombe, et si cette plage
+// désigne bien ce que le libellé annonce. Dix-huit fois, non :
 //
-// Le document d'où vient cette liste porte lui-même la mention « AI responses
-// may include mistakes ». Un code mal attribué ne se voit pas à l'écran : il
-// se voit au rejet. CES SIX LIGNES SONT À FAIRE CONFIRMER PAR UN DENTISTE
-// avant d'être présentées à un cabinet.
+//     D707        coiffage pulpaire        → plage « ancrage radiculaire »
+//     D715        greffe gingivale         → plage « extractions » (713–719)
+//     D716        urgence, pulpite aiguë   → plage « extractions »
+//     D719        fluor, scellements       → plage « extractions »
+//     D748 à D752 prothèse ADJOINTE        → plage « prothèse CONJOINTE »
+//     D905        hémostase                → plage « prothèse conjointe »
+//     D626        traitement ODF actif     → plage « bilan orthodontique »
+//     D800 D804 D805 D812  traumatologie   → plage « prothèse maxillo-faciale »
+//     T156 T157 T159  radiographies        → aucun code en T au référentiel
+//
+// Chacun porte son `aVerifier`, et ce motif remonte à l'écran : dans la liste
+// où l'on coche, et dans les alertes avant impression. Rien n'est bloqué —
+// un référentiel peut avoir été mis à jour depuis le document que nous
+// tenons — mais personne ne pose un de ces codes sans l'avoir lu.
+//
+// LES TRENTE-SIX AUTRES CONCORDENT, et ce sont ceux du quotidien :
+// obturations, pulpectomies, détartrage, extractions simples et
+// chirurgicales, couronnes, bridges, chirurgie des gencives.
 //
 // En attendant, c'est CE catalogue qui fait foi quand il connaît le code —
 // voir `familleDeLActe` — parce qu'il nomme l'acte, là où le référentiel ne
@@ -56,6 +66,10 @@ export interface ActeDentaire {
   /** À quelle famille l'acte appartient, quand le numéro seul induirait en
    *  erreur. Sert aux imprimés qui séparent les prothèses des soins. */
   famille?: 'soins' | 'prothese_conjointe' | 'prothese_adjointe' | 'odf' | 'extraction' | 'radio'
+  /** Pourquoi ce code est DOUTEUX : son numéro tombe, au référentiel officiel
+   *  de l'ANAM, dans une plage qui désigne autre chose. Renseigné, l'acte est
+   *  signalé partout où il apparaît — à la saisie et avant l'impression. */
+  aVerifier?: string
 }
 
 export interface GroupeActes {
@@ -71,8 +85,8 @@ export const GROUPES_ACTES: GroupeActes[] = [
     actes: [
       { code: 'C', libelle: 'Consultation au cabinet', dent: null, face: false, accord: false },
       { code: 'V', libelle: 'Visite au domicile du malade', dent: null, face: false, accord: false },
-      { code: 'D716', libelle: "Traitement d'urgence d'une pulpite aiguë / sédation douloureuse", dent: 'une', face: false, accord: false, famille: 'soins' },
-      { code: 'D707', libelle: 'Coiffage pulpaire direct (protection du nerf)', dent: 'une', face: false, accord: false, famille: 'soins' },
+      { code: 'D716', libelle: "Traitement d'urgence d'une pulpite aiguë / sédation douloureuse", dent: 'une', face: false, accord: false, famille: 'soins', aVerifier: "D716 tombe dans la plage des EXTRACTIONS (D713 à D719) du référentiel ANAM." },
+      { code: 'D707', libelle: 'Coiffage pulpaire direct (protection du nerf)', dent: 'une', face: false, accord: false, famille: 'soins', aVerifier: "Le référentiel ANAM donne D707 à la restauration avec ancrage radiculaire, pas au coiffage pulpaire." },
     ],
   },
   {
@@ -93,12 +107,12 @@ export const GROUPES_ACTES: GroupeActes[] = [
     titre: 'Prévention et parodontologie',
     actes: [
       { code: 'D708', libelle: 'Détartrage complet et polissage (par séance)', dent: null, face: false, accord: false },
-      { code: 'D719', libelle: 'Fluor topique / scellement de sillons (enfant)', dent: 'une', face: false, accord: false, famille: 'soins' },
+      { code: 'D719', libelle: 'Fluor topique / scellement de sillons (enfant)', dent: 'une', face: false, accord: false, famille: 'soins', aVerifier: "D719 tombe dans la plage des EXTRACTIONS (D713 à D719) du référentiel ANAM." },
       { code: 'D709', libelle: 'Attelle de contention parodontale (par bloc)', dent: 'bloc', face: false, accord: false },
       { code: 'D710', libelle: 'Traitement des parodontopathies (par quadrant)', dent: null, face: false, accord: false },
       { code: 'D711', libelle: 'Élongation coronaire chirurgicale', dent: 'une', face: false, accord: false },
       { code: 'D712', libelle: 'Gingivectomie ou plastie gingivale (bloc de 4 à 6 dents)', dent: 'bloc', face: false, accord: false },
-      { code: 'D715', libelle: 'Greffe gingivale libre ou lambeau déplacé', dent: 'une', face: false, accord: true },
+      { code: 'D715', libelle: 'Greffe gingivale libre ou lambeau déplacé', dent: 'une', face: false, accord: true, aVerifier: "D715 tombe dans la plage des EXTRACTIONS (D713 à D719) du référentiel ANAM. La chirurgie des gencives y commence à D733." },
     ],
   },
   {
@@ -120,11 +134,11 @@ export const GROUPES_ACTES: GroupeActes[] = [
       { code: 'D738', libelle: 'Séquestrectomie osseuse alvéolo-dentaire', dent: 'bloc', face: false, accord: false },
       { code: 'D740', libelle: 'Exérèse de kyste maxillaire ou tumeur bénigne', dent: null, face: false, accord: false },
       { code: 'D742', libelle: 'Drainage d’un abcès ou phlegmon', dent: null, face: false, accord: false },
-      { code: 'D800', libelle: 'Réduction d’une luxation de la mâchoire', dent: null, face: false, accord: false },
-      { code: 'D804', libelle: 'Suture de plaie de la langue ou du plancher', dent: null, face: false, accord: false },
-      { code: 'D805', libelle: 'Suture de plaie de la lèvre ou de la joue', dent: null, face: false, accord: false },
-      { code: 'D812', libelle: 'Contention de fracture alvéolo-dentaire', dent: null, face: false, accord: false },
-      { code: 'D905', libelle: 'Hémostase post-opératoire au cabinet', dent: null, face: false, accord: false },
+      { code: 'D800', libelle: 'Réduction d’une luxation de la mâchoire', dent: null, face: false, accord: false, aVerifier: "D800 à D813 sont la prothèse restauratrice maxillo-faciale au référentiel ANAM, pas la traumatologie." },
+      { code: 'D804', libelle: 'Suture de plaie de la langue ou du plancher', dent: null, face: false, accord: false, aVerifier: "D800 à D813 sont la prothèse restauratrice maxillo-faciale au référentiel ANAM, pas la traumatologie." },
+      { code: 'D805', libelle: 'Suture de plaie de la lèvre ou de la joue', dent: null, face: false, accord: false, aVerifier: "D800 à D813 sont la prothèse restauratrice maxillo-faciale au référentiel ANAM, pas la traumatologie." },
+      { code: 'D812', libelle: 'Contention de fracture alvéolo-dentaire', dent: null, face: false, accord: false, aVerifier: "D800 à D813 sont la prothèse restauratrice maxillo-faciale au référentiel ANAM, pas la traumatologie." },
+      { code: 'D905', libelle: 'Hémostase post-opératoire au cabinet', dent: null, face: false, accord: false, aVerifier: "D900 à D905 sont en prothèse conjointe au référentiel ANAM, pas en hémostase." },
     ],
   },
   {
@@ -136,23 +150,23 @@ export const GROUPES_ACTES: GroupeActes[] = [
       { code: 'D756', libelle: 'Élément de bridge céramo-métallique', dent: 'une', face: false, accord: false, famille: 'prothese_conjointe' },
       { code: 'D757', libelle: 'Couronne provisoire en résine', dent: 'une', face: false, accord: false, famille: 'prothese_conjointe', horsNomenclature: true },
       { code: 'D760', libelle: 'Facette esthétique en céramique', dent: 'une', face: false, accord: false, famille: 'prothese_conjointe', horsNomenclature: true },
-      { code: 'D748', libelle: 'Prothèse adjointe résine, 1 à 3 dents', dent: null, face: false, accord: false, famille: 'prothese_adjointe' },
-      { code: 'D750', libelle: 'Prothèse amovible complète (par maxillaire)', dent: null, face: false, accord: true, famille: 'prothese_adjointe' },
-      { code: 'D752', libelle: 'Stellite (châssis métallique) — base forfaitaire', dent: null, face: false, accord: true, famille: 'prothese_adjointe' },
-      { code: 'D749', libelle: 'Adjonction d’une dent ou d’un crochet (réparation)', dent: null, face: false, accord: false, famille: 'prothese_adjointe' },
-      { code: 'D751', libelle: 'Rebasage complet d’une prothèse amovible', dent: null, face: false, accord: false, famille: 'prothese_adjointe' },
+      { code: 'D748', libelle: 'Prothèse adjointe résine, 1 à 3 dents', dent: null, face: false, accord: false, famille: 'prothese_adjointe', aVerifier: "Le référentiel ANAM range D748 à D760 en prothèse CONJOINTE ; l'adjointe y commence à D761." },
+      { code: 'D750', libelle: 'Prothèse amovible complète (par maxillaire)', dent: null, face: false, accord: true, famille: 'prothese_adjointe', aVerifier: "Le référentiel ANAM range D748 à D760 en prothèse CONJOINTE ; l'adjointe y commence à D761." },
+      { code: 'D752', libelle: 'Stellite (châssis métallique) — base forfaitaire', dent: null, face: false, accord: true, famille: 'prothese_adjointe', aVerifier: "Le référentiel ANAM range D748 à D760 en prothèse CONJOINTE ; l'adjointe y commence à D761." },
+      { code: 'D749', libelle: 'Adjonction d’une dent ou d’un crochet (réparation)', dent: null, face: false, accord: false, famille: 'prothese_adjointe', aVerifier: "Le référentiel ANAM range D748 à D760 en prothèse CONJOINTE ; l'adjointe y commence à D761." },
+      { code: 'D751', libelle: 'Rebasage complet d’une prothèse amovible', dent: null, face: false, accord: false, famille: 'prothese_adjointe', aVerifier: "Le référentiel ANAM range D748 à D760 en prothèse CONJOINTE ; l'adjointe y commence à D761." },
     ],
   },
   {
     cle: 'odf',
     titre: 'Orthodontie et radiographies',
     actes: [
-      { code: 'D626', libelle: 'Traitement ODF actif, par semestre (moins de 16 ans)', dent: null, face: false, accord: true, famille: 'odf' },
+      { code: 'D626', libelle: 'Traitement ODF actif, par semestre (moins de 16 ans)', dent: null, face: false, accord: true, famille: 'odf', aVerifier: "D626 et D627 sont le BILAN orthodontique au référentiel ANAM ; le traitement commence à D628." },
       { code: 'D630', libelle: 'Forfait global de fin de traitement ODF', dent: null, face: false, accord: true, famille: 'odf' },
       { code: 'D635', libelle: 'Traitement chirurgico-orthodontique, canines incluses', dent: 'une', face: false, accord: true, famille: 'odf' },
-      { code: 'T156', libelle: 'Radiographie rétro-alvéolaire (une)', dent: 'une', face: false, accord: false, famille: 'radio' },
-      { code: 'T157', libelle: 'Deux rétro-alvéolaires dans la même séance', dent: 'une', face: false, accord: false, famille: 'radio' },
-      { code: 'T159', libelle: 'Trois rétro-alvéolaires ou plus, même séance', dent: 'une', face: false, accord: false, famille: 'radio' },
+      { code: 'T156', libelle: 'Radiographie rétro-alvéolaire (une)', dent: 'une', face: false, accord: false, famille: 'radio', aVerifier: "Code en T absent du référentiel ANAM, qui ne connaît que des codes en D pour la dentisterie." },
+      { code: 'T157', libelle: 'Deux rétro-alvéolaires dans la même séance', dent: 'une', face: false, accord: false, famille: 'radio', aVerifier: "Code en T absent du référentiel ANAM, qui ne connaît que des codes en D pour la dentisterie." },
+      { code: 'T159', libelle: 'Trois rétro-alvéolaires ou plus, même séance', dent: 'une', face: false, accord: false, famille: 'radio', aVerifier: "Code en T absent du référentiel ANAM, qui ne connaît que des codes en D pour la dentisterie." },
     ],
   },
 ]
