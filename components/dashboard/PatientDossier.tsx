@@ -24,6 +24,7 @@ import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne, type Anamn
 import QuotesCard from '@/components/dashboard/QuotesCard'
 import BlocGastro from '@/components/gastro/BlocGastro'
 import BlocConsultationsDentaires from '@/components/dashboard/BlocConsultationsDentaires'
+import BlocGeneraliste from '@/components/dashboard/BlocGeneraliste'
 import SuiviPoids from '@/components/gastro/SuiviPoids'
 import SynthesePathologie from '@/components/gastro/SynthesePathologie'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
@@ -270,7 +271,10 @@ export default function PatientDossier({
     // Les actes structurés des branches qui en ont. Le dentiste n'a pas
     // d'endoscopie : la requête retourne vide, elle ne coûte rien et évite un
     // second chemin de code.
-    if (isGastroDoctor(specialties) || isDentalDoctor(specialties)) {
+    // Le généraliste en fait partie depuis la v96 : sans lui, sa chronologie
+    // s'affichait sans ses propres consultations, ce qui est pire que pas de
+    // chronologie du tout.
+    if (isGastroDoctor(specialties) || isDentalDoctor(specialties) || isGeneralDoctor(specialties)) {
       const [consRes, endoRes] = await Promise.all([
         supabase.from('consultations').select('id, date_consultation, motif, statut').eq('patient_id', patient.id),
         supabase.from('endoscopies').select('id, date_examen, type_examen, conclusion, statut').eq('patient_id', patient.id),
@@ -752,6 +756,7 @@ export default function PatientDossier({
   const estDentiste = isDentalDoctor(specialties)
   const estPediatre = isPediatricDoctor(specialties)
   const estGastro = isGastroDoctor(specialties)
+  const estGeneraliste = isGeneralDoctor(specialties)
 
   // La chronologie ne coûte aucune requête : elle remet en ordre ce que le
   // dossier a déjà chargé pour ses autres onglets.
@@ -766,7 +771,7 @@ export default function PatientDossier({
   // documents, constantes et rappels sont déjà chargés pour les autres
   // onglets. Les consultations structurées et les endoscopies, que le
   // généraliste n'a pas, arrivent simplement vides.
-  const avecChronologie = estGastro || estDentiste || isGeneralDoctor(specialties)
+  const avecChronologie = estGastro || estDentiste || estGeneraliste
   const chronologie = avecChronologie
     ? construireChronologie({
         notes: consultNotes, prescriptions, certificates,
@@ -1203,6 +1208,11 @@ export default function PatientDossier({
                 retrouve. En tête de l'onglet, parce que c'est le premier geste
                 de la séance. */}
             {estDentiste && <BlocConsultationsDentaires patientId={patient.id} />}
+
+            {/* MÉDECINE GÉNÉRALE : la consultation structurée et les six
+                documents du quotidien. En tête de l'onglet — c'est le premier
+                geste de la consultation, pas le dernier. */}
+            {estGeneraliste && <BlocGeneraliste patientId={patient.id} doctorId={doctorId} />}
 
             {/* La synthèse des maladies suivies et le poids : les deux choses
                 qu'on veut voir AVANT de lire l'historique. Sur un Crohn ou une

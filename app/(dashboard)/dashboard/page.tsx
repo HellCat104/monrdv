@@ -6,10 +6,12 @@ import BandeauStock from '@/components/dashboard/BandeauStock'
 import SuiviRemboursements from '@/components/dashboard/SuiviRemboursements'
 import RappelsDus from '@/components/dashboard/RappelsDus'
 import ConversationsAReprendre from '@/components/dashboard/ConversationsAReprendre'
+import MaJournee, { type RdvDuJour } from '@/components/dashboard/MaJournee'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
 import { isDentalDoctor } from '@/lib/dental'
+import { isGeneralDoctor, specialitesDu } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, CheckCircle, AlertTriangle, ChevronRight, Banknote } from 'lucide-react'
 import Link from 'next/link'
@@ -116,6 +118,7 @@ export default async function DashboardPage() {
 
   const todayFormatted = format(getNowInMaroc(), 'EEEE d MMMM yyyy', { locale: fr })
   const estDentiste = isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])
+  const estGeneraliste = isGeneralDoctor(specialitesDu(doctor))
 
   // Calcul jours restants d'abonnement
   let daysLeft: number | null = null
@@ -181,6 +184,30 @@ export default async function DashboardPage() {
       {/* WhatsApp en premier : une personne ATTEND une réponse maintenant,
           là où un rappel de suivi porte sur les mois à venir. L'encart rend
           null quand rien n'attend, donc il ne coûte rien le reste du temps. */}
+      {/* MA JOURNÉE — le briefing du matin, avant tout le reste.
+          Ce que les dossiers du jour contiennent déjà et qu'on n'irait pas
+          chercher dossier par dossier : une tension haute deux fois de suite,
+          une allergie, un bilan qui date, un rappel échu. L'encart rend null
+          quand la journée n'a rien à signaler.
+
+          Réservé au forfait qui porte le dossier médical : il lit des
+          antécédents et des constantes, qui n'ont rien à faire dans un
+          forfait Agenda.
+
+          Et réservé au GÉNÉRALISTE, pour l'instant. Ses règles sont celles de
+          la médecine générale : « dernier bilan il y a 18 mois », « ordonnance
+          de fond à renouveler ». Chez un dentiste, qui ne prescrit pas de
+          bilan biologique, ce sont des constats qui ne le concernent pas — et
+          un briefing qu'on n'a pas de raison de lire, on cesse de le lire. On
+          ouvrira aux autres branches quand leurs règles à elles existeront. */}
+      {acces && estGeneraliste && (
+        <MaJournee
+          doctorId={doctor.id}
+          rendezVous={(todayAppointments ?? []) as RdvDuJour[]}
+          aujourdhui={today}
+        />
+      )}
+
       <ConversationsAReprendre />
       <RappelsDus />
       {/* Laboratoire : couronnes, bridges, prothèses — un objet de cabinet

@@ -2,9 +2,13 @@
 // Forfait Agenda : fiche minimale (nom, prénom, téléphone, notes) sans données de santé.
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { allVitalDefs, resolveEnabledVitals, type VitalDef, specialitesDu } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, isGeneralDoctor, type VitalDef, specialitesDu } from '@/types'
 import { canAccess } from '@/lib/plan'
 import PatientDossier from '@/components/dashboard/PatientDossier'
+import ResumePatient from '@/components/dashboard/ResumePatient'
+import { preparerUn } from '@/lib/preparation-serveur'
+import { getNowInMaroc } from '@/lib/utils'
+import { format } from 'date-fns'
 import PatientDossierLite from '@/components/dashboard/PatientDossierLite'
 import { logAccesDossier } from '@/lib/audit'
 
@@ -45,19 +49,35 @@ export default async function PatientDossierPage({ params }: { params: { id: str
   const vitalDefsAll: VitalDef[] = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabledVitals = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
 
+  // Le résumé, calculé ICI et non dans le composant client : il demande cinq
+  // lectures, et un dossier qui attend cinq allers-retours depuis le
+  // navigateur s'ouvre une seconde plus tard. Il rend null si le dossier n'a
+  // rien à résumer.
+  //
+  // Réservé au généraliste pour l'instant : ses règles sont celles de la
+  // médecine générale, et chez un dentiste la moitié des constats ne le
+  // concernent pas. Le jour où chaque branche a les siennes, le garde-fou
+  // saute — il est ici, en un seul endroit.
+  const preparation = isGeneralDoctor(specialties)
+    ? await preparerUn(supabase, doctor.id, patient.id, format(getNowInMaroc(), 'yyyy-MM-dd'))
+    : null
+
   return (
-    <PatientDossier
-      doctorId={doctor.id}
-      doctorName={doctor.name ?? ''}
-      doctorSlug={doctor.slug ?? ''}
-      specialties={specialties}
-      enabledVitals={enabledVitals}
-      vitalDefsAll={vitalDefsAll}
-      initialPatient={patient}
-      doctorInpe={doctor.inpe ?? null}
-      // Pour n'offrir « Facture » que si le forfait la porte : le lien
-      // conduirait sinon à une redirection muette.
-      facturation={canAccess(doctor.plan, 'invoicing')}
-    />
+    <div className="space-y-4">
+      {preparation && <ResumePatient preparation={preparation} />}
+      <PatientDossier
+        doctorId={doctor.id}
+        doctorName={doctor.name ?? ''}
+        doctorSlug={doctor.slug ?? ''}
+        specialties={specialties}
+        enabledVitals={enabledVitals}
+        vitalDefsAll={vitalDefsAll}
+        initialPatient={patient}
+        doctorInpe={doctor.inpe ?? null}
+        // Pour n'offrir « Facture » que si le forfait la porte : le lien
+        // conduirait sinon à une redirection muette.
+        facturation={canAccess(doctor.plan, 'invoicing')}
+      />
+    </div>
   )
 }
