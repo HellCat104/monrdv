@@ -21,8 +21,22 @@ import Link from 'next/link'
 import { preparer, type DossierPourPreparation } from '@/lib/preparation'
 import ResumePatient from '@/components/dashboard/ResumePatient'
 import MaJourneeVue, { type LigneJournee } from '@/components/dashboard/MaJourneeVue'
+import { notFound } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
+
+/** EN LIGNE, CETTE PAGE N'EXISTE PAS.
+ *
+ *  Un bac à sable est fait pour être regardé sur sa machine. Publié sur
+ *  monrdv.co.ma, c'est une URL sans mot de passe qui montre des patientes
+ *  inventées à qui tombe dessus — un prospect, un confrère, Google. Le
+ *  404 est renvoyé AVANT tout rendu : il n'y a rien à deviner, pas même
+ *  le titre de la page.
+ *
+ *  En local (`npm run dev`), rien ne change. */
+function horsLigne() {
+  if (process.env.NODE_ENV === 'production') notFound()
+}
 
 /** Le jour de référence de l'aperçu. Figé, pour que les « il y a 18 mois »
  *  restent les mêmes d'une semaine sur l'autre et qu'on puisse en discuter. */
@@ -98,6 +112,7 @@ const LIGNES: LigneJournee[] = [
 ].filter((l) => l.points.length > 0)
 
 export default function ApercuGeneraliste() {
+  horsLigne()
   return (
     <div className="min-h-screen bg-gray-50 py-5">
       <div className="max-w-3xl mx-auto px-4 space-y-5">

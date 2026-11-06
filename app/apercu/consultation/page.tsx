@@ -16,6 +16,22 @@ import ConsultationStructuree from '@/components/consultation/ConsultationStruct
 import ResumePatient from '@/components/dashboard/ResumePatient'
 import { preparer } from '@/lib/preparation'
 import { RUBRIQUES_GENERALISTE, TRAMES_GENERALISTE, COLONNES_FACULTATIVES_GENERALISTE } from '@/lib/generaliste'
+import { notFound } from 'next/navigation'
+
+export const dynamic = 'force-dynamic'
+
+/** EN LIGNE, CETTE PAGE N'EXISTE PAS.
+ *
+ *  Un bac à sable est fait pour être regardé sur sa machine. Publié sur
+ *  monrdv.co.ma, c'est une URL sans mot de passe qui montre des patientes
+ *  inventées à qui tombe dessus — un prospect, un confrère, Google. Le
+ *  404 est renvoyé AVANT tout rendu : il n'y a rien à deviner, pas même
+ *  le titre de la page.
+ *
+ *  En local (`npm run dev`), rien ne change. */
+function horsLigne() {
+  if (process.env.NODE_ENV === 'production') notFound()
+}
 
 /** Le même dossier inventé que /apercu, pour que les deux écrans parlent de
  *  la même patiente. Journée de référence figée. */
@@ -43,9 +59,8 @@ const BERRADA = preparer({
   aujourdhui: '2026-11-06',
 })
 
-export const dynamic = 'force-dynamic'
-
 export default function ApercuConsultationGeneraliste() {
+  horsLigne()
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 pt-4">
