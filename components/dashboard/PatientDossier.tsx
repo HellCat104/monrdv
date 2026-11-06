@@ -755,10 +755,18 @@ export default function PatientDossier({
 
   // La chronologie ne coûte aucune requête : elle remet en ordre ce que le
   // dossier a déjà chargé pour ses autres onglets.
-  // Chronologie : gastro ET dentisterie. Un traitement orthodontique de deux
-  // ans ou une réhabilitation en six séances se lisent dans l'ordre, comme un
-  // suivi de MICI — le besoin n'appartient pas à une spécialité.
-  const avecChronologie = estGastro || estDentiste
+  // Chronologie : gastro, dentisterie, ET médecine générale. Un traitement
+  // orthodontique de deux ans ou une réhabilitation en six séances se lisent
+  // dans l'ordre, comme un suivi de MICI — le besoin n'appartient pas à une
+  // spécialité, et c'est le généraliste qui suit le plus longtemps : un
+  // hypertendu revient tous les trois mois pendant vingt ans. Sa chronologie
+  // était pourtant le seul des trois à ne pas l'avoir.
+  //
+  // Elle ne coûte rien de plus ici : notes, ordonnances, certificats,
+  // documents, constantes et rappels sont déjà chargés pour les autres
+  // onglets. Les consultations structurées et les endoscopies, que le
+  // généraliste n'a pas, arrivent simplement vides.
+  const avecChronologie = estGastro || estDentiste || isGeneralDoctor(specialties)
   const chronologie = avecChronologie
     ? construireChronologie({
         notes: consultNotes, prescriptions, certificates,
