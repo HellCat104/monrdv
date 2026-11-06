@@ -63,21 +63,22 @@ export default async function PatientDossierPage({ params }: { params: { id: str
     : null
 
   return (
-    <div className="space-y-4">
-      {preparation && <ResumePatient preparation={preparation} />}
-      <PatientDossier
-        doctorId={doctor.id}
-        doctorName={doctor.name ?? ''}
-        doctorSlug={doctor.slug ?? ''}
-        specialties={specialties}
-        enabledVitals={enabledVitals}
-        vitalDefsAll={vitalDefsAll}
-        initialPatient={patient}
-        doctorInpe={doctor.inpe ?? null}
-        // Pour n'offrir « Facture » que si le forfait la porte : le lien
-        // conduirait sinon à une redirection muette.
-        facturation={canAccess(doctor.plan, 'invoicing')}
-      />
-    </div>
+    <PatientDossier
+      doctorId={doctor.id}
+      doctorName={doctor.name ?? ''}
+      doctorSlug={doctor.slug ?? ''}
+      specialties={specialties}
+      enabledVitals={enabledVitals}
+      vitalDefsAll={vitalDefsAll}
+      initialPatient={patient}
+      doctorInpe={doctor.inpe ?? null}
+      // Pour n'offrir « Facture » que si le forfait la porte : le lien
+      // conduirait sinon à une redirection muette.
+      facturation={canAccess(doctor.plan, 'invoicing')}
+      // Passé en prop plutôt que posé au-dessus du dossier : le composant le
+      // place sous le nom du patient, et retire son propre encadré d'allergies
+      // puisque le résumé le porte déjà.
+      resume={preparation ? <ResumePatient preparation={preparation} /> : null}
+    />
   )
 }

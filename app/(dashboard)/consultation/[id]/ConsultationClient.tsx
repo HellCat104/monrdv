@@ -594,7 +594,11 @@ export default function ConsultationClient({
             {patient.blood_group && <p className="text-gray-700 text-xs"><b>Groupe sanguin :</b> <span className="text-red-600 font-semibold">{patient.blood_group}</span></p>}
             {patient.cin && <p className="text-gray-500 text-xs">CIN : {patient.cin}</p>}
             {patient.mutuelle && <p className="text-gray-500 text-xs">Mutuelle : {patient.mutuelle}</p>}
-            {patient.allergies && (
+            {/* Pas quand le résumé est là : il porte déjà l'allergie, en
+                rouge et en première ligne, vingt pixels plus haut. Deux
+                bandeaux rouges identiques, et l'œil apprend à sauter les
+                deux. */}
+            {!preparation && patient.allergies && (
               <p className="text-red-600 flex items-start gap-1.5 bg-red-50 rounded-lg px-2.5 py-2">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span><b>Allergies :</b> {patient.allergies}</span>

@@ -75,7 +75,7 @@ const ACTIONS_LISIBLES: Record<string, string> = {"dossier_consulte": "Dossier c
 export default function PatientDossier({
   doctorId, doctorName, doctorSlug, specialties, enabledVitals, vitalDefsAll, initialPatient,
   doctorInpe = null,
-  facturation = false,
+  facturation = false, resume = null,
 }: {
   doctorId: string
   doctorName: string
@@ -89,6 +89,12 @@ export default function PatientDossier({
   doctorInpe?: string | null
   /** Le forfait porte-t-il la facturation ? */
   facturation?: boolean
+  /** Le résumé du dossier, calculé côté serveur (lib/preparation).
+   *
+   *  Il arrive en PROP et n'est pas calculé ici : cinq lectures depuis le
+   *  navigateur auraient retardé l'ouverture du dossier d'une seconde.
+   *  Absent = aucun encart, et surtout pas un cadre vide. */
+  resume?: ReactNode
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -937,12 +943,21 @@ export default function PatientDossier({
             })
           }}
         />
+      ) : resume ? (
+        /* Le résumé porte DÉJÀ l'allergie, en rouge et en première ligne. Le
+           doubler d'un second bandeau identique à trente pixels d'écart, c'est
+           apprendre à l'œil à sauter les deux. */
+        null
       ) : editAllergies.trim() ? (
         <div className="flex items-start gap-2 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3">
           <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
           <p className="text-sm"><b>Allergies :</b> {editAllergies}</p>
         </div>
       ) : null}
+
+      {/* LE RÉSUMÉ, sous le nom et jamais au-dessus : lire « allergie à la
+          pénicilline » avant de savoir de qui on parle n'aide personne. */}
+      {resume}
 
       {edition ? (
         /* Mode modification : le formulaire, et rien d'autre. */
