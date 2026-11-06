@@ -13,7 +13,35 @@
 // À SUPPRIMER le jour où la consultation du généraliste est branchée pour de
 // bon : elle ne doit pas survivre en production comme une porte dérobée.
 import ConsultationStructuree from '@/components/consultation/ConsultationStructuree'
-import { RUBRIQUES_GENERALISTE, TRAMES_GENERALISTE } from '@/lib/generaliste'
+import ResumePatient from '@/components/dashboard/ResumePatient'
+import { preparer } from '@/lib/preparation'
+import { RUBRIQUES_GENERALISTE, TRAMES_GENERALISTE, COLONNES_FACULTATIVES_GENERALISTE } from '@/lib/generaliste'
+
+/** Le même dossier inventé que /apercu, pour que les deux écrans parlent de
+ *  la même patiente. Journée de référence figée. */
+const BERRADA = preparer({
+  patient: {
+    age: 58,
+    allergies: 'Sulfamides (éruption, 2009)',
+    conditions: ['Hypertension artérielle', 'Diabète de type 2'],
+    chronic_conditions: 'Dyslipidémie',
+    surgeries: 'Césarienne 1994',
+    current_treatments: 'Amlodipine 5 mg\nMetformine 850 mg × 2',
+    anamnese_maj: '2025-02-10',
+  },
+  constantes: [
+    { measured_at: '2026-10-02', values: { systolic: 152, diastolic: 94, heart_rate: 78, weight: 78, height: 162 } },
+    { measured_at: '2026-06-18', values: { systolic: 148, diastolic: 92, heart_rate: 74, weight: 77, height: 162 } },
+  ],
+  consultations: [
+    { date: '2026-10-02', titre: 'Suivi d’hypertension artérielle' },
+    { date: '2026-06-18', titre: 'Renouvellement de traitement' },
+  ],
+  ordonnances: [{ created_at: '2026-06-18' }],
+  documents: [{ created_at: '2025-05-06', file_name: 'Bilan sanguin mai 2025.pdf' }],
+  rappels: [{ due_date: '2026-10-15', reason: 'Contrôle tensionnel à 3 mois' }],
+  aujourdhui: '2026-11-06',
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +54,9 @@ export default function ApercuConsultationGeneraliste() {
           Les boutons « Brouillon » et « Valider » ne marcheront pas, c&apos;est normal.
           Tout le reste — rubriques, trames, mise en page — est l&apos;écran réel.
         </p>
+        <div className="mt-4">
+          <ResumePatient preparation={BERRADA} titre="Avant de commencer" compact />
+        </div>
       </div>
       <ConsultationStructuree
         doctorId="apercu"
@@ -39,6 +70,7 @@ export default function ApercuConsultationGeneraliste() {
         }}
         rubriques={RUBRIQUES_GENERALISTE}
         trames={TRAMES_GENERALISTE}
+        colonnesFacultatives={COLONNES_FACULTATIVES_GENERALISTE}
         retourCr="/apercu/consultation"
       />
     </div>

@@ -7,6 +7,10 @@ import { canAccess } from '@/lib/plan'
 import { colonneAbsente, tableAbsente } from '@/lib/migrations'
 import { isDentalDoctor } from '@/lib/dental'
 import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne } from '@/lib/anamnese'
+import { isGeneralDoctor, isGastroDoctor, specialitesDu } from '@/types'
+import { preparerUn } from '@/lib/preparation-serveur'
+import { getNowInMaroc } from '@/lib/utils'
+import { format } from 'date-fns'
 import ConsultationClient from './ConsultationClient'
 
 export const dynamic = 'force-dynamic'
@@ -54,6 +58,20 @@ export default async function ConsultationPage({ params }: { params: { id: strin
   ])
 
   const existingNote = thisAptNoteRes.data ?? null
+
+  // ── Le résumé et la porte vers la consultation structurée ────────────────
+  //
+  // Les branches qui ont une consultation structurée ont chacune sa route : on
+  // ne devine pas, on associe. Une spécialité absente de cette liste garde la
+  // note libre, et aucun bouton ne promet un écran qui n'existe pas.
+  const specialites = specialitesDu(doctor)
+  const lienStructuree =
+    isGeneralDoctor(specialites) ? `/generaliste/consultation/${patient.id}?apt=${apt.id}`
+    : isGastroDoctor(specialites) ? `/gastro/consultation/${patient.id}?apt=${apt.id}`
+    : null
+  const preparation = await preparerUn(
+    supabase, doctor.id, patient.id as string, format(getNowInMaroc(), 'yyyy-MM-dd'),
+  )
 
   // Feuille de soins : les lignes arrivent pré-remplies avec les actes du plan
   // de traitement marqués « réalisés » AUJOURD'HUI. À défaut, l'acte du jour
@@ -180,6 +198,15 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       doctorInpe={doctor.inpe ?? null}
       // Ce qui doit se voir pendant que le patient est AU FAUTEUIL. La fiche
       // patient porte la même bannière, mais on n'y est pas à ce moment-là.
+      // Le résumé du dossier : antécédents, traitement en cours, dernières
+      // constantes avec leur écart, et ce qui mérite un regard aujourd'hui.
+      // Calculé ici — cinq lectures depuis le navigateur auraient retardé
+      // l'ouverture de l'écran sur lequel le patient attend.
+      preparation={preparation}
+      // Vers la consultation structurée de la branche, quand il y en a une.
+      // Le rendez-vous est passé en paramètre : c'est lui qui rattache la
+      // consultation à la séance et évite de ressaisir qui, quand, pourquoi.
+      lienConsultationStructuree={lienStructuree}
       alertes={{
         risques: risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }),
         verifier: aVerifier(anam?.anamnese),

@@ -33,6 +33,10 @@ import { Label } from '@/components/ui/label'
 import { ArrowLeft, Save, Check, Eye, FileText } from 'lucide-react'
 import type { RubriqueConsultation, TrameConsultation } from '@/lib/gastro'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
+// Reconnaître « la migration n'est pas passée » se fait en UN endroit : les
+// codes de PostgREST changent de version en version, et trois copies de la
+// liste, c'est deux qui finissent périmées.
+import { colonneAbsente, tableAbsente } from '@/lib/migrations'
 
 interface PatientLite { id: string; first_name: string; last_name: string; age?: number | null }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,6 +45,7 @@ type Existant = Record<string, any> | null
 export default function ConsultationStructuree({
   doctorId, patient, appointmentId, existant, dossier,
   rubriques, trames, retourCr, dentaire = false, alertes,
+  colonnesFacultatives = [],
 }: {
   doctorId: string
   patient: PatientLite
@@ -65,6 +70,15 @@ export default function ConsultationStructuree({
   /** Dentisterie : les dents concernées et les matériaux employés, deux
    *  colonnes qui n'existent qu'au fauteuil (v85). */
   dentaire?: boolean
+  /** Les rubriques dont la colonne peut ne pas exister encore en base.
+   *
+   *  Règle de la maison : une fonctionnalité dont la migration n'est pas
+   *  passée se DÉSACTIVE, elle ne plante pas. Si l'enregistrement échoue sur
+   *  une colonne absente, on la retire et on réessaie — le reste de la
+   *  consultation est enregistré, et l'écran dit ce qui n'a pas été gardé.
+   *
+   *  Ex. « arret_travail » (v96) chez le généraliste. */
+  colonnesFacultatives?: string[]
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -89,6 +103,8 @@ export default function ConsultationStructuree({
   const [enCours, setEnCours] = useState(false)
   const [enregistre, setEnregistre] = useState(false)
   const [erreur, setErreur] = useState('')
+  /** Les rubriques que la base n'a pas pu garder, faute de colonne. */
+  const [abandonnees, setAbandonnees] = useState<string[]>([])
 
   const maj = (cle: string, v: string) => setChamps((prev) => ({ ...prev, [cle]: v }))
 
@@ -107,13 +123,16 @@ export default function ConsultationStructuree({
     })
   }
 
-  function corps(statut: 'brouillon' | 'validee') {
+  function corps(statut: 'brouillon' | 'validee', omettre: string[] = []) {
     const base: Record<string, unknown> = {
       doctor_id: doctorId, patient_id: patient.id, appointment_id: appointmentId,
       date_consultation: date, prochain_controle: prochainControle || null, statut,
       ...(statut === 'validee' ? { validee_le: new Date().toISOString() } : {}),
     }
-    for (const r of rubriques) base[r.cle] = (champs[r.cle] ?? '').trim() || null
+    for (const r of rubriques) {
+      if (omettre.includes(r.cle)) continue
+      base[r.cle] = (champs[r.cle] ?? '').trim() || null
+    }
     // Colonnes dentaires : écrites SEULEMENT en dentisterie. Les envoyer
     // ailleurs ferait échouer l'enregistrement sur une base où la v85 n'est
     // pas passée, et sans raison — un gastro-entérologue ne note pas de dent.
@@ -124,25 +143,46 @@ export default function ConsultationStructuree({
     return base
   }
 
+  /** Un envoi, qui retente une fois SANS les rubriques facultatives si la base
+   *  ne les connaît pas encore. */
+  async function envoyer(statut: 'brouillon' | 'validee', courant: string | null) {
+    const unCoup = async (omettre: string[]) => {
+      if (courant) {
+        const { error } = await supabase.from('consultations').update(corps(statut, omettre)).eq('id', courant)
+        if (error) throw error
+        return courant
+      }
+      const { data, error } = await supabase.from('consultations').insert(corps(statut, omettre)).select('id').single()
+      if (error) throw error
+      return data.id as string
+    }
+
+    try {
+      const idFinal = await unCoup([])
+      setAbandonnees([])
+      return idFinal
+    } catch (e) {
+      // Pas une colonne manquante, ou rien de facultatif à retirer : l'erreur
+      // est réelle et doit remonter.
+      if (!colonneAbsente((e as { code?: string })?.code) || colonnesFacultatives.length === 0) throw e
+      const idFinal = await unCoup(colonnesFacultatives)
+      // On ne dit « abandonné » que pour ce qui avait été écrit : une rubrique
+      // laissée vide n'a rien perdu.
+      setAbandonnees(colonnesFacultatives.filter((c) => (champs[c] ?? '').trim()))
+      return idFinal
+    }
+  }
+
   async function enregistrer(statut: 'brouillon' | 'validee') {
     if (statut === 'validee' && !confirm('Valider cette consultation ? Elle ne pourra plus être modifiée.')) return
     setEnCours(true); setErreur('')
     try {
-      let courant = id
-      if (courant) {
-        const { error } = await supabase.from('consultations').update(corps(statut)).eq('id', courant)
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase.from('consultations').insert(corps(statut)).select('id').single()
-        if (error) throw error
-        courant = data.id
-        setId(courant)
-      }
+      const courant = await envoyer(statut, id)
+      if (courant !== id) setId(courant)
       if (statut === 'validee') { router.push(`${retourCr}/${courant}`); return }
       setEnregistre(true); setTimeout(() => setEnregistre(false), 2500)
     } catch (e) {
-      const m = (e as { message?: string })?.message ?? ''
-      setErreur(m.includes('relation') || m.includes('does not exist')
+      setErreur(tableAbsente((e as { code?: string })?.code)
         ? 'Les consultations structurées attendent une migration de la base (v81).'
         : 'L’enregistrement a échoué. Réessayez.')
     } finally { setEnCours(false) }
@@ -166,6 +206,18 @@ export default function ConsultationStructuree({
       </div>
 
       {erreur && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erreur}</p>}
+
+      {/* La consultation est enregistrée, mais une rubrique n'a pas pu l'être.
+          Le dire explicitement : un praticien qui croit avoir noté un arrêt de
+          travail et ne le retrouve pas le mois suivant perd sa confiance dans
+          tout le dossier. */}
+      {abandonnees.length > 0 && (
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Enregistré, sauf&nbsp;:{' '}
+          <b>{abandonnees.map((c) => rubriques.find((r) => r.cle === c)?.label ?? c).join(', ')}</b>.
+          Cette rubrique attend une migration de la base (v96) — recopiez-la ailleurs en attendant.
+        </p>
+      )}
 
       {/* AVANT la trame et avant la première rubrique. Une alerte d'hémostase
           placée après l'examen clinique arrive après la décision. */}

@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import BandeauRisques from '@/components/dashboard/BandeauRisques'
+import ResumePatient from '@/components/dashboard/ResumePatient'
+import type { Preparation } from '@/lib/preparation'
 import type { Risque as RisqueAlerte } from '@/lib/anamnese'
 import { Input } from '@/components/ui/input'
 import { formatDateFr, formatAge, getNowInMaroc } from '@/lib/utils'
@@ -19,6 +21,7 @@ import ActesDuJourCard from './ActesDuJourCard'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, FileSpreadsheet, Wallet, Printer,
   AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw, CalendarPlus, CalendarClock, BellRing, MessageSquare,
+  Stethoscope,
 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,6 +61,7 @@ export default function ConsultationClient({
   prochainRdv = null, mots: motsInitiaux = [], v77 = false, doctorName = '',
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
   isDental = false, mutuelle = null, suggestionsFeuille = [], doctorInpe = null, regleSurDevis = false, alertes,
+  preparation = null, lienConsultationStructuree = null,
 }: {
   doctorId: string
   appointmentId: string
@@ -112,6 +116,18 @@ export default function ConsultationClient({
   mutuelle?: string | null
   suggestionsFeuille?: ActeSuggere[]
   doctorInpe?: string | null
+  /** Le résumé du dossier, calculé côté serveur (lib/preparation).
+   *
+   *  Pourquoi ici et pas dans le panneau d'identité déjà présent : celui-ci
+   *  dit QUI est le patient (téléphone, CIN, mutuelle). Le résumé dit ce
+   *  qu'il FAUT SAVOIR — antécédents, traitement en cours, dernières
+   *  constantes avec leur écart, et ce qui mérite un regard aujourd'hui.
+   *  Absent = pas d'encart, et surtout pas un cadre vide. */
+  preparation?: Preparation | null
+  /** Vers la consultation structurée de la branche, s'il y en a une pour
+   *  cette spécialité. Null = la note libre reste le seul chemin, et aucun
+   *  bouton ne promet un écran qui n'existe pas. */
+  lienConsultationStructuree?: string | null
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -567,6 +583,12 @@ export default function ConsultationClient({
               remplie={alertes.remplie} ancienne={alertes.ancienne} maj={alertes.maj}
             />
           )}
+          {/* LE RÉSUMÉ, avant le panneau d'identité.
+              Le téléphone et la CIN servent à l'accueil ; ce qui change la
+              consultation, c'est le traitement en cours et la tension de la
+              dernière fois. L'un est une fiche, l'autre est le dossier. */}
+          {preparation && <ResumePatient preparation={preparation} titre="Ce qu’il faut savoir" compact />}
+
           <div className="bg-white border border-gray-100 rounded-xl p-4 text-sm space-y-2">
             <p className="text-gray-600">📞 {patient.phone || '—'}</p>
             {patient.blood_group && <p className="text-gray-700 text-xs"><b>Groupe sanguin :</b> <span className="text-red-600 font-semibold">{patient.blood_group}</span></p>}
@@ -671,6 +693,27 @@ export default function ConsultationClient({
             c'est le programme de la séance, qu'on lit avant d'écrire, et le
             glisser sous la note décollerait le schéma dentaire de celle-ci. */}
         <section className="lg:col-span-5 space-y-3">
+          {/* LA CONSULTATION STRUCTURÉE, quand la branche en a une.
+              La note libre reste là, et reste utilisable : certaines
+              consultations tiennent en trois lignes et n'ont pas besoin de
+              onze rubriques. Mais une consultation structurée n'était
+              accessible que depuis le dossier — donc jamais au moment où on
+              est assis devant le patient. */}
+          {lienConsultationStructuree && (
+            <a
+              href={lienConsultationStructuree}
+              className="flex items-center gap-3 bg-primary-50 border border-primary-200 rounded-xl px-4 py-3 hover:bg-primary-100 transition-colors"
+            >
+              <Stethoscope className="h-5 w-5 text-primary-600 shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-primary-800">Consultation structurée</span>
+                <span className="block text-[11.5px] text-primary-700/80 leading-snug">
+                  Motif, examen, diagnostic, traitement — avec les trames par motif et un compte rendu imprimable.
+                </span>
+              </span>
+            </a>
+          )}
+
           {/* Dentistes seulement : l'encart vient d'un plan de traitement chiffré,
               un objet dentaire. Chez les autres spécialités il n'y a rien à
               cocher, et on évite en plus une lecture de devis à chaque

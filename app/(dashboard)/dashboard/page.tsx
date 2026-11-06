@@ -6,6 +6,7 @@ import BandeauStock from '@/components/dashboard/BandeauStock'
 import SuiviRemboursements from '@/components/dashboard/SuiviRemboursements'
 import RappelsDus from '@/components/dashboard/RappelsDus'
 import ConversationsAReprendre from '@/components/dashboard/ConversationsAReprendre'
+import MaJournee, { type RdvDuJour } from '@/components/dashboard/MaJournee'
 import { AppointmentList } from '@/components/dashboard/AppointmentList'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { canAccess } from '@/lib/plan'
@@ -181,6 +182,23 @@ export default async function DashboardPage() {
       {/* WhatsApp en premier : une personne ATTEND une réponse maintenant,
           là où un rappel de suivi porte sur les mois à venir. L'encart rend
           null quand rien n'attend, donc il ne coûte rien le reste du temps. */}
+      {/* MA JOURNÉE — le briefing du matin, avant tout le reste.
+          Ce que les dossiers du jour contiennent déjà et qu'on n'irait pas
+          chercher dossier par dossier : une tension haute deux fois de suite,
+          une allergie, un bilan qui date, un rappel échu. L'encart rend null
+          quand la journée n'a rien à signaler.
+
+          Réservé au forfait qui porte le dossier médical : il lit des
+          antécédents et des constantes, qui n'ont rien à faire dans un
+          forfait Agenda. */}
+      {acces && (
+        <MaJournee
+          doctorId={doctor.id}
+          rendezVous={(todayAppointments ?? []) as RdvDuJour[]}
+          aujourdhui={today}
+        />
+      )}
+
       <ConversationsAReprendre />
       <RappelsDus />
       {/* Laboratoire : couronnes, bridges, prothèses — un objet de cabinet

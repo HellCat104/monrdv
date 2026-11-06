@@ -118,3 +118,11 @@ export const TRAMES_GENERALISTE: TrameConsultation[] = [
     },
   },
 ]
+
+/** Les rubriques dont la COLONNE peut manquer en base.
+ *
+ *  `arret_travail` arrive avec la v96. Tant qu'elle n'est pas passée, l'écran
+ *  affiche la rubrique, l'enregistrement la retire et réessaie, et il dit
+ *  clairement ce qui n'a pas été gardé — plutôt que d'échouer en bloc ou,
+ *  pire, de faire croire que c'est enregistré. */
+export const COLONNES_FACULTATIVES_GENERALISTE = ['arret_travail']
