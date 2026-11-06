@@ -108,20 +108,89 @@ export default function ConsultationStructuree({
 
   const maj = (cle: string, v: string) => setChamps((prev) => ({ ...prev, [cle]: v }))
 
-  /** Déposer une trame. On n'écrase QUE les rubriques vides : si le médecin a
-   *  déjà écrit l'histoire de la maladie et choisit ensuite une trame, son
-   *  texte reste. */
+  // ── LES TRAMES, ET LE DROIT DE SE TROMPER ─────────────────────────────────
+  //
+  // Une trame ne remplit que les rubriques VIDES : si le médecin a déjà écrit
+  // l'histoire de la maladie, son texte reste. Cette règle ne se négocie pas.
+  //
+  // Mais prise seule, elle rendait un mauvais clic irréversible. On cliquait
+  // « Hypertension » au lieu de « Diabète », les onze rubriques se
+  // remplissaient, et la bonne trame ne trouvait plus rien de vide : elle ne
+  // faisait rien. Il fallait vider chaque case à la main, au milieu de la
+  // consultation.
+  //
+  // D'où la distinction, qui est la seule idée de tout ce bloc :
+  //
+  //   · ce que LA TRAME a déposé et que personne n'a touché → remplaçable
+  //   · ce que LE MÉDECIN a écrit ou corrigé → intouchable, toujours
+  //
+  // On se souvient donc, texte par texte, de ce qu'on a déposé. Une rubrique
+  // dont le contenu est encore MOT POUR MOT celui de la trame n'a pas été
+  // relue ; dès qu'elle diffère d'un caractère, elle appartient au médecin.
+
+  /** La trame affichée comme active, s'il y en a une. */
+  const [trameActive, setTrameActive] = useState<string | null>(null)
+  /** Ce que cette trame a déposé, rubrique par rubrique. */
+  const [deposeParTrame, setDeposeParTrame] = useState<Record<string, string>>({})
+
+  /** Cette rubrique contient-elle encore, mot pour mot, ce que la trame y a
+   *  mis ? Si oui, elle n'a pas été relue, et on peut la remplacer. */
+  const intacte = (cle: string, valeurActuelle: string) =>
+    deposeParTrame[cle] !== undefined && valeurActuelle === deposeParTrame[cle]
+
+  /** Poser une trame — ou la retirer si on reclique sur celle qui est active.
+   *
+   *  Le reclic est volontaire : c'est le geste qu'on tente spontanément quand
+   *  on s'est trompé, et il n'y a rien à apprendre. */
   function appliquerTrame(cle: string) {
+    if (cle === trameActive) { retirerTrame(); return }
     const t = trames.find((x) => x.cle === cle)
     if (!t) return
+
+    // Calculé d'un bloc, puis posé : on a besoin de savoir ce qu'on a
+    // RÉELLEMENT déposé, et ça ne se lit pas depuis un setState.
+    const suivant = { ...champs }
+
+    // 1. Effacer ce que la trame PRÉCÉDENTE avait déposé et que personne n'a
+    //    touché. Sans ça, une rubrique de l'ancienne trame absente de la
+    //    nouvelle resterait là, orpheline, et on signerait un examen clinique
+    //    qui n'a rien à voir avec le motif.
+    for (const k of Object.keys(deposeParTrame)) {
+      if (intacte(k, suivant[k] ?? '')) suivant[k] = ''
+    }
+
+    // 2. Poser la nouvelle, dans les rubriques désormais vides — et retenir
+    //    CELLES-LÀ seulement. Une rubrique déjà écrite par le médecin n'a pas
+    //    été remplie par nous : il ne faudra jamais croire qu'on peut
+    //    l'effacer.
+    const depose: Record<string, string> = {}
+    for (const [k, v] of Object.entries(t.champs)) {
+      if (!(suivant[k] ?? '').trim() && v) { suivant[k] = v; depose[k] = v }
+    }
+
+    setChamps(suivant)
+    setDeposeParTrame(depose)
+    setTrameActive(cle)
+  }
+
+  /** Retirer la trame : on reprend ce qu'on a mis, et rien d'autre. */
+  function retirerTrame() {
     setChamps((prev) => {
       const suivant = { ...prev }
-      for (const [k, v] of Object.entries(t.champs)) {
-        if (!(suivant[k] ?? '').trim() && v) suivant[k] = v
+      for (const k of Object.keys(deposeParTrame)) {
+        if (intacte(k, suivant[k] ?? '')) suivant[k] = ''
       }
       return suivant
     })
+    setDeposeParTrame({})
+    setTrameActive(null)
   }
+
+  /** Combien de rubriques la trame peut encore reprendre. Zéro = le médecin a
+   *  tout relu, et le bouton « retirer » n'a plus rien à faire : on le dit
+   *  plutôt que de laisser un bouton qui ne répond pas. */
+  const reprenables = Object.keys(deposeParTrame)
+    .filter((k) => intacte(k, champs[k] ?? '')).length
 
   function corps(statut: 'brouillon' | 'validee', omettre: string[] = []) {
     const base: Record<string, unknown> = {
@@ -237,16 +306,45 @@ export default function ConsultationStructuree({
           <div className="flex-1 min-w-[16rem]">
             <Label className="text-[11px] text-gray-400 flex items-center gap-1"><FileText className="h-3 w-3" /> Trame de consultation</Label>
             <div className="flex flex-wrap gap-1.5 mt-1">
-              {trames.map((t) => (
-                <button key={t.cle} type="button" onClick={() => appliquerTrame(t.cle)}
-                  className="text-[11px] px-2 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition">
-                  {t.nom}
-                </button>
-              ))}
+              {trames.map((t) => {
+                const active = t.cle === trameActive
+                return (
+                  <button key={t.cle} type="button" onClick={() => appliquerTrame(t.cle)}
+                    title={active ? 'Cliquez à nouveau pour la retirer' : undefined}
+                    className={`text-[11px] px-2 py-1 rounded-lg border transition ${
+                      active
+                        ? 'bg-primary-500 border-primary-500 text-white font-medium'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+                    }`}>
+                    {t.nom}
+                    {/* La croix n'est pas un second bouton : elle montre que
+                        le clic qu'on vient de faire se défait. */}
+                    {active && reprenables > 0 && <span className="ml-1.5 opacity-70">×</span>}
+                  </button>
+                )
+              })}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Dépose les questions à poser dans les rubriques encore vides. Aucune réponse n’est pré-cochée.
-            </p>
+
+            {/* Ce que le bouton fait, dit au moment où il peut le faire. Un
+                mauvais clic au milieu d'une consultation, c'est onze cases à
+                vider à la main si on ne le dit pas ici. */}
+            {trameActive && reprenables > 0 ? (
+              <p className="text-[11px] text-gray-500 mt-1">
+                Trame posée. Cliquez une autre trame pour la remplacer, ou{' '}
+                <button type="button" onClick={retirerTrame} className="underline hover:text-gray-700">
+                  retirez-la
+                </button>
+                . Ce que vous avez écrit vous-même ne bougera pas.
+              </p>
+            ) : trameActive ? (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Vous avez repris toutes les rubriques de cette trame : elles vous appartiennent, plus rien n’est effacé automatiquement.
+              </p>
+            ) : (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Dépose les questions à poser dans les rubriques encore vides. Aucune réponse n’est pré-cochée.
+              </p>
+            )}
           </div>
         </div>
       </div>
