@@ -440,8 +440,8 @@ export default function FeuilleSoinsCard({
             {organisme && !imprimeDisponible(organisme, dental) && (
               <p className="text-[11px] text-amber-700 mt-1">
                 MonRDV ne détient pas l&apos;imprimé {organisme.imprimes.length > 0 ? (dental ? 'dentaire ' : 'médecin ') : ''}
-                de {organisme.nom} : la feuille sera marquée « indisponible », et c&apos;est le
-                formulaire papier de la caisse qu&apos;il faudra remplir.
+                de «&nbsp;{organisme.nom}&nbsp;» : la feuille sera marquée « indisponible », et c&apos;est
+                le formulaire papier de la caisse qu&apos;il faudra remplir.
               </p>
             )}
             {!mutuelle && organismeChoisi && (

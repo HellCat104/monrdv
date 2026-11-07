@@ -208,9 +208,11 @@ function raisonIndisponible(
     return `L'imprimé ${organisme.nom} existe dans MonRDV, mais il n'a pas pu être produit : la base de données n'est pas à jour (migration v95).`
   }
   if (organisme.imprimes.length === 0) {
-    return `MonRDV ne détient pas le formulaire de ${organisme.nom}. Les imprimés remplis automatiquement sont pour l'instant ceux de la CNSS, du CNOPS, de RMA Watanya et de la Mutuelle des FAR.`
+    // Le nom entre guillemets, et non « de ${nom} » : « de Assurance privée »
+    // demanderait une élision que le modèle ne connaît pas.
+    return `MonRDV ne détient pas le formulaire « ${organisme.nom} ». Les imprimés remplis automatiquement sont pour l'instant ceux de la CNSS, du CNOPS, de RMA Watanya et de la Mutuelle des FAR.`
   }
   const detenu = organisme.imprimes.includes('dentaire') ? 'dentaire' : 'médecin'
   const manquant = estDentiste ? 'dentaire' : 'médecin'
-  return `De ${organisme.nom}, MonRDV ne détient que l'imprimé ${detenu}. Celui du ${manquant} est un autre formulaire, et remettre l'un pour l'autre fait renvoyer le dossier.`
+  return `De « ${organisme.nom} », MonRDV ne détient que l'imprimé ${detenu}. Celui du ${manquant} est un autre formulaire, et remettre l'un pour l'autre fait renvoyer le dossier.`
 }
