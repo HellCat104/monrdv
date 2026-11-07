@@ -427,9 +427,20 @@ export default function FeuilleSoinsCard({
                 l&apos;imprimé de l&apos;assureur.
               </p>
             )}
-            {organisme && organisme.gabarit !== 'neutre' && (
+            {/* Ce qui va sortir, dit AVANT de cliquer. L'imprimé scanné de la
+                CNSS, du CNOPS et de RMA est celui du DENTISTE : promettre à un
+                généraliste « le formulaire CNSS » lui ferait découvrir un
+                schéma de dents à l'impression, devant son patient. */}
+            {organisme && organisme.gabarit !== 'neutre' && (dental || organisme.imprime === 'tout_praticien') && (
               <p className="text-[11px] text-gray-500 mt-1">
                 Le formulaire {organisme.nom} sortira rempli, prêt à imprimer sur une A4 blanche.
+              </p>
+            )}
+            {organisme && organisme.gabarit !== 'neutre' && !dental && organisme.imprime === 'dentaire' && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                De {organisme.nom}, MonRDV ne détient que l&apos;imprimé dentaire. Votre feuille
+                sortira sous la forme neutre de MonRDV, complète et signée, à agrafer à
+                l&apos;imprimé de la caisse.
               </p>
             )}
             {!mutuelle && organismeChoisi && (

@@ -14,6 +14,8 @@ import { FEUILLE_FONCTION } from '@/lib/feuilles-soins-server'
 import { getCabinetLogoUrl } from '@/lib/cabinet-logo-server'
 import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
 import { organismePour } from '@/lib/organismes'
+import { specialitesDu } from '@/types'
+import { isDentalDoctor } from '@/lib/dental'
 import { colonneAbsente } from '@/lib/migrations'
 import { FeuilleDocument, type LigneSoin } from './FeuilleDocument'
 import { type ActeImprime } from '@/lib/feuilles-soins'
@@ -32,7 +34,7 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
   if (!user) redirect('/login')
 
   const { data: doctor } = await supabase
-    .from('doctors').select(`id, plan, ${COLONNES_EN_TETE}`).eq('email', user.email).single()
+    .from('doctors').select(`id, plan, specialties, ${COLONNES_EN_TETE}`).eq('email', user.email).single()
   if (!doctor) notFound()
   if (!canAccess(doctor.plan, FEUILLE_FONCTION)) redirect('/appointments')
 
@@ -88,7 +90,28 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
   }
 
   const gabaritDisponible = !!v95 && !errV95
-  if (gabaritDisponible && organisme && organisme.gabarit !== 'neutre') {
+
+  // ── L'IMPRIMÉ QU'ON DÉTIENT EST-IL LE SIEN ? ─────────────────────────────
+  //
+  // Les formulaires scannés de la CNSS, du CNOPS et de RMA sont les imprimés
+  // DENTAIRES — « Feuille de soins dentaires », « Déclaration dentaire »,
+  // schéma de dents compris. Jusqu'ici tout praticien du forfait Cabinet
+  // complet les recevait : un généraliste remettait à son patient le
+  // formulaire d'un chirurgien-dentiste, et la caisse le renvoyait.
+  //
+  // Il n'y a rien à inventer à la place : un formulaire officiel se remplit,
+  // il ne se dessine pas. Tant qu'on n'a pas le scan de la feuille de soins
+  // « médecin » de ces caisses, le non-dentiste reçoit la feuille NEUTRE —
+  // correcte, complète, à agrafer à l'imprimé de la caisse — et l'écran dit
+  // pourquoi.
+  //
+  // Le carnet des FAR fait exception : sa page 3 est « le relevé commun à
+  // tout le corps de santé ». Il sort donc pour tout le monde, et c'est sa
+  // page 4, celle du dentiste, qu'on retire aux autres.
+  const estDentiste = isDentalDoctor(specialitesDu(doctor))
+  const imprimeLeSien = !organisme || organisme.imprime === 'tout_praticien' || estDentiste
+
+  if (gabaritDisponible && imprimeLeSien && organisme && organisme.gabarit !== 'neutre') {
     // L'identifiant fiscal arrive avec la même migration : on est ici, donc
     // elle est passée. Lu à part tout de même, pour ne pas alourdir la requête
     // du tronc commun d'une colonne dont six autres écrans n'ont que faire.
@@ -139,7 +162,7 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
     }
 
     if (organisme.gabarit === 'rma') return <GabaritRMA {...commun} />
-    if (organisme.gabarit === 'far') return <GabaritFAR {...commun} />
+    if (organisme.gabarit === 'far') return <GabaritFAR {...commun} avecPageDentiste={estDentiste} />
     // Les quatre organismes sortent désormais sur LEUR imprimé, scanné et
     // rempli. GabaritANAM, la reproduction en HTML, ne sert plus qu'aux
     // mutuelles dont on n'a pas le formulaire.
@@ -153,9 +176,16 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
       // Le gabarit de cet organisme existe, mais la base n'a pas ses colonnes :
       // le document sort sous sa forme neutre et l'explique, au lieu de
       // laisser croire que MonRDV n'a pas l'imprimé de cette caisse.
-      raisonNeutre={organisme && organisme.gabarit !== 'neutre'
-        ? `L'imprimé ${organisme.nom} n'a pas pu être produit : la base de données n'est pas à jour (migration v95).`
-        : null}
+      raisonNeutre={
+        organisme && organisme.gabarit !== 'neutre' && !imprimeLeSien
+          // Dire QUEL imprimé manque, et que la feuille ci-dessous fait le
+          // travail : un praticien qui lit « non disponible » sans plus
+          // retourne au formulaire papier et recopie tout à la main.
+          ? `MonRDV ne détient pour l'instant que l'imprimé DENTAIRE de ${organisme.nom}. Voici la feuille de soins de MonRDV, complète et signée : agrafez-la au formulaire de la caisse, ou envoyez-nous le sien pour qu'il sorte rempli.`
+          : organisme && organisme.gabarit !== 'neutre'
+            ? `L'imprimé ${organisme.nom} n'a pas pu être produit : la base de données n'est pas à jour (migration v95).`
+            : null
+      }
       lignes={lignesEnTete(doctor)}
       logoUrl={logoUrl}
       ville={doctor.city ?? null}

@@ -80,6 +80,19 @@ export interface Organisme {
   colonneCotation: boolean
   /** Le formulaire porte un schéma dentaire à marquer. */
   schemaDentaire: boolean
+  /** À QUI s'adresse l'imprimé qu'on détient.
+   *
+   *  Les feuilles scannées dans /public/formulaires sont, pour la plupart,
+   *  les imprimés DENTAIRES : « Feuille de soins dentaires » de la CNSS
+   *  (ANAM 1.2.03.01) et du CNOPS (1.1.03.01), « Déclaration dentaire » de
+   *  RMA. Un généraliste qui imprimerait l'un d'eux remettrait à son patient
+   *  un formulaire de chirurgien-dentiste, avec son schéma de dents : la
+   *  caisse le renvoie.
+   *
+   *  'tout_praticien' : l'imprimé vaut pour toutes les spécialités. C'est le
+   *  cas du carnet des FAR, dont la page 3 est « le relevé commun à tout le
+   *  corps de santé » ; seule sa page 4 est celle du dentiste. */
+  imprime: 'dentaire' | 'tout_praticien'
   /** Le formulaire porte la case « Entente préalable / Devis ». */
   ententePrealable: boolean
   /** Les mots de CE formulaire pour cette case. L'ANAM écrit « Entente
@@ -120,6 +133,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCode: true,
     colonneCotation: true,
     schemaDentaire: true,
+    imprime: 'dentaire',
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Entente préalable' },
     numeroEntente: true,
@@ -149,6 +163,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCode: true,
     colonneCotation: true,
     schemaDentaire: true,
+    imprime: 'dentaire',
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Entente préalable' },
     numeroEntente: true,
@@ -193,6 +208,7 @@ export const ORGANISMES: Organisme[] = [
     // Une grille de numéros, pas l'arcade dessinée des autres imprimés : on
     // croise la dent extraite ou appareillée, on entoure la dent soignée.
     schemaDentaire: true,
+    imprime: 'tout_praticien',
     ententePrealable: true,
     motsNature: { execution: 'Reçus', entente: 'Devis' },
     delai: {
@@ -215,6 +231,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCode: false,
     colonneCotation: true,
     schemaDentaire: true,
+    imprime: 'dentaire',
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Devis' },
     delai: {
@@ -244,6 +261,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCode: false,
     colonneCotation: false,
     schemaDentaire: false,
+    imprime: 'tout_praticien',
     ententePrealable: false,
     delai: {
       mois: 3,
@@ -279,6 +297,7 @@ export function organismePour(mutuelle: string | null | undefined): Organisme | 
     colonneCode: false,
     colonneCotation: false,
     schemaDentaire: false,
+    imprime: 'tout_praticien',
     ententePrealable: false,
     delai: {
       mois: 3,

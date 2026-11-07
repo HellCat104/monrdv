@@ -34,6 +34,12 @@ export interface Props {
   beneficiaire: BeneficiaireImprime
   feuille: FeuilleImprimee
   actes: ActeImprime[]
+  /** Sortir la page 4, « SOINS ET PROTHESE DENTAIRE ».
+   *
+   *  Le carnet est commun à tout le corps de santé : sa page 3 est le relevé
+   *  général, et sa page 4 celle du dentiste. Un généraliste qui la remet à
+   *  son patient lui donne une page de dents vide à faire signer. */
+  avecPageDentiste?: boolean
 }
 
 /** Les quatre scans, tous au même format. */
@@ -78,7 +84,7 @@ function caseDent(fdi: string | null | undefined): { x: number; y: number } | nu
   return { x, y: Y_QUADRANT[q] }
 }
 
-export default function GabaritFAR({ praticien, patientId, feuille, actes }: Props) {
+export default function GabaritFAR({ praticien, patientId, feuille, actes, avecPageDentiste = true }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
   const devis = feuille.nature === 'entente_prealable'
 
@@ -152,7 +158,10 @@ export default function GabaritFAR({ praticien, patientId, feuille, actes }: Pro
     { image: fichierPublic('/formulaires/far-1.jpg'), largeur: L, hauteur: H, marques: page1 },
     { image: fichierPublic('/formulaires/far-2.jpg'), largeur: L, hauteur: H, marques: [] },
     { image: fichierPublic('/formulaires/far-3.jpg'), largeur: L, hauteur: H, marques: page3 },
-    { image: fichierPublic('/formulaires/far-4.jpg'), largeur: L, hauteur: H, marques: page4 },
+    // La page du dentiste, et elle seule, s'efface pour les autres.
+    ...(avecPageDentiste
+      ? [{ image: fichierPublic('/formulaires/far-4.jpg'), largeur: L, hauteur: H, marques: page4 }]
+      : []),
   ]
 
   return <FormulaireImprime pages={pages} orientation="portrait" retourHref={`/patients/${patientId}`} />
