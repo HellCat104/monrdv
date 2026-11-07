@@ -29,7 +29,7 @@ import type { ActeDentaire } from '@/lib/actes-dentaires'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, resteACharge, type StatutFeuille, type FeuilleSuivi } from '@/lib/feuilles-soins'
-import { ORGANISMES, organismePour } from '@/lib/organismes'
+import { ORGANISMES, organismePour, imprimeDisponible } from '@/lib/organismes'
 import { alertesFeuille, type AlerteFeuille } from '@/lib/feuille-regles'
 import type { ImageDentaire } from '@/lib/imagerie'
 import { AlertTriangle, FileSpreadsheet, Info, Plus, Printer, Trash2, XCircle } from 'lucide-react'
@@ -423,24 +423,25 @@ export default function FeuilleSoinsCard({
             </select>
             {!organisme && (
               <p className="text-[11px] text-amber-700 mt-1">
-                Sans organisme, la feuille sort sous la forme neutre de MonRDV, à agrafer à
-                l&apos;imprimé de l&apos;assureur.
+                Sans organisme, aucune feuille de soins ne sort : il n&apos;y a pas de
+                formulaire à remplir.
               </p>
             )}
-            {/* Ce qui va sortir, dit AVANT de cliquer. L'imprimé scanné de la
-                CNSS, du CNOPS et de RMA est celui du DENTISTE : promettre à un
-                généraliste « le formulaire CNSS » lui ferait découvrir un
-                schéma de dents à l'impression, devant son patient. */}
-            {organisme && organisme.gabarit !== 'neutre' && (dental || organisme.imprime === 'tout_praticien') && (
+            {/* Ce qui va sortir, dit AVANT de cliquer. Chaque caisse a DEUX
+                imprimés, un par profession : promettre à un généraliste « le
+                formulaire CNSS » quand on n'a que celui du dentiste lui
+                ferait découvrir un schéma de dents devant son patient. */}
+            {organisme && imprimeDisponible(organisme, dental) && (
               <p className="text-[11px] text-gray-500 mt-1">
-                Le formulaire {organisme.nom} sortira rempli, prêt à imprimer sur une A4 blanche.
+                Le formulaire {organisme.nom} {dental ? 'dentaire' : 'médecin'} sortira rempli,
+                prêt à imprimer sur une A4 blanche.
               </p>
             )}
-            {organisme && organisme.gabarit !== 'neutre' && !dental && organisme.imprime === 'dentaire' && (
+            {organisme && !imprimeDisponible(organisme, dental) && (
               <p className="text-[11px] text-amber-700 mt-1">
-                De {organisme.nom}, MonRDV ne détient que l&apos;imprimé dentaire. Votre feuille
-                sortira sous la forme neutre de MonRDV, complète et signée, à agrafer à
-                l&apos;imprimé de la caisse.
+                MonRDV ne détient pas l&apos;imprimé {organisme.imprimes.length > 0 ? (dental ? 'dentaire ' : 'médecin ') : ''}
+                de {organisme.nom} : la feuille sera marquée « indisponible », et c&apos;est le
+                formulaire papier de la caisse qu&apos;il faudra remplir.
               </p>
             )}
             {!mutuelle && organismeChoisi && (

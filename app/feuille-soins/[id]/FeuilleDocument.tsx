@@ -1,3 +1,16 @@
+// PLUS RENDU DEPUIS NOVEMBRE 2026 — conservé, pas supprimé.
+//
+// C'était la « feuille de soins MonRDV » : le repli quand on n'avait pas
+// l'imprimé de la caisse. Le repli était l'erreur. Un document maison qui
+// ressemble à une feuille de soins sans en être une, le praticien le remet
+// tel quel et la caisse le renvoie — c'est arrivé. Depuis, une feuille ne
+// sort que sur le formulaire officiel de l'organisme, et sinon l'écran dit
+// « indisponible » (voir FeuilleIndisponible.tsx).
+//
+// Le fichier reste parce qu'il est juste et qu'il a servi : le jour où un
+// assureur privé accepte un relevé libre, il est là. `LigneSoin`, son type,
+// est toujours utilisé par la page.
+//
 // Mise en page de la feuille de soins imprimable. Aucun accès aux données :
 // ce que le composant reçoit est exactement ce qui s'imprime.
 //

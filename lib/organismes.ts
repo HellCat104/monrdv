@@ -15,8 +15,12 @@
 // Les deux premiers sont le MÊME formulaire normalisé par l'ANAM, à quelques
 // mots près ; les deux autres sont propres à leur organisme. D'où les
 // gabarits : « anam » couvre la CNSS et le CNOPS, « rma » et « far » sont
-// seuls de leur espèce, et « neutre » est la feuille MonRDV d'avant — celle
-// qu'on imprime quand on n'a pas le formulaire de l'organisme.
+// seuls de leur espèce, et « neutre » dit qu'on n'a pas d'imprimé pour cet
+// organisme — on n'en produit alors aucun.
+//
+// Depuis novembre 2026, chacune des trois premières caisses est là DEUX fois :
+// son imprimé dentaire et son imprimé médecin, qui ne se ressemblent pas. Voir
+// `imprimes`.
 //
 // ── CE QUE LE REGISTRE NE DÉCRIT PLUS ───────────────────────────────────────
 //
@@ -40,6 +44,9 @@
  *  règles de délai. Elle est stockée sur la feuille établie (v95) pour que le
  *  document réimprimé dans trois ans reste celui qu'on a remis. */
 export type CleOrganisme = 'cnss' | 'cnops' | 'far' | 'rma' | 'prive' | 'autre'
+
+/** L'imprimé d'un organisme, par la profession à qui il s'adresse. */
+export type ImprimeDetenu = 'dentaire' | 'medecin' | 'tout_praticien'
 
 /** Le gabarit imprimé. « neutre » = la feuille MonRDV, à agrafer au
  *  formulaire de l'organisme : le repli quand on n'a pas son imprimé. */
@@ -80,19 +87,23 @@ export interface Organisme {
   colonneCotation: boolean
   /** Le formulaire porte un schéma dentaire à marquer. */
   schemaDentaire: boolean
-  /** À QUI s'adresse l'imprimé qu'on détient.
+  /** QUELS imprimés de cet organisme MonRDV détient, scannés et remplissables.
    *
-   *  Les feuilles scannées dans /public/formulaires sont, pour la plupart,
-   *  les imprimés DENTAIRES : « Feuille de soins dentaires » de la CNSS
-   *  (ANAM 1.2.03.01) et du CNOPS (1.1.03.01), « Déclaration dentaire » de
-   *  RMA. Un généraliste qui imprimerait l'un d'eux remettrait à son patient
-   *  un formulaire de chirurgien-dentiste, avec son schéma de dents : la
-   *  caisse le renvoie.
+   *  Une caisse ne publie pas un formulaire mais plusieurs, un par profession.
+   *  La CNSS a une « Feuille de Soins Maladie » (ANAM 1.2.01.01) pour le
+   *  médecin et une « Feuille de soins dentaires » (1.2.03.01) pour le
+   *  chirurgien-dentiste ; le CNOPS et RMA font de même. Ce ne sont pas des
+   *  variantes : le formulaire dentaire porte un schéma de dents, celui du
+   *  médecin une cotation NGAP et un bloc biologie. Remettre l'un pour
+   *  l'autre, c'est un dossier renvoyé.
    *
-   *  'tout_praticien' : l'imprimé vaut pour toutes les spécialités. C'est le
-   *  cas du carnet des FAR, dont la page 3 est « le relevé commun à tout le
-   *  corps de santé » ; seule sa page 4 est celle du dentiste. */
-  imprime: 'dentaire' | 'tout_praticien'
+   *  'tout_praticien' vaut pour les deux : c'est le cas du carnet des FAR,
+   *  dont la page 3 est « le relevé commun à tout le corps de santé » ; seule
+   *  sa page 4 est celle du dentiste.
+   *
+   *  Liste VIDE : on ne détient aucun de ses imprimés. Le logiciel ne produit
+   *  alors pas de feuille de soins du tout — voir `imprimeDisponible`. */
+  imprimes: ImprimeDetenu[]
   /** Le formulaire porte la case « Entente préalable / Devis ». */
   ententePrealable: boolean
   /** Les mots de CE formulaire pour cette case. L'ANAM écrit « Entente
@@ -133,7 +144,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCode: true,
     colonneCotation: true,
     schemaDentaire: true,
-    imprime: 'dentaire',
+    imprimes: ['dentaire', 'medecin'],
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Entente préalable' },
     numeroEntente: true,
@@ -163,7 +174,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCode: true,
     colonneCotation: true,
     schemaDentaire: true,
-    imprime: 'dentaire',
+    imprimes: ['dentaire', 'medecin'],
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Entente préalable' },
     numeroEntente: true,
@@ -208,7 +219,7 @@ export const ORGANISMES: Organisme[] = [
     // Une grille de numéros, pas l'arcade dessinée des autres imprimés : on
     // croise la dent extraite ou appareillée, on entoure la dent soignée.
     schemaDentaire: true,
-    imprime: 'tout_praticien',
+    imprimes: ['tout_praticien'],
     ententePrealable: true,
     motsNature: { execution: 'Reçus', entente: 'Devis' },
     delai: {
@@ -231,7 +242,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCode: false,
     colonneCotation: true,
     schemaDentaire: true,
-    imprime: 'dentaire',
+    imprimes: ['dentaire', 'medecin'],
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Devis' },
     delai: {
@@ -247,9 +258,10 @@ export const ORGANISMES: Organisme[] = [
   },
 
   // ── Assureur privé dont on n'a pas l'imprimé ──────────────────────────────
-  // On ne devine PAS un formulaire qu'on n'a pas vu : on imprime la feuille
-  // neutre de MonRDV, à agrafer à celui de l'assureur. Les champs sont ceux
-  // que tous les assureurs privés demandent.
+  // On ne devine PAS un formulaire qu'on n'a pas vu, et on n'en fabrique pas
+  // un à la place : la feuille de soins est alors « indisponible », et le
+  // praticien remplit celui de l'assureur à la main. Ce qui reste ici — délai,
+  // accord préalable — sert à l'écran qui prévient, pas à un document.
   {
     cle: 'prive',
     nom: 'Assurance privée',
@@ -261,7 +273,7 @@ export const ORGANISMES: Organisme[] = [
     colonneCode: false,
     colonneCotation: false,
     schemaDentaire: false,
-    imprime: 'tout_praticien',
+    imprimes: [],
     ententePrealable: false,
     delai: {
       mois: 3,
@@ -297,7 +309,7 @@ export function organismePour(mutuelle: string | null | undefined): Organisme | 
     colonneCode: false,
     colonneCotation: false,
     schemaDentaire: false,
-    imprime: 'tout_praticien',
+    imprimes: [],
     ententePrealable: false,
     delai: {
       mois: 3,
@@ -312,4 +324,21 @@ export function organismePour(mutuelle: string | null | undefined): Organisme | 
 export function organismeParCle(cle: string | null | undefined): Organisme | null {
   if (!cle) return null
   return ORGANISMES.find((o) => o.cle === cle) ?? null
+}
+
+/**
+ * MonRDV détient-il l'imprimé de cet organisme POUR CE PRATICIEN ?
+ *
+ * C'est la seule question qui décide si une feuille de soins sort ou non. Un
+ * « non » ne se rattrape pas par un document maison : un formulaire officiel
+ * se remplit, il ne se dessine pas, et une feuille MonRDV présentée à une
+ * caisse qui attend le sien revient par la poste. L'écran dit alors
+ * « indisponible », et pourquoi.
+ */
+export function imprimeDisponible(
+  organisme: Organisme | null | undefined, estDentiste: boolean,
+): boolean {
+  if (!organisme) return false
+  if (organisme.imprimes.includes('tout_praticien')) return true
+  return organisme.imprimes.includes(estDentiste ? 'dentaire' : 'medecin')
 }
