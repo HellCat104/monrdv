@@ -809,8 +809,22 @@ export default function PatientDossier({
       })
     : []
   const aSoins = estDentiste || estPediatre || (!isPsy && enabledVitals.length > 0)
+  // L'ORDRE, qui est celui de la visite et non celui du logiciel :
+  //
+  //   Consultations — ce pour quoi on ouvre le dossier neuf fois sur dix.
+  //   Infos patient — qui est la personne. Administratif, et rien d'autre.
+  //   Constantes    — ce qu'on mesure pendant qu'elle est là.
+  //   Documents     — ce qu'on range et ce qu'on ressort.
+  //   Paiements     — ce qui se règle en partant.
+  //   Chronologie   — la relecture, quand on cherche « et en mars ? ».
+  //
+  // Les paiements étaient en troisième position, avant les documents : on
+  // passait devant la caisse pour aller chercher une radio.
   const onglets: { cle: Onglet; titre: string; icone: ReactNode }[] = [
     { cle: 'suivi', titre: 'Consultations', icone: <Calendar className="h-4 w-4" /> },
+    // « Infos patient » : l'état civil, la couverture, la fusion des doublons
+    // et le journal d'accès. PAS les antécédents — voir plus bas.
+    { cle: 'infos', titre: 'Infos patient', icone: <UserRound className="h-4 w-4" /> },
     ...(aSoins
       ? [{
           cle: 'soins' as Onglet,
@@ -818,14 +832,8 @@ export default function PatientDossier({
           icone: <Activity className="h-4 w-4" />,
         }]
       : []),
-    { cle: 'argent', titre: 'Paiements', icone: <Wallet className="h-4 w-4" /> },
     { cle: 'dossier', titre: 'Documents', icone: <Paperclip className="h-4 w-4" /> },
-    // « Infos patient » : qui il est, ce qu'il a eu, qui a ouvert son dossier.
-    // Ces trois choses étaient dispersées — les antécédents au dos des
-    // consultations, l'anamnèse au milieu du schéma dentaire, la fusion des
-    // doublons et le journal d'accès au fond des documents. Rien de clinique
-    // ne se décide là : c'est la carte d'identité du dossier.
-    { cle: 'infos', titre: 'Infos patient', icone: <UserRound className="h-4 w-4" /> },
+    { cle: 'argent', titre: 'Paiements', icone: <Wallet className="h-4 w-4" /> },
     // Le dossier range chaque chose dans son tiroir, ce qui est commode pour
     // saisir et inutilisable pour comprendre : « que s'est-il passé en mars ? »
     // obligeait à ouvrir quatre onglets et à recoller les dates de tête.
@@ -1219,10 +1227,11 @@ export default function PatientDossier({
         </div>
       ) : (
         <>
-          {/* Quatre onglets, des mots du quotidien du cabinet. Un praticien qui
-              ouvre un dossier cherche une chose à la fois : ce qu'il a fait,
-              ce qu'il soigne, ce qui est payé, ce qui est rangé. Quinze cartes
-              empilées obligeaient à lire tout l'écran pour en trouver une. */}
+          {/* Des mots du quotidien du cabinet, dans l'ordre de la visite. Un
+              praticien qui ouvre un dossier cherche une chose à la fois : ce
+              qu'il a fait, qui est le patient, ce qu'il a mesuré, ce qui est
+              rangé, ce qui est payé. Quinze cartes empilées obligeaient à
+              lire tout l'écran pour en trouver une. */}
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
             {onglets.map((o) => (
               <button
@@ -1328,6 +1337,12 @@ export default function PatientDossier({
             )}
               </div>
               <div className="space-y-4">
+            {/* Les antécédents, en tête de la colonne : c'est le contexte de
+                tout ce qui s'écrit à gauche. Ils étaient dans « Infos
+                patient », entre l'adresse et le journal d'accès — rangés
+                avec l'administratif, qu'ils ne sont pas. */}
+            {carteAntecedents}
+
             {/* Prochaine visite */}
             <div className={sec}>
               <div className={secTitle}><span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Prochaine visite</span></div>
@@ -1728,11 +1743,16 @@ export default function PatientDossier({
           )}
 
           {/* ── INFOS PATIENT ──────────────────────────────────────────────
-              Ce que le dossier sait de la personne, et ce qui se fait au
-              dossier lui-même. Rien de clinique ne s'y décide : on y vient
-              pour vérifier une allergie, remplir le questionnaire médical,
-              recoller deux fiches du même patient, ou voir qui a ouvert le
-              dossier. */}
+              LE DOSSIER ADMINISTRATIF : qui est la personne, comment on la
+              joint, qui paie, qui a ouvert son dossier, et le recollage de
+              deux fiches du même patient. Rien de clinique — les antécédents
+              et les allergies se lisent dans l'onglet Consultations, à côté
+              de ce qu'on soigne.
+
+              Une exception, assumée : le questionnaire médical du dentiste.
+              Il se remplit AVEC le patient, en même temps qu'on vérifie son
+              nom et sa mutuelle ; le ranger ailleurs voudrait dire changer
+              d'onglet au milieu d'une phrase. */}
           {onglet === 'infos' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <div className="space-y-4">
@@ -1759,7 +1779,12 @@ export default function PatientDossier({
                     ))}
                   </dl>
                 </div>
-                {carteAntecedents}
+                {/* LES ANTÉCÉDENTS NE SONT PLUS ICI. « Infos patient » est le
+                    dossier ADMINISTRATIF : qui est la personne, comment on la
+                    joint, qui paie, qui a ouvert son dossier. Une allergie et
+                    un numéro de téléphone ne se cherchent pas au même moment
+                    et n'ont pas la même sensibilité. Ils se lisent désormais
+                    dans l'onglet Consultations, à côté de ce qu'on soigne. */}
                 {/* Le questionnaire médical. Il était au milieu du schéma
                     dentaire, entre l'arcade et les radios : on le remplissait
                     en cherchant autre chose, ou jamais. */}
