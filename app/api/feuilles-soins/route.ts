@@ -15,6 +15,13 @@ import { tableAbsente, lienAbsent, colonneAbsente } from '@/lib/migrations'
 export const dynamic = 'force-dynamic'
 
 const MAX_LIGNES = 30
+/** Combien de feuilles le dossier montre d'emblée. Les suivantes se chargent
+ *  à la demande. Trois : la feuille du jour, et de quoi voir d'un coup d'œil
+ *  si la précédente a été remboursée. */
+const FEUILLES_RECENTES = 3
+/** Le plafond de l'historique complet. Un dossier n'en a jamais autant ; la
+ *  borne est là pour qu'une lecture reste bornée. */
+const MAX_FEUILLES = 500
 
 export async function GET(req: NextRequest) {
   const auth = await requireFeuilleDoctor()
@@ -58,20 +65,35 @@ export async function GET(req: NextRequest) {
   const patientId = req.nextUrl.searchParams.get('patient_id')
   if (!patientId) return NextResponse.json({ error: 'Patient manquant' }, { status: 400 })
 
+  // ?tout=1 — l'historique entier. Sans ce drapeau, on ne renvoie que les
+  // dernières feuilles.
+  //
+  // POURQUOI : un patient suivi depuis deux ans en a trente. Elles sortaient
+  // toutes, avec leurs actes, à chaque ouverture du dossier — une liste qui
+  // repoussait hors de l'écran tout ce qui vient après, pour un historique
+  // qu'on consulte une fois sur vingt. On montre les dernières, et le
+  // praticien charge les précédentes le jour où il les cherche.
+  const tout = req.nextUrl.searchParams.get('tout') === '1'
+
   const lire = (avecActes: boolean) => supabase
     .from('care_sheets')
-    .select(avecActes ? '*, items:care_sheet_items(*)' : '*')
+    .select(avecActes ? '*, items:care_sheet_items(*)' : '*', { count: 'exact' })
     .eq('doctor_id', doctor.id)
     .eq('patient_id', patientId)
     .order('care_date', { ascending: false })
+    // Plusieurs feuilles portent couramment la même date : sans second
+    // critère, leur ordre change d'une lecture à l'autre, et « les trois
+    // dernières » n'étaient pas toujours les mêmes trois.
+    .order('created_at', { ascending: false })
+    .limit(tout ? MAX_FEUILLES : FEUILLES_RECENTES)
 
-  let { data, error } = await lire(true)
+  let { data, error, count } = await lire(true)
   // La table jointe manque (v65 à moitié passée) ou le cache de schéma n'a pas
   // été rechargé : on relit les feuilles SANS leurs actes. Le praticien voit
   // alors ce qu'il a établi au lieu d'un « aucune feuille » mensonger.
   if (error && lienAbsent(error.code)) {
     console.error('[Feuille de soins] actes illisibles, lecture dégradée :', error.message)
-    ;({ data, error } = await lire(false))
+    ;({ data, error, count } = await lire(false))
   }
 
   if (error) {
@@ -80,7 +102,14 @@ export async function GET(req: NextRequest) {
     console.error('[Feuille de soins] lecture impossible :', error.message)
     return NextResponse.json({ error: 'Lecture impossible' }, { status: 500 })
   }
-  return NextResponse.json({ feuilles: data ?? [], activee: true })
+  // `total` dit combien le patient en a EN TOUT : c'est lui qui permet à
+  // l'écran d'annoncer le nombre de feuilles précédentes, au lieu d'un bouton
+  // qui ne dit pas ce qu'il va chercher.
+  return NextResponse.json({
+    feuilles: data ?? [],
+    total: count ?? (data ?? []).length,
+    activee: true,
+  })
 }
 
 export async function POST(req: NextRequest) {

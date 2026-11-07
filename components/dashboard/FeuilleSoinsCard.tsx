@@ -32,7 +32,7 @@ import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, resteACharge, typ
 import { ORGANISMES, organismePour, imprimeDisponible } from '@/lib/organismes'
 import { alertesFeuille, type AlerteFeuille } from '@/lib/feuille-regles'
 import type { ImageDentaire } from '@/lib/imagerie'
-import { AlertTriangle, FileSpreadsheet, Info, Plus, Printer, Trash2, XCircle } from 'lucide-react'
+import { AlertTriangle, ChevronDown, FileSpreadsheet, Info, Plus, Printer, Trash2, XCircle } from 'lucide-react'
 
 const inputCls = 'text-xs border border-gray-200 rounded-lg px-2 py-1.5'
 
@@ -120,6 +120,15 @@ export default function FeuilleSoinsCard({
   const [organismeChoisi, setOrganismeChoisi] = useState(mutuelle ?? '')
   const organisme = organismePour(organismeChoisi)
   const [feuilles, setFeuilles] = useState<Feuille[]>([])
+  /** Combien ce patient en a EN TOUT, y compris celles qui ne sont pas
+   *  chargées. C'est ce nombre qui permet d'annoncer ce que le bouton va
+   *  chercher plutôt que de l'appeler « les précédentes » à l'aveugle. */
+  const [nombreFeuilles, setNombreFeuilles] = useState(0)
+  /** L'historique entier a-t-il été demandé ? Une fois ouvert, il le reste :
+   *  le praticien qui remonte un dossier ne veut pas le voir se replier
+   *  chaque fois qu'il établit une feuille. */
+  const [toutCharge, setToutCharge] = useState(false)
+  const [chargementHistorique, setChargementHistorique] = useState(false)
   const [activee, setActivee] = useState(true)
   const [actes, setActes] = useState<{ label: string; code: string | null; amount: number }[]>([])
   /** Les derniers actes cotés par ce cabinet, pour la rangée de raccourcis. */
@@ -137,8 +146,10 @@ export default function FeuilleSoinsCard({
   const cliches = images ?? imagesLues
   const bloc = useRef<HTMLDivElement>(null)
 
-  const charger = useCallback(async () => {
-    const res = await fetch(`/api/feuilles-soins?patient_id=${patientId}`)
+  /** Relit les feuilles du patient. Par défaut les dernières seulement ; tout
+   *  l'historique une fois que le praticien l'a demandé. */
+  const charger = useCallback(async (tout: boolean) => {
+    const res = await fetch(`/api/feuilles-soins?patient_id=${patientId}${tout ? '&tout=1' : ''}`)
     const data = await res.json().catch(() => ({}))
     // Une lecture qui échoue n'est pas une absence de feuille. L'encart
     // affichait « Aucune feuille établie pour ce patient » sur une erreur 500 :
@@ -147,10 +158,26 @@ export default function FeuilleSoinsCard({
     if (!res.ok) { setErreur(true); return }
     setErreur(false)
     setFeuilles(data.feuilles ?? [])
+    // Une base d'avant ce changement ne renvoie pas `total` : la liste reçue
+    // EST alors tout l'historique, et le bouton n'a pas lieu d'être.
+    setNombreFeuilles(typeof data.total === 'number' ? data.total : (data.feuilles ?? []).length)
     setActivee(data.activee !== false)
   }, [patientId])
 
-  useEffect(() => { charger() }, [charger])
+  // À l'ouverture du dossier — et si l'on passe à un autre patient — on ne lit
+  // que les dernières feuilles, l'historique replié.
+  useEffect(() => { setToutCharge(false); charger(false) }, [charger])
+
+  /** « Charger les feuilles de soins précédentes ». */
+  async function chargerHistorique() {
+    setChargementHistorique(true)
+    try {
+      await charger(true)
+      setToutCharge(true)
+    } finally {
+      setChargementHistorique(false)
+    }
+  }
   useEffect(() => {
     fetch('/api/feuilles-soins/actes')
       .then((r) => (r.ok ? r.json() : { actes: [] }))
@@ -335,7 +362,7 @@ export default function FeuilleSoinsCard({
       if (!res.ok) { alert(data.error || "La feuille n'a pas pu être établie."); return }
       setLignes([]); setCandidats([]); setTypesSoins([]); setEntenteNo(''); setNature('execution')
       setOuvert(false)
-      await charger()
+      await charger(toutCharge)
       // Le document s'ouvre tout de suite : c'est pour l'imprimer qu'on l'établit.
       window.open(`/feuille-soins/${data.id}`, '_blank', 'noopener')
     } finally {
@@ -353,12 +380,17 @@ export default function FeuilleSoinsCard({
   async function supprimer(f: Feuille) {
     if (!confirm('Supprimer cette feuille de soins ?')) return
     const res = await fetch(`/api/feuilles-soins/${f.id}`, { method: 'DELETE' })
-    if (res.ok) setFeuilles((prev) => prev.filter((x) => x.id !== f.id))
+    if (res.ok) {
+      setFeuilles((prev) => prev.filter((x) => x.id !== f.id))
+      setNombreFeuilles((n) => Math.max(0, n - 1))
+    }
   }
 
   if (!activee) return null
 
   const total = totalFeuille(lignes.map((l) => ({ amount: l.amount })))
+  /** Combien de feuilles anciennes attendent derrière le bouton. */
+  const restantes = Math.max(0, nombreFeuilles - feuilles.length)
 
   // Ce qui ferait revenir le dossier, calculé à chaque frappe sur les lignes
   // retenues. Rien n'est bloqué : le praticien connaît son dossier mieux que
@@ -671,6 +703,27 @@ export default function FeuilleSoinsCard({
             </li>
           ))}
         </ul>
+      )}
+
+      {/* ── Les feuilles plus anciennes ───────────────────────────────────
+          Le dossier n'ouvre plus sur dix ans d'historique. Les feuilles
+          précédentes existent toujours et se chargent d'un clic ; le bouton
+          dit combien il y en a, pour qu'on sache ce qu'on va chercher. */}
+      {!erreur && !toutCharge && restantes > 0 && (
+        <button
+          onClick={chargerHistorique}
+          disabled={chargementHistorique}
+          className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed
+            border-gray-200 px-3 py-2 text-xs text-gray-500 hover:border-gray-300 hover:text-gray-700
+            disabled:opacity-60"
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+          {chargementHistorique
+            ? 'Chargement…'
+            : restantes === 1
+              ? 'Charger la feuille de soins précédente'
+              : `Charger les ${restantes} feuilles de soins précédentes`}
+        </button>
       )}
     </div>
   )
