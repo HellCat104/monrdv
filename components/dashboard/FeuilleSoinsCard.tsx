@@ -132,6 +132,10 @@ export default function FeuilleSoinsCard({
    *  chaque fois qu'il établit une feuille. */
   const [toutCharge, setToutCharge] = useState(false)
   const [chargementHistorique, setChargementHistorique] = useState(false)
+  /** L'organisme est inscrit sur la fiche du patient : on le reprend, on ne
+   *  le redemande pas. Ce drapeau n'est levé que si le praticien veut en
+   *  changer POUR CETTE FEUILLE — un patient change parfois de couverture. */
+  const [changerOrganisme, setChangerOrganisme] = useState(false)
   const [activee, setActivee] = useState(true)
   const [actes, setActes] = useState<{ label: string; code: string | null; amount: number }[]>([])
   /** Les derniers actes cotés par ce cabinet, pour la rangée de raccourcis. */
@@ -441,20 +445,41 @@ export default function FeuilleSoinsCard({
               Première question, et la seule qui change le document : c'est
               elle qui décide si l'on imprime l'imprimé de la CNSS, celui du
               CNOPS, de RMA, des FAR, ou la feuille neutre de MonRDV. */}
-          <div className={`rounded-lg p-2.5 ${organisme ? 'bg-gray-50' : 'bg-amber-50 border border-amber-200'}`}>
-            <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-              Organisme — il commande le formulaire imprimé
-            </label>
-            <select value={organismeChoisi} onChange={(e) => setOrganismeChoisi(e.target.value)}
-              className={`${inputCls} w-full bg-white`}>
-              <option value="">— à choisir —</option>
-              {ORGANISMES.map((o) => <option key={o.cle} value={o.nom}>{o.nom}</option>)}
-              {/* L'organisme déjà inscrit sur la fiche, s'il sort de la liste :
-                  une saisie libre d'hier ne doit pas disparaître du menu. */}
-              {organismeChoisi && !ORGANISMES.some((o) => o.nom === organismeChoisi) && (
-                <option value={organismeChoisi}>{organismeChoisi}</option>
-              )}
-            </select>
+          <div className={`rounded-lg p-2.5 ${organisme || mutuelle ? 'bg-gray-50' : 'bg-amber-50 border border-amber-200'}`}>
+            {/* La mutuelle est déjà sur la fiche du patient : on l'annonce,
+                on ne la redemande pas. Redemander à chaque consultation un
+                renseignement déjà donné, c'est faire ressaisir — et donner
+                une occasion de se tromper. Le bouton « Changer » est là
+                pour le patient qui a changé de couverture, ou pour la
+                consultation qui part sur une autre caisse. */}
+            {mutuelle && !changerOrganisme ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-gray-600">
+                  <span className="font-semibold text-gray-700">{organismeChoisi}</span>
+                  <span className="text-gray-400"> · repris de la fiche du patient</span>
+                </p>
+                <button onClick={() => setChangerOrganisme(true)}
+                  className="text-[11px] text-primary-600 hover:underline shrink-0">
+                  Changer
+                </button>
+              </div>
+            ) : (
+              <>
+                <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                  Organisme — il commande le formulaire imprimé
+                </label>
+                <select value={organismeChoisi} onChange={(e) => setOrganismeChoisi(e.target.value)}
+                  className={`${inputCls} w-full bg-white`}>
+                  <option value="">— à choisir —</option>
+                  {ORGANISMES.map((o) => <option key={o.cle} value={o.nom}>{o.nom}</option>)}
+                  {/* L'organisme déjà inscrit sur la fiche, s'il sort de la liste :
+                      une saisie libre d'hier ne doit pas disparaître du menu. */}
+                  {organismeChoisi && !ORGANISMES.some((o) => o.nom === organismeChoisi) && (
+                    <option value={organismeChoisi}>{organismeChoisi}</option>
+                  )}
+                </select>
+              </>
+            )}
             {!organisme && (
               <p className="text-[11px] text-amber-700 mt-1">
                 Sans organisme, aucune feuille de soins ne sort : il n&apos;y a pas de
