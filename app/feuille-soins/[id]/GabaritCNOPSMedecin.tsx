@@ -18,10 +18,10 @@
 // ── CE QU'IL LAISSE VIERGE ──────────────────────────────────────────────────
 //
 //   · « Partie réservée à l'assuré(e) » : l'assuré la remplit et signe.
-//   · « Type de soins » (Maladie, Maternité, Hospitalisation, Accident) et
-//     tout le bloc des dates de grossesse, d'accouchement, d'hospitalisation
-//     et d'accident : le logiciel ne sait pas lequel est vrai, et une case
-//     cochée à tort fait rejeter le dossier.
+//   · Le bloc des dates de grossesse, d'accouchement, d'hospitalisation et
+//     d'accident : le logiciel ne les connaît pas, et une date inventée sur
+//     un imprimé officiel est pire qu'une case vide. (« Type de soins », lui,
+//     se coche à l'écran — voir plus bas.)
 //   · « Pli confidentiel remis » : c'est une remise en main propre, pas une
 //     donnée du dossier.
 //   · « CIM-10 », les tableaux biologie / radiologie, paramédicaux et
@@ -69,6 +69,18 @@ const COL_COTATION = 194.1
 const COL_VALEUR = 251.5
 const COL_MONTANT_FIN = 334.5
 
+/** « Type de soins » : quatre pastilles EMPILÉES, à gauche du bloc, dans
+ *  l'ordre de l'imprimé. Relevées sur le scan. Coché par le praticien, jamais
+ *  deviné : une consultation qui suit un accident du travail cochée
+ *  « Maladie » fait rejeter le dossier. */
+const TYPE_SOINS_X = 611
+const TYPE_SOINS_Y: Record<string, number> = {
+  maladie: 509.5,
+  maternite: 537,
+  hospitalisation: 564.5,
+  accident: 593.5,
+}
+
 export default function GabaritCNOPSMedecin({ praticien, patientId, beneficiaire, feuille, actes }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
 
@@ -82,6 +94,11 @@ export default function GabaritCNOPSMedecin({ praticien, patientId, beneficiaire
 
     // Identification du médecin traitant.
     ...grille(INP[0], INP[1], 468, praticien.inpe, 10),
+
+    // « Type de soins », tel que le praticien l'a coché à l'écran.
+    ...feuille.typesSoins
+      .filter((t) => TYPE_SOINS_Y[t] !== undefined)
+      .map((t): MarqueFormulaire => ({ x: TYPE_SOINS_X, y: TYPE_SOINS_Y[t], signe: 'croix', largeur: 11 })),
 
     // Le cadre d'attestation de DROITE, celui du médecin. Celui de gauche est
     // à l'assuré et reste vierge.

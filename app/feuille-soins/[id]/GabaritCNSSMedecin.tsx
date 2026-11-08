@@ -22,10 +22,11 @@
 //   · « Partie réservée à l'assuré(e) » : l'assuré l'écrit de sa main et signe
 //     dessous. Le cabinet n'a pas à déclarer une identité qui n'est pas la
 //     sienne à déclarer.
-//   · « Type de soins » — Hospitalisation, Maternité, Accident, Maladie. Une
-//     feuille de soins MonRDV ne sait pas laquelle est vraie : cocher
-//     « Maladie » sur une consultation qui suit un accident du travail fait
-//     rejeter le dossier, et c'est le praticien qui sait. Il coche.
+//   · « Type de soins » — Hospitalisation, Maternité, Accident, Maladie :
+//     coché PAR LE PRATICIEN à l'écran, jamais deviné. Le logiciel ne peut
+//     pas savoir si la consultation suit un accident du travail, et une case
+//     cochée à tort fait rejeter le dossier. Rien n'est coché d'office ;
+//     ce que le praticien coche, on l'imprime.
 //   · « CIM-10 » : le logiciel ne tient pas de codage CIM des diagnostics.
 //   · Le deuxième bloc d'actes, et les tableaux biologie / radiologie /
 //     pharmacie : ils sont à d'AUTRES praticiens, qui y mettent leur propre
@@ -73,6 +74,16 @@ const LIGNES = [112.5, 123, 133.5, 144, 154.5]
 /** Les quatre cases de la colonne « Code des actes ». */
 const CASES_CODE = [177.4, 195.5, 213.6, 232.7]
 
+/** La rangée « Type de soins », relevée sur le scan : quatre cases carrées
+ *  alignées, dans l'ordre de l'imprimé. */
+const TYPE_SOINS_Y = 483
+const TYPE_SOINS_X: Record<string, number> = {
+  hospitalisation: 630,
+  maternite: 721.5,
+  accident: 801,
+  maladie: 896,
+}
+
 export default function GabaritCNSSMedecin({ praticien, patientId, beneficiaire, feuille, actes }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
 
@@ -92,6 +103,13 @@ export default function GabaritCNSSMedecin({ praticien, patientId, beneficiaire,
     // INPE, dans le cadre « Médecin traitant » — pas celui de droite, qui est
     // à l'établissement de soins.
     ...grille(INPE_MEDECIN[0], INPE_MEDECIN[1], 415, praticien.inpe, 10),
+
+    // « Type de soins ». Ce que le praticien a coché à l'écran, et rien de
+    // plus : l'imprimé dit « Cocher la mention utile pour chaque case », il
+    // en accepte donc plusieurs, et aucune si le praticien n'a rien dit.
+    ...feuille.typesSoins
+      .filter((t) => TYPE_SOINS_X[t] !== undefined)
+      .map((t): MarqueFormulaire => ({ x: TYPE_SOINS_X[t], y: TYPE_SOINS_Y, signe: 'croix', largeur: 9 })),
 
     // Le cadre d'attestation de DROITE : « Je déclare les informations
     // ci-dessus sincères et véritables », signé du médecin. Celui de gauche

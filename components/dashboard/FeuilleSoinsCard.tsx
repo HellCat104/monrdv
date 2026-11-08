@@ -29,7 +29,7 @@ import type { ActeDentaire } from '@/lib/actes-dentaires'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import { totalFeuille } from '@/lib/feuilles-soins'
-import { ORGANISMES, organismePour, imprimeDisponible } from '@/lib/organismes'
+import { ORGANISMES, organismePour, imprimeDisponible, imprimeTraits, aValeurCle } from '@/lib/organismes'
 import { alertesFeuille, type AlerteFeuille } from '@/lib/feuille-regles'
 import type { ImageDentaire } from '@/lib/imagerie'
 import { AlertTriangle, ChevronDown, FileSpreadsheet, Info, Plus, Printer, Trash2, XCircle } from 'lucide-react'
@@ -117,7 +117,11 @@ export default function FeuilleSoinsCard({
   // Il se choisit maintenant devant la feuille, et c'est lui qui commande le
   // formulaire imprimé.
   const [organismeChoisi, setOrganismeChoisi] = useState(mutuelle ?? '')
-  const organisme = organismePour(organismeChoisi)
+  // L'organisme TEL QUE L'IMPRIMÉ DE CETTE PROFESSION le décrit. Un
+  // généraliste se voyait proposer « Prothèse », « Orthodontie » et une
+  // valeur de clé : les cases du formulaire DENTAIRE, parce que c'est lui
+  // qui avait servi à décrire l'organisme. Le sien pose d'autres questions.
+  const organisme = imprimeTraits(organismePour(organismeChoisi), dental)
   const [feuilles, setFeuilles] = useState<Feuille[]>([])
   /** Combien ce patient en a EN TOUT, y compris celles qui ne sont pas
    *  chargées. C'est ce nombre qui permet d'annoncer ce que le bouton va
@@ -166,6 +170,12 @@ export default function FeuilleSoinsCard({
   // À l'ouverture du dossier — et si l'on passe à un autre patient — on ne lit
   // que les dernières feuilles, l'historique replié.
   useEffect(() => { setToutCharge(false); charger(false) }, [charger])
+
+  // Changer d'organisme change les cases à cocher : la CNSS demande
+  // « Hospitalisation / Maternité / Accident / Maladie » là où une feuille
+  // dentaire demandait « Soins / Prothèse ». Une case cochée pour l'un n'a
+  // aucun sens pour l'autre, et partirait pourtant avec la feuille.
+  useEffect(() => { setTypesSoins([]) }, [organismeChoisi])
 
   /** « Charger les feuilles de soins précédentes ». */
   async function chargerHistorique() {
@@ -558,8 +568,13 @@ export default function FeuilleSoinsCard({
                         placeholder="D" title="Lettre clé" className={`${inputCls} w-10 uppercase text-center`} />
                       <input value={l.coefficient} onChange={(e) => majLigne(i, 'coefficient', e.target.value)} type="number" min="0"
                         placeholder="Coef." title="Coefficient" className={`${inputCls} w-16`} />
-                      <input value={l.valeurCle} onChange={(e) => majLigne(i, 'valeurCle', e.target.value)} type="number" min="0"
-                        placeholder="Val. clé" title="Valeur de la clé, en dirhams" className={`${inputCls} w-20`} />
+                      {/* La valeur de la clé n'a pas sa colonne partout : la
+                          feuille médecin de la CNSS a la cotation NGAP et
+                          s'arrête là. */}
+                      {aValeurCle(organisme) && (
+                        <input value={l.valeurCle} onChange={(e) => majLigne(i, 'valeurCle', e.target.value)} type="number" min="0"
+                          placeholder="Val. clé" title="Valeur de la clé, en dirhams" className={`${inputCls} w-20`} />
+                      )}
                     </>
                   )}
                   <input value={l.amount} onChange={(e) => majLigne(i, 'amount', e.target.value)} type="number" min="0"

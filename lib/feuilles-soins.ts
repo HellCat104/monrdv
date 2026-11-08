@@ -84,8 +84,17 @@ export function normaliserCotation(brut: unknown): CotationLigne {
   }
 }
 
-/** Les cases « Type de soins » venues du navigateur. */
-export const TYPES_SOINS = ['soins', 'prothese', 'orthodontie', 'autres'] as const
+/** Les cases « Type de soins » venues du navigateur.
+ *
+ *  Les quatre premières sont celles des imprimés DENTAIRES, les quatre
+ *  suivantes celles des imprimés MÉDECIN (voir `TypeSoin` dans
+ *  lib/organismes.ts). La liste est commune parce que la base stocke un
+ *  tableau de mots : c'est l'organisme ET la profession qui disent lesquels
+ *  ont un sens, et c'est le gabarit qui décide où les imprimer. */
+export const TYPES_SOINS = [
+  'soins', 'prothese', 'orthodontie', 'autres',
+  'maladie', 'maternite', 'hospitalisation', 'accident',
+] as const
 export type TypeSoinFeuille = (typeof TYPES_SOINS)[number]
 
 export function normaliserTypesSoins(brut: unknown): TypeSoinFeuille[] {

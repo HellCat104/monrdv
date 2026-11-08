@@ -52,7 +52,17 @@ export type ImprimeDetenu = 'dentaire' | 'medecin' | 'tout_praticien'
  *  formulaire de l'organisme : le repli quand on n'a pas son imprimé. */
 export type Gabarit = 'anam' | 'rma' | 'far' | 'neutre'
 
-export type TypeSoin = 'soins' | 'prothese' | 'orthodontie' | 'autres'
+/** Les cases « Type de soins » d'un imprimé.
+ *
+ *  Les quatre premières sont celles des feuilles DENTAIRES de l'ANAM, les
+ *  quatre suivantes celles des feuilles MÉDECIN. Ce ne sont pas des variantes
+ *  de vocabulaire : un dentiste déclare la nature des TRAVAUX (soins,
+ *  prothèse, orthodontie), un médecin la nature de l'ÉVÉNEMENT (maladie,
+ *  maternité, hospitalisation, accident). Mélanger les deux, c'est proposer
+ *  « Prothèse » à un généraliste. */
+export type TypeSoin =
+  | 'soins' | 'prothese' | 'orthodontie' | 'autres'
+  | 'maladie' | 'maternite' | 'hospitalisation' | 'accident'
 
 /** Le délai de dépôt, dans les mots de l'organisme.
  *
@@ -83,8 +93,13 @@ export interface Organisme {
   typesSoins: { cle: TypeSoin; label: string }[] | null
   /** Le formulaire a une colonne « Code des actes ». */
   colonneCode: boolean
-  /** Le formulaire a une colonne « Lettre clé + Cotation » et « Valeur clé ». */
+  /** Le formulaire a une colonne « Lettre clé + Cotation ». */
   colonneCotation: boolean
+  /** …et une colonne « Valeur clé » à côté. Absent = comme `colonneCotation`.
+   *  La feuille MÉDECIN de la CNSS a la cotation NGAP mais PAS la valeur de
+   *  la clé : demander les deux ferait saisir un chiffre qui n'a nulle part
+   *  où s'imprimer. */
+  colonneValeurCle?: boolean
   /** Le formulaire porte un schéma dentaire à marquer. */
   schemaDentaire: boolean
   /** QUELS imprimés de cet organisme MonRDV détient, scannés et remplissables.
@@ -104,6 +119,19 @@ export interface Organisme {
    *  Liste VIDE : on ne détient aucun de ses imprimés. Le logiciel ne produit
    *  alors pas de feuille de soins du tout — voir `imprimeDisponible`. */
   imprimes: ImprimeDetenu[]
+  /** CE QUI CHANGE SUR L'IMPRIMÉ DU MÉDECIN.
+   *
+   *  Tout ce qui est décrit au-dessus l'a été sur l'imprimé DENTAIRE, parce
+   *  que c'est lui qui est arrivé le premier. Or une caisse publie un
+   *  formulaire par profession, et ils ne posent pas les mêmes questions :
+   *  la feuille dentaire de la CNSS demande « Soins / Prothèse /
+   *  Orthodontie / Autres », sa feuille médecin « Hospitalisation /
+   *  Maternité / Accident / Maladie ». Un généraliste à qui l'on propose de
+   *  cocher « Prothèse » voit un écran qui ne parle pas de son métier.
+   *
+   *  Absent, ou champ absent : l'imprimé médecin pose la même question que
+   *  le dentaire. `imprimeTraits()` applique ces écarts. */
+  medecin?: TraitsImprime
   /** Le formulaire porte la case « Entente préalable / Devis ». */
   ententePrealable: boolean
   /** Les mots de CE formulaire pour cette case. L'ANAM écrit « Entente
@@ -122,6 +150,19 @@ export interface Organisme {
   accordPrealable: string[]
 }
 
+/** Ce qu'un imprimé « médecin » redéfinit par rapport au dentaire. Les mêmes
+ *  champs que l'organisme, tous facultatifs : on ne réécrit que l'écart. */
+export interface TraitsImprime {
+  typesSoins?: { cle: TypeSoin; label: string }[] | null
+  colonneCode?: boolean
+  colonneCotation?: boolean
+  colonneValeurCle?: boolean
+  schemaDentaire?: boolean
+  ententePrealable?: boolean
+  numeroEntente?: boolean
+  motsNature?: { execution: string; entente: string }
+}
+
 /** Les quatre cases « Type de soins » du formulaire ANAM. Le CNOPS écrit
  *  « Orthodentie et O.D.F », la CNSS « Orthodontie faciale » : même case. */
 const TYPES_ANAM: { cle: TypeSoin; label: string }[] = [
@@ -129,6 +170,31 @@ const TYPES_ANAM: { cle: TypeSoin; label: string }[] = [
   { cle: 'prothese', label: 'Prothèse' },
   { cle: 'orthodontie', label: 'Orthodontie' },
   { cle: 'autres', label: 'Autres' },
+]
+
+/** Les quatre cases « Type de soins » des feuilles MÉDECIN de l'ANAM.
+ *
+ *  Elles décrivent l'ÉVÉNEMENT, pas les travaux. Le logiciel ne peut pas les
+ *  deviner : une consultation qui suit un accident du travail cochée
+ *  « Maladie » fait rejeter le dossier, et la caisse ne corrige pas, elle
+ *  renvoie. C'est donc le praticien qui coche, et rien n'est coché d'office.
+ *
+ *  L'ordre est celui de l'imprimé — la CNSS les aligne horizontalement
+ *  Hospitalisation / Maternité / Accident / Maladie, le CNOPS les empile
+ *  Maladie / Maternité / Hospitalisation / Accident. On suit chacun le sien
+ *  pour que l'écran ressemble au papier qu'on a sous les yeux. */
+const TYPES_MEDECIN_CNSS: { cle: TypeSoin; label: string }[] = [
+  { cle: 'hospitalisation', label: 'Hospitalisation' },
+  { cle: 'maternite', label: 'Maternité' },
+  { cle: 'accident', label: 'Accident' },
+  { cle: 'maladie', label: 'Maladie' },
+]
+
+const TYPES_MEDECIN_CNOPS: { cle: TypeSoin; label: string }[] = [
+  { cle: 'maladie', label: 'Maladie' },
+  { cle: 'maternite', label: 'Maternité' },
+  { cle: 'hospitalisation', label: 'Hospitalisation' },
+  { cle: 'accident', label: 'Accident' },
 ]
 
 export const ORGANISMES: Organisme[] = [
@@ -145,6 +211,16 @@ export const ORGANISMES: Organisme[] = [
     colonneCotation: true,
     schemaDentaire: true,
     imprimes: ['dentaire', 'medecin'],
+    // La feuille MÉDECIN de la CNSS (ANAM 1.2.01.01) garde les deux cases
+    // « Entente préalable / Exécution » en tête, mais elle ne demande AUCUN
+    // numéro d'accord en retour, son tableau d'actes n'a pas de colonne
+    // « Valeur clé », et son « Type de soins » parle de l'événement.
+    medecin: {
+      typesSoins: TYPES_MEDECIN_CNSS,
+      numeroEntente: false,
+      colonneValeurCle: false,
+      schemaDentaire: false,
+    },
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Entente préalable' },
     numeroEntente: true,
@@ -175,6 +251,15 @@ export const ORGANISMES: Organisme[] = [
     colonneCotation: true,
     schemaDentaire: true,
     imprimes: ['dentaire', 'medecin'],
+    // La feuille MÉDECIN du CNOPS (ANAM 1.1.01.01) ne pose PAS la question
+    // « Entente préalable / Exécution » : la case n'existe pas sur cet
+    // imprimé. Elle a en revanche sa colonne « Valeur Clé ».
+    medecin: {
+      typesSoins: TYPES_MEDECIN_CNOPS,
+      ententePrealable: false,
+      numeroEntente: false,
+      schemaDentaire: false,
+    },
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Entente préalable' },
     numeroEntente: true,
@@ -220,6 +305,15 @@ export const ORGANISMES: Organisme[] = [
     // croise la dent extraite ou appareillée, on entoure la dent soignée.
     schemaDentaire: true,
     imprimes: ['tout_praticien'],
+    // Dans le carnet des FAR, les cases « Soins ? / Prothèse ? » et la
+    // mention « DEVIS ? — REÇUS ? » sont sur la PAGE 4, celle du dentiste,
+    // qui ne s'imprime pas pour un médecin. Il ne reste que la page 3, le
+    // relevé commun : rien à cocher.
+    medecin: {
+      typesSoins: null,
+      ententePrealable: false,
+      schemaDentaire: false,
+    },
     ententePrealable: true,
     motsNature: { execution: 'Reçus', entente: 'Devis' },
     delai: {
@@ -243,6 +337,13 @@ export const ORGANISMES: Organisme[] = [
     colonneCotation: true,
     schemaDentaire: true,
     imprimes: ['dentaire', 'medecin'],
+    // Chez RMA, la « Déclaration de maladie » (FOR.GM-021) réserve toute sa
+    // page 1 à l'assuré — type de déclaration compris. La page du praticien
+    // ne porte qu'un tableau d'actes.
+    medecin: {
+      ententePrealable: false,
+      schemaDentaire: false,
+    },
     ententePrealable: true,
     motsNature: { execution: 'Exécution', entente: 'Devis' },
     delai: {
@@ -335,6 +436,29 @@ export function organismeParCle(cle: string | null | undefined): Organisme | nul
  * caisse qui attend le sien revient par la poste. L'écran dit alors
  * « indisponible », et pourquoi.
  */
+/** L'organisme TEL QUE L'IMPRIMÉ DE CETTE PROFESSION le décrit.
+ *
+ *  Toute l'interface passe par là : les cases à cocher, les colonnes de
+ *  saisie, les alertes. Avant, elle lisait l'organisme brut — c'est-à-dire
+ *  l'imprimé du dentiste — et un généraliste se voyait proposer de cocher
+ *  « Prothèse » et de saisir une valeur de clé que son formulaire n'a pas.
+ *
+ *  On ne renvoie pas un objet partiel : c'est le même organisme, décrit par
+ *  le bon papier. */
+export function imprimeTraits<T extends Organisme | null | undefined>(
+  organisme: T, estDentiste: boolean,
+): T {
+  if (!organisme || estDentiste || !organisme.medecin) return organisme
+  return { ...organisme, ...organisme.medecin }
+}
+
+/** Le formulaire a-t-il une colonne « Valeur clé » ? Par défaut, celle-ci
+ *  accompagne la colonne de cotation. */
+export function aValeurCle(organisme: Organisme | null | undefined): boolean {
+  if (!organisme) return false
+  return organisme.colonneValeurCle ?? organisme.colonneCotation
+}
+
 export function imprimeDisponible(
   organisme: Organisme | null | undefined, estDentiste: boolean,
 ): boolean {

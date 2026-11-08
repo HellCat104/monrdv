@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/server'
 import { canAccess } from '@/lib/plan'
 import { FEUILLE_FONCTION } from '@/lib/feuilles-soins-server'
 import { COLONNES_EN_TETE, lignesEnTete } from '@/lib/document-entete'
-import { imprimeDisponible, organismePour, type Organisme } from '@/lib/organismes'
+import { imprimeDisponible, imprimeTraits, organismePour, type Organisme } from '@/lib/organismes'
 import { specialitesDu } from '@/types'
 import { isDentalDoctor } from '@/lib/dental'
 import { colonneAbsente } from '@/lib/migrations'
@@ -146,7 +146,10 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
   // Tous les gabarits reçoivent exactement la même chose : seuls la trame et
   // l'ordre des blocs changent d'un imprimé à l'autre.
   const commun = {
-    organisme,
+    // L'organisme décrit par l'imprimé de CETTE profession : les cases et les
+    // colonnes d'une feuille médecin ne sont pas celles d'une feuille
+    // dentaire, et c'est l'imprimé qui commande, pas la caisse.
+    organisme: imprimeTraits(organisme, estDentiste),
     praticien: {
       nom: lignesEnTete(doctor).nom,
       specialite: doctor.specialty ?? null,

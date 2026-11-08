@@ -24,7 +24,7 @@
 // se passe outre. Un logiciel qui bloque sur une règle qu'il a mal comprise
 // est un logiciel qu'on abandonne.
 
-import type { Organisme } from '@/lib/organismes'
+import { aValeurCle, type Organisme } from '@/lib/organismes'
 import {
   MOIS_VALIDITE_RADIO, actesSousAccord, familleDuCode, piecesAJoindre,
 } from '@/lib/nomenclature-anam'
@@ -265,18 +265,28 @@ export function alertesFeuille(ctx: ContexteFeuille): AlerteFeuille[] {
   //    sans coefficient part avec des cases vides, et c'est le premier motif
   //    de renvoi d'un dossier.
   if (org.colonneCotation) {
+    // Tous les imprimés n'ont pas la colonne « Valeur Clé » : la feuille
+    // médecin de la CNSS s'arrête à la cotation NGAP. On ne réclame pas un
+    // chiffre qui n'a nulle part où s'imprimer.
+    const avecValeur = aValeurCle(org)
+    const demande = avecValeur
+      ? 'la lettre clé, le coefficient et la valeur de la clé'
+      : 'la lettre clé et le coefficient'
+    const colonnes = avecValeur
+      ? 'Les colonnes « Lettre clé + Cotation » et « Valeur Clé »'
+      : 'La colonne « Lettre clé + Cotation »'
     const sansCotation = actes.filter((a) => a.label.trim() && !aUneCotation(a))
     if (sansCotation.length === actes.length && actes.length > 0) {
       alertes.push({
         niveau: 'attention',
         titre: 'Aucun acte n\'est coté',
-        detail: `Le formulaire ${org.nom} demande la lettre clé, le coefficient et la valeur de la clé pour chaque acte. Sans eux, les colonnes sortiront vides et vous devrez les remplir à la main.`,
+        detail: `Le formulaire ${org.nom} demande ${demande} pour chaque acte. Sans eux, les colonnes sortiront vides et vous devrez les remplir à la main.`,
       })
     } else if (sansCotation.length > 0) {
       alertes.push({
         niveau: 'attention',
         titre: `${sansCotation.length} acte${sansCotation.length > 1 ? 's' : ''} sans cotation`,
-        detail: `${sansCotation.map((a) => a.label).join(', ')}. Les colonnes « Lettre clé + Cotation » et « Valeur Clé » sortiront vides pour ${sansCotation.length > 1 ? 'ces lignes' : 'cette ligne'}.`,
+        detail: `${sansCotation.map((a) => a.label).join(', ')}. ${colonnes} ${avecValeur ? 'sortiront vides' : 'sortira vide'} pour ${sansCotation.length > 1 ? 'ces lignes' : 'cette ligne'}.`,
       })
     }
   }
