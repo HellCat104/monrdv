@@ -16,8 +16,8 @@ export const dynamic = 'force-dynamic'
 
 const MAX_LIGNES = 30
 /** Combien de feuilles le dossier montre d'emblée. Les suivantes se chargent
- *  à la demande. Trois : la feuille du jour, et de quoi voir d'un coup d'œil
- *  si la précédente a été remboursée. */
+ *  à la demande. Trois : celle du jour, et les deux dernières, de quoi voir
+ *  ce qui a déjà été établi pour ce patient sans dérouler son histoire. */
 const FEUILLES_RECENTES = 3
 /** Le plafond de l'historique complet. Un dossier n'en a jamais autant ; la
  *  borne est là pour qu'une lecture reste bornée. */
@@ -27,40 +27,6 @@ export async function GET(req: NextRequest) {
   const auth = await requireFeuilleDoctor()
   if ('error' in auth) return auth.error
   const { supabase, doctor } = auth.ctx
-
-  // ?suivi=1 — TOUTES les feuilles du cabinet, pour l'écran de suivi.
-  //
-  // Jusqu'ici les feuilles ne vivaient que dans le dossier de chaque patient.
-  // Retrouver celle déposée il y a trois mois et jamais remboursée imposait
-  // d'ouvrir les dossiers un par un : personne ne le faisait, et les dossiers
-  // s'enlisaient sans que rien ne le signale.
-  if (req.nextUrl.searchParams.get('suivi') === '1') {
-    // `remise_le`, `rembourse_le` et `montant_rembourse` n'existent qu'à
-    // partir de la v90. Sans elle on relit sans ces colonnes : l'écran
-    // fonctionne, il sait seulement moins de choses.
-    const colonnes = 'id, care_date, status, total, insurer, patient_id, patient:patients(first_name, last_name)'
-    const avecSuivi = await supabase
-      .from('care_sheets')
-      .select(`${colonnes}, remise_le, rembourse_le, montant_rembourse`)
-      .eq('doctor_id', doctor.id)
-      .order('care_date', { ascending: false })
-      .limit(500)
-
-    if (!avecSuivi.error) return NextResponse.json({ feuilles: avecSuivi.data ?? [], activee: true, suivi: true })
-
-    const simple = await supabase
-      .from('care_sheets').select(colonnes)
-      .eq('doctor_id', doctor.id)
-      .order('care_date', { ascending: false })
-      .limit(500)
-
-    if (simple.error) {
-      if (tableAbsente(simple.error.code)) return NextResponse.json({ feuilles: [], activee: false })
-      console.error('[Feuille de soins] suivi illisible :', simple.error.message)
-      return NextResponse.json({ error: 'Lecture impossible' }, { status: 500 })
-    }
-    return NextResponse.json({ feuilles: simple.data ?? [], activee: true, suivi: false })
-  }
 
   const patientId = req.nextUrl.searchParams.get('patient_id')
   if (!patientId) return NextResponse.json({ error: 'Patient manquant' }, { status: 400 })

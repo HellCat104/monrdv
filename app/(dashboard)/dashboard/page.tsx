@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import SuiviLabo from '@/components/dashboard/SuiviLabo'
 import BandeauStock from '@/components/dashboard/BandeauStock'
-import SuiviRemboursements from '@/components/dashboard/SuiviRemboursements'
 import RappelsDus from '@/components/dashboard/RappelsDus'
 import ConversationsAReprendre from '@/components/dashboard/ConversationsAReprendre'
 import MaJournee, { type RdvDuJour } from '@/components/dashboard/MaJournee'
@@ -221,11 +220,6 @@ export default async function DashboardPage() {
           et il est trop tard. L'encart ne s'affiche que s'il y a quelque
           chose à dire. */}
       {estDentiste && accesStock && <BandeauStock />}
-
-      {/* Remboursements : les feuilles qui dorment et celles qui ne reviennent
-          pas. Toutes spécialités — la CNSS concerne tous les cabinets. Comme
-          les autres encarts, il ne s'affiche que s'il a quelque chose à dire. */}
-      {acces && <SuiviRemboursements />}
 
       {/* Les trois chiffres du mois, en tête — c'est la place que la
           praticienne leur a choisie. Le taux d'absentéisme, lui, ne revient

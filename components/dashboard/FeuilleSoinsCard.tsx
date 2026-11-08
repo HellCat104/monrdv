@@ -28,7 +28,7 @@ import ChoixActesNgap, { type ActeRecent } from '@/components/dashboard/ChoixAct
 import type { ActeDentaire } from '@/lib/actes-dentaires'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
-import { STATUT_FEUILLE_LABELS, STATUTS_FEUILLE, totalFeuille, resteACharge, type StatutFeuille, type FeuilleSuivi } from '@/lib/feuilles-soins'
+import { totalFeuille } from '@/lib/feuilles-soins'
 import { ORGANISMES, organismePour, imprimeDisponible } from '@/lib/organismes'
 import { alertesFeuille, type AlerteFeuille } from '@/lib/feuille-regles'
 import type { ImageDentaire } from '@/lib/imagerie'
@@ -75,7 +75,6 @@ interface Feuille {
   id: string
   care_date: string
   total: number
-  status: StatutFeuille
   insurer: string | null
   items?: { id: string; tooth: string | null; code: string | null; label: string; amount: number }[]
 }
@@ -368,13 +367,6 @@ export default function FeuilleSoinsCard({
     } finally {
       setBusy(false)
     }
-  }
-
-  async function changerStatut(f: Feuille, status: StatutFeuille) {
-    const res = await fetch(`/api/feuilles-soins/${f.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
-    })
-    if (res.ok) setFeuilles((prev) => prev.map((x) => (x.id === f.id ? { ...x, status } : x)))
   }
 
   async function supprimer(f: Feuille) {
@@ -677,22 +669,14 @@ export default function FeuilleSoinsCard({
                 {(f.items ?? []).length} acte{(f.items ?? []).length > 1 ? 's' : ''}
                 {f.insurer ? ` · ${f.insurer}` : ''}
               </span>
+              {/* Le montant, et rien d'autre. Il y avait ici un menu
+                  « Établie / Remise / Remboursée » et un reste à charge : le
+                  cabinet ne sait pas ce que l'organisme a versé, et ne
+                  l'apprend jamais. Une ligne de feuille dit ce qui est vrai —
+                  la date, les actes, la caisse, le montant facturé. */}
               <span className="text-sm font-semibold text-gray-800 shrink-0">
                 {Number(f.total).toLocaleString('fr-FR')} DH
-                {/* Le reste à charge, là où le patient pose la question : au
-                    comptoir, sa fiche ouverte. Affiché seulement quand le
-                    montant versé est connu — présenter le total comme reste à
-                    charge laisserait croire que l'organisme n'a rien versé. */}
-                {resteACharge(f as unknown as FeuilleSuivi) != null && (
-                  <span className="block text-[10px] font-normal text-gray-400 text-right">
-                    reste {resteACharge(f as unknown as FeuilleSuivi)!.toLocaleString('fr-FR')} DH
-                  </span>
-                )}
               </span>
-              <select value={f.status} onChange={(e) => changerStatut(f, e.target.value as StatutFeuille)}
-                className="text-[11px] border border-gray-200 rounded-lg px-1.5 py-1 bg-white shrink-0">
-                {STATUTS_FEUILLE.map((s) => <option key={s} value={s}>{STATUT_FEUILLE_LABELS[s]}</option>)}
-              </select>
               <a href={`/feuille-soins/${f.id}`} target="_blank" rel="noopener noreferrer"
                 className="text-gray-400 hover:text-primary-600 shrink-0" title="Imprimer">
                 <Printer className="h-4 w-4" />

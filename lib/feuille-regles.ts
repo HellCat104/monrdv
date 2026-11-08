@@ -355,19 +355,3 @@ function alertesRadioAvant(ctx: ContexteFeuille, pour: string[]): AlerteFeuille[
   }
   return sorties
 }
-
-/** Le montant qui sera remboursé, quand on connaît la cotation.
- *
- *  coefficient × valeur de la clé. Le reste à charge du patient est la
- *  différence avec ce qui lui a été facturé. Rend null dès qu'une des deux
- *  valeurs manque : annoncer un remboursement à partir d'une moitié de
- *  cotation reviendrait à promettre un chiffre au patient. */
-export function montantRemboursable(
-  coefficient: number | string | null | undefined,
-  valeurCle: number | string | null | undefined,
-): number | null {
-  const c = Number(coefficient)
-  const v = Number(valeurCle)
-  if (!Number.isFinite(c) || !Number.isFinite(v) || c <= 0 || v <= 0) return null
-  return Math.round(c * v * 100) / 100
-}

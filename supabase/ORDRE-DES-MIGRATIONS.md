@@ -564,6 +564,17 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      relance) et index de suivi (doctor_id, status, care_date desc).
      Additive. Sans elle, l'écran de suivi fonctionne en se passant des dates.
 
+     ABANDONNÉE EN NOVEMBRE 2026 — à ne plus passer sur une base neuve.
+     Le suivi du remboursement décrivait un métier qui n'est pas celui du
+     Maroc : le patient règle la consultation, repart avec sa feuille remplie
+     et la dépose lui-même. Le cabinet n'apprend jamais si elle a été
+     remboursée ni de combien, et ces trois colonnes ne pouvaient donc être
+     remplies que de suppositions. L'écran « Remboursements », l'encart du
+     tableau de bord et le menu de statut sont retirés du logiciel.
+     LES COLONNES NE SONT PAS SUPPRIMÉES : les cabinets qui ont déjà passé la
+     v90 les gardent, vides et inertes. On n'écrit pas une migration qui
+     détruit des données pour faire propre.
+
  91. `migration_v91_effacement_complet.sql`
      Migration v91 — L'EFFACEMENT COMPLET. Ajoute `patients.efface_le`
      (timestamptz, NULL = fiche vivante) et réécrit le déclencheur
