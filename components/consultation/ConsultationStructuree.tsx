@@ -44,7 +44,7 @@ type Existant = Record<string, any> | null
 
 export default function ConsultationStructuree({
   doctorId, patient, appointmentId, existant, dossier,
-  rubriques, trames, retourCr, dentaire = false, alertes,
+  rubriques, trames, retourCr, retour = null, dentaire = false, alertes,
   colonnesFacultatives = [], pleineLargeur = false,
 }: {
   doctorId: string
@@ -57,6 +57,14 @@ export default function ConsultationStructuree({
   trames: TrameConsultation[]
   /** Où mène l'aperçu du compte rendu (la route diffère par branche). */
   retourCr: string
+  /** D'où l'on vient, quand on vient d'ailleurs que du dossier : l'écran de
+   *  consultation en cours, typiquement.
+   *
+   *  POURQUOI : enregistrée, la consultation renvoyait sur son compte rendu
+   *  imprimable — une impasse. Le praticien était au milieu de sa séance : il
+   *  lui restait à encaisser et à clôturer, et il n'avait plus de chemin pour
+   *  y revenir. On repose donc l'écran là où il l'avait quitté. */
+  retour?: string | null
   /** Les risques à signaler AVANT le geste (anamnèse + allergies du dossier).
    *  Absent = pas de bannière : c'est la branche qui décide, pas ce composant,
    *  et une branche sans questionnaire n'a pas à être invitée à le remplir. */
@@ -249,13 +257,22 @@ export default function ConsultationStructuree({
     }
   }
 
-  async function enregistrer(statut: 'brouillon' | 'validee') {
+  async function enregistrer(statut: 'brouillon' | 'validee', revenirApres = false) {
     if (statut === 'validee' && !confirm('Valider cette consultation ? Elle ne pourra plus être modifiée.')) return
     setEnCours(true); setErreur('')
     try {
       const courant = await envoyer(statut, id)
       if (courant !== id) setId(courant)
-      if (statut === 'validee') { router.push(`${retourCr}/${courant}`); return }
+      // Validée, la consultation est close : on montre son compte rendu, qui
+      // est ce qu'on en fait ensuite — l'imprimer, le remettre. Le chemin du
+      // retour l'accompagne, pour que la page ne soit plus une impasse : le
+      // praticien était au milieu de sa séance, il lui reste à encaisser.
+      if (statut === 'validee') {
+        const suite = retour ? `?back=${encodeURIComponent(retour)}` : ''
+        router.push(`${retourCr}/${courant}${suite}`)
+        return
+      }
+      if (revenirApres && retour) { router.push(retour); return }
       setEnregistre(true); setTimeout(() => setEnregistre(false), 2500)
     } catch (e) {
       setErreur(tableAbsente((e as { code?: string })?.code)
@@ -267,7 +284,8 @@ export default function ConsultationStructuree({
   return (
     <div className={`space-y-4 pb-16 ${pleineLargeur ? '' : 'max-w-3xl mx-auto'}`}>
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => router.back()} className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowLeft className="h-4 w-4" /></button>
+        <button onClick={() => (retour ? router.push(retour) : router.back())}
+          className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowLeft className="h-4 w-4" /></button>
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-gray-900">Consultation</h1>
           <p className="text-sm text-gray-500">{patient.first_name} {patient.last_name}{patient.age != null ? ` · ${patient.age} ans` : ''}</p>
@@ -277,7 +295,17 @@ export default function ConsultationStructuree({
           <Button variant="outline" size="sm" onClick={() => enregistrer('brouillon')} disabled={enCours}>
             {enregistre ? <><Check className="h-4 w-4 mr-1.5" /> Enregistré</> : <><Save className="h-4 w-4 mr-1.5" /> Brouillon</>}
           </Button>
-          <Button size="sm" onClick={() => enregistrer('validee')} disabled={enCours}>Valider</Button>
+          {/* Venu de la consultation en cours, le geste normal n'est pas
+              « valider » — qui ferme la consultation pour toujours — mais
+              « j'ai fini d'écrire, je retourne encaisser ». C'est donc lui
+              qui est mis en avant. « Valider » reste à côté, pour la fin. */}
+          {retour && (
+            <Button size="sm" onClick={() => enregistrer('brouillon', true)} disabled={enCours}>
+              Enregistrer et revenir
+            </Button>
+          )}
+          <Button size="sm" variant={retour ? 'outline' : 'default'}
+            onClick={() => enregistrer('validee')} disabled={enCours}>Valider</Button>
         </div>
       </div>
 

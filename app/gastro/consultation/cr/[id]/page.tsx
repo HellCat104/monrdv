@@ -11,9 +11,16 @@ import { RUBRIQUES_CONSULTATION } from '@/lib/gastro'
 import { formatDateFr } from '@/lib/utils'
 import DocumentGastro from '@/components/gastro/DocumentGastro'
 
+/** D'où l'on vient : la consultation en cours quand on en vient — il y reste
+ *  à encaisser et à clôturer —, le dossier du patient sinon. */
+function retourSurDoc(back?: string): string | null {
+  if (back && back.startsWith('/') && !back.startsWith('//')) return back
+  return null
+}
+
 export const dynamic = 'force-dynamic'
 
-export default async function PageCrConsultation({ params }: { params: { id: string } }) {
+export default async function PageCrConsultation({ params, searchParams }: { params: { id: string }; searchParams: { back?: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -59,7 +66,7 @@ export default async function PageCrConsultation({ params }: { params: { id: str
       patient={identite}
       blocs={blocs}
       brouillon={c.statut !== 'validee'}
-      backHref={`/patients/${c.patient_id}`}
+      backHref={retourSurDoc(searchParams.back) ?? `/patients/${c.patient_id}`}
     />
   )
 }

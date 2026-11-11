@@ -42,13 +42,20 @@ import ResumePatient from '@/components/dashboard/ResumePatient'
 import { preparerUn } from '@/lib/preparation-serveur'
 import { RUBRIQUES_GENERALISTE, TRAMES_GENERALISTE, COLONNES_FACULTATIVES_GENERALISTE } from '@/lib/generaliste'
 
+/** D'où l'on vient. Une adresse du site, jamais une URL externe : un `back`
+ *  venu de la barre d'adresse ne doit pas pouvoir servir de tremplin. */
+function retourSur(back?: string): string | null {
+  if (back && back.startsWith('/') && !back.startsWith('//')) return back
+  return null
+}
+
 export const dynamic = 'force-dynamic'
 
 export default async function PageConsultationGeneraliste({
   params, searchParams,
 }: {
   params: { patientId: string }
-  searchParams: { apt?: string; id?: string }
+  searchParams: { apt?: string; id?: string; back?: string }
 }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -74,12 +81,28 @@ export default async function PageConsultationGeneraliste({
     aptId = apt?.id ?? null
   }
 
+  // La consultation qu'on reprend.
+  //
+  // Par son identifiant quand on l'a — on vient de la liste du dossier. Sinon
+  // par le RENDEZ-VOUS : le praticien qui écrit, retourne encaisser, puis
+  // rouvre « Consultation » repartait d'une page blanche et laissait deux
+  // consultations du même jour dans le dossier.
   let existant = null
   if (searchParams.id) {
     const { data } = await supabase.from('consultations').select('*')
       .eq('id', searchParams.id).eq('doctor_id', doctor.id).eq('patient_id', patient.id).maybeSingle()
-    if (data && data.statut === 'validee') redirect(`/generaliste/consultation/cr/${data.id}`)
     existant = data
+  } else if (aptId) {
+    const { data } = await supabase.from('consultations').select('*')
+      .eq('appointment_id', aptId).eq('doctor_id', doctor.id).eq('patient_id', patient.id)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    existant = data
+  }
+  // Validée, elle ne se modifie plus : on montre le compte rendu, en gardant
+  // le chemin du retour s'il y en a un.
+  if (existant && existant.statut === 'validee') {
+    const suite = searchParams.back ? `?back=${encodeURIComponent(searchParams.back)}` : ''
+    redirect(`/generaliste/consultation/cr/${existant.id}${suite}`)
   }
 
   const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd')
@@ -218,6 +241,7 @@ export default async function PageConsultationGeneraliste({
           trames={TRAMES_GENERALISTE}
           colonnesFacultatives={COLONNES_FACULTATIVES_GENERALISTE}
           retourCr="/generaliste/consultation/cr"
+          retour={retourSur(searchParams.back)}
           pleineLargeur
         />
       </DossierDeConsultation>

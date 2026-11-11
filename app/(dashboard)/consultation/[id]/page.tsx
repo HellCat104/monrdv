@@ -65,9 +65,15 @@ export default async function ConsultationPage({ params }: { params: { id: strin
   // ne devine pas, on associe. Une spécialité absente de cette liste garde la
   // note libre, et aucun bouton ne promet un écran qui n'existe pas.
   const specialites = specialitesDu(doctor)
+  //
+  // On emporte l'adresse de CET écran : une fois sa consultation écrite, le
+  // praticien est encore au milieu de sa séance — il lui reste à encaisser et
+  // à clôturer. Sans ce retour, il atterrissait sur un compte rendu
+  // imprimable sans aucun chemin pour revenir.
+  const retourIci = `&back=${encodeURIComponent(`/consultation/${apt.id}`)}`
   const lienStructuree =
-    isGeneralDoctor(specialites) ? `/generaliste/consultation/${patient.id}?apt=${apt.id}`
-    : isGastroDoctor(specialites) ? `/gastro/consultation/${patient.id}?apt=${apt.id}`
+    isGeneralDoctor(specialites) ? `/generaliste/consultation/${patient.id}?apt=${apt.id}${retourIci}`
+    : isGastroDoctor(specialites) ? `/gastro/consultation/${patient.id}?apt=${apt.id}${retourIci}`
     : null
   // Généraliste seulement, même raison que dans le dossier : les règles du
   // moteur sont celles de la médecine générale. Les autres branches gardent
