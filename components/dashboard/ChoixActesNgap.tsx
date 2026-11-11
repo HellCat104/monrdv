@@ -30,10 +30,17 @@ export interface ActeRecent {
 }
 
 export default function ChoixActesNgap({
-  recents = [], onChoisir, dejaChoisis = [],
+  recents = [], tarifs = {}, onChoisir, dejaChoisis = [],
 }: {
   /** Les derniers actes cotés par ce praticien, du plus récent au plus ancien. */
   recents?: ActeRecent[]
+  /** Le dernier tarif pratiqué, PAR CODE et en majuscules.
+   *
+   *  À part de `recents`, qui est volontairement court — huit actes, pour que
+   *  la rangée de raccourcis tienne sur une ligne. La mémoire des prix, elle,
+   *  n'a pas de raison d'être courte : un acte posé il y a deux mois garde son
+   *  tarif. Tant qu'elle passait par `recents`, le praticien le retapait. */
+  tarifs?: Record<string, number>
   /** Appelé avec l'acte coché, et le dernier tarif connu s'il y en a un. */
   onChoisir: (acte: ActeDentaire, montant?: number) => void
   /** Les codes déjà portés sur la feuille : on les marque, sans les interdire
@@ -47,8 +54,9 @@ export default function ChoixActesNgap({
   const porte = (code: string) => dejaChoisis.includes(code.toUpperCase())
 
   /** Le dernier tarif pratiqué pour ce code, s'il a déjà été posé. */
-  const dernierTarif = (code: string) =>
-    recents.find((r) => (r.code ?? '').toUpperCase() === code.toUpperCase())?.amount
+  const dernierTarif = (code: string): number | undefined =>
+    tarifs[code.toUpperCase()]
+    ?? recents.find((r) => (r.code ?? '').toUpperCase() === code.toUpperCase())?.amount
 
   /** Une ligne d'acte, cliquable. Le code à gauche, en chiffres fixes, parce
    *  que c'est lui qu'on relit sur la feuille imprimée. */
@@ -85,6 +93,13 @@ export default function ChoixActesNgap({
           </span>
         )}
       </span>
+      {/* Le tarif retenu, montré AVANT de cocher. Sans lui, le praticien ne
+          sait pas si le prix va venir tout seul, et le retape « au cas où ». */}
+      {dernierTarif(a.code) !== undefined && (
+        <span className="text-[10px] text-gray-500 shrink-0 mt-0.5 tabular-nums">
+          {dernierTarif(a.code)!.toLocaleString('fr-FR')} DH
+        </span>
+      )}
       {porte(a.code) && <span className="text-[9.5px] text-gray-400 shrink-0 mt-0.5">déjà porté</span>}
     </button>
   )
@@ -111,13 +126,18 @@ export default function ChoixActesNgap({
                   // code : on ne fait pas disparaître le travail d'hier.
                   onClick={() => onChoisir(
                     a ?? { code: r.code ?? '', libelle: r.label, dent: null, face: false, accord: false },
-                    r.amount,
+                    dernierTarif(r.code ?? '') ?? r.amount,
                   )}
                   title={a?.libelle ?? r.label}
                   className="flex items-center gap-1.5 text-[11px] border border-gray-200 rounded-full pl-1.5 pr-2.5 py-1 hover:border-primary-300 hover:bg-primary-50/70"
                 >
                   <span className="font-bold text-primary-700 tabular-nums">{r.code}</span>
                   <span className="text-gray-600 truncate max-w-[150px]">{a?.libelle ?? r.label}</span>
+                  {dernierTarif(r.code ?? '') !== undefined && (
+                    <span className="text-gray-400 tabular-nums">
+                      {dernierTarif(r.code ?? '')!.toLocaleString('fr-FR')} DH
+                    </span>
+                  )}
                 </button>
               )
             })}

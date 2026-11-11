@@ -13,7 +13,12 @@ const MAX_ACTES = 40
 /** Au-delà, la rangée de raccourcis passerait à la ligne et cesserait d'en
  *  être une. */
 const MAX_RECENTS = 8
-const MAX_LIGNES = 600
+/** La mémoire des tarifs remonte sur ces lignes-là. Un cabinet qui cote vingt
+ *  actes par jour couvre ainsi plusieurs mois ; au-delà, un acte qu'on n'a pas
+ *  pratiqué depuis tout ce temps est précisément celui dont le tarif a changé.
+ *  Les tarifs qu'on veut garder pour de bon se posent dans les Paramètres, sur
+ *  le motif qui porte le code — et ils sont relus ici. */
+const MAX_LIGNES = 2000
 
 export async function GET() {
   const auth = await requireFeuilleDoctor()
@@ -55,8 +60,51 @@ export async function GET() {
   // l'intéresse pas. Les lignes arrivent déjà de la plus récente à la plus
   // ancienne, et la Map conserve cet ordre d'insertion : on le prend tel quel.
   const vus = Array.from(parCle.values())
+
+  // ── LES TARIFS, PAR CODE ───────────────────────────────────────────────
+  //
+  // Un prix tapé une fois doit revenir tout seul la fois suivante. Il
+  // revenait déjà, mais SEULEMENT pour les huit derniers actes posés : la
+  // liste `recents` sert la rangée de raccourcis, et elle est courte pour que
+  // cette rangée tienne sur une ligne. Un acte pratiqué le mois dernier en
+  // sortait, et le praticien retapait son tarif.
+  //
+  // `tarifs` est une table à part, sans plafond d'affichage : tout code vu
+  // dans le relevé y porte le DERNIER montant facturé (les lignes arrivent de
+  // la plus récente à la plus ancienne, la première gagne).
+  //
+  // Un montant nul n'est pas un tarif : c'est un acte enregistré sans prix,
+  // et le proposer ferait réécrire un zéro à chaque feuille.
+  const tarifs: Record<string, number> = {}
+  for (const ligne of data ?? []) {
+    const code = String(ligne.code ?? '').trim().toUpperCase()
+    const montant = Number(ligne.amount ?? 0)
+    if (!code || !(montant > 0) || tarifs[code] !== undefined) continue
+    tarifs[code] = montant
+  }
+
+  // Le tarif POSÉ À LA MAIN dans les Paramètres l'emporte-t-il ? Non : il
+  // complète. Ce que le praticien a facturé en dernier est plus vrai que ce
+  // qu'il a noté un jour dans ses réglages ; mais pour un acte qu'il n'a pas
+  // encore coté, son catalogue est la seule source, et c'est là qu'un cabinet
+  // qui s'installe entre sa grille d'honoraires.
+  const { data: catalogue } = await supabase
+    .from('consultation_types')
+    .select('code, default_price')
+    .eq('doctor_id', doctor.id)
+    .eq('active', true)
+    .not('code', 'is', null)
+    .not('default_price', 'is', null)
+  for (const ligne of catalogue ?? []) {
+    const code = String(ligne.code ?? '').trim().toUpperCase()
+    const montant = Number(ligne.default_price ?? 0)
+    if (!code || !(montant > 0) || tarifs[code] !== undefined) continue
+    tarifs[code] = montant
+  }
+
   return NextResponse.json({
     actes: vus.slice().sort((a, b) => b.n - a.n).slice(0, MAX_ACTES),
     recents: vus.filter((a) => !!a.code).slice(0, MAX_RECENTS),
+    tarifs,
   })
 }

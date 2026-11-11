@@ -155,6 +155,14 @@ export default function FeuilleSoinsCard({
   const [actes, setActes] = useState<{ label: string; code: string | null; amount: number }[]>([])
   /** Les derniers actes cotés par ce cabinet, pour la rangée de raccourcis. */
   const [recents, setRecents] = useState<ActeRecent[]>([])
+  /** LE TARIF DÉJÀ PRATIQUÉ, par code de nomenclature.
+   *
+   *  Un prix tapé une fois revient tout seul la fois suivante. Il revenait
+   *  déjà, mais seulement pour les huit derniers actes posés — la rangée de
+   *  raccourcis servait aussi de mémoire des prix, et elle est courte pour
+   *  tenir sur une ligne. Un acte du mois dernier en sortait, et le praticien
+   *  retapait son tarif. Cette table-ci n'a pas cette limite. */
+  const [tarifs, setTarifs] = useState<Record<string, number>>({})
   const [lignes, setLignes] = useState<Ligne[]>([])
   const [candidats, setCandidats] = useState<Candidat[]>([])
   const [nature, setNature] = useState<'execution' | 'entente_prealable'>('execution')
@@ -206,11 +214,20 @@ export default function FeuilleSoinsCard({
       setChargementHistorique(false)
     }
   }
-  useEffect(() => {
-    fetch('/api/feuilles-soins/actes')
+  /** Le catalogue de ce cabinet : ses actes, ses raccourcis, ses tarifs.
+   *  Relu après chaque feuille établie — le prix qu'on vient de taper doit
+   *  revenir dès la feuille SUIVANTE, pas à la prochaine ouverture de
+   *  l'écran. */
+  const chargerCatalogueActes = useCallback(() => {
+    return fetch('/api/feuilles-soins/actes')
       .then((r) => (r.ok ? r.json() : { actes: [] }))
-      .then((d) => { setActes(d.actes ?? []); setRecents(d.recents ?? []) })
-      .catch(() => { /* catalogue vide : on saisit à la main */ })
+      .then((d) => { setActes(d.actes ?? []); setRecents(d.recents ?? []); setTarifs(d.tarifs ?? {}) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    chargerCatalogueActes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /** Les actes du plan marqués « réalisés », du plus récent au plus ancien.
@@ -256,7 +273,12 @@ export default function FeuilleSoinsCard({
       tooth: c.tooth ?? '',
       code: connu?.code ?? '',
       label: c.label,
-      amount: String(c.amount || connu?.amount || ''),
+      amount: String(
+        c.amount
+        || (connu?.code ? tarifs[connu.code.toUpperCase()] : undefined)
+        || connu?.amount
+        || '',
+      ),
       acteDate: c.jour,
       lettreCle: dental ? 'D' : '',
     }
@@ -325,11 +347,16 @@ export default function FeuilleSoinsCard({
    *  chose que le logiciel ne peut pas savoir, et `alertesFeuille` la
    *  réclamera avant l'impression quand l'acte l'exige. */
   function ajouterActe(acte: ActeDentaire, montant?: number) {
+    // Le tarif vient de l'appelant quand il le connaît ; sinon on le cherche
+    // ici, par code. Deux chemins mènent à cette fonction — la liste d'actes
+    // et les raccourcis — et aucun ne doit poser une case vide sur un acte
+    // dont le prix est connu.
+    const prix = montant ?? tarifs[acte.code.toUpperCase()]
     setLignes((prev) => [...prev, {
       ...LIGNE_VIDE,
       code: acte.code,
       label: acte.libelle,
-      amount: montant ? String(montant) : '',
+      amount: prix ? String(prix) : '',
       acteDate: new Date().toLocaleDateString('en-CA'),
       lettreCle: dental ? 'D' : '',
     }])
@@ -355,11 +382,16 @@ export default function FeuilleSoinsCard({
     setLignes((prev) => prev.map((l, j) => {
       if (j !== i) return l
       const connu = actes.find((a) => a.label.toLowerCase().replace(/\s+/g, ' ') === label.trim().toLowerCase().replace(/\s+/g, ' '))
+      const code = l.code || connu?.code || ''
+      // Le tarif par CODE passe devant celui du libellé : deux libellés
+      // voisins (« Composite », « Composite 1 face ») portent le même code et
+      // le même prix, et c'est le code qui fait foi sur la feuille.
+      const memorise = code ? tarifs[code.toUpperCase()] : undefined
       return {
         ...l,
         label,
-        code: l.code || connu?.code || '',
-        amount: l.amount || (connu ? String(connu.amount) : ''),
+        code,
+        amount: l.amount || (memorise ? String(memorise) : '') || (connu ? String(connu.amount) : ''),
       }
     }))
   }
@@ -396,6 +428,10 @@ export default function FeuilleSoinsCard({
       setLignes([]); setCandidats([]); setTypesSoins([]); setEntenteNo(''); setNature('execution')
       setOuvert(false)
       await charger(toutCharge)
+      // Le tarif qu'on vient de taper entre dans la mémoire des prix tout de
+      // suite : il doit revenir dès la feuille suivante, pas au prochain
+      // chargement de l'écran.
+      chargerCatalogueActes()
       if (imprimer) window.open(`/feuille-soins/${data.id}`, '_blank', 'noopener')
       onFerme?.()
     } finally {
@@ -580,6 +616,7 @@ export default function FeuilleSoinsCard({
           {dental && (
             <ChoixActesNgap
               recents={recents}
+              tarifs={tarifs}
               onChoisir={ajouterActe}
               dejaChoisis={lignes.map((l) => l.code.toUpperCase()).filter(Boolean)}
             />
