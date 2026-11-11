@@ -690,9 +690,29 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      8 h veut savoir de quoi sa journée est faite avant d'en lire les libellés
      un par un.
      AUCUNE COULEUR N'EST ATTRIBUÉE : un cabinet qui n'a rien choisi garde
-     l'agenda qu'il connaît. La colonne ne porte qu'une CLÉ ('ciel',
+     l'agenda qu'il connaît. La colonne ne porte qu'une CLÉ ('fuchsia',
      'menthe'…) ; les teintes vivent dans lib/motifs-couleurs.ts, pas en base —
      des codes hexadécimaux y auraient figé l'apparence de l'agenda dans les
      données du cabinet.
      Additive. Sans elle, les motifs fonctionnent, les pastilles de couleur le
      disent et l'agenda garde son bleu.
+
+ 99. `migration_v99_consommables_par_motif.sql`
+     Migration v99 — CE QU'UN MOTIF CONSOMME, D'HABITUDE. Crée
+     `motif_consommables` (motif, article du stock, quantité).
+     La clôture d'une consultation demande « Qu'avez-vous utilisé ? » et retire
+     la réponse du stock. Pour que la question tienne en un clic, la réponse
+     est déjà écrite : cette table garde, pour chaque motif de rendez-vous, ce
+     que le cabinet a réellement déduit la DERNIÈRE fois.
+     CE N'EST PAS LE JOURNAL DU STOCK : les sorties s'écrivent dans
+     `stock_mouvements`, par `stock_mouvement()` (v88), comme toutes les
+     autres. Effacer cette table ne ferait perdre que le pré-remplissage.
+     AUCUNE LIGNE N'EST LIVRÉE : MonRDV ne sait pas ce que le cabinet range sur
+     ses étagères, il l'apprend. `motif_cle` est l'identifiant du motif en
+     texte, ou 'sans-motif' — du texte et non une clé étrangère, parce qu'un
+     NULL dans une contrainte d'unicité laisse passer les doublons (leçon v89).
+     Nouvelle table : le GRANT est dans le fichier (obligatoire depuis le
+     30 octobre 2026). Dépend de la v88.
+     Additive. Sans elle, la question se pose quand même et le stock est bien
+     déduit ; c'est la liste habituelle du motif qui n'est ni pré-remplie ni
+     retenue, et la fenêtre le dit.

@@ -30,8 +30,18 @@ export interface ActeRecent {
 }
 
 export default function ChoixActesNgap({
-  recents = [], tarifs = {}, onChoisir, dejaChoisis = [],
+  recents = [], tarifs = {}, onChoisir, dejaChoisis = [], suggeres = [], motif = null,
 }: {
+  /** Les actes que le MOTIF du rendez-vous laisse prévoir (lib/motifs-
+   *  dentaires.ts). Ils passent devant tout le reste : le patient est venu
+   *  pour un détartrage, et c'est D708 que le praticien cherche.
+   *
+   *  Proposés, jamais cochés d'office — la feuille atteste des actes sous sa
+   *  signature, et un rendez-vous pris pour une extraction peut se terminer
+   *  par une simple ordonnance. */
+  suggeres?: ActeDentaire[]
+  /** Le libellé du motif, pour dire D'OÙ vient la suggestion. */
+  motif?: string | null
   /** Les derniers actes cotés par ce praticien, du plus récent au plus ancien. */
   recents?: ActeRecent[]
   /** Le dernier tarif pratiqué, PAR CODE et en majuscules.
@@ -109,6 +119,39 @@ export default function ChoixActesNgap({
       <p className="text-[11px] font-semibold text-gray-500">
         Cochez les actes de la séance — le code part tout seul sur la feuille
       </p>
+
+      {/* ── Ce que le motif du rendez-vous laisse prévoir ─────────────── */}
+      {suggeres.length > 0 && (
+        <div>
+          <p className="text-[10px] text-primary-600 mb-1">
+            Suggéré pour ce rendez-vous{motif ? ` — ${motif}` : ''}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {suggeres.map((a) => (
+              <button
+                key={`suggere-${a.code}`}
+                type="button"
+                onClick={() => onChoisir(a, dernierTarif(a.code))}
+                title={a.aVerifier ? `${a.libelle} — code à confirmer : ${a.aVerifier}` : a.libelle}
+                className={`flex items-center gap-1.5 text-[11px] border rounded-full pl-1.5 pr-2.5 py-1 ${
+                  porte(a.code)
+                    ? 'border-gray-200 bg-gray-50 text-gray-400'
+                    : 'border-primary-300 bg-primary-50 hover:bg-primary-100'}`}
+              >
+                <span className="font-bold text-primary-700 tabular-nums">{a.code}</span>
+                <span className="text-gray-700 truncate max-w-[190px]">{a.libelle}</span>
+                {dernierTarif(a.code) !== undefined && (
+                  <span className="text-gray-400 tabular-nums">
+                    {dernierTarif(a.code)!.toLocaleString('fr-FR')} DH
+                  </span>
+                )}
+                {a.aVerifier && <span className="text-amber-600">⚠</span>}
+                {porte(a.code) && <span className="text-[9.5px]">déjà porté</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Les raccourcis ────────────────────────────────────────────── */}
       {recents.length > 0 && (

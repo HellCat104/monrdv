@@ -178,6 +178,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       recentVitals={vitalsRes.data ?? []}
       consultationCertificates={thisAptCertRes.data ?? []}
       consultationTypeId={consultationType?.id ?? null}
+      motifNom={consultationType?.name ?? null}
       queueStatus={(apt as { queue_status?: string | null }).queue_status ?? null}
       attendanceActuelle={(apt as { attendance?: string | null }).attendance ?? null}
       reprogrammerJours={reprogrammerJours}

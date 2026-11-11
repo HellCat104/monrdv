@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import ChoixActesNgap, { type ActeRecent } from '@/components/dashboard/ChoixActesNgap'
+import { actesSuggeres } from '@/lib/motifs-dentaires'
 import type { ActeDentaire } from '@/lib/actes-dentaires'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
@@ -81,7 +82,7 @@ interface Feuille {
 
 export default function FeuilleSoinsCard({
   patientId, appointmentId = null, dental = false, mutuelle = null, suggestions = [],
-  images = null, inpe = null, declencheur = 0, enFenetre = false, onFerme,
+  images = null, inpe = null, declencheur = 0, enFenetre = false, onFerme, motif = null,
 }: {
   patientId: string
   appointmentId?: string | null
@@ -120,6 +121,10 @@ export default function FeuilleSoinsCard({
   enFenetre?: boolean
   /** Refermer la fenêtre : à l'annulation, et une fois la feuille établie. */
   onFerme?: () => void
+  /** Le motif du rendez-vous en cours. Il sert à proposer, en tête de la
+   *  feuille, les actes qu'il amène le plus souvent. Absent dans le dossier du
+   *  patient, où la feuille ne se rattache à aucun rendez-vous. */
+  motif?: string | null
 }) {
   // L'organisme de CETTE feuille.
   //
@@ -615,6 +620,8 @@ export default function FeuilleSoinsCard({
               ne se tape plus : il vient avec l'acte. */}
           {dental && (
             <ChoixActesNgap
+              suggeres={actesSuggeres(motif)}
+              motif={motif}
               recents={recents}
               tarifs={tarifs}
               onChoisir={ajouterActe}

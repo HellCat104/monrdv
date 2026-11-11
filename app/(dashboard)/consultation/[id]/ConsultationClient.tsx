@@ -15,6 +15,7 @@ import { NOTE_TEMPLATE, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import DentalChart from '@/components/dashboard/DentalChart'
 import FeuilleSoinsCard, { type ActeSuggere } from '@/components/dashboard/FeuilleSoinsCard'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import ConsommationStock, { type DonneesConsommation } from '@/components/dashboard/ConsommationStock'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import OrthoCard from '@/components/dashboard/OrthoCard'
 import PerioCard from '@/components/dashboard/PerioCard'
@@ -58,7 +59,7 @@ interface Patient { id: string; first_name: string; last_name: string; age?: num
 export default function ConsultationClient({
   doctorId, appointmentId, appointmentDate, appointmentPaid, amountPaid, amountDue, defaultPrice,
   patient, recentNotes, recentPrescriptions, consultationPrescriptions, consultationCertificates, recentVitals,
-  consultationTypeId = null, queueStatus = null, attendanceActuelle = null, reprogrammerJours = null, v76 = false,
+  consultationTypeId = null, motifNom = null, queueStatus = null, attendanceActuelle = null, reprogrammerJours = null, v76 = false,
   prochainRdv = null, mots: motsInitiaux = [], v77 = false, doctorName = '',
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
   isDental = false, mutuelle = null, suggestionsFeuille = [], doctorInpe = null, regleSurDevis = false, alertes,
@@ -83,6 +84,9 @@ export default function ConsultationClient({
   consultationCertificates: Row[]
   /** Motif du RDV en cours : repris par défaut pour le rendez-vous suivant. */
   consultationTypeId?: string | null
+  /** Le libellé du motif du rendez-vous. Il sert à PROPOSER : les actes de la
+   *  feuille de soins, et les consommables à la clôture. */
+  motifNom?: string | null
   /** État de file à l'ouverture : sert à ne prévenir l'accueil qu'une fois. */
   queueStatus?: string | null
   /** Bilan de présence déjà noté : la clôture ne doit pas écraser un retard. */
@@ -157,6 +161,37 @@ export default function ConsultationClient({
   // de charger les actes du jour À CHAQUE ouverture, y compris la seconde.
   const [ouvrirFeuille, setOuvrirFeuille] = useState(0)
   const [feuilleOuverte, setFeuilleOuverte] = useState(false)
+
+  // ── LE STOCK, À LA CLÔTURE ────────────────────────────────────────────────
+  // « Terminer la consultation » demande ce qui a été utilisé, et le retire du
+  // stock (components/dashboard/ConsommationStock.tsx).
+  //
+  // `stock` reste à null tant qu'il n'y a RIEN à demander : forfait sans
+  // stock, migration v88 absente, étagères vides. Dans ces cas la clôture se
+  // fait comme avant, sans fenêtre — on ne pose pas une question à laquelle
+  // il est impossible de répondre.
+  //
+  // Lu à l'ouverture de la consultation et non au clic : la fenêtre doit
+  // s'ouvrir tout de suite, pas après une attente au moment où le praticien
+  // a déjà la tête au patient suivant.
+  const [stock, setStock] = useState<DonneesConsommation | null>(null)
+  const [stockOuvert, setStockOuvert] = useState(false)
+  // Déduit, ou refusé : dans les deux cas on ne redemande pas. Sans ce
+  // drapeau, une clôture qui échoue APRÈS la déduction rouvrirait la fenêtre
+  // au second essai, et le stock descendrait deux fois.
+  const [stockRegle, setStockRegle] = useState(false)
+  useEffect(() => {
+    if (!isDental) return
+    let vivant = true
+    fetch(`/api/stock/consommation${consultationTypeId ? `?motif=${consultationTypeId}` : ''}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!vivant || !d || d.indisponible || !(d.articles?.length > 0)) return
+        setStock({ articles: d.articles, habituels: d.habituels ?? [], memoire: d.memoire !== false })
+      })
+      .catch(() => { /* pas de stock lisible : la clôture s'en passe */ })
+    return () => { vivant = false }
+  }, [isDental, consultationTypeId])
   // Qui a une feuille de soins à faire.
   //
   // La couverture du patient ne suffit pas comme condition : une fiche où la
@@ -576,6 +611,14 @@ export default function ConsultationClient({
     if (paidAmount == null && !actesSurDevis) {
       if (!confirm('Aucun encaissement n\'a été saisi pour cette consultation.\n\nTerminer quand même ? Vous pourrez encaisser plus tard depuis l\'agenda.')) return
     }
+    // Le stock d'abord : c'est maintenant que le praticien sait ce qu'il
+    // vient d'ouvrir. La fenêtre rappelle `cloturer()` quand il a répondu.
+    if (stock && !stockRegle) { setStockOuvert(true); return }
+    await cloturer()
+  }
+
+  /** La clôture elle-même, une fois toutes les questions posées. */
+  async function cloturer() {
     setFinishing(true)
     try {
       if (note.trim()) await saveNote()
@@ -1245,6 +1288,17 @@ export default function ConsultationClient({
 
           Les feuilles PASSÉES ne sont pas ici : elles vivent dans le dossier
           du patient. Cette fenêtre ne sert qu'à celle du jour. */}
+      {stock && (
+        <ConsommationStock
+          ouvert={stockOuvert}
+          onOuvert={setStockOuvert}
+          donnees={stock}
+          motifCle={consultationTypeId}
+          motifNom={motifNom}
+          onFini={() => { setStockRegle(true); setStockOuvert(false); cloturer() }}
+        />
+      )}
+
       {feuillePossible && (
         <Dialog open={feuilleOuverte} onOpenChange={setFeuilleOuverte}>
           <DialogContent className="max-w-3xl">
@@ -1262,6 +1316,7 @@ export default function ConsultationClient({
               suggestions={suggestionsFeuille}
               inpe={doctorInpe}
               declencheur={ouvrirFeuille}
+              motif={motifNom}
               enFenetre
               onFerme={() => setFeuilleOuverte(false)}
             />
