@@ -518,6 +518,43 @@ export default function ConsultationClient({
     }
   }
 
+  /** Les rubriques CLINIQUES d'une consultation structurée.
+   *
+   *  `antecedents`, `allergies` et `mesures` n'y sont pas : l'écran les
+   *  pré-remplit depuis le dossier. Une consultation où elles seules sont
+   *  remplies est une consultation où le praticien n'a rien écrit, et la
+   *  verrouiller lui laisserait une coquille qu'il ne peut plus corriger. */
+  const RUBRIQUES_ECRITES = [
+    'motif', 'histoire', 'symptomes', 'examen_clinique', 'hypotheses',
+    'diagnostic', 'examens_demandes', 'traitement', 'conduite',
+    'recommandations', 'arret_travail',
+  ] as const
+
+  /** Verrouille la consultation structurée de ce rendez-vous.
+   *
+   *  Clôturer le rendez-vous, c'est dire « j'ai fini avec ce patient » : la
+   *  consultation qu'on vient d'écrire n'a plus de raison de rester un
+   *  brouillon modifiable. Elle devient le compte rendu du jour.
+   *
+   *  Rien ici ne doit empêcher la clôture : sans la migration, sans
+   *  consultation structurée, ou sur une erreur, le rendez-vous se ferme
+   *  quand même. Une fonctionnalité en retard ne bloque jamais l'agenda. */
+  async function validerConsultationStructuree() {
+    try {
+      const { data } = await supabase
+        .from('consultations')
+        .select('*')
+        .eq('appointment_id', appointmentId).eq('doctor_id', doctorId).eq('statut', 'brouillon')
+      for (const c of data ?? []) {
+        const ecrite = RUBRIQUES_ECRITES.some((r) => String((c as Record<string, unknown>)[r] ?? '').trim())
+        if (!ecrite) continue
+        await supabase.from('consultations')
+          .update({ statut: 'validee', validee_le: new Date().toISOString() })
+          .eq('id', c.id).eq('doctor_id', doctorId)
+      }
+    } catch { /* ni table ni colonne : la clôture n'en dépend pas */ }
+  }
+
   // Clôture le RDV : note enregistrée, patient marqué présent et « parti »
   async function terminer() {
     // Une fois clôturé, le RDV quitte la file du jour : si rien n'a été encaissé,
@@ -533,6 +570,10 @@ export default function ConsultationClient({
     setFinishing(true)
     try {
       if (note.trim()) await saveNote()
+      // La consultation structurée du jour devient définitive avec la
+      // clôture : on ne ferme pas un patient en laissant son compte rendu
+      // au brouillon.
+      await validerConsultationStructuree()
       await supabase
         .from('appointments')
         // On ne repose « présent » que si rien de plus précis n'est noté : un
@@ -565,9 +606,20 @@ export default function ConsultationClient({
             <p className="text-xs text-gray-500">Consultation en cours</p>
           </div>
         </div>
-        <Button onClick={terminer} disabled={finishing}>
-          <CheckCircle2 className="h-4 w-4 mr-1.5" /> {finishing ? 'Clôture…' : 'Terminer la consultation'}
-        </Button>
+        {/* Clôturer verrouille aussi la consultation structurée du jour : on
+            le dit AVANT, sous le bouton. Un praticien qui l'apprend en
+            retrouvant son compte rendu figé n'a plus que la confiance en
+            moins. */}
+        <div className="flex flex-col items-end gap-1">
+          <Button onClick={terminer} disabled={finishing}>
+            <CheckCircle2 className="h-4 w-4 mr-1.5" /> {finishing ? 'Clôture…' : 'Terminer la consultation'}
+          </Button>
+          {lienConsultationStructuree && (
+            <p className="text-[11px] text-gray-400 text-right max-w-[260px]">
+              Clôturer valide la consultation du jour : elle ne sera plus modifiable.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
