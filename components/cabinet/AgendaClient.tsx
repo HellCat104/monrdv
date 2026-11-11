@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getNowInMaroc, formatTime, formatAge, minutesDepuis, APPEL_VALIDE_MIN } from '@/lib/utils'
 import { etatPatient, resumeEchange, retardMinutes } from '@/lib/file-attente'
 import { useRafraichissement } from '@/lib/rafraichissement'
@@ -31,13 +31,20 @@ import DaySheet from '@/components/shared/DaySheet'
 import { PatientPicker, type PatientChoice } from '@/components/shared/PatientPicker'
 import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
 import { FileText, UserPlus } from 'lucide-react'
+import { couleurDuRdv } from '@/lib/motifs-couleurs'
+import { grouperParFamille } from '@/lib/motifs-dentaires'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
 type Block = { id: string; date: string; start_time: string | null; end_time: string | null; reason: string | null }
 
 
-interface CType { id: string; name: string; duration_minutes: number | null; default_price: number | null }
+interface CType {
+  id: string; name: string; duration_minutes: number | null; default_price: number | null
+  /** La famille du motif (v86) : elle range le menu et porte la couleur. */
+  categorie?: string | null
+  couleur?: string | null
+}
 const NO_TYPE = '__none__'
 // « Sans poste précisé » est une valeur, pas une absence de choix (v89).
 const NO_POSTE = '__aucun__'
@@ -640,8 +647,20 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                   )}
 
                 </p>
+                {/* Le motif, dans la couleur de sa famille. L'assistante
+                    qui ouvre l'agenda à 8 h voit de quoi la journée est faite
+                    avant d'avoir lu un seul libellé — et la couleur est
+                    NOMMÉE, puisque le libellé reste écrit dedans. */}
                 <p className="text-xs text-gray-500 truncate">
-                  {a.consultation_type?.name || a.notes || 'Consultation'}
+                  {(() => {
+                    const teinte = couleurDuRdv(a)
+                    const libelle = a.consultation_type?.name || a.notes || 'Consultation'
+                    return teinte ? (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${teinte.fond} ${teinte.texte}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${teinte.point}`} /> {libelle}
+                      </span>
+                    ) : libelle
+                  })()}
                   {permissions.patients_contact && a.patient?.phone ? ` · ${a.patient.phone}` : ''}
                 </p>
               </div>
@@ -733,7 +752,25 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NO_TYPE}>Durée standard</SelectItem>
-                    {types.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}{t.duration_minutes ? ` · ${t.duration_minutes} min` : ''}</SelectItem>)}
+                    {/* Rangés par famille, avec leur couleur : un cabinet
+                        dentaire a une cinquantaine de motifs, et les séances
+                        d'un même traitement doivent se suivre. */}
+                    {grouperParFamille(types).map(([famille, motifs]) => (
+                      <SelectGroup key={famille || 'sans-famille'}>
+                        {famille && <SelectLabel className="text-[11px] uppercase tracking-wider text-gray-400">{famille}</SelectLabel>}
+                        {motifs.map((t) => {
+                          const teinte = couleurDuRdv({ consultation_type: t })
+                          return (
+                            <SelectItem key={t.id} value={t.id}>
+                              <span className="flex items-center gap-1.5">
+                                {teinte && <span className={`h-2 w-2 rounded-full shrink-0 ${teinte.point}`} />}
+                                {t.name}{t.duration_minutes ? ` · ${t.duration_minutes} min` : ''}
+                              </span>
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectGroup>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

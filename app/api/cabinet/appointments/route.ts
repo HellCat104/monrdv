@@ -20,6 +20,8 @@ import { displayName } from '@/lib/profession'
 import { formatDateShort } from '@/lib/utils'
 import { formatPhoneMaroc, isValidPhoneMaroc, generateCancelToken, getNowInMaroc, getDayKey, ageFromBirthDate } from '@/lib/utils'
 import { retardMinutes } from '@/lib/file-attente'
+import { posableAuCabinet } from '@/lib/motifs-dentaires'
+import { colonneAbsente } from '@/lib/migrations'
 import { format, parseISO, addDays, addMonths } from 'date-fns'
 import { proposerCreneauLibere, creneauDuRdv } from '@/lib/waitlist'
 import { randomUUID } from 'crypto'
@@ -58,7 +60,7 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
   let aptQuery = admin.from('appointments')
-    .select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)')
+    .select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name, couleur), patient:patients(first_name, last_name, phone)')
     .eq('doctor_id', ctx.doctor.id)
   aptQuery = isRange
     ? aptQuery.gte('date', from!).lte('date', to!).order('date', { ascending: true }).order('time', { ascending: true })
@@ -66,12 +68,20 @@ export async function GET(req: NextRequest) {
 
   const [aptRes, typesRes, docRes, blocksRes] = await Promise.all([
     aptQuery,
-    // Motifs RÉSERVABLES seulement (v86) : la secrétaire ne doit pas pouvoir
-    // poser « composite 2 faces » comme motif d'un rendez-vous.
+    // Tout ce que LE CABINET peut poser en rendez-vous.
+    //
+    // La requête ne gardait que `rdv = true`, c'est-à-dire les motifs ouverts
+    // à la réservation EN LIGNE. La secrétaire, qui pose la quasi-totalité des
+    // rendez-vous, ne trouvait donc pas « Couronne — 2e séance : essayage » —
+    // le motif qu'elle fixe justement en sortant de la première séance. Le
+    // tri (`posableAuCabinet`) écarte les lignes purement comptables du
+    // catalogue d'actes : un composite se facture, il ne se réserve pas.
     admin.from('consultation_types')
-      .select('id, name, duration_minutes, default_price')
-      .eq('doctor_id', ctx.doctor.id).eq('active', true).eq('rdv', true)
-      .order('created_at', { ascending: true }),
+      .select('id, name, duration_minutes, default_price, categorie, couleur, rdv, acte')
+      .eq('doctor_id', ctx.doctor.id).eq('active', true)
+      // Départage à date de création égale (catalogue créé d'un bloc) : sans
+      // lui, l'ordre du menu change d'une ouverture à l'autre.
+      .order('created_at', { ascending: true }).order('name', { ascending: true }),
     // Les horaires d'ouverture servent à dessiner la grille horaire de la
     // secrétaire : sans eux, la grille s'ouvre à 8 h et ferme à 19 h pour tout
     // le monde, et les cases hors ouverture ne se distinguent pas des trous.
@@ -169,9 +179,27 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  // Les motifs, triés en mémoire plutôt qu'en SQL (voir la requête).
+  // Si la v86 ou la v98 ne sont pas passées, la projection échoue sur une
+  // colonne inconnue : on relit alors les motifs sous leur forme d'avant,
+  // plutôt que de rendre un menu vide — une migration en retard ne doit pas
+  // empêcher la secrétaire de poser un rendez-vous.
+  type MotifCabinet = {
+    id: string; name: string; duration_minutes: number | null; default_price: number | null
+    categorie?: string | null; couleur?: string | null; rdv?: boolean | null; acte?: boolean | null
+  }
+  let motifs: MotifCabinet[] = (typesRes.data ?? []) as MotifCabinet[]
+  if (typesRes.error && colonneAbsente(typesRes.error.code)) {
+    const repli = await admin.from('consultation_types')
+      .select('id, name, duration_minutes, default_price')
+      .eq('doctor_id', ctx.doctor.id).eq('active', true)
+      .order('created_at', { ascending: true }).order('name', { ascending: true })
+    motifs = (repli.data ?? []) as MotifCabinet[]
+  }
+
   return NextResponse.json({
     appointments,
-    consultationTypes: ctx.confidential ? [] : (typesRes.data ?? []),
+    consultationTypes: ctx.confidential ? [] : motifs.filter(posableAuCabinet),
     defaultDuration: docRes.data?.appointment_duration ?? 30,
     workingHours: docRes.data?.working_hours ?? null,
     blocks: blocksRes.data ?? [],
@@ -224,7 +252,7 @@ export async function POST(req: NextRequest) {
       status: 'confirmed', walk_in: true, queue_status: 'arrive', attendance: 'present',
       cancel_token: generateCancelToken(), specialty: specs0.length === 1 ? specs0[0] : null,
       duration_minutes: doc0?.appointment_duration ?? 30, consent_at: null,
-    }).select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+    }).select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name, couleur), patient:patients(first_name, last_name, phone)').single()
     if (aErr || !appt0) return NextResponse.json({ error: 'Échec de l\'ajout à la file' }, { status: 500 })
     return NextResponse.json({ appointment: filtreConfidentiel(appt0, ctx.confidential) }, { status: 201 })
   }
@@ -379,7 +407,7 @@ export async function POST(req: NextRequest) {
         recurrence_group_id: groupId,
         ...(postePose ? { poste_id: postePose } : {}),
       })
-      .select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+      .select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, consultation_type:consultation_types(name, couleur), patient:patients(first_name, last_name, phone)').single()
     if (e || !appt) {
       // 23505 = même heure de départ ; 23P01 = chevauchement (contrainte d'exclusion)
       if (e?.code === '23505' || e?.code === '23P01') { skipped.push(ds); continue }
@@ -575,7 +603,7 @@ export async function PATCH(req: NextRequest) {
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Aucune modification' }, { status: 400 })
 
   const { data: updated, error } = await admin.from('appointments')
-    .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, cancel_token, consultation_type:consultation_types(name), patient:patients(first_name, last_name, phone)').single()
+    .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, cancel_token, consultation_type:consultation_types(name, couleur), patient:patients(first_name, last_name, phone)').single()
   if (error) {
     if (error.code === '23505' || error.code === '23P01') {
       return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant.' }, { status: 409 })

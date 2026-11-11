@@ -18,13 +18,16 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { format } from 'date-fns'
 import type { Doctor, ConsultationType, TimeSlot } from '@/types'
 import { couleurMotif } from '@/lib/motifs-couleurs'
+import { grouperParFamille, posableAuCabinet } from '@/lib/motifs-dentaires'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
 import { posteActifs, posteUtile, type Poste } from '@/lib/postes'
 
@@ -108,27 +111,28 @@ export function AddAppointmentDialog({
 
   useEffect(() => {
     if (!open) return
+    // Ce que LE CABINET peut poser — pas ce que le patient peut réserver.
+    //
+    // La requête filtrait sur `rdv = true`, c'est-à-dire sur les motifs
+    // ouverts à la réservation EN LIGNE. C'est la bonne règle pour la page
+    // publique ; ici elle était fausse. « Couronne — 2e séance : essayage »
+    // n'a rien à faire sur la page publique — un patient ne prend pas
+    // rendez-vous pour un essayage — mais c'est précisément ce que la
+    // secrétaire pose en sortant de la première séance. Elle ne le trouvait
+    // pas dans le menu.
+    //
+    // On écarte seulement les lignes PUREMENT comptables du catalogue d'actes
+    // (v86) : un composite se facture, il ne se réserve pas.
     supabase
       .from('consultation_types')
       .select('*')
       .eq('doctor_id', doctor.id)
       .eq('active', true)
-      // Motifs réservables seulement (v86). Sans la migration, la requête
-      // échoue sur une colonne inconnue : on retombe sur la liste complète,
-      // qui était le comportement d'avant.
-      .eq('rdv', true)
       // Départage à date de création égale (catalogue v86 créé d'un bloc) :
       // sans lui, l'ordre du menu change d'une ouverture à l'autre.
       .order('created_at', { ascending: true })
       .order('name', { ascending: true })
-      .then(({ data, error }) => {
-        if (!error) { setConsultTypes(data ?? []); return }
-        supabase.from('consultation_types').select('*')
-          .eq('doctor_id', doctor.id).eq('active', true)
-          .order('created_at', { ascending: true })
-          .order('name', { ascending: true })
-          .then(({ data: tout }) => setConsultTypes(tout ?? []))
-      })
+      .then(({ data }) => setConsultTypes((data ?? []).filter(posableAuCabinet)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, doctor.id])
 
@@ -235,17 +239,27 @@ export function AddAppointmentDialog({
                   {/* La pastille de couleur dès la saisie : celui qui entre
                       le rendez-vous voit la couleur qu'il donne à sa journée,
                       au lieu de la découvrir dans l'agenda. */}
-                  {consultTypes.map((t) => {
-                    const teinte = couleurMotif(t.couleur)
-                    return (
-                      <SelectItem key={t.id} value={t.id}>
-                        <span className="flex items-center gap-1.5">
-                          {teinte && <span className={`h-2 w-2 rounded-full shrink-0 ${teinte.point}`} />}
-                          {t.name} · {t.duration_minutes} min
-                        </span>
-                      </SelectItem>
-                    )
-                  })}
+                  {/* Rangés par famille : un cabinet dentaire qui a posé le
+                      catalogue a une cinquantaine de motifs, et les trois
+                      séances d'une couronne doivent se suivre. Un cabinet qui
+                      n'a pas rangé ses motifs n'a qu'un groupe, sans titre, et
+                      son menu ne change pas. */}
+                  {grouperParFamille(consultTypes).map(([famille, motifs]) => (
+                    <SelectGroup key={famille || 'sans-famille'}>
+                      {famille && <SelectLabel className="text-[11px] uppercase tracking-wider text-gray-400">{famille}</SelectLabel>}
+                      {motifs.map((t) => {
+                        const teinte = couleurMotif(t.couleur)
+                        return (
+                          <SelectItem key={t.id} value={t.id}>
+                            <span className="flex items-center gap-1.5">
+                              {teinte && <span className={`h-2 w-2 rounded-full shrink-0 ${teinte.point}`} />}
+                              {t.name} · {t.duration_minutes} min
+                            </span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectGroup>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

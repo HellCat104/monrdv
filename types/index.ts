@@ -154,6 +154,18 @@ export interface ConsultationType {
   /** Clé de couleur du motif dans l'agenda (v98). Absente = pas de couleur :
    *  le rendez-vous garde son apparence par défaut. Voir lib/motifs-couleurs. */
   couleur?: string | null
+  /** La famille du motif (v86) : « Endodontie », « Prothèse et esthétique »…
+   *  Elle range la liste des Paramètres et le menu « Motif » de la création
+   *  d'un rendez-vous ; elle porte aussi la couleur de toute la famille. */
+  categorie?: string | null
+  /** Ce rendez-vous dépend d'un travail de laboratoire (v86). */
+  labo?: boolean | null
+  /** Réservable EN LIGNE par le patient (v86). Faux = le cabinet seul le
+   *  pose. À ne pas confondre avec `acte`, qui désigne une ligne de
+   *  facturation et non un rendez-vous. */
+  rdv?: boolean | null
+  /** Ligne du catalogue d'actes facturables (v86), pas un motif d'agenda. */
+  acte?: boolean | null
   active: boolean
   created_at: string
 }

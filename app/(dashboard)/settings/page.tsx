@@ -18,7 +18,11 @@ import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals, type VitalDef } from '@/types'
 import { COULEURS_MOTIF, couleurMotif, colonneCouleurAbsente } from '@/lib/motifs-couleurs'
-import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle, Paperclip } from 'lucide-react'
+import {
+  MOTIFS_DENTAIRES, NOMBRE_MOTIFS_DENTAIRES, motifsAInstaller, couleurDeLaFamille,
+  grouperParFamille,
+} from '@/lib/motifs-dentaires'
+import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle, Paperclip, Layers } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 import { LogoCabinet } from '@/components/dashboard/LogoCabinet'
 import { PhotosCabinet } from '@/components/dashboard/PhotosCabinet'
@@ -143,6 +147,12 @@ export default function SettingsPage() {
   /** La v98 n'est pas passée : la couleur ne s'enregistre pas, et on le dit
    *  au lieu de laisser le praticien cliquer sur des pastilles sans effet. */
   const [couleurKo, setCouleurKo] = useState(false)
+  const [installation, setInstallation] = useState(false)
+  // Tous les libellés de motifs du cabinet, SUPPRIMÉS COMPRIS. Un motif
+  // supprimé est désactivé, pas effacé : s'il ne comptait pas ici, le
+  // catalogue le reposerait à chaque installation, et le praticien qui ne
+  // fait pas d'orthodontie verrait revenir ce qu'il vient d'écarter.
+  const [nomsMotifs, setNomsMotifs] = useState<{ name: string }[]>([])
   // Le catalogue d'actes est une affaire de dentiste : lui seul range ses
   // soins par catégorie et leur donne un code interne.
   const estDentiste = isDentalDoctor([doctor?.specialty, ...((doctor?.specialties as string[] | null) ?? [])])
@@ -235,10 +245,75 @@ export default function SettingsPage() {
           // liste, sous le doigt de celui qui venait de cliquer.
           .order('name', { ascending: true })
         setConsultTypes(types ?? [])
+
+        const { data: noms } = await supabase
+          .from('consultation_types')
+          .select('name')
+          .eq('doctor_id', data.id)
+        setNomsMotifs((noms ?? []) as { name: string }[])
       }
     }
     load()
   }, [])
+
+  // POSER LE CATALOGUE DENTAIRE.
+  //
+  // Rejouable : on ne pose que ce qui manque, en comparant les libellés sans
+  // accents ni casse (voir lib/motifs-dentaires.ts). Un cabinet qui a déjà son
+  // « detartrage » n'en récolte pas un second.
+  //
+  // Aucun tarif n'est écrit : les honoraires dentaires sont libres au Maroc, et
+  // un prix proposé par le logiciel serait lu comme une référence.
+  async function handleInstallerCatalogue() {
+    if (!doctor) return
+    const manquants = motifsAInstaller([...nomsMotifs, ...consultTypes])
+    if (manquants.length === 0) return
+    setInstallation(true)
+    const base = manquants.map((m) => ({
+      doctor_id: doctor.id,
+      name: m.nom,
+      duration_minutes: m.minutes,
+      default_price: null,
+    }))
+    const complet = manquants.map((m, i) => ({
+      ...base[i],
+      categorie: m.categorie,
+      couleur: m.couleur,
+      labo: m.labo ?? false,
+      // `rdv` = réservable EN LIGNE. Les séances techniques restent au
+      // cabinet : un patient ne prend pas rendez-vous pour un essayage.
+      rdv: m.enLigne ?? false,
+      acte: false,
+    }))
+
+    let { data, error } = await supabase.from('consultation_types').insert(complet).select()
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      // Base sans la v86 ou la v98 : on pose quand même les motifs et leurs
+      // durées, et on DIT ce qui manque, plutôt que de ne rien poser du tout.
+      const repli = await supabase.from('consultation_types').insert(base).select()
+      data = repli.data; error = repli.error
+      if (!error) { setCatalogueKo(true); setCouleurKo(true) }
+    }
+    setInstallation(false)
+    if (error || !data) {
+      alert("Le catalogue n'a pas pu être installé. Réessayez dans un instant.")
+      return
+    }
+    const poses = [...data].sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr'))
+    setConsultTypes((prev) => [...prev, ...poses])
+    setNomsMotifs((prev) => [...prev, ...poses.map((m) => ({ name: String(m.name) }))])
+  }
+
+  // Réservable en ligne, ou posé par le cabinet seulement.
+  async function handleRdvConsultType(id: string, rdv: boolean) {
+    const avant = consultTypes.find((t) => t.id === id)?.rdv ?? null
+    setConsultTypes((prev) => prev.map((t) => (t.id === id ? { ...t, rdv } : t)))
+    const { error } = await supabase.from('consultation_types').update({ rdv }).eq('id', id)
+    if (!error) return
+    setConsultTypes((prev) => prev.map((t) => (t.id === id ? { ...t, rdv: avant } : t)))
+    if (error.code === '42703' || error.code === 'PGRST204') setCatalogueKo(true)
+    else alert("Ce réglage n'a pas pu être enregistré.")
+  }
 
   async function handleAddConsultType() {
     if (!doctor || !newTypeName.trim()) return
@@ -1329,10 +1404,68 @@ export default function SettingsPage() {
               />
             </div>
 
-            {/* Liste des motifs */}
+            {/* LE CATALOGUE DENTAIRE PRÊT À POSER — dentistes seulement.
+                Il s'affiche AVANT la liste : un cabinet qui s'installe a une
+                liste vide, et c'est à ce moment-là que le catalogue sert. */}
+            {estDentiste && (() => {
+              const manquants = motifsAInstaller([...nomsMotifs, ...consultTypes])
+              return (
+                <div className="rounded-lg border border-dashed border-primary-300 bg-primary-50/40 px-3 py-3">
+                  <div className="flex items-start gap-2">
+                    <Layers className="h-4 w-4 text-primary-500 mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-800">Catalogue dentaire</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {NOMBRE_MOTIFS_DENTAIRES} motifs tout prêts, rangés en {MOTIFS_DENTAIRES.length} familles,
+                        chacune avec sa couleur. Les traitements qui tiennent en plusieurs rendez-vous
+                        portent leur séance et ce qu&apos;on y fait — « Couronne — 2<sup>e</sup> séance : essayage »
+                        dit à l&apos;assistante que le travail doit être revenu du laboratoire ce jour-là.
+                        Aucun tarif n&apos;est posé : les honoraires sont les vôtres. Vous supprimez
+                        ensuite ce que vous ne pratiquez pas.
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {MOTIFS_DENTAIRES.map((f) => {
+                          const c = couleurDeLaFamille(f)
+                          return (
+                            <span key={f.nom}
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${
+                                c ? `${c.fond} ${c.texte}` : 'bg-gray-100 text-gray-600'}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${c?.point ?? 'bg-gray-400'}`} />
+                              {f.nom} · {f.motifs.length}
+                            </span>
+                          )
+                        })}
+                      </div>
+                      <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                        <Button type="button" size="sm" variant="outline"
+                          onClick={handleInstallerCatalogue}
+                          disabled={installation || manquants.length === 0}>
+                          <Plus className="h-4 w-4 mr-1" />
+                          {installation ? 'Installation…'
+                            : manquants.length === 0 ? 'Catalogue déjà posé'
+                            : `Poser ${manquants.length} motif${manquants.length > 1 ? 's' : ''}`}
+                        </Button>
+                        <span className="text-[11px] text-gray-400">
+                          Rien n&apos;est écrasé : les motifs que vous avez déjà sont reconnus et laissés en place.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Liste des motifs, rangée par famille */}
             {consultTypes.length > 0 && (
-              <div className="space-y-2">
-                {consultTypes.map((t) => {
+              <div className="space-y-4">
+                {grouperParFamille(consultTypes).map(([famille, motifs]) => (
+                <div key={famille || 'sans-famille'} className="space-y-2">
+                  {famille && (
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 pl-1">
+                      {famille}
+                    </p>
+                  )}
+                  {motifs.map((t) => {
                   const teinte = couleurMotif(t.couleur)
                   return (
                   <div key={t.id} className="bg-gray-50 rounded-lg px-3 py-2">
@@ -1379,10 +1512,29 @@ export default function SettingsPage() {
                       <span className="text-[11px] text-gray-400 ml-1">
                         {teinte ? 'Couleur dans l’agenda' : 'Sans couleur'}
                       </span>
+                      {/* Qui pose ce rendez-vous. Un patient réserve une
+                          douleur ou un détartrage ; il ne réserve pas un
+                          essayage de couronne — mais c'est au praticien de
+                          trancher, motif par motif. */}
+                      <button
+                        type="button"
+                        onClick={() => handleRdvConsultType(t.id, t.rdv !== true)}
+                        title={t.rdv === true
+                          ? 'Le patient peut choisir ce motif sur votre page de réservation'
+                          : 'Seul le cabinet peut poser ce motif'}
+                        className={`ml-auto text-[11px] rounded-full px-2 py-0.5 border transition-colors ${
+                          t.rdv === true
+                            ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                            : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-100'}`}
+                      >
+                        {t.rdv === true ? 'En ligne' : 'Cabinet'}
+                      </button>
                     </div>
                   </div>
                   )
                 })}
+                </div>
+                ))}
               </div>
             )}
 
