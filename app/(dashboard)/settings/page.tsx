@@ -17,6 +17,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Doctor, WorkingHours, DaySchedule, ConsultationType } from '@/types'
 import { DAY_NAMES_FR, DAY_ORDER, DEFAULT_WORKING_HOURS, SPECIALITES_LIST, VILLES_MAROC, VITAL_DEFS, resolveEnabledVitals, type VitalDef } from '@/types'
+import { COULEURS_MOTIF, couleurMotif, colonneCouleurAbsente } from '@/lib/motifs-couleurs'
 import { Settings, Clock, Copy, Check, ExternalLink, Camera, MapPin, CalendarOff, Plus, Trash2, ListChecks, Activity, X, KeyRound, Eye, EyeOff, AlertTriangle, Paperclip } from 'lucide-react'
 import type { BlockedDate } from '@/types'
 import { LogoCabinet } from '@/components/dashboard/LogoCabinet'
@@ -139,6 +140,9 @@ export default function SettingsPage() {
   const [newTypeLabo, setNewTypeLabo] = useState(false)
   const [newTypeRdv, setNewTypeRdv] = useState(true)
   const [catalogueKo, setCatalogueKo] = useState(false)
+  /** La v98 n'est pas passée : la couleur ne s'enregistre pas, et on le dit
+   *  au lieu de laisser le praticien cliquer sur des pastilles sans effet. */
+  const [couleurKo, setCouleurKo] = useState(false)
   // Le catalogue d'actes est une affaire de dentiste : lui seul range ses
   // soins par catégorie et leur donne un code interne.
   const estDentiste = isDentalDoctor([doctor?.specialty, ...((doctor?.specialties as string[] | null) ?? [])])
@@ -272,6 +276,25 @@ export default function SettingsPage() {
         ? 'Ce code est déjà utilisé par un autre acte de votre cabinet.'
         : 'L’enregistrement de l’acte a échoué.')
     }
+  }
+
+  /** Donner — ou retirer — sa couleur à un motif.
+   *
+   *  Reprendre la même teinte l'enlève : c'est le geste qu'on essaie d'abord
+   *  quand on veut revenir en arrière, et il n'y a rien à expliquer. */
+  async function handleCouleurConsultType(id: string, cle: string) {
+    const actuel = consultTypes.find((t) => t.id === id)
+    const couleur = actuel?.couleur === cle ? null : cle
+    // On peint tout de suite : une pastille qui attend l'aller-retour du
+    // serveur donne l'impression que le clic n'a pas pris.
+    setConsultTypes((prev) => prev.map((t) => (t.id === id ? { ...t, couleur } : t)))
+    const { error } = await supabase.from('consultation_types').update({ couleur }).eq('id', id)
+    if (!error) return
+    // Échec : on remet la pastille où elle était. Un réglage qui ment est
+    // pire qu'un réglage absent.
+    setConsultTypes((prev) => prev.map((t) => (t.id === id ? { ...t, couleur: actuel?.couleur ?? null } : t)))
+    if (colonneCouleurAbsente(error)) setCouleurKo(true)
+    else alert('La couleur n’a pas pu être enregistrée.')
   }
 
   async function handleRemoveConsultType(id: string) {
@@ -1277,7 +1300,9 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400 mt-1">
               Optionnel — si vous définissez des motifs, le patient choisit le sien à la réservation
               et la durée du créneau s&apos;adapte automatiquement (ex : Première consultation 45 min, Suivi 15 min).
-              Sans motif, la durée par défaut ci-dessus s&apos;applique.
+              Sans motif, la durée par défaut ci-dessus s&apos;applique. Donnez une couleur
+              à chacun et l&apos;agenda se lit d&apos;un coup d&apos;œil : on voit de quoi la
+              journée est faite avant d&apos;en lire les libellés.
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -1300,30 +1325,65 @@ export default function SettingsPage() {
             {/* Liste des motifs */}
             {consultTypes.length > 0 && (
               <div className="space-y-2">
-                {consultTypes.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                      <span className="text-sm font-medium text-gray-800 truncate">{t.name}</span>
-                      <span className="text-xs text-primary-600 bg-primary-50 rounded-full px-2 py-0.5 shrink-0">
-                        {t.duration_minutes} min
-                      </span>
-                      {t.default_price != null && (
-                        <span className="text-xs text-green-700 bg-green-50 rounded-full px-2 py-0.5 shrink-0">
-                          {t.default_price} DH
+                {consultTypes.map((t) => {
+                  const teinte = couleurMotif(t.couleur)
+                  return (
+                  <div key={t.id} className="bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        {/* Le motif porte sa couleur ici aussi : on choisit
+                            une teinte en voyant ce qu'elle donnera. */}
+                        <span className={`text-sm font-medium truncate rounded-full px-2 py-0.5 ${
+                          teinte ? `${teinte.fond} ${teinte.texte}` : 'text-gray-800'}`}>
+                          {t.name}
                         </span>
-                      )}
+                        <span className="text-xs text-primary-600 bg-primary-50 rounded-full px-2 py-0.5 shrink-0">
+                          {t.duration_minutes} min
+                        </span>
+                        {t.default_price != null && (
+                          <span className="text-xs text-green-700 bg-green-50 rounded-full px-2 py-0.5 shrink-0">
+                            {t.default_price} DH
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveConsultType(t.id)}
+                        className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                        title="Supprimer ce motif"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveConsultType(t.id)}
-                      className="text-gray-300 hover:text-red-500 transition-colors shrink-0"
-                      title="Supprimer ce motif"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {/* La palette. Sans couleur choisie, le motif garde
+                        l'apparence habituelle de l'agenda : on n'impose rien. */}
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      {COULEURS_MOTIF.map((c) => (
+                        <button
+                          key={c.cle}
+                          type="button"
+                          onClick={() => handleCouleurConsultType(t.id, c.cle)}
+                          title={t.couleur === c.cle ? `${c.label} — cliquez pour retirer la couleur` : c.label}
+                          aria-label={c.label}
+                          className={`h-4 w-4 rounded-full ${c.point} transition-transform hover:scale-110 ${
+                            t.couleur === c.cle ? 'ring-2 ring-offset-1 ring-gray-500' : ''}`}
+                        />
+                      ))}
+                      <span className="text-[11px] text-gray-400 ml-1">
+                        {teinte ? 'Couleur dans l’agenda' : 'Sans couleur'}
+                      </span>
+                    </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
+            )}
+
+            {couleurKo && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
+                Les couleurs de motif attendent une migration de la base (v98). Le reste des
+                motifs fonctionne normalement.
+              </p>
             )}
 
             {/* Ajout d'un motif */}

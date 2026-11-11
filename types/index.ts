@@ -151,6 +151,9 @@ export interface ConsultationType {
   name: string
   duration_minutes: number
   default_price?: number | null // tarif pré-rempli à l'encaissement
+  /** Clé de couleur du motif dans l'agenda (v98). Absente = pas de couleur :
+   *  le rendez-vous garde son apparence par défaut. Voir lib/motifs-couleurs. */
+  couleur?: string | null
   active: boolean
   created_at: string
 }

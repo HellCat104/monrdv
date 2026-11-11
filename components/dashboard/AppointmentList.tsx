@@ -10,6 +10,7 @@ import PanneauAccueil, { type Mot } from '@/components/dashboard/PanneauAccueil'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, VITAL_DEFS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMethod } from '@/types'
 import { posteUtile, nomPoste, couleurPoste, type Poste } from '@/lib/postes'
+import { couleurDuRdv } from '@/lib/motifs-couleurs'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -423,12 +424,24 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     {apt.patient.phone}
                   </span>
                 )}
-                {(apt.consultation_type?.name || apt.notes) && (
-                  <span className="flex items-center gap-1">
-                    <ClipboardList className="h-3 w-3" />
-                    {apt.consultation_type?.name || apt.notes}
-                  </span>
-                )}
+                {/* Le motif, dans sa couleur quand le cabinet lui en a donné
+                    une. L'étiquette porte le nom À CÔTÉ de la teinte : une
+                    couleur seule se devine, une couleur nommée se lit, et
+                    l'agenda n'a pas besoin d'une légende ailleurs. */}
+                {(apt.consultation_type?.name || apt.notes) && (() => {
+                  const teinte = couleurDuRdv(apt)
+                  const libelle = apt.consultation_type?.name || apt.notes
+                  return teinte ? (
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${teinte.fond} ${teinte.texte}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${teinte.point}`} /> {libelle}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <ClipboardList className="h-3 w-3" />
+                      {libelle}
+                    </span>
+                  )
+                })()}
                 {apt.amount_paid != null && (() => {
                   const st = paymentStatus(apt)
                   const reste = (apt.amount_due ?? 0) - apt.amount_paid

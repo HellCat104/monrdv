@@ -680,3 +680,19 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      produite par le logiciel du capteur. Et aucune compression — une image de
      diagnostic ne se redimensionne pas, contrairement aux photos du cabinet.
      Additive.
+
+ 98. `migration_v98_couleur_motif.sql`
+     Migration v98 — LA COULEUR D'UN MOTIF. Ajoute `consultation_types.couleur`
+     (text, NULL par défaut).
+     Un agenda de dentiste n'est pas une suite de rendez-vous
+     interchangeables : un détartrage de vingt minutes et une pose de couronne
+     d'une heure ne se préparent pas pareil. L'assistante qui ouvre l'écran à
+     8 h veut savoir de quoi sa journée est faite avant d'en lire les libellés
+     un par un.
+     AUCUNE COULEUR N'EST ATTRIBUÉE : un cabinet qui n'a rien choisi garde
+     l'agenda qu'il connaît. La colonne ne porte qu'une CLÉ ('ciel',
+     'menthe'…) ; les teintes vivent dans lib/motifs-couleurs.ts, pas en base —
+     des codes hexadécimaux y auraient figé l'apparence de l'agenda dans les
+     données du cabinet.
+     Additive. Sans elle, les motifs fonctionnent, les pastilles de couleur le
+     disent et l'agenda garde son bleu.

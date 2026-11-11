@@ -13,6 +13,7 @@ import { getDayKey, getDayBreaks, getNowInMaroc, toMinutes } from '@/lib/utils'
 import { estAbsent } from '@/lib/file-attente'
 import type { Appointment, WorkingHours } from '@/types'
 import { posteUtile, nomPoste, couleurPoste, type Poste } from '@/lib/postes'
+import { couleurDuRdv } from '@/lib/motifs-couleurs'
 
 export interface WeekBlock {
   id: string
@@ -338,6 +339,11 @@ export function WeekGrid({
                   // Même règle que la vue Jour : voir estAbsent().
                   const absent = estAbsent(r.apt)
                   const enAttente = r.apt.status === 'pending'
+                  // La couleur du motif, quand le cabinet en a choisi une.
+                  // Elle NE PASSE PAS devant un état : savoir qu'un patient
+                  // n'est pas venu compte plus que savoir ce qu'il venait
+                  // faire, et un rendez-vous à confirmer reste ambre.
+                  const teinte = absent || enAttente ? null : couleurDuRdv(r.apt)
                   return (
                     <button
                       key={r.apt.id}
@@ -356,6 +362,7 @@ export function WeekGrid({
                       } ${glisse?.id === r.apt.id ? 'opacity-40' : ''} ${
                         absent      ? 'bg-gray-100 border-gray-400 text-gray-500 line-through'
                         : enAttente ? 'bg-amber-50 border-amber-400 text-amber-900'
+                        : teinte    ? `${teinte.fond} ${teinte.bord} ${teinte.texte}`
                                     : 'bg-primary-50 border-primary-500 text-primary-900'
                       } ${
                         // Le liseré gauche prend la couleur du fauteuil : deux

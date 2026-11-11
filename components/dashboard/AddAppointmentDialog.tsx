@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import { format } from 'date-fns'
 import type { Doctor, ConsultationType, TimeSlot } from '@/types'
+import { couleurMotif } from '@/lib/motifs-couleurs'
 import { motsRecherche, filtreMot } from '@/lib/recherche-patient'
 import { posteActifs, posteUtile, type Poste } from '@/lib/postes'
 
@@ -227,11 +228,20 @@ export function AddAppointmentDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_TYPE}>Durée standard ({doctor.appointment_duration} min)</SelectItem>
-                  {consultTypes.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name} · {t.duration_minutes} min
-                    </SelectItem>
-                  ))}
+                  {/* La pastille de couleur dès la saisie : celui qui entre
+                      le rendez-vous voit la couleur qu'il donne à sa journée,
+                      au lieu de la découvrir dans l'agenda. */}
+                  {consultTypes.map((t) => {
+                    const teinte = couleurMotif(t.couleur)
+                    return (
+                      <SelectItem key={t.id} value={t.id}>
+                        <span className="flex items-center gap-1.5">
+                          {teinte && <span className={`h-2 w-2 rounded-full shrink-0 ${teinte.point}`} />}
+                          {t.name} · {t.duration_minutes} min
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>

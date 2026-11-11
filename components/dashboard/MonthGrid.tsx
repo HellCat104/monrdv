@@ -5,6 +5,7 @@
 // les fermetures — or c'est en vue Mois qu'on planifie ses congés.
 
 import { format, isSameMonth, isSameDay } from 'date-fns'
+import { couleurDuRdv } from '@/lib/motifs-couleurs'
 import { fr } from 'date-fns/locale'
 import { getNowInMaroc } from '@/lib/utils'
 import { estAbsent } from '@/lib/file-attente'
@@ -78,9 +79,11 @@ export function MonthGrid({
               cle: a.id,
               heure: a.time.substring(0, 5),
               // Même règle que les vues Jour et Semaine : voir estAbsent().
+              // La couleur du motif ne vient qu'APRÈS les états — absent et
+              // en attente disent quelque chose de plus urgent.
               couleur: estAbsent(a) ? 'bg-gray-400'
                      : a.status === 'pending' ? 'bg-amber-400'
-                     : 'bg-primary-500',
+                     : couleurDuRdv(a)?.point ?? 'bg-primary-500',
               texte: `${a.time.substring(0, 5)} ${a.patient?.first_name ?? ''} ${a.patient?.last_name ?? ''}`.trim(),
               barre: estAbsent(a),
               apt: a,
