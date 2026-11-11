@@ -81,7 +81,7 @@ interface Feuille {
 
 export default function FeuilleSoinsCard({
   patientId, appointmentId = null, dental = false, mutuelle = null, suggestions = [],
-  images = null, inpe = null, declencheur = 0,
+  images = null, inpe = null, declencheur = 0, enFenetre = false, onFerme,
 }: {
   patientId: string
   appointmentId?: string | null
@@ -105,6 +105,21 @@ export default function FeuilleSoinsCard({
    *  « Feuille de soins » est dans la colonne d'actions, à droite, alors que
    *  l'encart est au milieu, sous le reste du dossier. */
   declencheur?: number
+  /** L'encart est-il DANS une fenêtre ?
+   *
+   *  Sur l'écran de consultation, la feuille de soins vivait tout en bas de la
+   *  page, sous le schéma dentaire, les ordonnances et le reste du dossier :
+   *  un bouton de la colonne de droite y faisait descendre, et le praticien
+   *  perdait de vue ce qu'il était en train de faire. Elle s'ouvre maintenant
+   *  en fenêtre, par-dessus la consultation, et se referme dessus.
+   *
+   *  En fenêtre, l'encart se dépouille : pas d'en-tête (la fenêtre a son
+   *  titre), pas de bouton « Établir » (on y vient pour ça), pas d'historique
+   *  des feuilles passées — c'est le dossier du patient qui les montre, et
+   *  cette fenêtre-là ne sert qu'à cocher les actes du jour. */
+  enFenetre?: boolean
+  /** Refermer la fenêtre : à l'annulation, et une fois la feuille établie. */
+  onFerme?: () => void
 }) {
   // L'organisme de CETTE feuille.
   //
@@ -295,7 +310,9 @@ export default function FeuilleSoinsCard({
   useEffect(() => {
     if (declencheur === 0 || ouvert) return
     ouvrir()
-    bloc.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // Dans une fenêtre, l'encart est déjà sous les yeux : le faire défiler
+    // ferait bouger la page qui se trouve DERRIÈRE.
+    if (!enFenetre) bloc.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     // `ouvrir` lit l'état du moment : le relancer à chaque rendu rechargerait
     // les actes cochés et effacerait la saisie en cours.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,7 +364,10 @@ export default function FeuilleSoinsCard({
     }))
   }
 
-  async function etablir() {
+  /** Enregistrer la feuille — et ouvrir le document si on a demandé à
+   *  l'imprimer. Les deux boutons passent par ici : une feuille ne s'imprime
+   *  pas sans exister, c'est le même geste pour la base. */
+  async function etablir(imprimer: boolean) {
     const items = lignes
       .filter((l) => l.label.trim())
       .map((l) => ({
@@ -376,8 +396,8 @@ export default function FeuilleSoinsCard({
       setLignes([]); setCandidats([]); setTypesSoins([]); setEntenteNo(''); setNature('execution')
       setOuvert(false)
       await charger(toutCharge)
-      // Le document s'ouvre tout de suite : c'est pour l'imprimer qu'on l'établit.
-      window.open(`/feuille-soins/${data.id}`, '_blank', 'noopener')
+      if (imprimer) window.open(`/feuille-soins/${data.id}`, '_blank', 'noopener')
+      onFerme?.()
     } finally {
       setBusy(false)
     }
@@ -426,18 +446,20 @@ export default function FeuilleSoinsCard({
     : []
 
   return (
-    <div ref={bloc} className="bg-white border border-gray-100 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-primary-600 flex items-center gap-1.5">
-          <FileSpreadsheet className="h-4 w-4" /> Feuille de soins
-          {mutuelle && <span className="text-[11px] font-medium text-gray-400">· {mutuelle}</span>}
-        </h3>
-        {!ouvert && (
-          <Button size="sm" variant="outline" onClick={ouvrir}>
-            <Plus className="h-4 w-4 mr-1" /> Établir
-          </Button>
-        )}
-      </div>
+    <div ref={bloc} className={enFenetre ? '' : 'bg-white border border-gray-100 rounded-xl p-4'}>
+      {!enFenetre && (
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-primary-600 flex items-center gap-1.5">
+            <FileSpreadsheet className="h-4 w-4" /> Feuille de soins
+            {mutuelle && <span className="text-[11px] font-medium text-gray-400">· {mutuelle}</span>}
+          </h3>
+          {!ouvert && (
+            <Button size="sm" variant="outline" onClick={ouvrir}>
+              <Plus className="h-4 w-4 mr-1" /> Établir
+            </Button>
+          )}
+        </div>
+      )}
 
       {ouvert && (
         <div className="space-y-3 mb-4">
@@ -684,16 +706,27 @@ export default function FeuilleSoinsCard({
             </ul>
           )}
 
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={etablir} disabled={busy}>
-              {busy ? 'Établissement…' : 'Établir et imprimer'}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" onClick={() => etablir(true)} disabled={busy}>
+              <Printer className="h-4 w-4 mr-1" />
+              {busy ? 'Enregistrement…' : 'Imprimer'}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setOuvert(false)}>Annuler</Button>
+            <Button size="sm" variant="outline" onClick={() => etablir(false)} disabled={busy}>
+              Enregistrer
+            </Button>
+            <Button size="sm" variant="ghost"
+              onClick={() => { setOuvert(false); onFerme?.() }}>Annuler</Button>
+            {/* Les deux enregistrent : une feuille ne s'imprime pas sans
+                exister. On le dit, plutôt que de laisser croire qu'imprimer
+                ne garderait rien. */}
+            <span className="text-[11px] text-gray-400 basis-full">
+              Les deux enregistrent la feuille ; « Imprimer » ouvre en plus le document.
+            </span>
           </div>
         </div>
       )}
 
-      {erreur ? (
+      {enFenetre ? null : erreur ? (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
           Les feuilles de ce patient n&apos;ont pas pu être lues. Rechargez la page ; si le message
           revient, la base n&apos;est pas à jour (migration v65).
@@ -733,7 +766,7 @@ export default function FeuilleSoinsCard({
           Le dossier n'ouvre plus sur dix ans d'historique. Les feuilles
           précédentes existent toujours et se chargent d'un clic ; le bouton
           dit combien il y en a, pour qu'on sache ce qu'on va chercher. */}
-      {!erreur && !toutCharge && restantes > 0 && (
+      {!enFenetre && !erreur && !toutCharge && restantes > 0 && (
         <button
           onClick={chargerHistorique}
           disabled={chargementHistorique}

@@ -14,6 +14,7 @@ import { formatDateFr, formatAge, getNowInMaroc } from '@/lib/utils'
 import { NOTE_TEMPLATE, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import DentalChart from '@/components/dashboard/DentalChart'
 import FeuilleSoinsCard, { type ActeSuggere } from '@/components/dashboard/FeuilleSoinsCard'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import OrthoCard from '@/components/dashboard/OrthoCard'
 import PerioCard from '@/components/dashboard/PerioCard'
@@ -144,10 +145,18 @@ export default function ConsultationClient({
   // quatre titres vides dans le dossier.
   const trameNote = isPsy ? PSY_NOTE_TEMPLATE : isDental ? '' : NOTE_TEMPLATE
   const estTrameVierge = (t: string) => t === PSY_NOTE_TEMPLATE || t === NOTE_TEMPLATE
-  // Le bouton « Feuille de soins » de la colonne d'actions : il ouvre l'encart
-  // qui est au milieu de l'écran, loin sous le dossier. Un compteur, et non un
-  // booléen, pour qu'un second clic rouvre une feuille qu'on vient de fermer.
+  // Le bouton « Feuille de soins » de la colonne d'actions.
+  //
+  // L'encart vivait TOUT EN BAS de la page, sous le schéma dentaire, les
+  // ordonnances et le reste du dossier : le bouton y faisait descendre, et le
+  // praticien perdait de vue la consultation qu'il était en train de mener.
+  // Il ouvre maintenant une fenêtre par-dessus — on coche les actes, on
+  // imprime ou on enregistre, et on retombe sur la consultation.
+  //
+  // Le compteur, et non un simple booléen, sert toujours : il dit à l'encart
+  // de charger les actes du jour À CHAQUE ouverture, y compris la seconde.
   const [ouvrirFeuille, setOuvrirFeuille] = useState(0)
+  const [feuilleOuverte, setFeuilleOuverte] = useState(false)
   // Qui a une feuille de soins à faire.
   //
   // La couverture du patient ne suffit pas comme condition : une fiche où la
@@ -981,19 +990,8 @@ export default function ConsultationClient({
             </div>
           )}
 
-          {/* Feuille de soins. Les actes du jour y sont déjà inscrits : il
-              reste à vérifier les codes, et à imprimer. */}
-          {feuillePossible && (
-            <FeuilleSoinsCard
-              patientId={patient.id}
-              appointmentId={appointmentId}
-              dental={isDental}
-              mutuelle={mutuelle}
-              suggestions={suggestionsFeuille}
-              inpe={doctorInpe}
-              declencheur={ouvrirFeuille}
-            />
-          )}
+          {/* La feuille de soins n'est plus ici : elle s'ouvre en fenêtre,
+              depuis la colonne d'actions. Voir plus bas. */}
 
         </section>
 
@@ -1016,7 +1014,7 @@ export default function ConsultationClient({
                 le praticien la faisait plus tard, dans le dossier, et les
                 actes du jour n'y étaient plus pré-cochés. */}
             {feuillePossible && (
-              <button onClick={() => setOuvrirFeuille((n) => n + 1)} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+              <button onClick={() => { setOuvrirFeuille((n) => n + 1); setFeuilleOuverte(true) }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:border-primary-300 hover:bg-primary-50 transition-colors">
                 <FileSpreadsheet className="h-4 w-4 text-primary-500" /> Feuille de soins
                 <span className={`ml-auto text-[10px] truncate max-w-[100px] ${porteUneCouverture ? 'text-gray-400' : 'text-amber-600'}`}>
                   {porteUneCouverture ? mutuelle : 'organisme à saisir'}
@@ -1238,6 +1236,38 @@ export default function ConsultationClient({
           </div>
         </aside>
       </div>
+
+      {/* ── LA FEUILLE DE SOINS, EN FENÊTRE ───────────────────────────────
+          Elle s'établit au fauteuil, pendant que le patient est là pour
+          signer. En fenêtre, on coche les actes du jour — déjà pré-cochés —
+          on vérifie les codes, et on imprime ou on enregistre ; la
+          consultation reste derrière, intacte.
+
+          Les feuilles PASSÉES ne sont pas ici : elles vivent dans le dossier
+          du patient. Cette fenêtre ne sert qu'à celle du jour. */}
+      {feuillePossible && (
+        <Dialog open={feuilleOuverte} onOpenChange={setFeuilleOuverte}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                Feuille de soins
+                {mutuelle && <span className="text-xs font-normal text-gray-400">· {mutuelle}</span>}
+              </DialogTitle>
+            </DialogHeader>
+            <FeuilleSoinsCard
+              patientId={patient.id}
+              appointmentId={appointmentId}
+              dental={isDental}
+              mutuelle={mutuelle}
+              suggestions={suggestionsFeuille}
+              inpe={doctorInpe}
+              declencheur={ouvrirFeuille}
+              enFenetre
+              onFerme={() => setFeuilleOuverte(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
