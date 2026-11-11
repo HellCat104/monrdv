@@ -227,6 +227,13 @@ export default function SettingsPage() {
           .eq('doctor_id', data.id)
           .eq('active', true)
           .order('created_at', { ascending: true })
+          // Second critère OBLIGATOIRE : les motifs du catalogue (v86) ont été
+          // créés d'un bloc et portent la MÊME date de création. À égalité,
+          // PostgreSQL rend les lignes dans l'ordre où il les trouve sur le
+          // disque — et une modification déplace la ligne. Sans ce départage,
+          // donner une couleur à un motif le faisait sauter ailleurs dans la
+          // liste, sous le doigt de celui qui venait de cliquer.
+          .order('name', { ascending: true })
         setConsultTypes(types ?? [])
       }
     }

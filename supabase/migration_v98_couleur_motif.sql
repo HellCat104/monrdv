@@ -18,7 +18,7 @@
 -- Aucune couleur n'est attribuée aux motifs existants. Un cabinet qui n'a
 -- rien choisi garde l'agenda qu'il connaît : la couleur se décide, elle ne
 -- s'impose pas. Et aucune palette n'est stockée en base — la colonne ne porte
--- qu'une CLÉ ('ciel', 'menthe'…), dont les teintes vivent dans
+-- qu'une CLÉ ('fuchsia', 'menthe'…), dont les teintes vivent dans
 -- lib/motifs-couleurs.ts. Mettre des codes hexadécimaux en base aurait figé
 -- l'apparence de l'agenda dans les données du cabinet.
 -- ============================================================================
@@ -27,7 +27,7 @@ alter table public.consultation_types
   add column if not exists couleur text;
 
 comment on column public.consultation_types.couleur is
-  'Clé de couleur du motif dans l''agenda (ciel, menthe, violet, rose, turquoise, indigo, citron, ardoise). NULL = pas de couleur, le rendez-vous garde l''apparence par défaut. Les teintes vivent dans lib/motifs-couleurs.ts, pas ici.';
+  'Clé de couleur du motif dans l''agenda (fuchsia, menthe, violet, rose, turquoise, indigo, citron, ardoise). NULL = pas de couleur, le rendez-vous garde l''apparence par défaut. Les teintes vivent dans lib/motifs-couleurs.ts, pas ici.';
 
 notify pgrst, 'reload schema';
 

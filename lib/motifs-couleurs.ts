@@ -23,6 +23,12 @@
 // confirmation, le rouge d'une plage bloquée. Elles PASSENT AVANT la couleur
 // du motif : savoir qu'un patient n'est pas venu compte plus que savoir ce
 // qu'il venait faire.
+//
+// Le BLEU CIEL est exclu pour la même raison, moins évidente : la couleur
+// principale de MonRDV est très exactement `sky-500`, et le rendez-vous qui
+// n'a pas de couleur s'affiche en `primary-50`, c'est-à-dire `sky-50`. Un
+// motif peint en bleu ciel aurait donc eu l'apparence d'un motif SANS
+// couleur — vérifié à l'écran avant de le retirer de la palette.
 
 export interface CouleurMotif {
   cle: string
@@ -45,7 +51,7 @@ export interface CouleurMotif {
  *  « en attente » et « bloqué » dans cet écran, et les réemployer pour un
  *  motif ferait lire un état là où il n'y en a pas. */
 export const COULEURS_MOTIF: CouleurMotif[] = [
-  { cle: 'ciel',     label: 'Ciel',      point: 'bg-sky-400',     fond: 'bg-sky-50',     bord: 'border-sky-300',     texte: 'text-sky-800' },
+  { cle: 'fuchsia',  label: 'Fuchsia',   point: 'bg-fuchsia-400', fond: 'bg-fuchsia-50', bord: 'border-fuchsia-300', texte: 'text-fuchsia-800' },
   { cle: 'menthe',   label: 'Menthe',    point: 'bg-emerald-400', fond: 'bg-emerald-50', bord: 'border-emerald-300', texte: 'text-emerald-800' },
   { cle: 'violet',   label: 'Violet',    point: 'bg-violet-400',  fond: 'bg-violet-50',  bord: 'border-violet-300',  texte: 'text-violet-800' },
   { cle: 'rose',     label: 'Rose',      point: 'bg-rose-400',    fond: 'bg-rose-50',    bord: 'border-rose-300',    texte: 'text-rose-800' },

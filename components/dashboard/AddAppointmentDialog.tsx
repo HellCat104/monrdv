@@ -117,12 +117,16 @@ export function AddAppointmentDialog({
       // échoue sur une colonne inconnue : on retombe sur la liste complète,
       // qui était le comportement d'avant.
       .eq('rdv', true)
+      // Départage à date de création égale (catalogue v86 créé d'un bloc) :
+      // sans lui, l'ordre du menu change d'une ouverture à l'autre.
       .order('created_at', { ascending: true })
+      .order('name', { ascending: true })
       .then(({ data, error }) => {
         if (!error) { setConsultTypes(data ?? []); return }
         supabase.from('consultation_types').select('*')
           .eq('doctor_id', doctor.id).eq('active', true)
           .order('created_at', { ascending: true })
+          .order('name', { ascending: true })
           .then(({ data: tout }) => setConsultTypes(tout ?? []))
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
