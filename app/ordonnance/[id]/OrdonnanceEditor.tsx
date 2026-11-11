@@ -185,7 +185,23 @@ export function OrdonnanceEditor({
   })()
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0">
+    <div className="min-h-screen bg-gray-100 py-8 px-4 print:bg-white print:py-0 print:px-0">
+      {/* L'ordonnance est une pièce médicale : elle ne doit porter QUE l'en-tête
+          du praticien. Le navigateur, lui, imprime d'office dans la marge haute
+          le titre de la page (« MonRDV — Prise de rendez-vous médical en ligne
+          au Maroc ») et l'heure, et dans la marge basse l'adresse complète de la
+          page. Sur le document remis au patient ou au pharmacien, cela ressemble
+          à une publicité et à une adresse de site collées sur une prescription.
+
+          On les supprime en ne laissant AUCUNE marge au navigateur : c'est la
+          marge de page qui accueille ces mentions, et sans marge il n'a nulle
+          part où les écrire. Les blancs du document sont alors dessinés par le
+          document lui-même, ci-dessous, en millimètres pour tenir aussi bien sur
+          A4 que sur A5 (le praticien imprime souvent ses ordonnances en A5). */}
+      <style>{`
+        @page { margin: 0; }
+        @media print { .feuille-ordonnance { padding: 14mm 15mm 12mm; } }
+      `}</style>
       {/* Barre d'actions — masquée à l'impression */}
       <div className="max-w-5xl mx-auto mb-4 flex items-center justify-between gap-2 print:hidden">
         <a href={backHref} className="text-sm text-gray-500 hover:text-gray-700">← Retour</a>
@@ -245,7 +261,7 @@ export function OrdonnanceEditor({
 
       <div className="max-w-5xl mx-auto flex gap-4 items-start print:block">
         {/* Feuille A4 */}
-        <div className="flex-1 bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none print:px-0 print:py-0">
+        <div className="feuille-ordonnance flex-1 bg-white shadow-sm rounded-lg px-12 py-10 print:shadow-none print:rounded-none">
           {/* En-tête commun à tous les documents (components/shared/
               EnTeteDocument.tsx), disposition centrée : c'est le balisage
               d'origine de l'ordonnance, déplacé tel quel. */}
