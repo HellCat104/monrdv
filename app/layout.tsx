@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import VersionPerimee from '@/components/shared/VersionPerimee'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -76,7 +77,12 @@ export default function RootLayout({
           gtag('config', 'G-J76BEBZT5D');
         `}} />
       </head>
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        {children}
+        {/* Un onglet resté ouvert sur une version remplacée se recharge de
+            lui-même au lieu de rester cassé (components/shared/VersionPerimee). */}
+        <VersionPerimee />
+      </body>
     </html>
   )
 }

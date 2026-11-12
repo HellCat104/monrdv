@@ -6,24 +6,64 @@
 // cher en référencement que de ne rien publier — Google déclasse un site dont
 // une part notable des pages n'apporte rien.
 
+import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/server'
 import { SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
 import type { LienSEO } from '@/components/home/MaillageSEO'
 
-export async function chargerLiensSEO(): Promise<{
+interface LiensSEO {
   villes: LienSEO[]
   specialites: LienSEO[]
   combinaisons: LienSEO[]
-}> {
+}
+
+const AUCUN_LIEN: LiensSEO = { villes: [], specialites: [], combinaisons: [] }
+
+// ── POURQUOI CE CALCUL EST GARDÉ UNE HEURE ──────────────────────────────────
+//
+// La page d'accueil annonce `revalidate = 3600` : calculée une fois, servie à
+// tous pendant une heure. Elle ne l'a jamais été. Tous les appels à la base
+// partent avec `cache: 'no-store'` (lib/supabase/server.ts) — précaution
+// juste pour un dossier patient, qui ne doit jamais sortir d'un cache — et un
+// seul appel de ce genre suffit à rendre TOUTE la page dynamique. L'accueil
+// était donc recalculé à chaque visite : un aller-retour jusqu'au serveur, un
+// autre jusqu'à la base, et une seconde d'attente quand le serveur dormait.
+// Pour la page que voit en premier quelqu'un qui découvre MonRDV.
+//
+// `unstable_cache` garde le RÉSULTAT du calcul, quoi que fassent les appels à
+// l'intérieur. La liste des villes et des spécialités pourvues n'a rien de
+// personnel et change quand un médecin s'inscrit : une heure de retard n'y
+// coûte rien.
+//
+// Une erreur n'entre PAS dans le cache : la fonction lève, et c'est
+// `chargerLiensSEO` qui rattrape. Sans cela, une base injoignable dix secondes
+// laisserait l'accueil sans maillage pendant une heure.
+//
+// Fonction de Next.js, pas de l'hébergeur : elle se comporte pareil sur un
+// serveur au Maroc.
+const liensEnCache = unstable_cache(calculerLiensSEO, ['liens-seo-accueil'], { revalidate: 3600 })
+
+export async function chargerLiensSEO(): Promise<LiensSEO> {
   try {
+    return await liensEnCache()
+  } catch {
+    // Un incident de base ne doit pas empêcher la page d'accueil de s'afficher :
+    // le maillage disparaît, le reste de la page vit sa vie.
+    return AUCUN_LIEN
+  }
+}
+
+async function calculerLiensSEO(): Promise<LiensSEO> {
+  {
     const supabase = createAdminClient()
-    const { data: doctors } = await supabase
+    const { data: doctors, error } = await supabase
       .from('doctors')
       .select('specialty, specialties, city')
       .eq('status', 'approved')
       .eq('subscription_status', 'actif')
 
-    if (!doctors || doctors.length === 0) return { villes: [], specialites: [], combinaisons: [] }
+    if (error) throw new Error(error.message)
+    if (!doctors || doctors.length === 0) return AUCUN_LIEN
 
     const specToSlug = new Map(Object.entries(SPECIALITE_SLUGS).map(([slug, nom]) => [nom, slug]))
     const villeToSlug = new Map(Object.entries(VILLE_SLUGS).map(([slug, nom]) => [nom, slug]))
@@ -95,9 +135,5 @@ export async function chargerLiensSEO(): Promise<{
       .map((c) => ({ href: c.href, libelle: c.libelle, nombre: c.n }))
 
     return { villes, specialites, combinaisons }
-  } catch {
-    // Un incident de base ne doit pas empêcher la page d'accueil de s'afficher :
-    // le maillage disparaît, le reste de la page vit sa vie.
-    return { villes: [], specialites: [], combinaisons: [] }
   }
 }
