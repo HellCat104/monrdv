@@ -6,8 +6,7 @@
 // cher en référencement que de ne rien publier — Google déclasse un site dont
 // une part notable des pages n'apporte rien.
 
-import { unstable_cache } from 'next/cache'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { SPECIALITE_SLUGS, VILLE_SLUGS } from '@/lib/seo-slugs'
 import type { LienSEO } from '@/components/home/MaillageSEO'
 
@@ -19,7 +18,7 @@ interface LiensSEO {
 
 const AUCUN_LIEN: LiensSEO = { villes: [], specialites: [], combinaisons: [] }
 
-// ── POURQUOI CE CALCUL EST GARDÉ UNE HEURE ──────────────────────────────────
+// ── POURQUOI CETTE LECTURE EST GARDÉE UNE HEURE ─────────────────────────────
 //
 // La page d'accueil annonce `revalidate = 3600` : calculée une fois, servie à
 // tous pendant une heure. Elle ne l'a jamais été. Tous les appels à la base
@@ -30,39 +29,53 @@ const AUCUN_LIEN: LiensSEO = { villes: [], specialites: [], combinaisons: [] }
 // autre jusqu'à la base, et une seconde d'attente quand le serveur dormait.
 // Pour la page que voit en premier quelqu'un qui découvre MonRDV.
 //
-// `unstable_cache` garde le RÉSULTAT du calcul, quoi que fassent les appels à
-// l'intérieur. La liste des villes et des spécialités pourvues n'a rien de
-// personnel et change quand un médecin s'inscrit : une heure de retard n'y
-// coûte rien.
+// Cette lecture-ci a donc SON client, dont les appels disent explicitement
+// « gardable une heure ». Elle seule : la liste des villes et des spécialités
+// pourvues n'a rien de personnel, et une heure de retard n'y coûte rien.
+// Aucune autre lecture du site ne passe par ce client.
 //
-// Une erreur n'entre PAS dans le cache : la fonction lève, et c'est
-// `chargerLiensSEO` qui rattrape. Sans cela, une base injoignable dix secondes
-// laisserait l'accueil sans maillage pendant une heure.
+// ⚠ PREMIÈRE TENTATIVE, RETIRÉE LE JOUR MÊME : envelopper le calcul dans
+// `unstable_cache`. La page est bien devenue statique — et les sept liens du
+// maillage en ont disparu, sans la moindre erreur visible. Une lecture
+// `no-store` à l'intérieur d'un calcul mis en cache ne se comporte pas comme
+// on le croit ; on ne met pas en cache par-dessus, on rend la lecture
+// elle-même gardable.
 //
 // Fonction de Next.js, pas de l'hébergeur : elle se comporte pareil sur un
 // serveur au Maroc.
-const liensEnCache = unstable_cache(calculerLiensSEO, ['liens-seo-accueil'], { revalidate: 3600 })
+const UNE_HEURE = 3600
+const DELAI_MAX_MS = 8000
+
+function clientGardable() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: {
+        fetch: (url: RequestInfo | URL, options: RequestInit = {}) => fetch(url, {
+          ...options,
+          next: { revalidate: UNE_HEURE },
+          signal: options.signal ?? AbortSignal.timeout(DELAI_MAX_MS),
+        }),
+      },
+    },
+  )
+}
 
 export async function chargerLiensSEO(): Promise<LiensSEO> {
   try {
-    return await liensEnCache()
-  } catch {
-    // Un incident de base ne doit pas empêcher la page d'accueil de s'afficher :
-    // le maillage disparaît, le reste de la page vit sa vie.
-    return AUCUN_LIEN
-  }
-}
-
-async function calculerLiensSEO(): Promise<LiensSEO> {
-  {
-    const supabase = createAdminClient()
+    const supabase = clientGardable()
     const { data: doctors, error } = await supabase
       .from('doctors')
       .select('specialty, specialties, city')
       .eq('status', 'approved')
       .eq('subscription_status', 'actif')
 
-    if (error) throw new Error(error.message)
+    if (error) {
+      console.error('[Accueil] maillage illisible :', error.message)
+      return AUCUN_LIEN
+    }
     if (!doctors || doctors.length === 0) return AUCUN_LIEN
 
     const specToSlug = new Map(Object.entries(SPECIALITE_SLUGS).map(([slug, nom]) => [nom, slug]))
@@ -135,5 +148,12 @@ async function calculerLiensSEO(): Promise<LiensSEO> {
       .map((c) => ({ href: c.href, libelle: c.libelle, nombre: c.n }))
 
     return { villes, specialites, combinaisons }
+  } catch (e) {
+    // Un incident de base ne doit pas empêcher la page d'accueil de s'afficher :
+    // le maillage disparaît, le reste de la page vit sa vie. Mais on le DIT
+    // dans les journaux — la première version se taisait, et c'est ce silence
+    // qui a laissé passer une page d'accueil sans ses liens.
+    console.error('[Accueil] maillage non calculé :', e instanceof Error ? e.message : e)
+    return AUCUN_LIEN
   }
 }
