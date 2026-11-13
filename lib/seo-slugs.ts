@@ -19,6 +19,7 @@ export const SPECIALITE_SLUGS: Record<string, string> = {
   'gastro-enterologue':        'Gastro-entérologue',
   'gynecologue':               'Gynécologue',
   'orthopediste':              'Orthopédiste',
+  'orthoptiste':               'Orthoptiste',
   'endocrinologue':            'Endocrinologue',
   'orl':                       'ORL (Oto-rhino-laryngologiste)',
   'chirurgien-general':        'Chirurgien général',

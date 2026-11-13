@@ -510,6 +510,7 @@ export const SPECIALITES_LIST = [
   'Ophtalmologue',
   'ORL (Oto-rhino-laryngologiste)',
   'Orthopédiste',
+  'Orthoptiste',
   'Pédiatre',
   'Pneumologue',
   'Psychiatre',

@@ -6,14 +6,20 @@
 //
 // « Nutritionniste / Diététicien » reste traité comme médical : le libellé couvre
 // aussi le médecin nutritionniste, qui lui prescrit.
+//
+// L'orthoptiste est un auxiliaire médical : il rééduque la vision sur
+// prescription de l'ophtalmologue, sans titre de docteur ni ordonnance.
+// À ne pas confondre avec « Orthopédiste », qui est médecin — les deux mots
+// se ressemblent, le motif ci-dessous ne reconnaît que le premier.
 
-const NON_PRESCRIBER = /psychologue|kin[ée]sith[ée]rapeute/i
+const NON_PRESCRIBER = /psychologue|kin[ée]sith[ée]rapeute|orthoptiste/i
 
 export function isNonPrescriber(specialties: (string | null | undefined)[]): boolean {
   return specialties.some((s) => !!s && NON_PRESCRIBER.test(s))
 }
 
-/** « Dr. » pour un médecin, rien pour un psychologue ou un kinésithérapeute. */
+/** « Dr. » pour un médecin, rien pour un psychologue, un kinésithérapeute
+ *  ou un orthoptiste. */
 export function professionalTitle(...specialties: (string | null | undefined)[]): string {
   return isNonPrescriber(specialties) ? '' : 'Dr. '
 }
