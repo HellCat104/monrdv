@@ -256,7 +256,11 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
         // 38 px (sinon l'arcade s'étire bêtement sur un grand écran) ni
         // descendre sous 20 px (en dessous, le défilement reprend la main).
         // La hauteur suit la largeur : c'est le dessin qui la fixe.
-        className={`flex-1 basis-0 min-w-[20px] max-w-[38px] flex flex-col items-center gap-[3px] rounded-lg px-[1px] py-1 transition hover:bg-gray-50 ${
+        // Une dent de lait est plafonnée plus bas : elles ne sont que dix par
+        // rangée, et sans ce plafond elles s'étalaient plus LARGES que les
+        // seize définitives au-dessus — des dents de lait plus grosses que
+        // des molaires d'adulte, vu en production sur un dossier d'enfant.
+        className={`flex-1 basis-0 min-w-[18px] ${estDentDeLait(key) ? 'max-w-[22px]' : 'max-w-[38px]'} flex flex-col items-center gap-[3px] rounded-lg px-[1px] py-1 transition hover:bg-gray-50 ${
           isActive ? 'bg-primary-50 ring-2 ring-primary-500' : ''}`}
       >
         {!haut && numero}
