@@ -284,11 +284,11 @@ export default async function DashboardPage() {
                   {passesSummarised.length} rendez-vous passé{passesSummarised.length > 1 ? 's' : ''}
                 </summary>
                 <div className="mt-2 opacity-70">
-                  <AppointmentList appointments={passesSummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
+                  <AppointmentList appointments={passesSummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} dentaire={estDentiste && doctor.plan === 'complet'} />
                 </div>
               </details>
             )}
-            <AppointmentList appointments={todaySummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
+            <AppointmentList appointments={todaySummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} dentaire={estDentiste && doctor.plan === 'complet'} />
           </CardContent>
         </Card>
 
@@ -306,7 +306,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <AppointmentList appointments={upcomingSummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} />
+            <AppointmentList appointments={upcomingSummarised} plan={doctor.plan === 'complet' ? 'complet' : 'agenda'} dentaire={estDentiste && doctor.plan === 'complet'} />
           </CardContent>
         </Card>
       </div>

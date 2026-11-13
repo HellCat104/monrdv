@@ -99,9 +99,24 @@ interface AppointmentListProps {
    *  pas : un badge « Fauteuil 1 » sur chaque ligne d'un cabinet qui n'en a
    *  qu'un est du bruit. */
   postes?: Poste[]
+  /** Cabinet dentaire : la ligne d'un rendez-vous s'allège de quatre choses
+   *  qui n'y servent pas.
+   *
+   *  · « Confirmé » : presque tous les rendez-vous le sont ; une étiquette
+   *    portée par toutes les lignes ne distingue plus rien. Les états qui
+   *    disent quelque chose — à confirmer, annulé — restent.
+   *  · La spécialité : elle départage les rendez-vous d'un praticien qui en
+   *    exerce plusieurs, et un dentiste n'en a qu'une.
+   *  · « Encaisser » : au cabinet dentaire l'argent se suit sur le devis et
+   *    se règle depuis l'écran de consultation. Le bouton disparaît de la
+   *    ligne ; un montant DÉJÀ encaissé reste affiché, et un rendez-vous
+   *    clôturé sans paiement garde son « Encaisser » dans le menu, sans quoi
+   *    la recette n'aurait plus aucune porte d'entrée.
+   *  · « Nouvelle ordonnance » : elle se rédige depuis la consultation. */
+  dentaire?: boolean
 }
 
-export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, onRefresh, plan = 'complet', postes = [] }: AppointmentListProps) {
+export function AppointmentList({ appointments, onStatusChange, onAttendanceChange, onPayment: onPaymentProp, onViewPatient, onReschedule, onRefresh, plan = 'complet', postes = [], dentaire = false }: AppointmentListProps) {
   const montrerPoste = posteUtile(postes)
   // Forfait Agenda : pas d'encaissement (le reste des actions est filtré plus bas)
   // L'encaissement est ouvert aux deux forfaits : seuls les documents
@@ -335,7 +350,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                       icon: Wallet,
                       onClick: () => openPayDialog(apt),
                     } : null,
-                    plan === 'complet' && apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
+                    plan === 'complet' && apt.patient_id && !dentaire ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
                     plan === 'complet' && apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
                     plan === 'complet' && apt.invoice_no ? {
                       label: 'Émettre un avoir', icon: Undo2,
@@ -366,9 +381,11 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                 <span className="font-semibold text-gray-900 text-sm">
                   {apt.patient ? `${apt.patient.first_name} ${apt.patient.last_name}` : 'Patient inconnu'}
                 </span>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[apt.status]}`}>
-                  {STATUS_LABELS[apt.status]}
-                </span>
+                {!(dentaire && apt.status === 'confirmed') && (
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[apt.status]}`}>
+                    {STATUS_LABELS[apt.status]}
+                  </span>
+                )}
                 {/* UNE seule étiquette d'état. Avant, « Présent » et « Attend
                     depuis 12 min » cohabitaient pour dire la même chose, et
                     « Présent » survivait à la consultation. La règle vit
@@ -387,7 +404,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     {resumeEchange(apt as never)}
                   </span>
                 )}
-                {apt.specialty && (
+                {apt.specialty && !dentaire && (
                   <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
                     {apt.specialty}
                   </span>
@@ -497,7 +514,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   )}
 
                   {/* Encaissement : bouton tant que non payé, badge-état ensuite */}
-                  {onPayment && !apt.quote_id && (
+                  {onPayment && !apt.quote_id && !(dentaire && apt.amount_paid == null) && (
                     apt.amount_paid == null ? (
                       <button
                         onClick={() => openPayDialog(apt)}
@@ -525,7 +542,7 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                   <MoreMenu
                     items={[
                       onReschedule ? { label: 'Déplacer le RDV', icon: CalendarClock, onClick: () => { setMoveError(''); setMoveDialog({ open: true, apt, date: '', time: '' }) } } : null,
-                      plan === 'complet' && apt.patient_id ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
+                      plan === 'complet' && apt.patient_id && !dentaire ? { label: 'Nouvelle ordonnance', icon: FileText, href: `/ordonnance/${apt.id}?new=1` } : null,
                       plan === 'complet' && apt.amount_paid != null ? { label: 'Facture', icon: Printer, href: `/facture/${apt.id}` } : null,
                       plan === 'complet' && apt.invoice_no ? {
                         label: 'Émettre un avoir', icon: Undo2,

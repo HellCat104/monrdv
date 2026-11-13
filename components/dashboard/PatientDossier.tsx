@@ -1289,6 +1289,7 @@ export default function PatientDossier({
                 <p className="text-sm text-gray-400 italic">Aucun rendez-vous pour ce patient.</p>
               ) : (
                 <AppointmentList
+                  dentaire={isDentalDoctor(specialties)}
                   appointments={appts}
                   onPayment={handlePayment}
                   onReschedule={handleReschedule}

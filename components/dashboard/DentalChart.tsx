@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Check } from 'lucide-react'
 import DentDevis from '@/components/dashboard/DentDevis'
+import DessinDent, { dentDuHaut, lireDent } from '@/components/dashboard/DessinDent'
 import {
   DENTAL_STATES, DENTAL_COLOR, FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT,
   DENTAL_FACES, ETATS_AVEC_FACES, estDentDeLait,
@@ -196,11 +197,8 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
     const key = String(n)
     const info = teeth[key]
     const states = info?.s ?? []
-    const primary = primaryState(states)
-    const color = primary ? DENTAL_COLOR[primary] : undefined
-    const colors = stateColors(states)
     const isActive = active === key
-    const extraite = primary === 'extraite'
+    const haut = dentDuHaut(n)
     // Toutes les faces notées sur cette dent, sans doublon : « O » d'une carie
     // et « O » d'une obturation ne s'affichent qu'une fois.
     const marqueFaces = Array.from(
@@ -218,62 +216,52 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
     // du travail en attente, alors que c'est la carie qui lui donne sa couleur.
     const aPlanifie = states.some((st) => natureDe(info, st) === 'planifie')
     const aRealise = states.some((st) => natureDe(info, st) === 'realise')
+    // Ce que le dessin ne peut pas montrer : une dent cariée ET obturée n'a
+    // qu'une couronne à colorer. Ces états-là restent visibles, en pastilles.
+    const enPlus = lireDent(states).nonMontres
+
+    // Le numéro et ses repères, du côté où les deux arcades se rencontrent :
+    // sous une dent du haut, au-dessus d'une dent du bas. C'est là qu'on lit
+    // les numéros sur un schéma papier, et c'est ce qui laisse les racines
+    // pointer vers l'extérieur comme dans la bouche.
+    const numero = (
+      <span className="flex flex-col items-center leading-none">
+        <span className="flex items-center gap-[2px]">
+          {/* Le repère d'imagerie : cette dent a un cliché au dossier. */}
+          {dentsAvecImage?.has(key) && <span className="w-[4px] h-[4px] rounded-[1px] bg-sky-500" />}
+          <span className={`text-[11px] font-semibold ${states.length > 0 ? 'text-gray-800' : 'text-gray-500'} ${states.includes('extraite') ? 'line-through text-gray-400' : ''}`}>{n}</span>
+          {/* La coche : un soin a été fait sur cette dent. */}
+          {aRealise && <span className="text-[9px] font-bold text-emerald-600">✓</span>}
+        </span>
+        {/* Les faces, en toutes petites initiales : « OM » se lit d'un coup
+            d'œil sur l'arcade entière, là où il faudrait ouvrir chaque dent. */}
+        {marqueFaces && <span className="text-[8px] font-bold text-gray-400 mt-[1px]">{marqueFaces}</span>}
+        {enPlus.length > 0 && (
+          <span className="flex gap-[1px] mt-[2px]">
+            {enPlus.map((e) => (
+              <span key={e} className="w-[5px] h-[5px] rounded-full" style={{ backgroundColor: DENTAL_COLOR[e] }} />
+            ))}
+          </span>
+        )}
+      </span>
+    )
+
     return (
       <button
         type="button"
         onClick={() => setActive(isActive ? null : key)}
         title={`${states.length > 0 ? `Dent ${n} — ${statesWithFacesLabel(info)}${info?.n ? ` · ${info.n}` : ''}` : `Dent ${n}`}${
           dentsAvecImage?.has(key) ? ' · image au dossier' : ''}`}
-        style={{
-          ...(color ? { backgroundColor: color, color: '#fff', borderColor: color } : {}),
-          // Pointillés = il reste un geste à poser. C'est la bordure qui le
-          // porte : elle est libre, elle fait le tour de la dent, et elle se
-          // lit sur toute l'arcade sans rien recouvrir.
-          ...(aPlanifie ? { borderStyle: 'dashed', borderWidth: 2, borderColor: color ?? '#475569' } : {}),
-        }}
-        // ÉLASTIQUE, et c'est le point : à 36 px fixes l'arcade mesure 700 px et
-        // se retrouvait COUPÉE dans la colonne de l'écran de consultation — le
-        // praticien voyait 18→22 et devait faire glisser pour atteindre 28, sur
-        // le schéma qu'il consulte le plus souvent. La dent occupe maintenant la
-        // place disponible, sans jamais dépasser 36 px (sinon l'arcade s'étire
-        // bêtement sur un grand écran) ni descendre sous 20 px (sinon le numéro
-        // n'est plus lisible — en dessous, le défilement reprend la main).
-        className={`relative flex-1 basis-0 min-w-[20px] max-w-[36px] h-11 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-600 transition ${isActive ? 'ring-2 ring-primary-500 ring-offset-1' : ''} ${extraite ? 'opacity-80' : ''}`}
+        // ÉLASTIQUE : la dent occupe la place disponible, sans jamais dépasser
+        // 38 px (sinon l'arcade s'étire bêtement sur un grand écran) ni
+        // descendre sous 20 px (en dessous, le défilement reprend la main).
+        // La hauteur suit la largeur : c'est le dessin qui la fixe.
+        className={`flex-1 basis-0 min-w-[20px] max-w-[38px] flex flex-col items-center gap-[3px] rounded-lg px-[1px] py-1 transition hover:bg-gray-50 ${
+          isActive ? 'bg-primary-50 ring-2 ring-primary-500' : ''}`}
       >
-        <span className={`block leading-tight ${colors.length > 1 ? 'pb-2' : ''} ${extraite ? 'line-through' : ''}`}>{n}</span>
-        {/* Le repère d'imagerie : cette dent a un cliché au dossier. En haut
-            à GAUCHE, parce que la coche « réalisé » occupe déjà la droite — et
-            les deux doivent pouvoir coexister sur une dent soignée et
-            radiographiée. Un carré de cinq pixels : on le voit en balayant
-            l'arcade, il ne dispute rien au numéro. */}
-        {dentsAvecImage?.has(key) && (
-          <span className={`absolute top-[3px] left-[3px] w-[5px] h-[5px] rounded-[1px] ${color ? 'bg-white/90' : 'bg-sky-500'}`} />
-        )}
-        {/* La coche : un soin a été fait sur cette dent. Minuscule et dans
-            l'angle, pour ne pas disputer la place au numéro. */}
-        {aRealise && (
-          <span className={`absolute top-[2px] right-[3px] text-[9px] font-bold leading-none ${color ? 'text-white' : 'text-emerald-600'}`}>
-            ✓
-          </span>
-        )}
-        {/* Les faces, en toutes petites initiales sous le numéro : « OM » se lit
-            d'un coup d'œil sur l'arcade entière, là où il faudrait ouvrir
-            chaque dent pour les retrouver. */}
-        {marqueFaces && (
-          <span className={`block text-[8px] font-bold leading-none ${color ? 'text-white/90' : 'text-gray-400'} ${colors.length > 1 ? 'mb-1.5' : ''}`}>
-            {marqueFaces}
-          </span>
-        )}
-        {/* États multiples : une pastille par état, posée sur un liseré blanc pour
-            rester lisible par-dessus la couleur principale. Un dégradé serait
-            illisible à 28 px de large ; des pastilles se comptent d'un coup d'œil. */}
-        {colors.length > 1 && (
-          <span className="absolute inset-x-[3px] bottom-[3px] flex gap-[1px] h-[7px] rounded-[2px] bg-white p-[1px]">
-            {colors.map((c, i) => (
-              <span key={i} className="flex-1 rounded-[1px]" style={{ backgroundColor: c }} />
-            ))}
-          </span>
-        )}
+        {!haut && numero}
+        <DessinDent numero={n} etats={states} planifie={aPlanifie} />
+        {haut && numero}
       </button>
     )
   }
@@ -284,10 +272,13 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
     // Une hémi-arcade : 8 dents définitives, 5 de lait.
     const moitie = ids.length / 2
     return (
-      <div className="flex justify-center">
-        <div className="flex-1 flex gap-1 justify-end">{ids.slice(0, moitie).map((n) => <Tooth key={n} n={n} />)}</div>
-        <div className="w-6 shrink-0 flex justify-center"><span className="border-l border-dashed border-gray-300 self-stretch" /></div>
-        <div className="flex-1 flex gap-1 justify-start">{ids.slice(moitie).map((n) => <Tooth key={n} n={n} />)}</div>
+      // Les dents d'une même rangée n'ont pas toutes la même hauteur une fois
+      // leurs repères ajoutés : on les cale sur le bord où les deux arcades se
+      // rencontrent — en bas pour le haut, en haut pour le bas.
+      <div className={`flex justify-center ${dentDuHaut(ids[0]) ? 'items-end' : 'items-start'}`}>
+        <div className={`flex-1 flex gap-[2px] justify-end ${dentDuHaut(ids[0]) ? 'items-end' : 'items-start'}`}>{ids.slice(0, moitie).map((n) => <Tooth key={n} n={n} />)}</div>
+        <div className="w-5 shrink-0 flex justify-center self-stretch"><span className="border-l border-dashed border-gray-300 self-stretch" /></div>
+        <div className={`flex-1 flex gap-[2px] justify-start ${dentDuHaut(ids[0]) ? 'items-end' : 'items-start'}`}>{ids.slice(moitie).map((n) => <Tooth key={n} n={n} />)}</div>
         {lait && <span className="self-center ml-2 text-[9px] text-gray-300 shrink-0">lait</span>}
       </div>
     )
@@ -317,7 +308,7 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
         {saveState === 'saved' && <span className="text-[11px] text-green-600 font-normal inline-flex items-center gap-0.5"><Check className="h-3 w-3" /> Enregistré</span>}
         {saveState === 'error' && <span className="text-[11px] text-red-500 font-normal">Échec de l&apos;enregistrement</span>}
       </h4>
-      <p className="text-[11px] text-gray-400 mb-3">Cliquez sur une dent pour indiquer son état ; plusieurs états sont possibles. Notation internationale (FDI).</p>
+      <p className="text-[11px] text-gray-400 mb-3">Cliquez sur une dent pour indiquer son état ; plusieurs états sont possibles. La couleur se pose là où est le soin : sur la couronne, dans la racine, ou sur toute la dent. Notation internationale (FDI).</p>
       {journalKo && (
         <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1.5 mb-3">
           Le schéma est enregistré, mais l&apos;historique de la dent n&apos;a pas pu être écrit. Signalez-le : c&apos;est cette trace datée qui fait foi en cas de contestation.

@@ -1957,7 +1957,7 @@ export default function PatientsPage() {
                     ))}
                   </div>
                 ) : (
-                  <AppointmentList appointments={patientAppointments} onPayment={handlePatientPayment} />
+                  <AppointmentList appointments={patientAppointments} onPayment={handlePatientPayment} dentaire={doctorPlan === 'complet' && isDentalDoctor(doctorSpecialties)} />
                 )}
               </div>
 

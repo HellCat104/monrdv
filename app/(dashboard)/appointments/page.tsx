@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { isDentalDoctor } from '@/lib/dental'
 import { withConsultationSummary } from '@/lib/consultation-summary'
 import { AppointmentList, type PaymentPayload } from '@/components/dashboard/AppointmentList'
 import { AddAppointmentDialog } from '@/components/dashboard/AddAppointmentDialog'
@@ -658,6 +659,7 @@ export default function AppointmentsPage() {
               onReschedule={handleReschedule}
               onRefresh={() => loadAppointments(true)}
               plan={doctor?.plan === 'complet' ? 'complet' : 'agenda'}
+              dentaire={doctor?.plan === 'complet' && isDentalDoctor([doctor?.specialty, ...((doctor?.specialties as string[] | null) ?? [])])}
             />
           )}
         </CardContent>
