@@ -2,7 +2,7 @@
 // actions (ordonnance / certificat / encaisser / facture) à droite. Un seul écran.
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { allVitalDefs, resolveEnabledVitals, isPsychiatricDoctor, type VitalDef } from '@/types'
+import { allVitalDefs, resolveEnabledVitals, isPsychiatricDoctor, VITALS_DENTISTE, type VitalDef } from '@/types'
 import { canAccess } from '@/lib/plan'
 import { colonneAbsente, tableAbsente } from '@/lib/migrations'
 import { isDentalDoctor } from '@/lib/dental'
@@ -176,7 +176,11 @@ export default async function ConsultationPage({ params }: { params: { id: strin
     : null
 
   const vitalDefsAll = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
-  const enabled = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
+  // Chez le dentiste, la carte « Constantes » s'affiche toujours : sans
+  // réglage (ou avec une liste vide), il reçoit ses constantes par défaut —
+  // tension, pouls, glycémie, douleur — celles qu'on vérifie avant d'anesthésier.
+  const choisies = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
+  const enabled = estDentiste && choisies.length === 0 ? VITALS_DENTISTE : choisies
   const vitalDefs = vitalDefsAll.filter((v) => enabled.includes(v.key))
 
   return (

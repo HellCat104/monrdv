@@ -284,7 +284,9 @@ export default function ConsultationClient({
   // verrou qu'en se voyant refuser le montant qu'il venait de taper.
   const [actesSurDevis, setActesSurDevis] = useState(regleSurDevis)
   // Bloc parodonte / labo / ortho : fermé par défaut, voir plus bas.
-  const [suiviOuvert, setSuiviOuvert] = useState(false)
+  // Ouvert d'emblée : le dentiste voit parodonte, labo et ortho sans les
+  // chercher. Il peut toujours le replier.
+  const [suiviOuvert, setSuiviOuvert] = useState(true)
 
   const vLabel = (k: string) => vitalDefsAll.find((v) => v.key === k)?.label || k
   const vUnit = (k: string) => vitalDefsAll.find((v) => v.key === k)?.unit || ''
@@ -886,6 +888,68 @@ export default function ConsultationClient({
             </a>
           )}
 
+          {/* L'ORDRE DU DENTISTE (novembre 2026) : ce qu'on regarde en premier —
+              le schéma et les clichés —, puis ce qu'on écrit, ce qu'on chiffre,
+              le suivi au long cours, les constantes, et les documents remis.
+              Tout est ouvert : le praticien ne cherche plus un bloc replié. */}
+          {isDental ? (
+            <>
+          {/* Schéma dentaire — le même composant que dans la fiche patient, donc
+              le même enregistrement (auto, via /api/dental) et le même journal
+              dent par dent. Le dentiste note ce qu'il voit pendant qu'il le voit,
+              sans quitter la consultation. Le filet de séparation du composant
+              est retiré ici : il est déjà dans sa propre carte. */}
+          {isDental && (
+            <div className="bg-white border border-gray-100 rounded-xl p-4 [&>div]:border-t-0 [&>div]:pt-0">
+              <DentalChart
+                key={patient.id} patientId={patient.id} doctorId={doctorId}
+                // Chaque changement est rattaché à CETTE séance : le dossier
+                // saura dire ce qui a été fait aujourd'hui, et sur quelles dents.
+                appointmentId={appointmentId}
+                dentsAvecImage={calculerDentsAvecImage(imagerie)}
+                panneauDent={(dent) => (
+                  <PanneauContexteDent patientId={patient.id} dent={dent} seance={appointmentId} version={imagerie.length} />
+                )}
+              />
+            </div>
+          )}
+
+          {/* DENTISTE : les clichés, sans quitter la séance. Un cliché déposé
+              ici est rattaché à ce rendez-vous et daté du jour. */}
+          {isDental && (
+            <ImagerieDentaire patientId={patient.id} doctorId={doctorId} onImages={setImagerie} seance={appointmentId} compact />
+          )}
+
+          <div className="bg-white border border-gray-100 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-gray-700">Note de consultation</h3>
+              <div className="flex items-center gap-2">
+                {noteSigned && <span className="text-xs text-gray-500 flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Signée · verrouillée</span>}
+                {!noteSigned && noteState === 'saved' && <span className="text-xs text-green-600 flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Enregistrée</span>}
+                {/* Remettre la trame après l'avoir effacée, pour qui en veut
+                    une — donc pas chez le dentiste, qui n'en a pas. */}
+                {!noteSigned && trameNote && !note.trim() && (
+                  <Button variant="outline" size="sm" onClick={() => setNote(trameNote)}>
+                    <FileText className="h-4 w-4 mr-1" /> Modèle
+                  </Button>
+                )}
+                {!noteSigned && (
+                  <Button variant="outline" size="sm" onClick={saveNote} disabled={noteState === 'saving' || !note.trim() || estTrameVierge(note)}>
+                    <Save className="h-4 w-4 mr-1" /> {noteState === 'saving' ? '…' : 'Enregistrer'}
+                  </Button>
+                )}
+              </div>
+            </div>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              readOnly={noteSigned}
+              placeholder={isPsy ? 'Motif / Histoire / Évolution / Traitement / Prochain RDV…' : 'Motif, examen clinique, diagnostic, conduite à tenir…'}
+              rows={9}
+              className={`w-full text-sm text-gray-800 leading-relaxed border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 ${noteSigned ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+            />
+          </div>
+
           {/* Dentistes seulement : l'encart vient d'un plan de traitement chiffré,
               un objet dentaire. Chez les autres spécialités il n'y a rien à
               cocher, et on évite en plus une lecture de devis à chaque
@@ -899,6 +963,179 @@ export default function ConsultationClient({
             />
           )}
 
+          {/* DENTISTE : le plan de traitement complet, sans quitter la séance —
+              ajouter un acte, le chiffrer, le faire accepter. C'est le même
+              bloc que dans le dossier, donc les mêmes données : ce qui est
+              ajouté ici y est aussitôt. Replié par défaut ; les actes du jour
+              se cochent dans l'encart du haut. */}
+          {isDental && <QuotesCard key={`plan-${patient.id}`} patientId={patient.id} dental />}
+
+          {/* Parodonte, laboratoire, orthodontie — des actes qui se font AU
+              FAUTEUIL, et qu'il fallait pourtant aller saisir dans la fiche
+              patient : on sortait de la consultation pour noter une poche ou
+              pour vérifier si la couronne était revenue du labo.
+              
+              REPLIÉS, et c'est volontaire : la plupart des séances ne touchent
+              à aucun des trois. Les déplier d'office rendrait l'écran illisible
+              pour le soin courant, alors qu'un clic suffit le jour où on en a
+              besoin. Rien n'est chargé tant que le bloc n'est pas ouvert. */}
+          {isDental && (
+            <div className="bg-white border border-gray-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setSuiviOuvert((v) => !v)}
+                className="w-full flex items-center gap-2 px-4 py-3 text-left"
+                aria-expanded={suiviOuvert}
+              >
+                <span className="text-sm font-semibold text-gray-700">Parodonte, laboratoire, orthodontie</span>
+                <span className="ml-auto text-[11px] text-gray-400">{suiviOuvert ? 'Masquer' : 'Afficher'}</span>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${suiviOuvert ? 'rotate-180' : ''}`} />
+              </button>
+              {suiviOuvert && (
+                <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
+                  <OrthoCard patientId={patient.id} />
+                  <PerioCard patientId={patient.id} />
+                  <LabWorksCard patientId={patient.id} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Constantes du jour — juste sous la note : la tension se prend au
+              début de la consultation, et les valeurs restent sous les yeux
+              pendant que la note s'écrit. Rendu seulement si la spécialité
+              déclare des constantes, ce qui est ce qui permet au schéma
+              dentaire de rester collé à la note chez le dentiste (voir
+              l'en-tête de cette colonne). */}
+          {vitalDefs.length > 0 && (
+            <div className="bg-white border border-gray-100 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Activity className="h-4 w-4 text-primary-500" /> Constantes du jour</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+                {vitalDefs.map((v) => {
+                  const precedent = dernieresValeurs[v.key]
+                  return (
+                    <div key={v.key}>
+                      <div className="relative">
+                        <Input
+                          type="number" step={v.step ?? 'any'} inputMode="decimal"
+                          value={vitalInput[v.key] ?? ''}
+                          onChange={(e) => setVitalInput((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                          placeholder={v.label} className="pr-10 text-sm" aria-label={v.label}
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">{v.unit}</span>
+                      </div>
+                      {precedent && (
+                        <button
+                          type="button"
+                          onClick={() => setVitalInput((prev) => ({ ...prev, [v.key]: String(precedent.valeur) }))}
+                          className="mt-0.5 text-[10px] text-gray-400 hover:text-primary-600 hover:underline"
+                          title={`${v.label} : ${precedent.valeur} ${v.unit} le ${formatDateFr(precedent.date)} — cliquer pour reprendre cette valeur`}
+                        >
+                          dernière : {precedent.valeur}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <Button variant="outline" size="sm" onClick={saveVitals} disabled={savingVital}>
+                <Plus className="h-4 w-4 mr-1" /> {savingVital ? 'Enregistrement…' : 'Enregistrer les constantes'}
+              </Button>
+            </div>
+          )}
+
+          {/* Ordonnances de cette consultation (plusieurs possibles) */}
+          <div className="bg-white border border-gray-100 rounded-xl p-4">
+            <div className={`flex items-center justify-between gap-2 flex-wrap ${consultationPrescriptions.length > 0 ? 'mb-2' : ''}`}>
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <Pill className="h-4 w-4 shrink-0 text-primary-500" /> Ordonnances de la consultation ({consultationPrescriptions.length})
+              </h3>
+              <div className="flex items-center gap-2">
+                {/* La dernière ordonnance du patient, hors celles écrites
+                    aujourd'hui : sans ce filtre, « Renouveler la dernière »
+                    recopierait l'ordonnance qu'on vient tout juste de rédiger. */}
+                {derniereOrdonnanceAnterieure && (
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => goTo(lienRenouveler(derniereOrdonnanceAnterieure.id))}
+                    title={`Repartir de l'ordonnance du ${formatDateFr(derniereOrdonnanceAnterieure.created_at)}`}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" /> Renouveler
+                  </Button>
+                )}
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => goTo(`/ordonnance/${appointmentId}?new=1&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Nouvelle
+                </Button>
+              </div>
+            </div>
+            {/* Pas d'ordonnance : la carte se réduit à son titre et à son
+                bouton. La phrase « Aucune ordonnance. Cliquez Nouvelle… » qui
+                tenait ici n'apprenait rien que le bouton ne dise déjà, et
+                occupait une ligne sur un écran qu'on veut lisible d'un coup
+                d'œil. Le compteur (0) dit l'état. */}
+            {consultationPrescriptions.length > 0 && (
+              <div className="space-y-1.5">
+                {consultationPrescriptions.map((p, i) => (
+                  <button
+                    key={p.id}
+                    onClick={() => goTo(`/ordonnance/p/${p.id}?back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}
+                    className="w-full text-left flex items-start gap-2 rounded-lg border border-gray-100 hover:border-primary-300 hover:bg-primary-50/40 p-2.5 transition-colors"
+                    title="Modifier cette ordonnance"
+                  >
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary-100 text-primary-600 text-[11px] font-semibold flex items-center justify-center mt-0.5">{i + 1}</span>
+                    <span className="min-w-0">
+                      <span className="block text-xs text-gray-800 line-clamp-2 whitespace-pre-wrap">{p.content}</span>
+                      <span className="block text-[11px] text-primary-500 mt-0.5">Modifier</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Certificats établis pendant cette consultation.
+              La carte n'existe QUE s'il y en a : un généraliste en établit
+              plusieurs par jour, mais pas à chaque patient, et une carte vide
+              de plus sur l'écran de consultation ne dit rien. Le bouton
+              « Certificat » du panneau de droite reste le chemin pour en
+              créer un — on n'en ajoute pas un deuxième. */}
+          {(isDental || consultationCertificates.length > 0) && (
+            <div className="bg-white border border-gray-100 rounded-xl p-4">
+              <div className={`flex items-center justify-between gap-2 ${consultationCertificates.length > 0 ? 'mb-2' : ''}`}>
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-primary-500" /> Certificats de la consultation ({consultationCertificates.length})
+                </h3>
+                <Button variant="outline" size="sm"
+                  onClick={() => goTo(`/certificat/nouveau/${patient.id}?apt=${appointmentId}&back=${encodeURIComponent(`/consultation/${appointmentId}`)}`)}>
+                  <Plus className="h-4 w-4 mr-1" /> Nouveau
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                {consultationCertificates.map((c, i) => (
+                  <button
+                    key={c.id}
+                    onClick={() => goTo(`/certificat/${c.id}`)}
+                    className="w-full text-left flex items-start gap-2 rounded-lg border border-gray-100 hover:border-primary-300 hover:bg-primary-50/40 p-2.5 transition-colors"
+                    title="Ouvrir ce certificat pour le relire ou l'imprimer"
+                  >
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary-100 text-primary-600 text-[11px] font-semibold flex items-center justify-center mt-0.5">{i + 1}</span>
+                    <span className="min-w-0">
+                      <span className="block text-xs text-gray-800">{c.title}</span>
+                      {c.motif && <span className="block text-[11px] text-gray-500">{c.motif}</span>}
+                      <span className="block text-[11px] text-primary-500 mt-0.5">Ouvrir / imprimer</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+            </>
+          ) : (
+            <>
           <div className="bg-white border border-gray-100 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-gray-700">Note de consultation</h3>
@@ -970,39 +1207,6 @@ export default function ConsultationClient({
                 <Plus className="h-4 w-4 mr-1" /> {savingVital ? 'Enregistrement…' : 'Enregistrer les constantes'}
               </Button>
             </div>
-          )}
-
-          {/* Schéma dentaire — le même composant que dans la fiche patient, donc
-              le même enregistrement (auto, via /api/dental) et le même journal
-              dent par dent. Le dentiste note ce qu'il voit pendant qu'il le voit,
-              sans quitter la consultation. Le filet de séparation du composant
-              est retiré ici : il est déjà dans sa propre carte. */}
-          {isDental && (
-            <div className="bg-white border border-gray-100 rounded-xl p-4 [&>div]:border-t-0 [&>div]:pt-0">
-              <DentalChart
-                key={patient.id} patientId={patient.id} doctorId={doctorId}
-                // Chaque changement est rattaché à CETTE séance : le dossier
-                // saura dire ce qui a été fait aujourd'hui, et sur quelles dents.
-                appointmentId={appointmentId}
-                dentsAvecImage={calculerDentsAvecImage(imagerie)}
-                panneauDent={(dent) => (
-                  <PanneauContexteDent patientId={patient.id} dent={dent} seance={appointmentId} version={imagerie.length} />
-                )}
-              />
-            </div>
-          )}
-
-          {/* DENTISTE : le plan de traitement complet, sans quitter la séance —
-              ajouter un acte, le chiffrer, le faire accepter. C'est le même
-              bloc que dans le dossier, donc les mêmes données : ce qui est
-              ajouté ici y est aussitôt. Replié par défaut ; les actes du jour
-              se cochent dans l'encart du haut. */}
-          {isDental && <QuotesCard key={`plan-${patient.id}`} patientId={patient.id} dental />}
-
-          {/* DENTISTE : les clichés, sans quitter la séance. Un cliché déposé
-              ici est rattaché à ce rendez-vous et daté du jour. */}
-          {isDental && (
-            <ImagerieDentaire patientId={patient.id} doctorId={doctorId} onImages={setImagerie} seance={appointmentId} compact />
           )}
 
           {/* Ordonnances de cette consultation (plusieurs possibles) */}
@@ -1088,35 +1292,7 @@ export default function ConsultationClient({
             </div>
           )}
 
-          {/* Parodonte, laboratoire, orthodontie — des actes qui se font AU
-              FAUTEUIL, et qu'il fallait pourtant aller saisir dans la fiche
-              patient : on sortait de la consultation pour noter une poche ou
-              pour vérifier si la couronne était revenue du labo.
-              
-              REPLIÉS, et c'est volontaire : la plupart des séances ne touchent
-              à aucun des trois. Les déplier d'office rendrait l'écran illisible
-              pour le soin courant, alors qu'un clic suffit le jour où on en a
-              besoin. Rien n'est chargé tant que le bloc n'est pas ouvert. */}
-          {isDental && (
-            <div className="bg-white border border-gray-100 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setSuiviOuvert((v) => !v)}
-                className="w-full flex items-center gap-2 px-4 py-3 text-left"
-                aria-expanded={suiviOuvert}
-              >
-                <span className="text-sm font-semibold text-gray-700">Parodonte, laboratoire, orthodontie</span>
-                <span className="ml-auto text-[11px] text-gray-400">{suiviOuvert ? 'Masquer' : 'Afficher'}</span>
-                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${suiviOuvert ? 'rotate-180' : ''}`} />
-              </button>
-              {suiviOuvert && (
-                <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
-                  <OrthoCard patientId={patient.id} />
-                  <PerioCard patientId={patient.id} />
-                  <LabWorksCard patientId={patient.id} />
-                </div>
-              )}
-            </div>
+            </>
           )}
 
           {/* La feuille de soins n'est plus ici : elle s'ouvre en fenêtre,

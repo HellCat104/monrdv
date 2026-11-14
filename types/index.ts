@@ -312,7 +312,15 @@ export const DEFAULT_VITALS_BY_SPECIALTY: Record<string, string[]> = {
   'Gériatre':                     ['weight', 'height', 'systolic', 'diastolic', 'heart_rate', 'spo2'],
   'Néphrologue':                  ['weight', 'systolic', 'diastolic'],
   'Médecin urgentiste':           ['systolic', 'diastolic', 'heart_rate', 'spo2', 'temperature', 'respiratory_rate'],
+  // Le dentiste prend la tension et la glycémie avant une anesthésie ou une
+  // extraction (cardiaques, diabétiques, patients sous anticoagulants), et
+  // cote la douleur à l'arrivée d'une urgence.
+  'Dentiste':                     ['systolic', 'diastolic', 'heart_rate', 'blood_glucose', 'pain'],
+  'Stomatologiste':               ['systolic', 'diastolic', 'heart_rate', 'blood_glucose', 'pain'],
 }
+
+/** Les constantes du dentiste, quand il n'en a choisi aucune. */
+export const VITALS_DENTISTE = ['systolic', 'diastolic', 'heart_rate', 'blood_glucose', 'pain']
 
 // Résout les constantes à afficher pour un médecin (config ou défaut spécialité)
 export function resolveEnabledVitals(enabled: string[] | null | undefined, specialty?: string): string[] {
