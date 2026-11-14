@@ -9,7 +9,7 @@ import { etatPatient, resumeEchange } from '@/lib/file-attente'
 import PanneauAccueil, { type Mot } from '@/components/dashboard/PanneauAccueil'
 import { STATUS_LABELS, STATUS_COLORS, ATTENDANCE_LABELS, ATTENDANCE_COLORS, PAYMENT_METHOD_LABELS, VITAL_DEFS } from '@/types'
 import type { Appointment, AppointmentStatus, AppointmentAttendance, PaymentMethod } from '@/types'
-import { posteUtile, nomPoste, couleurPoste, type Poste } from '@/lib/postes'
+import { posteUtile, nomPoste, type Poste } from '@/lib/postes'
 import { couleurDuRdv } from '@/lib/motifs-couleurs'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -426,10 +426,12 @@ export function AppointmentList({ appointments, onStatusChange, onAttendanceChan
                     question — où et quand ce patient est-il attendu. */}
                 {montrerPoste && (() => {
                   const nom = nomPoste(postes, apt.poste_id)
-                  const c = couleurPoste(postes.find((p) => p.id === apt.poste_id)?.couleur)
+                  // Étiquette NEUTRE : la couleur, sur cette ligne, est celle
+                  // du motif. Deux étiquettes colorées côte à côte, l'une pour
+                  // le soin et l'autre pour le fauteuil, se confondaient.
                   return nom ? (
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${c.fond} ${c.texte}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${c.point}`} /> {nom}
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium bg-gray-100 text-gray-700 border border-gray-200">
+                      {nom}
                     </span>
                   ) : (
                     <span className="text-gray-300">Sans poste</span>

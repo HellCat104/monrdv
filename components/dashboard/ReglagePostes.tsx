@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Armchair, Plus, Check, X, Trash2 } from 'lucide-react'
-import { COULEURS_POSTE, couleurPoste, type Poste } from '@/lib/postes'
+import { COULEURS_POSTE, type Poste } from '@/lib/postes'
 
 export default function ReglagePostes() {
   const [postes, setPostes] = useState<Poste[]>([])
@@ -104,15 +104,15 @@ export default function ReglagePostes() {
           Si votre cabinet reçoit sur <strong>plusieurs fauteuils ou plusieurs salles</strong>,
           déclarez-les ici : l’agenda pourra alors poser deux rendez-vous à la même heure, un par
           poste, au lieu de les refuser. Tant que vous n’en déclarez aucun, rien ne change.
+          Dans l’agenda, le fauteuil s’écrit sur chaque rendez-vous : la couleur, elle, est
+          réservée au motif de consultation.
         </p>
 
         {postes.length > 0 && (
           <ul className="space-y-1.5">
             {postes.map((p, i) => {
-              const c = couleurPoste(p.couleur)
               return (
-                <li key={p.id} className={`flex items-center gap-2 border rounded-lg px-2.5 py-2 ${c.fond} ${c.bord}`}>
-                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${c.point}`} />
+                <li key={p.id} className="flex items-center gap-2 border border-gray-200 bg-gray-50 rounded-lg px-2.5 py-2">
                   <input
                     defaultValue={p.nom}
                     onBlur={(e) => {
@@ -121,13 +121,9 @@ export default function ReglagePostes() {
                     }}
                     className="flex-1 min-w-0 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 font-medium text-gray-900"
                   />
-                  <div className="flex items-center gap-1 shrink-0">
-                    {COULEURS_POSTE.map((x) => (
-                      <button key={x.cle} type="button" title={x.label}
-                        onClick={() => modifier(p.id, { couleur: x.cle })}
-                        className={`h-4 w-4 rounded-full ${x.point} ${p.couleur === x.cle ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-50 hover:opacity-100'}`} />
-                    ))}
-                  </div>
+                  {/* Plus de couleur par fauteuil : elle entrait en conflit
+                      avec celle des motifs, dans les mêmes teintes. La colonne
+                      reste en base, inutilisée. */}
                   {/* L'ordre des colonnes, celui du couloir et pas l'alphabet. */}
                   <div className="flex items-center gap-0.5 shrink-0">
                     <button type="button" disabled={i === 0}
@@ -158,7 +154,6 @@ export default function ReglagePostes() {
         )}
 
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`h-3 w-3 rounded-full shrink-0 ${couleurPoste(couleur).point}`} />
           <input value={nouveau} onChange={(e) => setNouveau(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); ajouter() } }}
             placeholder={postes.length === 0 ? 'Fauteuil 1' : `Fauteuil ${postes.length + 1}`}

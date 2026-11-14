@@ -12,7 +12,7 @@ import { Ban } from 'lucide-react'
 import { getDayKey, getDayBreaks, getNowInMaroc, toMinutes } from '@/lib/utils'
 import { estAbsent } from '@/lib/file-attente'
 import type { Appointment, WorkingHours } from '@/types'
-import { posteUtile, nomPoste, couleurPoste, type Poste } from '@/lib/postes'
+import { posteUtile, nomPoste, type Poste } from '@/lib/postes'
 import { couleurDuRdv } from '@/lib/motifs-couleurs'
 
 export interface WeekBlock {
@@ -364,14 +364,13 @@ export function WeekGrid({
                         : enAttente ? 'bg-amber-50 border-amber-400 text-amber-900'
                         : teinte    ? `${teinte.caseFond} ${teinte.bord} ${teinte.texte}`
                                     : 'bg-primary-50 border-primary-500 text-primary-900'
-                      } ${
-                        // Le liseré gauche prend la couleur du fauteuil : deux
-                        // blocs côte à côte sans ce repère laissent deviner
-                        // lequel est où, ce qui est justement la question.
-                        montrerPoste && r.apt.poste_id && !absent
-                          ? couleurPoste(postes.find((p) => p.id === r.apt.poste_id)?.couleur).bordG
-                          : ''
                       }`}
+                      // UNE COULEUR, UN SENS. Le bloc prenait la couleur du
+                      // MOTIF et son liseré celle du FAUTEUIL, avec des
+                      // palettes qui se recouvrent (menthe, violet, rose) :
+                      // un bloc vert bordé de violet ne se lisait plus. La
+                      // couleur dit désormais le motif, et seulement lui ; le
+                      // fauteuil s'écrit en toutes lettres dans le bloc.
                       style={{
                         top: y(r.start, debut),
                         height: Math.max(16, (r.end - r.start) * MINUTE_PX - 2),
@@ -388,10 +387,12 @@ export function WeekGrid({
                       {(r.end - r.start) >= 30 && (
                         <div className="text-[10px] leading-tight truncate opacity-75">
                           {r.apt.patient?.last_name ?? ''}
+                          {montrerPoste && nomPoste(postes, r.apt.poste_id) && (r.end - r.start) < 45
+                            ? ` · ${nomPoste(postes, r.apt.poste_id)}` : ''}
                         </div>
                       )}
                       {montrerPoste && (r.end - r.start) >= 45 && nomPoste(postes, r.apt.poste_id) && (
-                        <div className="text-[9px] leading-tight truncate opacity-60">
+                        <div className="text-[10px] leading-tight truncate font-medium opacity-80">
                           {nomPoste(postes, r.apt.poste_id)}
                         </div>
                       )}
