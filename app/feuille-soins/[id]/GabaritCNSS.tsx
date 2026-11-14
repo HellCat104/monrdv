@@ -21,6 +21,7 @@ import type {
   ActeImprime, BeneficiaireImprime, FeuilleImprimee, PraticienImprime,
 } from '@/lib/feuilles-soins'
 import type { Organisme } from '@/lib/organismes'
+import type { Assure } from '@/lib/assure'
 
 export interface Props {
   organisme: Organisme
@@ -29,6 +30,8 @@ export interface Props {
   beneficiaire: BeneficiaireImprime
   feuille: FeuilleImprimee
   actes: ActeImprime[]
+  /** L'assuré, quand la fiche patient le renseigne (lib/assure.ts). */
+  assure?: Assure
 }
 
 const L = 1700
@@ -98,7 +101,7 @@ function dentSurArcade(fdi: string | null | undefined): { x: number; y: number; 
   return { x, y, d: DIAMETRE[Number(m[2]) - 1] }
 }
 
-export default function GabaritCNSS({ praticien, patientId, beneficiaire, feuille, actes }: Props) {
+export default function GabaritCNSS({ praticien, patientId, beneficiaire, feuille, actes, assure }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
   const coche = (t: string) => feuille.typesSoins.includes(t)
 
@@ -115,7 +118,25 @@ export default function GabaritCNSS({ praticien, patientId, beneficiaire, feuill
   const NAISSANCE = [751.5, 761.2, 775.6, 785.3, 798.0, 808.1, 818.3, 828.4]
   const DATE_PRATICIEN = [833.8, 843.5, 857.9, 867.6, 880.5, 890.8, 900.9, 910.9]
 
+  // La partie de l'assuré : ce que la fiche patient en sait. Le reste reste
+  // vierge — l'assuré complète et signe.
+  const LIENS_X: Record<string, number> = { 'Conjoint': 711.9, 'Enfant': 776.9, 'Lui même': 848.3 }
+  const adresse = (assure?.adresse ?? '').replace(/\s+/g, ' ').trim()
+  // L'adresse tient sur deux lignes pointillées d'environ 300 millièmes.
+  const coupe = adresse.length > 54 ? adresse.lastIndexOf(' ', 54) : -1
+  const partieAssure: MarqueFormulaire[] = assure ? [
+    { x: 630, y: 104.5, texte: assure.nom, taille: 12.5 },
+    { x: 653.3, y: 123.5, texte: assure.immatriculation, pas: 9.73, taille: 10 },
+    { x: 792.4, y: 137.6, texte: assure.cin, pas: 9.68, taille: 10 },
+    ...(assure.lien && LIENS_X[assure.lien] ? [{ x: LIENS_X[assure.lien], y: 164.6, signe: 'croix' as const, largeur: 7 }] : []),
+    { x: 622, y: 181, texte: coupe > 0 ? adresse.slice(0, coupe) : adresse.slice(0, 60), taille: 10.5 },
+    ...(coupe > 0 ? [{ x: 622, y: 192, texte: adresse.slice(coupe + 1, coupe + 61), taille: 10.5 }] : []),
+  ] : []
+
   const page1: MarqueFormulaire[] = [
+    ...partieAssure,
+    // Le montant des frais : le total de la feuille, que le cabinet connaît.
+    { x: 728, y: 207, texte: feuille.total > 0 ? dh(feuille.total) : '', taille: 11, ancre: 'end' },
     // Entente préalable ou exécution, en tête de l'imprimé : la petite case à
     // droite de chaque mention.
     feuille.nature === 'entente_prealable'

@@ -4,6 +4,18 @@
 export type ToothStatus =
   | 'carie' | 'obturation' | 'couronne' | 'a_extraire' | 'extraite' | 'implant'
   | 'fracture' | 'bridge' | 'endodontie' | 'mobilite'
+  // Novembre 2026 : ce que les logiciels dentaires notent couramment et qui
+  // manquait. Aucune migration : les états vivent dans le JSON du schéma.
+  | 'lesion_apicale' | 'inlay' | 'scellement' | 'facette' | 'incluse' | 'prothese_amovible'
+
+/** Les trois familles d'états, pour ranger la saisie et la légende : ce qu'on
+ *  CONSTATE, ce qu'on a SOIGNÉ ou restauré, ce qui REMPLACE ou retire la dent. */
+export type GroupeEtat = 'pathologie' | 'soin' | 'remplacement'
+export const GROUPES_ETATS: { cle: GroupeEtat; titre: string }[] = [
+  { cle: 'pathologie', titre: 'Pathologies' },
+  { cle: 'soin', titre: 'Soins et restaurations' },
+  { cle: 'remplacement', titre: 'Absence et remplacement' },
+]
 
 // ── LES QUATRE NATURES ──────────────────────────────────────────────────────
 //
@@ -69,17 +81,33 @@ export interface StoredToothInfo {
 }
 export type StoredDentalTeeth = Record<string, StoredToothInfo | null | undefined>
 
-export const DENTAL_STATES: { key: ToothStatus; label: string; color: string }[] = [
-  { key: 'carie',      label: 'Carie',                 color: '#ef4444' },
-  { key: 'fracture',   label: 'Fracture',              color: '#dc2626' },
-  { key: 'mobilite',   label: 'Mobilité',              color: '#ea580c' },
-  { key: 'obturation', label: 'Plombage / obturation', color: '#3b82f6' },
-  { key: 'endodontie', label: 'Traitement de racine',  color: '#0ea5e9' },
-  { key: 'couronne',   label: 'Couronne',              color: '#f59e0b' },
-  { key: 'bridge',     label: 'Bridge',                color: '#d97706' },
-  { key: 'a_extraire', label: 'À extraire',            color: '#f97316' },
-  { key: 'extraite',   label: 'Absente / extraite',    color: '#6b7280' },
-  { key: 'implant',    label: 'Implant',               color: '#8b5cf6' },
+// LA PALETTE. Seize états, seize teintes qu'on ne confond pas. L'ancienne
+// palette mettait côte à côte deux rouges (carie, fracture), trois oranges
+// (mobilité, à extraire, bridge) et deux ambres (couronne, bridge) : sur une
+// dent de 30 pixels, on ne savait plus lequel on regardait. Chaque teinte est
+// désormais seule dans sa famille de couleur, et la couleur suit le sens
+// quand elle le peut : l'or pour la couronne, le noir pour la fracture, le
+// bordeaux pour l'infection.
+export const DENTAL_STATES: { key: ToothStatus; label: string; color: string; groupe: GroupeEtat; aide: string }[] = [
+  // Pathologies
+  { key: 'carie',          label: 'Carie',                  color: '#dc2626', groupe: 'pathologie', aide: 'Lésion carieuse — précisez la face' },
+  { key: 'fracture',       label: 'Fracture',               color: '#1f2937', groupe: 'pathologie', aide: 'Dent ou restauration fracturée' },
+  { key: 'lesion_apicale', label: 'Lésion apicale / abcès', color: '#9f1239', groupe: 'pathologie', aide: 'Infection au bout de la racine' },
+  { key: 'mobilite',       label: 'Mobilité',               color: '#65a30d', groupe: 'pathologie', aide: 'La dent bouge' },
+  // Soins et restaurations
+  { key: 'obturation',     label: 'Obturation (composite)', color: '#2563eb', groupe: 'soin', aide: 'Plombage, composite — précisez la face' },
+  { key: 'inlay',          label: 'Inlay / onlay',          color: '#1e3a8a', groupe: 'soin', aide: 'Restauration collée faite au laboratoire' },
+  { key: 'scellement',     label: 'Scellement de sillons',  color: '#16a34a', groupe: 'soin', aide: 'Protection des sillons (enfant)' },
+  { key: 'endodontie',     label: 'Traitement de racine',   color: '#06b6d4', groupe: 'soin', aide: 'Dévitalisation, canaux obturés' },
+  { key: 'couronne',       label: 'Couronne',               color: '#eab308', groupe: 'soin', aide: 'Couronne prothétique' },
+  { key: 'bridge',         label: 'Bridge',                 color: '#b45309', groupe: 'soin', aide: 'Pilier ou élément de bridge' },
+  { key: 'facette',        label: 'Facette',                color: '#f472b6', groupe: 'soin', aide: 'Facette esthétique sur la face visible' },
+  // Absence et remplacement
+  { key: 'a_extraire',     label: 'À extraire',             color: '#f97316', groupe: 'remplacement', aide: 'Extraction décidée' },
+  { key: 'extraite',       label: 'Absente / extraite',     color: '#6b7280', groupe: 'remplacement', aide: 'La dent n’est plus là' },
+  { key: 'incluse',        label: 'Dent incluse',           color: '#0d9488', groupe: 'remplacement', aide: 'Restée dans l’os, non sortie' },
+  { key: 'implant',        label: 'Implant',                color: '#7c3aed', groupe: 'remplacement', aide: 'Racine remplacée par un implant' },
+  { key: 'prothese_amovible', label: 'Prothèse amovible',   color: '#c026d3', groupe: 'remplacement', aide: 'Dent remplacée par un appareil' },
 ]
 // Les cinq faces d'une dent, dans l'ordre où un praticien les lit sur un schéma.
 // Les initiales sont celles qu'il écrit déjà à la main sur ses fiches.
@@ -104,7 +132,7 @@ export const DENTAL_FACE_LABEL: Record<string, string> =
 // Une couronne coiffe la dent entière, un implant la remplace, une dent
 // extraite n'a plus de face, une mobilité concerne la dent dans son ensemble :
 // proposer des cases de face pour ces états inviterait à saisir un non-sens.
-export const ETATS_AVEC_FACES = new Set<ToothStatus>(['carie', 'obturation', 'fracture'])
+export const ETATS_AVEC_FACES = new Set<ToothStatus>(['carie', 'obturation', 'fracture', 'inlay'])
 
 export const DENTAL_LABEL: Record<string, string> = Object.fromEntries(DENTAL_STATES.map((s) => [s.key, s.label]))
 export const DENTAL_COLOR: Record<string, string> = Object.fromEntries(DENTAL_STATES.map((s) => [s.key, s.color]))
@@ -118,8 +146,8 @@ const STATE_RANK: Record<string, number> = Object.fromEntries(DENTAL_STATES.map(
 // qu'un : on met en avant ce qui doit sauter aux yeux du praticien (l'urgence, puis
 // la pathologie) ; les états « réparés » ne servent que de marqueur secondaire.
 const PRIMARY_PRIORITY: ToothStatus[] = [
-  'extraite', 'a_extraire', 'fracture', 'carie', 'mobilite',
-  'implant', 'bridge', 'couronne', 'endodontie', 'obturation',
+  'extraite', 'a_extraire', 'fracture', 'lesion_apicale', 'carie', 'mobilite', 'incluse',
+  'implant', 'prothese_amovible', 'bridge', 'couronne', 'facette', 'endodontie', 'inlay', 'obturation', 'scellement',
 ]
 
 // Arcades, dans l'ordre d'affichage (vue du praticien : côté droit du patient à gauche).

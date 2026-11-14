@@ -157,28 +157,32 @@ const TRACES: Record<Forme, Trace> = {
 
 /** Les racines, et les canaux qu'un traitement de racine remplit. `arriere` =
  *  la racine palatine d'une molaire du haut, vue en transparence derrière. */
-const RACINES: Record<Racines, { avant: string; arriere?: string; canaux: string }> = {
+const RACINES: Record<Racines, { avant: string; arriere?: string; canaux: string; apex: [number, number][] }> = {
   une: {
+    apex: [[20, 6]],
     avant: 'M12.4 46C11.8 31 14.3 15 18.5 5Q20 2.5 21.5 5C25.7 15 28.2 31 27.6 46Z',
     canaux: 'M20 46C20 32 20 19 20 8',
   },
   bifide: {
+    apex: [[16.2, 13], [23.8, 13]],
     avant: 'M12.2 47C11.5 36 12.5 24 15 13Q16.2 10.5 17.5 13C18.3 18 19 22 20 25C21 22 21.7 18 22.5 13Q23.8 10.5 25 13C27.5 24 28.5 36 27.8 47Z',
     canaux: 'M18.3 47C17.8 35 17 24 16.3 14M21.7 47C22.2 35 23 24 23.7 14',
   },
   trois: {
+    apex: [[11, 13.5], [29, 13.5]],
     arriere: 'M15 41C15 28 17 16 19.5 6Q20.5 4.5 21.5 6C24 16 25.5 28 25.5 41Z',
     avant: 'M7.3 49C6 38 6.5 25 9.5 13Q11 10.5 12.5 13C13.5 21 14.5 28 16.5 33Q20 36.5 23.5 33C25.5 28 26.5 21 27.5 13Q29 10.5 30.5 13C33.5 25 34 38 32.7 49Z',
     canaux: 'M12.5 48C11 38 10.5 26 11 15M27.5 48C29 38 29.5 26 29 15M20 40V9',
   },
   deux: {
+    apex: [[12, 15.5], [28, 15.5]],
     avant: 'M7.3 49C6.5 38 7.5 26 10.5 15Q12 12.5 13.5 15C14.5 23 15.5 30 17 35Q20 38 23 35C24.5 30 25.5 23 26.5 15Q28 12.5 29.5 15C32.5 26 33.5 38 32.7 49Z',
     canaux: 'M13.5 48C12.5 38 12 27 12 17M26.5 48C27.5 38 28 27 28 17',
   },
 }
 
 /** Ce qui se pose en TACHE sur l'émail, à l'endroit de la face notée. */
-const TACHES: ToothStatus[] = ['obturation', 'carie'] // la carie par-dessus
+const TACHES: ToothStatus[] = ['inlay', 'obturation', 'carie'] // la carie par-dessus
 /** Ce qui recouvre toute la couronne. */
 const PROTHESES: ToothStatus[] = ['bridge', 'couronne']
 const FACES_CONNUES = new Set<string>(['O', 'M', 'D', 'V', 'P'])
@@ -197,6 +201,16 @@ export interface LectureDent {
   /** À extraire : la couleur de toute la dent. */
   toute: string | null
   contour: string | null
+  /** Lésion apicale : un halo au bout de chaque racine. */
+  lesion: string | null
+  /** Scellement des sillons : un liseré vert sur le bord libre. */
+  scellement: boolean
+  /** Facette : un voile coloré sur la face visible de la couronne. */
+  facette: string | null
+  /** Dent incluse : dessinée en transparence, dans l'os. */
+  incluse: boolean
+  /** Prothèse amovible : une dent prothétique sur sa base, sans racine. */
+  amovible: boolean
   /** Les états que le dessin ne montre PAS : une couronne sous un bridge, un
    *  traitement de racine sur un implant. Le schéma les signale en pastilles. */
   nonMontres: ToothStatus[]
@@ -207,6 +221,7 @@ export function lireDent(etats: ToothStatus[]): LectureDent {
   const lu: LectureDent = {
     extraite: false, prothese: null, bridge: false, taches: [], fracture: false,
     canaux: null, implant: false, toute: null, contour: null, nonMontres: [],
+    lesion: null, scellement: false, facette: null, incluse: false, amovible: false,
   }
   if (etats.includes('extraite')) return { ...lu, extraite: true }
 
@@ -232,6 +247,11 @@ export function lireDent(etats: ToothStatus[]): LectureDent {
   if (etats.includes('a_extraire')) { lu.toute = DENTAL_COLOR.a_extraire; montres.add('a_extraire') }
 
   if (etats.includes('mobilite')) { lu.contour = DENTAL_COLOR.mobilite; montres.add('mobilite') }
+  if (etats.includes('lesion_apicale')) { lu.lesion = DENTAL_COLOR.lesion_apicale; montres.add('lesion_apicale') }
+  if (etats.includes('scellement')) { lu.scellement = true; montres.add('scellement') }
+  if (etats.includes('facette') && !lu.prothese) { lu.facette = DENTAL_COLOR.facette; montres.add('facette') }
+  if (etats.includes('incluse')) { lu.incluse = true; montres.add('incluse') }
+  if (etats.includes('prothese_amovible')) { lu.amovible = true; montres.add('prothese_amovible') }
 
   lu.nonMontres = etats.filter((e) => !montres.has(e))
   return lu
@@ -371,9 +391,14 @@ export default function DessinDent({ numero, etats, planifie = false, faces }: {
             <path d="M9 28L31 74M31 28L9 74" stroke={DENTAL_COLOR.extraite} strokeWidth="2.4" fill="none" />
           </>
         ) : (
-          <>
+          <g opacity={lu.incluse ? 0.45 : undefined}>
             {/* ── Les racines ── */}
-            {lu.implant ? (
+            {lu.amovible ? (
+              // Prothèse amovible : pas de racine. La dent prothétique repose
+              // sur sa base en résine rose, à la hauteur de la gencive.
+              <path d={`M5 ${c - 7}Q20 ${c - 11} 35 ${c - 7}L35 ${c + 3}L5 ${c + 3}Z`}
+                fill="#f9a8d4" stroke={DENTAL_COLOR.prothese_amovible} strokeWidth="0.8" />
+            ) : lu.implant ? (
               <>
                 {/* L'implant : une vis de titane à la place de la racine,
                     teintée de la couleur de la légende. */}
@@ -423,7 +448,15 @@ export default function DessinDent({ numero, etats, planifie = false, faces }: {
             <g clipPath={`url(#${p}k)`}>
               <rect x="0" y={y0 - 6} width="40" height={h + 10} fill={fondCouronne ? `url(#${p}o)` : `url(#${p}i)`} />
               {trace.relief && <path d={trace.relief} fill="none" stroke="#64748b" strokeOpacity={0.22} strokeWidth="0.8" />}
+              {/* Facette : un voile sur toute la face visible. */}
+              {lu.facette && (
+                <rect x={x0 - 2} y={y0 + 0.12 * h} width={w + 4} height={h} fill={lu.facette} fillOpacity={0.55} />
+              )}
               {taches}
+              {/* Scellement des sillons : un liseré vert sur le bord libre. */}
+              {lu.scellement && (
+                <rect x={x0 - 2} y={y1 - 0.12 * h} width={w + 4} height={0.12 * h + 3} fill={DENTAL_COLOR.scellement} />
+              )}
               {lu.fracture && (
                 <>
                   <path d={fracture} fill="none" stroke="#ffffff" strokeOpacity={0.8} strokeWidth="3" />
@@ -454,7 +487,21 @@ export default function DessinDent({ numero, etats, planifie = false, faces }: {
               <path d={`M${x0 - 2} ${y0 + 0.3 * h}Q${x0 - 4} ${y0 + 0.5 * h} ${x0 - 2} ${y0 + 0.7 * h}M${x1 + 2} ${y0 + 0.3 * h}Q${x1 + 4} ${y0 + 0.5 * h} ${x1 + 2} ${y0 + 0.7 * h}`}
                 fill="none" stroke={lu.contour} strokeWidth="1.3" />
             )}
-          </>
+
+            {/* Lésion apicale : un halo bordeaux au bout de chaque racine. */}
+            {lu.lesion && !lu.implant && !lu.amovible && racines.apex.map(([ax, ay], i) => (
+              <circle key={i} cx={ax} cy={ay} r={5.2} fill={lu.lesion!} fillOpacity={0.45}
+                stroke={lu.lesion!} strokeWidth="1" />
+            ))}
+
+            {/* Dent incluse : contour en tirets, restée dans l'os. */}
+            {lu.incluse && (
+              <>
+                <path d={racines.avant} fill="none" stroke={DENTAL_COLOR.incluse} strokeWidth="1.4" strokeDasharray="2.5 1.8" />
+                <path d={trace.couronne} fill="none" stroke={DENTAL_COLOR.incluse} strokeWidth="1.4" strokeDasharray="2.5 1.8" />
+              </>
+            )}
+          </g>
         )}
       </g>
     </svg>

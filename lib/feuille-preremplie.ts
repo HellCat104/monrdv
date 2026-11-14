@@ -79,6 +79,7 @@ export function actesDeLaSeance(events: ToothEvent[], appointmentId: string | nu
     }
     if (r.has('endodontie')) actes.push({ tooth, code: canalairePourDent(tooth) })
     if (r.has('carie') || r.has('obturation')) actes.push({ tooth, code: obturationPourFaces(faces.get(tooth) ?? 0) })
+    if (r.has('scellement')) actes.push({ tooth, code: 'D712' })
     if (r.has('bridge')) actes.push({ tooth, code: 'D757' })
     else if (r.has('couronne')) actes.push({ tooth, code: 'D754' })
   }

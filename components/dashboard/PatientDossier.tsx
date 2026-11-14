@@ -37,6 +37,7 @@ import VitalsTrend from '@/components/dashboard/VitalsTrend'
 import { organismePour } from '@/lib/organismes'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
+import { LIENS_ASSURE, assureDe, libelleNumeroAssure, normaliserLien, numeroAssure } from '@/lib/assure'
 import { isNonPrescriber } from '@/lib/profession'
 import { nettoyerEtiquettes, normaliserEtiquette, dejaPosee, suggestions } from '@/lib/pathologies'
 import { Button } from '@/components/ui/button'
@@ -155,12 +156,11 @@ export default function PatientDossier({
   const [editUrgence, setEditUrgence] = useState((patient as { emergency_contact?: string | null }).emergency_contact ?? '')
   const [editUrgencePhone, setEditUrgencePhone] = useState((patient as { emergency_phone?: string | null }).emergency_phone ?? '')
   const [editMutuelle, setEditMutuelle] = useState(patient.mutuelle ?? '')
-  // Les renseignements de l'assuré. PLUS AUCUN ÉCRAN NE LES SAISIT — c'est
-  // l'assuré qui remplit sa partie du formulaire, de sa main — mais cet état
-  // reste, et il est réenregistré tel quel : sans lui, le premier
-  // enregistrement de la fiche effacerait ce que les cabinets ont déjà saisi
-  // sous l'ancienne version. On conserve, on ne demande plus.
-  const [assureData] = useState<Record<string, string>>(
+  // Les renseignements de l'assuré (lib/assure.ts) : facultatifs. Ce qui est
+  // renseigné s'imprime dans « Partie réservée à l'assuré(e) » de la feuille
+  // de soins ; le reste y reste vierge pour la main de l'assuré. Les clés
+  // inconnues de l'écran (saisies sous l'ancienne version) sont conservées.
+  const [assureData, setAssureData] = useState<Record<string, string>>(
     ((patient as { insurer_data?: Record<string, string> | null }).insurer_data ?? {}) as Record<string, string>,
   )
   const [mutuelleOther, setMutuelleOther] = useState(!!patient.mutuelle && !(MUTUELLES_MAROC as readonly string[]).includes(patient.mutuelle))
@@ -1095,16 +1095,60 @@ export default function PatientDossier({
                 </Select>
                 {mutuelleOther && <Input value={editMutuelle} onChange={(e) => setEditMutuelle(e.target.value)} placeholder="Précisez" className="h-9 mt-1.5" />}
               </div>
-              {/* Les champs de l'assuré — nom, immatriculation, CIN, adresse,
-                  lien de parenté — ne sont plus demandés. Ils ne servaient
-                  qu'à remplir « Partie réservée à l'assuré(e) » sur la feuille
-                  de soins, et cette partie-là, c'est l'assuré qui l'écrit de
-                  sa main et qui signe dessous. Le cabinet saisissait donc une
-                  identité qu'il n'a pas à déclarer, pour qu'elle ne soit
-                  finalement pas opposable. Ce qui était déjà saisi reste en
-                  base, intact.
-                  Seule la mutuelle compte encore : elle choisit le formulaire
-                  imprimé. */}
+              {/* L'assuré — pour la « Partie réservée à l'assuré(e) » de la
+                  feuille de soins. Tout est facultatif : ce qui est saisi
+                  s'imprime, le reste est laissé à la main de l'assuré. */}
+              {couvertureDisponible && editMutuelle && editMutuelle !== 'Aucune' && (
+                <div className="sm:col-span-2 rounded-lg border border-gray-100 bg-gray-50/60 p-3 space-y-2.5">
+                  <p className="text-[11px] font-semibold text-gray-500">
+                    Assuré — imprimé sur la feuille de soins
+                    <span className="font-normal text-gray-400"> · facultatif</span>
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-gray-400 mr-1">Le patient est</span>
+                    {LIENS_ASSURE.map((l) => {
+                      const actif = normaliserLien(assureData.lien) === l
+                      return (
+                        <button key={l} type="button"
+                          onClick={() => setAssureData((d) => ({ ...d, lien: actif ? '' : l }))}
+                          className={`text-xs rounded-full border px-2.5 py-1 transition ${actif
+                            ? 'border-primary-500 bg-primary-500 text-white'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-primary-300'}`}>
+                          {l === 'Lui même' ? 'l’assuré lui-même' : l === 'Conjoint' ? 'conjoint de l’assuré' : 'enfant de l’assuré'}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-gray-400">{libelleNumeroAssure(editMutuelle)}</Label>
+                      <Input value={numeroAssure(assureData) ?? ''} placeholder="Recopié de la carte"
+                        onChange={(e) => setAssureData((d) => ({ ...d, immatriculation: e.target.value.toUpperCase() }))} className="h-9" />
+                    </div>
+                    {normaliserLien(assureData.lien) && normaliserLien(assureData.lien) !== 'Lui même' && (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-gray-400">Nom et prénom de l’assuré</Label>
+                          <Input value={assureData.assure ?? ''} onChange={(e) => setAssureData((d) => ({ ...d, assure: e.target.value }))} className="h-9" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-gray-400">CIN de l’assuré</Label>
+                          <Input value={assureData.cin_assure ?? ''} placeholder="AB123456"
+                            onChange={(e) => setAssureData((d) => ({ ...d, cin_assure: e.target.value.toUpperCase() }))} className="h-9" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-gray-400">Adresse de l’assuré</Label>
+                          <Input value={assureData.adresse_assure ?? ''} placeholder="Si différente de celle du patient"
+                            onChange={(e) => setAssureData((d) => ({ ...d, adresse_assure: e.target.value }))} className="h-9" />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {normaliserLien(assureData.lien) === 'Lui même' && (
+                    <p className="text-[10.5px] text-gray-400">Nom, CIN et adresse de l’assuré : ceux du patient.</p>
+                  )}
+                </div>
+              )}
               {!isPsy && (
                 <div className="space-y-1"><Label className="text-[11px] text-gray-400">Groupe sanguin</Label>
                   <Select value={editBloodGroup || undefined} onValueChange={setEditBloodGroup}>
@@ -1787,6 +1831,12 @@ export default function PatientDossier({
                       ['CIN', editCin],
                       ['E-mail', editEmail],
                       ['Organisme', editMutuelle],
+                      ['Assuré', (() => {
+                        const a = assureDe(assureData, { first_name: editFirstName, last_name: editLastName, cin: editCin, address: editAddress })
+                        if (!a.lien && !a.immatriculation) return ''
+                        const qui = a.lien === 'Lui même' ? 'le patient' : [a.nom, a.lien ? `(${a.lien.toLowerCase()})` : ''].filter(Boolean).join(' ')
+                        return [qui, a.immatriculation ? `n° ${a.immatriculation}` : ''].filter(Boolean).join(' · ')
+                      })()],
                       ['Adresse', editAddress],
                       ['Urgence', [editUrgence, editUrgencePhone].filter((x) => x.trim()).join(' · ')],
                     ] as [string, string][]).filter(([, v]) => String(v ?? '').trim()).map(([k, v]) => (

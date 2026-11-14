@@ -19,6 +19,7 @@ import { colonneAbsente } from '@/lib/migrations'
 import { type LigneSoin } from './FeuilleDocument'
 import FeuilleIndisponible from './FeuilleIndisponible'
 import { type ActeImprime } from '@/lib/feuilles-soins'
+import { assureDe } from '@/lib/assure'
 import GabaritANAM from './GabaritANAM'
 import GabaritCNSS from './GabaritCNSS'
 import GabaritCNOPS from './GabaritCNOPS'
@@ -43,7 +44,7 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
 
   const { data: feuille } = await supabase
     .from('care_sheets')
-    .select('*, items:care_sheet_items(tooth, code, label, amount, position), patient:patients(first_name, last_name, cin, birth_date, sex, mutuelle)')
+    .select('*, items:care_sheet_items(tooth, code, label, amount, position), patient:patients(first_name, last_name, cin, birth_date, sex, mutuelle, address)')
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .maybeSingle()
@@ -52,7 +53,7 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
   // Pas de logo ici : un imprimé officiel n'en porte pas, et le cadre
   // « Cachet et signature » est fait pour le tampon du cabinet.
   const patient = (Array.isArray(feuille.patient) ? feuille.patient[0] : feuille.patient) as
-    { first_name?: string; last_name?: string; cin?: string | null; birth_date?: string | null; sex?: string | null; mutuelle?: string | null } | null
+    { first_name?: string; last_name?: string; cin?: string | null; birth_date?: string | null; sex?: string | null; mutuelle?: string | null; address?: string | null } | null
   const patientNom = patient ? `${patient.first_name ?? ''} ${patient.last_name ?? ''}`.trim() : ''
   // L'organisme du document.
   //
@@ -161,8 +162,10 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
       ville: doctor.city ?? null,
     },
     patientId: feuille.patient_id as string,
-    // Rien de l'assuré n'est transmis aux gabarits : sa partie du formulaire
-    // s'imprime vierge, il la remplit de sa main et signe dessous.
+    // L'assuré tel que la feuille l'a RECOPIÉ le jour où elle a été établie
+    // (lib/assure.ts). Ce qui n'a pas été saisi reste vierge, pour la main de
+    // l'assuré — qui signe toujours dessous.
+    assure: assureDe(feuille.insurer_data as Record<string, unknown> | null, patient ?? {}),
     beneficiaire: {
       nom: patientNom,
       dateNaissance: patient?.birth_date ?? null,

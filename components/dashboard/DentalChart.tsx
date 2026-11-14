@@ -13,16 +13,17 @@
 // bien voulu déclarer.
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Check } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Maximize2, X } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import DentDevis from '@/components/dashboard/DentDevis'
 import DessinDent, { dentDuHaut, lireDent } from '@/components/dashboard/DessinDent'
 import {
   DENTAL_STATES, DENTAL_COLOR, FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT,
-  DENTAL_FACES, ETATS_AVEC_FACES, estDentDeLait,
+  ETATS_AVEC_FACES, estDentDeLait,
   normalizeTeeth, toggleToothState, toggleFace, toothFaces, allToothFaces, facesLabel,
-  primaryState, stateColors, statesLabel, statesWithFacesLabel,
-  DENTAL_NATURES, natureDe,
-  type DentalTeeth, type ToothStatus, type ToothFace, type ToothNature,
+  statesWithFacesLabel,
+  DENTAL_NATURES, natureDe, GROUPES_ETATS, DENTAL_FACE_LABEL,
+  type DentalTeeth, type ToothStatus, type ToothFace, type ToothNature, type GroupeEtat,
 } from '@/lib/dental'
 
 /** Le jour, écrit depuis les composantes locales : passer par toISOString()
@@ -75,6 +76,8 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
   // le praticien qui prépare un plan de traitement bascule sur « À faire » et
   // n'a plus à la préciser dent après dent.
   const [natureParDefaut, setNatureParDefaut] = useState<ToothNature>('constate')
+  // La vue agrandie : l'arcade en grand et la fiche de la dent côte à côte.
+  const [agrandi, setAgrandi] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Le dernier schéma pas encore envoyé. Si le praticien quitte l'écran dans
   // les 600 ms qui suivent un clic, il part quand même : l'enregistrement
@@ -227,7 +230,7 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
     })
   }
 
-  const Tooth = ({ n }: { n: number }) => {
+  const Tooth = ({ n, grand = false }: { n: number; grand?: boolean }) => {
     const key = String(n)
     const info = teeth[key]
     const states = info?.s ?? []
@@ -263,7 +266,7 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
         <span className="flex items-center gap-[2px]">
           {/* Le repère d'imagerie : cette dent a un cliché au dossier. */}
           {dentsAvecImage?.has(key) && <span className="w-[4px] h-[4px] rounded-[1px] bg-sky-500" />}
-          <span className={`text-[11px] font-semibold ${states.length > 0 ? 'text-gray-800' : 'text-gray-500'} ${states.includes('extraite') ? 'line-through text-gray-400' : ''}`}>{n}</span>
+          <span className={`${grand ? 'text-[13px]' : 'text-[11px]'} font-semibold ${states.length > 0 ? 'text-gray-800' : 'text-gray-500'} ${states.includes('extraite') ? 'line-through text-gray-400' : ''}`}>{n}</span>
           {/* La coche : un soin a été fait sur cette dent. */}
           {aRealise && <span className="text-[9px] font-bold text-emerald-600">✓</span>}
         </span>
@@ -283,7 +286,7 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
     return (
       <button
         type="button"
-        onClick={() => setActive(isActive ? null : key)}
+        onClick={() => setActive(key)}
         title={`${states.length > 0 ? `Dent ${n} — ${statesWithFacesLabel(info)}${info?.n ? ` · ${info.n}` : ''}` : `Dent ${n}`}${
           dentsAvecImage?.has(key) ? ' · image au dossier' : ''}`}
         // ÉLASTIQUE : la dent occupe la place disponible, sans jamais dépasser
@@ -294,7 +297,9 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
         // rangée, et sans ce plafond elles s'étalaient plus LARGES que les
         // seize définitives au-dessus — des dents de lait plus grosses que
         // des molaires d'adulte, vu en production sur un dossier d'enfant.
-        className={`flex-1 basis-0 min-w-[18px] ${estDentDeLait(key) ? 'max-w-[26px]' : 'max-w-[44px]'} flex flex-col items-center gap-[3px] rounded-lg px-[1px] py-1 transition hover:bg-gray-50 ${
+        className={`flex-1 basis-0 min-w-[18px] ${grand
+          ? (estDentDeLait(key) ? 'max-w-[40px]' : 'max-w-[64px]')
+          : (estDentDeLait(key) ? 'max-w-[26px]' : 'max-w-[44px]')} flex flex-col items-center gap-[3px] rounded-lg px-[1px] py-1 transition hover:bg-gray-50 ${
           isActive ? 'bg-primary-50 ring-2 ring-primary-500' : ''}`}
       >
         {!haut && numero}
@@ -306,7 +311,7 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
 
   // Une arcade = hémi-arcade droite du patient (à gauche de l'écran : vue du
   // praticien), écart médian franc, puis hémi-arcade gauche.
-  const Row = ({ ids, lait = false }: { ids: number[]; lait?: boolean }) => {
+  const Row = ({ ids, lait = false, grand = false }: { ids: number[]; lait?: boolean; grand?: boolean }) => {
     // Une hémi-arcade : 8 dents définitives, 5 de lait.
     const moitie = ids.length / 2
     return (
@@ -314,9 +319,9 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
       // leurs repères ajoutés : on les cale sur le bord où les deux arcades se
       // rencontrent — en bas pour le haut, en haut pour le bas.
       <div className={`flex justify-center ${dentDuHaut(ids[0]) ? 'items-end' : 'items-start'}`}>
-        <div className={`flex-1 flex gap-[2px] justify-end ${dentDuHaut(ids[0]) ? 'items-end' : 'items-start'}`}>{ids.slice(0, moitie).map((n) => <Tooth key={n} n={n} />)}</div>
+        <div className={`flex-1 flex gap-[2px] justify-end ${dentDuHaut(ids[0]) ? 'items-end' : 'items-start'}`}>{ids.slice(0, moitie).map((n) => <Tooth key={n} n={n} grand={grand} />)}</div>
         <div className="w-5 shrink-0 flex justify-center self-stretch"><span className="border-l border-dashed border-gray-300 self-stretch" /></div>
-        <div className={`flex-1 flex gap-[2px] justify-start ${dentDuHaut(ids[0]) ? 'items-end' : 'items-start'}`}>{ids.slice(moitie).map((n) => <Tooth key={n} n={n} />)}</div>
+        <div className={`flex-1 flex gap-[2px] justify-start ${dentDuHaut(ids[0]) ? 'items-end' : 'items-start'}`}>{ids.slice(moitie).map((n) => <Tooth key={n} n={n} grand={grand} />)}</div>
         {lait && <span className="self-center ml-2 text-[9px] text-gray-300 shrink-0">lait</span>}
       </div>
     )
@@ -338,15 +343,296 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
   // route renvoie déjà cet ordre). Une dent jamais modifiée n'a pas de bloc.
   const activeHistory = active ? history.filter((e) => e.tooth === active) : []
 
+  // L'ordre de lecture de l'arcade affichée, pour passer d'une dent à la
+  // suivante sans refermer la fiche.
+  const ordre: number[] = [
+    ...(denture !== 'lait' ? FDI_UPPER : []), ...(denture !== 'definitive' ? FDI_UPPER_LAIT : []),
+    ...(denture !== 'definitive' ? FDI_LOWER_LAIT : []), ...(denture !== 'lait' ? FDI_LOWER : []),
+  ]
+  const rang = active ? ordre.indexOf(Number(active)) : -1
+  const voisine = (pas: number) => (rang >= 0 ? ordre[(rang + pas + ordre.length) % ordre.length] : null)
+
+  const etatsDuGroupe = (g: GroupeEtat) => DENTAL_STATES.filter((s) => s.groupe === g)
+
+  /** Les cinq faces, dessinées comme on les voit d'en haut : vestibulaire en
+   *  haut, palatine / linguale en bas, occlusale au centre, mésiale du côté du
+   *  milieu de la bouche. Un clic coche la face pour CET état. */
+  const croixFaces = (n: string, st: ToothStatus) => {
+    const faces = toothFaces(activeInfo, st)
+    const q = Math.floor(Number(n) / 10)
+    const mesialADroite = q === 1 || q === 4 || q === 5 || q === 8
+    const face = (f: ToothFace, place: string) => {
+      const on = faces.includes(f)
+      return (
+        <button key={f} type="button" aria-pressed={on} title={DENTAL_FACE_LABEL[f]}
+          onClick={() => toggleToothFace(n, st, f)}
+          className={`${place} h-6 rounded text-[10px] font-bold border transition ${on
+            ? 'text-white border-transparent' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'}`}
+          style={on ? { backgroundColor: DENTAL_COLOR[st] } : undefined}>
+          {f}
+        </button>
+      )
+    }
+    return (
+      <div className="grid grid-cols-3 gap-[3px] w-[84px] shrink-0">
+        <span />{face('V', '')}<span />
+        {face(mesialADroite ? 'D' : 'M', '')}{face('O', '')}{face(mesialADroite ? 'M' : 'D', '')}
+        <span />{face('P', '')}<span />
+      </div>
+    )
+  }
+
+  /** La fiche d'UNE dent : ce qu'elle porte, où, et où en est chaque acte.
+   *  Ouverte dans une fenêtre : sous l'arcade, elle poussait le reste de la
+   *  consultation hors de l'écran, et un dentiste ne voyait plus à quelle
+   *  dent il était en train de toucher. */
+  const ficheDent = (n: string) => (
+    <div className="space-y-4">
+      {/* En-tête : la dent dessinée en grand, son nom en clair, et de quoi
+          passer à la voisine sans refermer. */}
+      <div className="flex items-start gap-4">
+        <div className="w-20 shrink-0 rounded-xl bg-gray-50 border border-gray-100 p-2">
+          <DessinDent numero={Number(n)} etats={activeStates}
+            planifie={activeStates.some((st) => natureDe(activeInfo, st) === 'planifie')}
+            faces={allToothFaces(activeInfo)} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-semibold text-gray-900 leading-tight">Dent {n}</p>
+          <p className="text-sm text-gray-500">{nomDent(Number(n))}</p>
+          {activeStates.length === 0
+            ? <p className="text-xs text-gray-400 mt-1.5">Dent saine — rien n’est noté. Choisissez ci-dessous ce que vous constatez ou ce que vous avez fait.</p>
+            : <p className="text-xs text-gray-600 mt-1.5">{statesWithFacesLabel(activeInfo)}</p>}
+          <div className="flex items-center gap-1.5 mt-2">
+            <button type="button" onClick={() => { const v = voisine(-1); if (v) setActive(String(v)) }}
+              className="inline-flex items-center gap-0.5 text-xs text-gray-500 border border-gray-200 rounded-md px-2 py-1 hover:border-gray-300">
+              <ChevronLeft className="h-3.5 w-3.5" /> {voisine(-1)}
+            </button>
+            <button type="button" onClick={() => { const v = voisine(1); if (v) setActive(String(v)) }}
+              className="inline-flex items-center gap-0.5 text-xs text-gray-500 border border-gray-200 rounded-md px-2 py-1 hover:border-gray-300">
+              {voisine(1)} <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 1. CE QU'ON NOTE. Trois familles, dans l'ordre où l'on examine : ce
+          qu'on constate, ce qui a été soigné, ce qui manque ou remplace. */}
+      <div>
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          <span className="text-[11px] font-semibold text-gray-500 mr-1">Ce que je coche est</span>
+          {DENTAL_NATURES.map((nat) => (
+            <button key={nat.key} type="button" onClick={() => setNatureParDefaut(nat.key)} title={nat.aide}
+              className={`text-[11px] px-2 py-0.5 rounded-full border transition ${natureParDefaut === nat.key
+                ? 'bg-gray-800 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+              {nat.label.toLowerCase()}
+            </button>
+          ))}
+        </div>
+        <div className="space-y-2">
+          {GROUPES_ETATS.map((g) => (
+            <div key={g.cle}>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400 mb-1">{g.titre}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {etatsDuGroupe(g.cle).map((s) => {
+                  const on = activeStates.includes(s.key)
+                  return (
+                    <button key={s.key} type="button" aria-pressed={on} title={s.aide}
+                      onClick={() => toggleState(n, s.key)}
+                      className={`inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1.5 rounded-lg border transition ${on
+                        ? 'font-semibold text-gray-900 bg-white shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}
+                      style={on ? { borderColor: s.color } : undefined}>
+                      <span className="w-3.5 h-3.5 rounded-[4px] inline-flex items-center justify-center shrink-0 border"
+                        style={{ backgroundColor: on ? s.color : '#fff', borderColor: s.color }}>
+                        {on && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3.5} />}
+                      </span>
+                      {s.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 2. CE QUI EST POSÉ SUR LA DENT — une carte par état : où en est
+          l'acte, depuis quand, et sur quelles faces. C'est ici qu'un soin
+          passe de « à faire » à « réalisé ». */}
+      {activeStates.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold text-gray-500">Sur cette dent</p>
+          {activeStates.map((st) => {
+            const nat = natureDe(activeInfo, st)
+            const quand = activeInfo?.d?.[st]
+            const def = DENTAL_STATES.find((x) => x.key === st)
+            return (
+              <div key={st} className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2"
+                style={{ borderLeft: `4px solid ${DENTAL_COLOR[st]}` }}>
+                <div className="min-w-[130px] flex-1">
+                  <p className="text-sm font-medium text-gray-800">{def?.label}</p>
+                  {quand && <p className="text-[10.5px] text-gray-400">noté le {quand.split('-').reverse().join('/')}</p>}
+                </div>
+                <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+                  {DENTAL_NATURES.map((x) => (
+                    <button key={x.key} type="button" onClick={() => changerNature(n, st, x.key)} title={x.aide}
+                      className={`text-[11px] px-2 py-1 rounded-md transition ${nat === x.key
+                        ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
+                      {x.label}
+                    </button>
+                  ))}
+                </div>
+                {ETATS_AVEC_FACES.has(st) && (
+                  <div className="flex items-center gap-2">
+                    {croixFaces(n, st)}
+                    <span className="text-[10px] text-gray-400 w-16 leading-tight">
+                      {toothFaces(activeInfo, st).length === 0 ? 'dent entière' : `face${toothFaces(activeInfo, st).length > 1 ? 's' : ''} ${facesLabel(toothFaces(activeInfo, st))}`}
+                    </span>
+                  </div>
+                )}
+                <button type="button" onClick={() => toggleState(n, st)} title="Retirer cet état"
+                  className="text-gray-300 hover:text-red-500"><X className="h-4 w-4" /></button>
+              </div>
+            )
+          })}
+          <p className="text-[10px] text-gray-400">
+            Faces : V vestibulaire (côté joue / lèvre) · P palatine ou linguale · O occlusale · M mésiale (vers le milieu) · D distale
+          </p>
+        </div>
+      )}
+
+      {/* Le pont vers le devis : un soin « à faire » devient une ligne de
+          devis sans changer d'écran. */}
+      <DentDevis
+        patientId={patientId}
+        dent={n}
+        etatsPlanifies={activeStates
+          .filter((st) => natureDe(activeInfo, st) === 'planifie')
+          .map((st) => ({ cle: st, label: DENTAL_STATES.find((x) => x.key === st)?.label ?? st }))}
+      />
+
+      {activeInfo && (
+        <div className="flex items-center gap-2">
+          <input
+            value={activeInfo.n ?? ''}
+            onChange={(e) => setNote(n, e.target.value)}
+            placeholder="Note sur cette dent (facultatif) — ex : à surveiller"
+            className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400"
+          />
+          <button type="button" onClick={() => clearTooth(n)}
+            className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200">
+            Tout effacer
+          </button>
+        </div>
+      )}
+
+      {/* Histoire de la dent — la seule pièce que le praticien pourra opposer
+          à un patient qui affirme « cette dent était saine ». */}
+      {activeHistory.length > 0 && (
+        <details className="rounded-lg border border-gray-100 px-3 py-2" open={activeHistory.length <= 4}>
+          <summary className="text-[11px] font-semibold text-gray-500 cursor-pointer">
+            Historique de la dent {n} ({activeHistory.length})
+          </summary>
+          <ul className="space-y-1 mt-1.5">
+            {activeHistory.map((e, i) => {
+              const { kind, texte } = describeToothChange(
+                e.states_before, e.states_after, e.faces_before, e.faces_after,
+                e.natures_before, e.natures_after,
+              )
+              const premiere = kind === 'creation' && i === activeHistory.length - 1
+              return (
+                <li key={e.id} className="text-[12px] text-gray-700 flex gap-1.5" title={toothEventTitle(e)}>
+                  <span className="text-gray-400 shrink-0 tabular-nums">{formatToothEventDate(e.created_at)}</span>
+                  <span className="text-gray-300">—</span>
+                  <span className="min-w-0">
+                    {texte}
+                    {premiere && <span className="text-gray-400"> · première mention</span>}
+                    {e.actor_role !== 'medecin' && <span className="text-gray-400"> · saisi par le secrétariat</span>}
+                    {appointmentId && e.appointment_id === appointmentId && (
+                      <span className="text-primary-600"> · aujourd&apos;hui</span>
+                    )}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </details>
+      )}
+
+      {/* Ce que l'écran autour du schéma sait de cette dent : ses clichés,
+          ses lignes du plan de traitement. */}
+      {panneauDent && panneauDent(n)}
+    </div>
+  )
+
+  /** Les arcades — à la taille de l'encart, ou en grand. */
+  const arcades = (grand: boolean) => (
+    <div className="overflow-x-auto pb-1">
+      <div className={`flex flex-col ${grand ? 'gap-2.5 min-w-[640px]' : 'gap-1.5 min-w-[360px]'}`}>
+        {/* Vue du praticien : le côté droit du patient est à GAUCHE. */}
+        <div className={`flex ${grand ? 'text-xs' : 'text-[10px]'} text-gray-400`}>
+          <div className="flex-1 text-center">Droite du patient</div>
+          <div className="w-6 shrink-0" />
+          <div className="flex-1 text-center">Gauche du patient</div>
+        </div>
+        {denture !== 'lait' && <Row ids={FDI_UPPER} grand={grand} />}
+        {denture !== 'definitive' && <Row ids={FDI_UPPER_LAIT} lait grand={grand} />}
+        <div className="flex items-center gap-2 text-[9px] text-gray-300 tracking-widest">
+          <span className="flex-1 border-t border-gray-100" />MAXILLAIRE ↑ · ↓ MANDIBULE<span className="flex-1 border-t border-gray-100" />
+        </div>
+        {denture !== 'definitive' && <Row ids={FDI_LOWER_LAIT} lait grand={grand} />}
+        {denture !== 'lait' && <Row ids={FDI_LOWER} grand={grand} />}
+      </div>
+    </div>
+  )
+
+  /** La légende, rangée comme la saisie : trois familles, puis ce que disent
+   *  les contours (où en est l'acte). */
+  const legende = (
+    <div className="mt-3 space-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+        {GROUPES_ETATS.map((g) => (
+          <div key={g.cle}>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400 mb-0.5">{g.titre}</p>
+            <div className="flex flex-wrap gap-x-2.5 gap-y-0.5">
+              {etatsDuGroupe(g.cle).map((s) => (
+                <span key={s.key} className="inline-flex items-center gap-1 text-[11px] text-gray-600" title={s.aide}>
+                  <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: s.color }} /> {s.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1.5 border-t border-gray-100 text-[11px] text-gray-500">
+        <span className="text-gray-400">Où en est l’acte :</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3.5 h-3.5 rounded border-2 border-gray-400 bg-gray-300 inline-block" /> constaté
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3.5 h-3.5 rounded border-2 border-dashed border-gray-700 inline-block" /> à faire (contour en tirets)
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="text-emerald-600 font-bold">✓</span> réalisé (coche à côté du numéro)
+        </span>
+      </div>
+    </div>
+  )
+
   return (
     <div className="border-t border-gray-100 pt-4">
-      <h4 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
-        <span>🦷</span> Schéma dentaire
-        {saveState === 'saving' && <span className="text-[11px] text-gray-400 font-normal">Enregistrement…</span>}
-        {saveState === 'saved' && <span className="text-[11px] text-green-600 font-normal inline-flex items-center gap-0.5"><Check className="h-3 w-3" /> Enregistré</span>}
-        {saveState === 'error' && <span className="text-[11px] text-red-500 font-normal">Échec de l&apos;enregistrement</span>}
-      </h4>
-      <p className="text-[11px] text-gray-400 mb-3">Cliquez sur une dent pour indiquer son état ; plusieurs états sont possibles. La couleur se pose là où est le soin : sur la couronne, dans la racine, ou sur toute la dent. Notation internationale (FDI).</p>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <span>🦷</span> Schéma dentaire
+          {saveState === 'saving' && <span className="text-[11px] text-gray-400 font-normal">Enregistrement…</span>}
+          {saveState === 'saved' && <span className="text-[11px] text-green-600 font-normal inline-flex items-center gap-0.5"><Check className="h-3 w-3" /> Enregistré</span>}
+          {saveState === 'error' && <span className="text-[11px] text-red-500 font-normal">Échec de l&apos;enregistrement</span>}
+        </h4>
+        <button type="button" onClick={() => setAgrandi(true)}
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg px-2 py-1">
+          <Maximize2 className="h-3.5 w-3.5" /> Agrandir
+        </button>
+      </div>
+      <p className="text-[11px] text-gray-400 mb-3">Touchez une dent pour ouvrir sa fiche : ce qu’elle porte, sur quelles faces, et où en est chaque soin.</p>
       {journalKo && (
         <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1.5 mb-3">
           Le schéma est enregistré, mais l&apos;historique de la dent n&apos;a pas pu être écrit. Signalez-le : c&apos;est cette trace datée qui fait foi en cas de contestation.
@@ -357,262 +643,62 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
           déjà ses premières molaires définitives — d'où le choix « les deux ». */}
       <div className="flex gap-1 mb-3">
         {([['definitive', 'Définitives'], ['lait', 'Dents de lait'], ['mixte', 'Les deux']] as const).map(([cle, lbl]) => (
-          <button
-            key={cle}
-            type="button"
-            onClick={() => setDentureChoisie(cle)}
-            className={`text-[12px] px-2.5 py-1 rounded-lg border transition ${denture === cle ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}
-          >
+          <button key={cle} type="button" onClick={() => setDentureChoisie(cle)}
+            className={`text-[12px] px-2.5 py-1 rounded-lg border transition ${denture === cle ? 'bg-primary-500 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
             {lbl}
           </button>
         ))}
       </div>
 
-      {/* Le défilement reste, mais en dernier recours : il ne se déclenche plus
-          qu'en dessous de la largeur minimale des dents (téléphone). */}
-      <div className="overflow-x-auto pb-1">
-        <div className="flex flex-col gap-1.5 min-w-[360px]">
-          {/* Vue du praticien : le côté droit du patient est à GAUCHE de l'écran.
-              Les deux libellés lèvent l'hésitation devant le schéma. */}
-          <div className="flex text-[10px] text-gray-400">
-            <div className="flex-1 text-center">Droite du patient</div>
-            <div className="w-6 shrink-0" />
-            <div className="flex-1 text-center">Gauche du patient</div>
-          </div>
-          {denture !== 'lait' && <Row ids={FDI_UPPER} />}
-          {denture !== 'definitive' && <Row ids={FDI_UPPER_LAIT} lait />}
-          <div className="text-center text-[9px] text-gray-300 tracking-widest">— haut / bas —</div>
-          {denture !== 'definitive' && <Row ids={FDI_LOWER_LAIT} lait />}
-          {denture !== 'lait' && <Row ids={FDI_LOWER} />}
-        </div>
-      </div>
+      {arcades(false)}
+      {legende}
 
-      {/* Légende */}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3">
-        {DENTAL_STATES.map((s) => (
-          <span key={s.key} className="inline-flex items-center gap-1 text-[11px] text-gray-500">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: s.color }} /> {s.label}
-          </span>
-        ))}
-      </div>
-
-      {/* DEUX LECTURES, DEUX LÉGENDES. La couleur dit l'acte, la bordure et la
-          coche disent où il en est. Sans cette seconde ligne, personne ne
-          devine ce que signifient des pointillés. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 pt-1.5 border-t border-gray-100 text-[11px] text-gray-500">
-        <span className="text-gray-400">Où en est l’acte :</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded border-2 border-gray-400 bg-gray-400 inline-block" />
-          constaté ou diagnostiqué
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded border-2 border-dashed border-gray-500 inline-block" />
-          à faire
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded border-2 border-gray-400 bg-gray-400 inline-flex items-center justify-center text-white text-[9px] font-bold leading-none">✓</span>
-          réalisé
-        </span>
-      </div>
-
-      {/* Éditeur de la dent sélectionnée */}
-      {active && (
-        <div className="mt-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-semibold text-gray-800">Dent {active}</span>
-            <button type="button" onClick={() => setActive(null)} className="text-xs text-gray-400 hover:text-gray-600">Fermer</button>
-          </div>
-          <p className="text-[11px] text-gray-400 mb-2">Cochez tous les états qui s&apos;appliquent. « Absente / extraite » s&apos;utilise seule.</p>
-
-          {/* CE QU'ON EST EN TRAIN DE NOTER. Au fauteuil on constate ; en
-              préparant un plan de traitement on coche « À faire » une fois,
-              puis on pose les soins dent après dent sans le répéter. */}
-          <div className="flex flex-wrap items-center gap-1.5 mb-2 pb-2 border-b border-gray-100">
-            <span className="text-[11px] text-gray-400 mr-0.5">Je note :</span>
-            {DENTAL_NATURES.map((nat) => (
-              <button key={nat.key} type="button" onClick={() => setNatureParDefaut(nat.key)}
-                title={nat.aide}
-                className={`text-[11px] px-2 py-1 rounded-full border transition ${
-                  natureParDefaut === nat.key
-                    ? 'bg-gray-800 border-gray-800 text-white'
-                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                {nat.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {DENTAL_STATES.map((s) => {
-              const on = activeStates.includes(s.key)
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => toggleState(active, s.key)}
-                  className={`inline-flex items-center gap-1.5 text-[12px] px-2 py-1.5 rounded border bg-white transition ${on ? 'border-gray-700 text-gray-900 font-semibold' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}
-                >
-                  {/* Vraie case à cocher : un bouton simplement coloré ne dit pas
-                      à un médecin peu à l'aise qu'il peut en cocher plusieurs. */}
-                  <span
-                    className="w-4 h-4 rounded-[3px] border inline-flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: on ? s.color : '#ffffff', borderColor: on ? s.color : '#cbd5e1' }}
-                  >
-                    {on && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-                  </span>
-                  {s.label}
-                </button>
-              )
-            })}
-            <button
-              type="button"
-              onClick={() => clearTooth(active)}
-              className="text-[12px] px-2 py-1.5 rounded border border-gray-200 bg-white text-gray-400 hover:text-red-500"
-            >
-              Tout effacer
-            </button>
-          </div>
-          {/* CE QUI EST POSÉ SUR CETTE DENT, et dans quel statut. C'est ici
-              qu'un soin passe de « à faire » à « réalisé » : le plan de
-              traitement vit sur le schéma, pas dans un écran à part. */}
-          {activeStates.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
-              {activeStates.map((st) => {
-                const nat = natureDe(activeInfo, st)
-                const quand = activeInfo?.d?.[st]
-                return (
-                  <div key={st} className="flex items-center gap-1.5 flex-wrap">
-                    <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: DENTAL_COLOR[st] }} />
-                    <span className="text-[12px] text-gray-700 w-[110px] shrink-0">
-                      {DENTAL_STATES.find((x) => x.key === st)?.label}
-                    </span>
-                    {DENTAL_NATURES.map((n) => (
-                      <button key={n.key} type="button" onClick={() => changerNature(active, st, n.key)}
-                        title={n.aide}
-                        className={`text-[11px] px-1.5 py-0.5 rounded border transition ${
-                          nat === n.key
-                            ? 'bg-gray-800 border-gray-800 text-white'
-                            : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'}`}>
-                        {n.label}
-                      </button>
-                    ))}
-                    {quand && <span className="text-[10px] text-gray-400">le {quand.split('-').reverse().join('/')}</span>}
-                  </div>
-                )
-              })}
+      {/* LA VUE AGRANDIE : l'arcade en grand à gauche, la fiche de la dent
+          touchée à droite — tout le travail d'un examen dans une fenêtre. */}
+      <Dialog open={agrandi} onOpenChange={(o) => {
+        setAgrandi(o)
+        // En refermant la vue agrandie, la fiche ne doit pas se rouvrir en
+        // petite fenêtre : on revient à l'encart, aucune dent ouverte.
+        if (!o) setActive(null)
+      }}>
+        <DialogContent className="max-w-[1200px] w-[96vw] max-h-[92vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Schéma dentaire</DialogTitle></DialogHeader>
+          <div className={`grid gap-5 ${active ? 'lg:grid-cols-[1fr_440px]' : ''}`}>
+            <div>
+              {arcades(true)}
+              {legende}
             </div>
-          )}
+            {active && (
+              <div className="border-t lg:border-t-0 lg:border-l border-gray-100 pt-4 lg:pt-0 lg:pl-5">
+                {ficheDent(active)}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-          {/* Le pont vers le devis : un soin « à faire » sur cette dent devient
-              une ligne de devis sans changer d'écran. */}
-          <DentDevis
-            patientId={patientId}
-            dent={active}
-            etatsPlanifies={activeStates
-              .filter((st) => natureDe(activeInfo, st) === 'planifie')
-              .map((st) => ({ cle: st, label: DENTAL_STATES.find((x) => x.key === st)?.label ?? st }))}
-          />
-
-          {/* Faces — seulement pour les états qui se localisent (carie,
-              obturation) : une couronne coiffe la dent entière, proposer des
-              faces inviterait à saisir un non-sens. */}
-          {activeInfo && activeStates.some((st) => ETATS_AVEC_FACES.has(st)) && (
-            <div className="mt-2 space-y-1.5">
-              {activeStates.filter((st) => ETATS_AVEC_FACES.has(st)).map((st) => {
-                const faces = toothFaces(activeInfo, st)
-                return (
-                  <div key={st} className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[12px] text-gray-600 w-[90px] shrink-0">
-                      {DENTAL_STATES.find((x) => x.key === st)?.label}
-                    </span>
-                    {DENTAL_FACES.map((f) => {
-                      const on = faces.includes(f.key)
-                      return (
-                        <button
-                          key={f.key}
-                          type="button"
-                          aria-pressed={on}
-                          title={f.aide}
-                          onClick={() => toggleToothFace(active, st, f.key)}
-                          className={`w-7 h-7 rounded border text-[12px] font-semibold transition ${on ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'}`}
-                        >
-                          {f.label}
-                        </button>
-                      )
-                    })}
-                    {faces.length === 0 && (
-                      <span className="text-[11px] text-gray-400">dent entière</span>
-                    )}
-                  </div>
-                )
-              })}
-              <p className="text-[10px] text-gray-400">
-                M mésiale · O occlusale · D distale · V vestibulaire · P palatine / linguale
-              </p>
-            </div>
-          )}
-
-          {activeInfo && (
-            <input
-              value={activeInfo.n ?? ''}
-              onChange={(e) => setNote(active, e.target.value)}
-              placeholder="Note (facultatif) — ex : à surveiller"
-              className="mt-2 w-full text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400"
-            />
-          )}
-
-          {/* Histoire de la dent — l'état actuel ne dit pas d'où il vient.
-              C'est la seule pièce que le praticien pourra opposer à un patient
-              qui affirme « cette dent était saine ». Bloc masqué tant que la
-              dent n'a rien vécu : un cadre vide sous chaque dent neuve
-              n'apprendrait rien et alourdirait la saisie courante. */}
-          {activeHistory.length > 0 && (
-            <div className="mt-3 border-t border-gray-200 pt-2">
-              <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Historique de la dent {active}</p>
-              <ul className="space-y-1">
-                {activeHistory.map((e, i) => {
-                  const { kind, texte } = describeToothChange(
-                    e.states_before, e.states_after, e.faces_before, e.faces_after,
-                    e.natures_before, e.natures_after,
-                  )
-                  // La liste est du plus récent au plus ancien : la dernière
-                  // ligne est le plus vieil événement connu de cette dent.
-                  const premiere = kind === 'creation' && i === activeHistory.length - 1
-                  return (
-                    <li key={e.id} className="text-[12px] text-gray-700 flex gap-1.5" title={toothEventTitle(e)}>
-                      {/* La date ne se comprime jamais (shrink-0) : c'est elle
-                          qui fait la valeur de la ligne, un libellé long ne
-                          doit pas la renvoyer à la ligne. */}
-                      <span className="text-gray-400 shrink-0 tabular-nums">{formatToothEventDate(e.created_at)}</span>
-                      <span className="text-gray-300">—</span>
-                      <span className="min-w-0">
-                        {texte}
-                        {/* Ce repère ne s'affiche que sur le plus ancien
-                            événement : il dit « c'est ici que la dent entre
-                            dans le dossier ». Le mettre sur toute création le
-                            rendrait faux dès qu'une dent effacée est ressaisie. */}
-                        {premiere && <span className="text-gray-400"> · première mention</span>}
-                        {e.actor_role !== 'medecin' && <span className="text-gray-400"> · saisi par le secrétariat</span>}
-                        {/* Fait pendant la séance en cours : le praticien
-                            distingue ce qu'il vient de poser de ce qui était
-                            déjà au dossier. */}
-                        {appointmentId && e.appointment_id === appointmentId && (
-                          <span className="text-primary-600"> · aujourd&apos;hui</span>
-                        )}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          )}
-
-          {/* Ce que l'écran autour du schéma sait de cette dent : ses
-              clichés, ses lignes du plan de traitement. Fourni par l'espace
-              patient, qui a ces données sous la main ; le schéma ne les
-              recharge pas lui-même. */}
-          {panneauDent && panneauDent(active)}
-        </div>
-      )}
+      {/* LA FICHE DE LA DENT, en petite fenêtre au-dessus de l'encart. */}
+      <Dialog open={!!active && !agrandi} onOpenChange={(o) => { if (!o) setActive(null) }}>
+        <DialogContent className="max-w-[620px] w-[94vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="sr-only">Fiche de la dent {active}</DialogTitle></DialogHeader>
+          {active && ficheDent(active)}
+        </DialogContent>
+      </Dialog>
     </div>
   )
+}
+
+/** Le nom d'une dent en clair : « 1re molaire, en bas à gauche ». Le numéro
+ *  FDI se lit vite quand on en a l'habitude ; le nom évite l'erreur de
+ *  quadrant à qui ne l'a pas. */
+export function nomDent(fdi: number): string {
+  const q = Math.floor(fdi / 10)
+  const p = fdi % 10
+  const lait = q >= 5
+  const noms = lait
+    ? ['', 'incisive centrale de lait', 'incisive latérale de lait', 'canine de lait', '1re molaire de lait', '2e molaire de lait']
+    : ['', 'incisive centrale', 'incisive latérale', 'canine', '1re prémolaire', '2e prémolaire', '1re molaire', '2e molaire', 'dent de sagesse']
+  const cote = { 1: 'en haut à droite', 2: 'en haut à gauche', 3: 'en bas à gauche', 4: 'en bas à droite' }[((q - 1) % 4) + 1] ?? ''
+  const nom = noms[p] ?? ''
+  return nom ? `${nom.charAt(0).toUpperCase()}${nom.slice(1)}, ${cote} (côté patient)` : ''
 }

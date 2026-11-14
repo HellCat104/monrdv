@@ -9,6 +9,9 @@ import {
   nettoyerDonneesAssure, type LigneFeuille, type CotationLigne,
 } from '@/lib/feuilles-soins'
 import { organismePour } from '@/lib/organismes'
+import { instantaneAssure } from '@/lib/assure'
+import { getNowInMaroc } from '@/lib/utils'
+import { format } from 'date-fns'
 import { requireFeuilleDoctor, FEUILLE_NON_ACTIVEE } from '@/lib/feuilles-soins-server'
 import { tableAbsente, lienAbsent, colonneAbsente } from '@/lib/migrations'
 
@@ -91,7 +94,7 @@ export async function POST(req: NextRequest) {
   // la feuille le RECOPIE (migration v65), elle ne le pointe pas.
   const { data: patient } = await supabase
     .from('patients')
-    .select('id, mutuelle, insurer_data, first_name, last_name')
+    .select('id, mutuelle, insurer_data, first_name, last_name, cin, address')
     .eq('id', patientId).eq('doctor_id', doctor.id).maybeSingle()
   if (!patient) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
 
@@ -105,7 +108,9 @@ export async function POST(req: NextRequest) {
 
   const careDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.care_date ?? ''))
     ? String(body.care_date)
-    : new Date().toISOString().slice(0, 10)
+    // Le jour AU MAROC : toISOString() donne le jour UTC, qui n'est pas le
+    // même entre minuit et une heure du matin.
+    : format(getNowInMaroc(), 'yyyy-MM-dd')
 
   const base = supabase
     .from('care_sheets')
@@ -118,7 +123,15 @@ export async function POST(req: NextRequest) {
       insurer: body.insurer ? String(body.insurer).slice(0, 60) : (patient.mutuelle ?? null),
       // Les champs de l'assuré, tels que l'organisme les demande
       // (lib/organismes.ts). Recopiés, jamais pointés : voir la v65.
-      insurer_data: nettoyerDonneesAssure(body.insurer_data ?? patient.insurer_data),
+      // L'assuré est RÉSOLU ici : quand c'est le patient lui-même, son nom, sa
+      // CIN et son adresse du jour sont recopiés avec le reste (lib/assure.ts).
+      insurer_data: nettoyerDonneesAssure({
+        ...nettoyerDonneesAssure(body.insurer_data ?? patient.insurer_data),
+        ...instantaneAssure(
+          (body.insurer_data ?? patient.insurer_data) as Record<string, unknown> | null,
+          patient as { first_name?: string | null; last_name?: string | null; cin?: string | null; address?: string | null },
+        ),
+      }),
       care_date: careDate,
       total: totalFeuille(lignes),
       notes: body.notes ? String(body.notes).slice(0, 500) : null,
