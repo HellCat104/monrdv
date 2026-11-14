@@ -633,6 +633,7 @@ export default function AppointmentsPage() {
               blocks={dayBlocks}
               onSelectDay={(day) => { setCurrentDate(day); setViewMode('day') }}
               onSelectAppointment={(apt) => setActionsFor(apt)}
+              cases={!!doctor && isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])}
             />
           ) : viewMode === 'week' && doctor ? (
             /* Grille horaire hebdomadaire */

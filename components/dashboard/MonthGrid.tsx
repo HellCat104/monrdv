@@ -19,13 +19,20 @@ interface MonthGridProps {
   blocks: WeekBlock[]
   onSelectDay: (day: Date) => void
   onSelectAppointment: (apt: Appointment) => void
+  /** Chaque rendez-vous dans une CASE colorée, au lieu d'une ligne de texte
+   *  précédée d'un trait. Cabinet dentaire : c'est là que les motifs portent
+   *  une couleur, et un trait de 4 px ne la laissait pas voir. */
+  cases?: boolean
 }
 
 const MAX_VISIBLE = 3             // au-delà, on résume par « + n autres »
 
 export function MonthGrid({
-  days, month, appointments, blocks, onSelectDay, onSelectAppointment,
+  days, month, appointments, blocks, onSelectDay, onSelectAppointment, cases = false,
 }: MonthGridProps) {
+  // Plus de place par case quand les rendez-vous sont des cases : trois de
+  // 20 px, plus le numéro du jour.
+  const maxVisibles = cases ? 4 : MAX_VISIBLE
   const aujourdhui = getNowInMaroc()
 
   // Regroupement par date, fait une fois plutôt qu'à chaque case
@@ -68,12 +75,14 @@ export function MonthGrid({
 
           // Blocages et rendez-vous mélangés, dans l'ordre de la journée :
           // c'est ainsi qu'on lit un agenda.
-          const lignes: { cle: string; heure: string; couleur: string; texte: string; barre?: boolean; apt?: Appointment }[] = [
+          const lignes: { cle: string; heure: string; couleur: string; texte: string; nom?: string; caseCls: string; barre?: boolean; apt?: Appointment }[] = [
             ...plages.map((b) => ({
               cle: b.id,
               heure: b.start_time!.slice(0, 5),
               couleur: 'bg-red-500',
               texte: `${b.start_time!.slice(0, 5)} ${b.reason || 'Bloqué'}`,
+              nom: b.reason || 'Bloqué',
+              caseCls: 'bg-red-100 text-red-800',
             })),
             ...rdv.map((a) => ({
               cle: a.id,
@@ -85,11 +94,16 @@ export function MonthGrid({
                      : a.status === 'pending' ? 'bg-amber-400'
                      : couleurDuRdv(a)?.point ?? 'bg-primary-500',
               texte: `${a.time.substring(0, 5)} ${a.patient?.first_name ?? ''} ${a.patient?.last_name ?? ''}`.trim(),
+              nom: `${a.patient?.first_name ?? ''} ${a.patient?.last_name ?? ''}`.trim(),
+              // Même ordre que la couleur du trait : l'état passe avant le motif.
+              caseCls: estAbsent(a) ? 'bg-gray-100 text-gray-400'
+                     : a.status === 'pending' ? 'bg-amber-100 text-amber-900'
+                     : (() => { const t = couleurDuRdv(a); return t ? `${t.caseFond} ${t.texte}` : 'bg-primary-100 text-primary-700' })(),
               barre: estAbsent(a),
               apt: a,
             })),
           ].sort((x, z) => x.heure.localeCompare(z.heure))
-          const visibles = lignes.slice(0, MAX_VISIBLE)
+          const visibles = lignes.slice(0, maxVisibles)
           const reste = lignes.length - visibles.length
 
           return (
@@ -99,7 +113,7 @@ export function MonthGrid({
               role="button"
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') onSelectDay(day) }}
-              className={`min-h-[104px] border-b border-r border-gray-100 p-1.5 cursor-pointer transition-colors ${
+              className={`${cases ? 'min-h-[132px]' : 'min-h-[104px]'} border-b border-r border-gray-100 p-1.5 cursor-pointer transition-colors ${
                 ferme ? 'bg-red-50/70 hover:bg-red-50'
                       : dansLeMois ? 'bg-white hover:bg-gray-50'
                                    : 'bg-gray-50/60 hover:bg-gray-100/60'
@@ -128,10 +142,29 @@ export function MonthGrid({
                     tronqué à « 09… ». On ne garde que les pastilles. */}
                 <div className="flex flex-wrap gap-1 sm:hidden">
                   {lignes.slice(0, 4).map((l) => (
-                    <span key={l.cle} className={`w-1.5 h-1.5 rounded-full ${l.couleur}`} />
+                    <span key={l.cle} className={`${cases ? 'w-2 h-2' : 'w-1.5 h-1.5'} rounded-full ${l.couleur}`} />
                   ))}
                 </div>
 
+                {cases ? (
+                <div className="hidden sm:block space-y-1">
+                  {visibles.map((l) => (
+                    <button
+                      type="button"
+                      key={l.cle}
+                      onClick={(e) => { if (l.apt) { e.stopPropagation(); onSelectAppointment(l.apt) } }}
+                      className={`w-full flex items-baseline gap-1 rounded-md px-1.5 py-[3px] text-left text-[11px] leading-tight transition hover:brightness-95 ${l.caseCls}`}
+                      title={l.texte}
+                    >
+                      <span className="font-semibold tabular-nums shrink-0">{l.heure}</span>
+                      <span className={`truncate ${l.barre ? 'line-through' : ''}`}>{l.nom}</span>
+                    </button>
+                  ))}
+                  {reste > 0 && (
+                    <div className="text-[11px] text-gray-500 pl-1">+ {reste} autre{reste > 1 ? 's' : ''}</div>
+                  )}
+                </div>
+                ) : (
                 <div className="hidden sm:block space-y-0.5">
                   {visibles.map((l) => (
                     <div
@@ -150,6 +183,7 @@ export function MonthGrid({
                     <div className="text-[11px] text-gray-400 pl-2">+ {reste} autre{reste > 1 ? 's' : ''}</div>
                   )}
                 </div>
+                )}
                 </>
               )}
             </div>

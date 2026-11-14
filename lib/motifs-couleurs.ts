@@ -41,6 +41,11 @@ export interface CouleurMotif {
   bord: string
   /** Le texte posé sur ce fond. */
   texte: string
+  /** La CASE d'un rendez-vous dans la vue Mois : un fond plus soutenu que
+   *  `fond`, qui se voit d'un coup d'œil sur un mois entier. Le `fond` -50
+   *  suffit sur un grand bloc de la vue Semaine ; sur une ligne de 20 px, il
+   *  ne se distinguait plus du blanc. */
+  caseFond: string
 }
 
 /** Huit teintes, et pas davantage : au-delà, deux motifs se ressemblent et la
@@ -51,14 +56,14 @@ export interface CouleurMotif {
  *  « en attente » et « bloqué » dans cet écran, et les réemployer pour un
  *  motif ferait lire un état là où il n'y en a pas. */
 export const COULEURS_MOTIF: CouleurMotif[] = [
-  { cle: 'fuchsia',  label: 'Fuchsia',   point: 'bg-fuchsia-400', fond: 'bg-fuchsia-50', bord: 'border-fuchsia-300', texte: 'text-fuchsia-800' },
-  { cle: 'menthe',   label: 'Menthe',    point: 'bg-emerald-400', fond: 'bg-emerald-50', bord: 'border-emerald-300', texte: 'text-emerald-800' },
-  { cle: 'violet',   label: 'Violet',    point: 'bg-violet-400',  fond: 'bg-violet-50',  bord: 'border-violet-300',  texte: 'text-violet-800' },
-  { cle: 'rose',     label: 'Rose',      point: 'bg-rose-400',    fond: 'bg-rose-50',    bord: 'border-rose-300',    texte: 'text-rose-800' },
-  { cle: 'turquoise',label: 'Turquoise', point: 'bg-teal-400',    fond: 'bg-teal-50',    bord: 'border-teal-300',    texte: 'text-teal-800' },
-  { cle: 'indigo',   label: 'Indigo',    point: 'bg-indigo-400',  fond: 'bg-indigo-50',  bord: 'border-indigo-300',  texte: 'text-indigo-800' },
-  { cle: 'citron',   label: 'Citron',    point: 'bg-lime-500',    fond: 'bg-lime-50',    bord: 'border-lime-300',    texte: 'text-lime-800' },
-  { cle: 'ardoise',  label: 'Ardoise',   point: 'bg-slate-400',   fond: 'bg-slate-50',   bord: 'border-slate-300',   texte: 'text-slate-700' },
+  { cle: 'fuchsia',  label: 'Fuchsia',   point: 'bg-fuchsia-400', fond: 'bg-fuchsia-50', bord: 'border-fuchsia-300', texte: 'text-fuchsia-800', caseFond: 'bg-fuchsia-100' },
+  { cle: 'menthe',   label: 'Menthe',    point: 'bg-emerald-400', fond: 'bg-emerald-50', bord: 'border-emerald-300', texte: 'text-emerald-800', caseFond: 'bg-emerald-100' },
+  { cle: 'violet',   label: 'Violet',    point: 'bg-violet-400',  fond: 'bg-violet-50',  bord: 'border-violet-300',  texte: 'text-violet-800', caseFond: 'bg-violet-100' },
+  { cle: 'rose',     label: 'Rose',      point: 'bg-rose-400',    fond: 'bg-rose-50',    bord: 'border-rose-300',    texte: 'text-rose-800', caseFond: 'bg-rose-100' },
+  { cle: 'turquoise',label: 'Turquoise', point: 'bg-teal-400',    fond: 'bg-teal-50',    bord: 'border-teal-300',    texte: 'text-teal-800', caseFond: 'bg-teal-100' },
+  { cle: 'indigo',   label: 'Indigo',    point: 'bg-indigo-400',  fond: 'bg-indigo-50',  bord: 'border-indigo-300',  texte: 'text-indigo-800', caseFond: 'bg-indigo-100' },
+  { cle: 'citron',   label: 'Citron',    point: 'bg-lime-500',    fond: 'bg-lime-50',    bord: 'border-lime-300',    texte: 'text-lime-800', caseFond: 'bg-lime-100' },
+  { cle: 'ardoise',  label: 'Ardoise',   point: 'bg-slate-400',   fond: 'bg-slate-50',   bord: 'border-slate-300',   texte: 'text-slate-700', caseFond: 'bg-slate-100' },
 ]
 
 /** La couleur d'un motif, ou `null` s'il n'en a pas.

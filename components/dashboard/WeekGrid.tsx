@@ -362,7 +362,7 @@ export function WeekGrid({
                       } ${glisse?.id === r.apt.id ? 'opacity-40' : ''} ${
                         absent      ? 'bg-gray-100 border-gray-400 text-gray-500 line-through'
                         : enAttente ? 'bg-amber-50 border-amber-400 text-amber-900'
-                        : teinte    ? `${teinte.fond} ${teinte.bord} ${teinte.texte}`
+                        : teinte    ? `${teinte.caseFond} ${teinte.bord} ${teinte.texte}`
                                     : 'bg-primary-50 border-primary-500 text-primary-900'
                       } ${
                         // Le liseré gauche prend la couleur du fauteuil : deux
