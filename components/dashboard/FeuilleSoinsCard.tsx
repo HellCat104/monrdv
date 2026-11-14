@@ -709,7 +709,10 @@ export default function FeuilleSoinsCard({
             <div className="space-y-1.5">
               {/* Les intitulés des colonnes : ceux de l'imprimé. Sans eux,
                   « 10 » et « 17,5 » côte à côte ne se distinguent pas. */}
-              <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+              {/* Dans la fenêtre seulement : dans l'encart du dossier, plus
+                  étroit, la ligne passe à la ligne et les intitulés ne
+                  tomberaient plus au-dessus de leurs cases. */}
+              {enFenetre && <div className="hidden md:flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
                 {dental && <span className="w-[68px] shrink-0">Dent</span>}
                 <span className="flex-1 min-w-[200px]">Acte</span>
                 <span className="w-[125px] shrink-0">Date</span>
@@ -723,7 +726,7 @@ export default function FeuilleSoinsCard({
                 )}
                 <span className="w-20 shrink-0">Montant</span>
                 <span className="w-3.5 shrink-0" />
-              </div>
+              </div>}
               {lignes.map((l, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-1.5">
                   {dental && (
