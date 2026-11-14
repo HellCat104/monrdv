@@ -44,6 +44,10 @@ export interface MarqueFormulaire {
   /** Écrit un caractère tous les `pas` millièmes : pour les grilles de cases
    *  à un chiffre, où chaque chiffre a sa case. */
   pas?: number
+  /** Comme `pas`, mais case par case : l'abscisse du centre de CHAQUE case.
+   *  Pour les grilles « JJ MM AAAA » dont les groupes sont séparés d'un
+   *  blanc — un pas régulier y glisse d'une demi-case dès le mois. */
+  positions?: number[]
 }
 
 export interface PageFormulaire {
@@ -87,6 +91,18 @@ function Marque({ m, unite }: { m: MarqueFormulaire; unite: number }) {
 
   // Une valeur à écrire case par case : chaque caractère reçoit sa position,
   // sinon les chiffres dérivent dès le troisième et débordent de la grille.
+  if (m.positions) {
+    return (
+      <>
+        {texte.replace(/\s/g, '').split('').slice(0, m.positions.length).map((c, i) => (
+          <text key={i} x={m.positions![i]} y={m.y} fontSize={taille} textAnchor="middle"
+            fontFamily="ui-monospace, Menlo, monospace" fill="#111" fontWeight={m.gras ? 700 : 400}>
+            {c}
+          </text>
+        ))}
+      </>
+    )
+  }
   if (m.pas) {
     return (
       <>

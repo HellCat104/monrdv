@@ -25,12 +25,24 @@ export async function GET() {
   if ('error' in auth) return auth.error
   const { supabase, doctor } = auth.ctx
 
-  const { data, error } = await supabase
+  // La cotation (v95) se lit à part du reste : sans la migration, la mémoire
+  // des tarifs doit continuer de marcher.
+  type LigneLue = { label: string | null; code: string | null; amount: number | null; created_at: string
+    lettre_cle?: string | null; coefficient?: number | null; valeur_cle?: number | null }
+  let { data, error } = await supabase
     .from('care_sheet_items')
-    .select('label, code, amount, created_at')
+    .select('label, code, amount, created_at, lettre_cle, coefficient, valeur_cle')
     .eq('doctor_id', doctor.id)
     .order('created_at', { ascending: false })
-    .limit(MAX_LIGNES)
+    .limit(MAX_LIGNES) as { data: LigneLue[] | null; error: { code?: string; message: string } | null }
+  if (error && ['42703', 'PGRST204'].includes(error.code ?? '')) {
+    ;({ data, error } = await supabase
+      .from('care_sheet_items')
+      .select('label, code, amount, created_at')
+      .eq('doctor_id', doctor.id)
+      .order('created_at', { ascending: false })
+      .limit(MAX_LIGNES) as { data: LigneLue[] | null; error: { code?: string; message: string } | null })
+  }
 
   if (error) {
     if (!tableAbsente(error.code)) console.error('[Feuille de soins] catalogue illisible :', error.message)
@@ -102,9 +114,29 @@ export async function GET() {
     tarifs[code] = montant
   }
 
+  // ── LA COTATION, PAR CODE ──────────────────────────────────────────────
+  //
+  // Même principe que les tarifs : la dernière lettre clé, le dernier
+  // coefficient et la dernière valeur de clé portés sur ce code. La feuille
+  // s'en sert pour ce que la nomenclature ne fixe pas — la valeur de la
+  // consultation « C », un code propre au cabinet. Pour un code de la NGAP,
+  // c'est le catalogue officiel qui fait foi (lib/actes-dentaires.ts).
+  const cotations: Record<string, { lettre_cle: string | null; coefficient: number | null; valeur_cle: number | null }> = {}
+  for (const ligne of data ?? []) {
+    const code = String(ligne.code ?? '').trim().toUpperCase()
+    if (!code || cotations[code] !== undefined) continue
+    if (!ligne.lettre_cle && !(Number(ligne.coefficient) > 0) && !(Number(ligne.valeur_cle) > 0)) continue
+    cotations[code] = {
+      lettre_cle: ligne.lettre_cle ?? null,
+      coefficient: Number(ligne.coefficient) > 0 ? Number(ligne.coefficient) : null,
+      valeur_cle: Number(ligne.valeur_cle) > 0 ? Number(ligne.valeur_cle) : null,
+    }
+  }
+
   return NextResponse.json({
     actes: vus.slice().sort((a, b) => b.n - a.n).slice(0, MAX_ACTES),
     recents: vus.filter((a) => !!a.code).slice(0, MAX_RECENTS),
     tarifs,
+    cotations,
   })
 }

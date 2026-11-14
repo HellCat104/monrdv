@@ -26,7 +26,9 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import ChoixActesNgap, { type ActeRecent } from '@/components/dashboard/ChoixActesNgap'
 import { actesSuggeres } from '@/lib/motifs-dentaires'
-import type { ActeDentaire } from '@/lib/actes-dentaires'
+import { ACTES_DENTAIRES, cotationDe, type ActeDentaire } from '@/lib/actes-dentaires'
+import { actesDeLaSeance, ligneCotee, codeDuLibelle, type CotationMemorisee } from '@/lib/feuille-preremplie'
+import type { ToothEvent } from '@/lib/dental-history'
 import { formatDateShort } from '@/lib/utils'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import { totalFeuille } from '@/lib/feuilles-soins'
@@ -60,6 +62,13 @@ interface Candidat {
   label: string
   amount: number
   jour: string
+}
+
+/** Ce que le cabinet a déjà coté : libellés, tarifs et cotations par code. */
+interface CatalogueCabinet {
+  actes: { label: string; code: string | null; amount: number }[]
+  tarifs: Record<string, number>
+  cotations: Record<string, CotationMemorisee>
 }
 
 const LIGNE_VIDE: Ligne = {
@@ -168,6 +177,9 @@ export default function FeuilleSoinsCard({
    *  tenir sur une ligne. Un acte du mois dernier en sortait, et le praticien
    *  retapait son tarif. Cette table-ci n'a pas cette limite. */
   const [tarifs, setTarifs] = useState<Record<string, number>>({})
+  // La dernière cotation portée par le cabinet sur chaque code : sert à ce
+  // que la nomenclature ne fixe pas (la valeur de la consultation « C »).
+  const [cotations, setCotations] = useState<Record<string, CotationMemorisee>>({})
   const [lignes, setLignes] = useState<Ligne[]>([])
   const [candidats, setCandidats] = useState<Candidat[]>([])
   const [nature, setNature] = useState<'execution' | 'entente_prealable'>('execution')
@@ -223,11 +235,17 @@ export default function FeuilleSoinsCard({
    *  Relu après chaque feuille établie — le prix qu'on vient de taper doit
    *  revenir dès la feuille SUIVANTE, pas à la prochaine ouverture de
    *  l'écran. */
-  const chargerCatalogueActes = useCallback(() => {
+  const chargerCatalogueActes = useCallback((): Promise<CatalogueCabinet> => {
     return fetch('/api/feuilles-soins/actes')
       .then((r) => (r.ok ? r.json() : { actes: [] }))
-      .then((d) => { setActes(d.actes ?? []); setRecents(d.recents ?? []); setTarifs(d.tarifs ?? {}) })
-      .catch(() => {})
+      .then((d) => {
+        const cat: CatalogueCabinet = {
+          actes: d.actes ?? [], tarifs: d.tarifs ?? {}, cotations: d.cotations ?? {},
+        }
+        setActes(cat.actes); setRecents(d.recents ?? []); setTarifs(cat.tarifs); setCotations(cat.cotations)
+        return cat
+      })
+      .catch(() => ({ actes: [], tarifs: {}, cotations: {} }))
   }, [])
 
   useEffect(() => {
@@ -270,22 +288,44 @@ export default function FeuilleSoinsCard({
 
   /** Une ligne construite à partir d'un acte coché. Le code et le tarif
    *  viennent du catalogue : saisis une fois, ils reviennent tout seuls. */
-  function ligneDepuis(c: Candidat): Ligne {
-    const connu = actes.find((a) => a.label.toLowerCase().replace(/\s+/g, ' ') === c.label.toLowerCase().replace(/\s+/g, ' '))
+  function ligneDepuis(c: Candidat, cat: CatalogueCabinet = { actes, tarifs, cotations }): Ligne {
+    const connu = cat.actes.find((a) => a.label.toLowerCase().replace(/\s+/g, ' ') === c.label.toLowerCase().replace(/\s+/g, ' '))
+    // Le code : celui que le cabinet a déjà posé sur ce libellé, sinon celui
+    // du catalogue officiel quand le libellé est le sien.
+    const code = connu?.code || codeDuLibelle(c.label, ACTES_DENTAIRES) || ''
+    const cote = code ? ligneCotee(code, { tarifs: cat.tarifs, cotations: cat.cotations, label: c.label }) : null
     return {
       ...LIGNE_VIDE,
       origine: c.cle,
       tooth: c.tooth ?? '',
-      code: connu?.code ?? '',
+      code: cote?.code ?? '',
       label: c.label,
-      amount: String(
-        c.amount
-        || (connu?.code ? tarifs[connu.code.toUpperCase()] : undefined)
-        || connu?.amount
-        || '',
-      ),
+      // Le prix du plan de traitement est celui que le patient a accepté :
+      // il passe devant la mémoire des tarifs.
+      amount: String(c.amount || cote?.amount || connu?.amount || ''),
       acteDate: c.jour,
-      lettreCle: dental ? 'D' : '',
+      lettreCle: cote?.lettreCle || (dental ? 'D' : ''),
+      coefficient: cote?.coefficient ?? '',
+      valeurCle: cote?.valeurCle ?? '',
+    }
+  }
+
+  /** Une ligne prête pour un code : cotation officielle, dernier tarif. */
+  function ligneDuCode(code: string, jour: string, cat: CatalogueCabinet, extra: { tooth?: string; montant?: number | null; label?: string } = {}): Ligne {
+    const cote = ligneCotee(code, { tarifs: cat.tarifs, cotations: cat.cotations, montant: extra.montant, label: extra.label })
+    return { ...LIGNE_VIDE, ...cote, tooth: extra.tooth ?? '', acteDate: jour }
+  }
+
+  /** Les soins que le schéma dentaire a vus RÉALISER pendant ce rendez-vous. */
+  async function actesDuSchema(): Promise<{ tooth: string; code: string }[]> {
+    if (!dental || !appointmentId) return []
+    try {
+      const res = await fetch(`/api/dental/${encodeURIComponent(patientId)}`)
+      if (!res.ok) return []
+      const d = (await res.json()) as { history?: ToothEvent[] }
+      return actesDeLaSeance(d.history ?? [], appointmentId)
+    } catch {
+      return []
     }
   }
 
@@ -311,24 +351,44 @@ export default function FeuilleSoinsCard({
     setOuvert(true)
     if (images === null) chargerCliches()
     if (lignes.length > 0 || candidats.length > 0) return
-    const liste = await chargerCandidats()
+    // Tout est relu ici, ensemble : le catalogue du cabinet (ses tarifs, ses
+    // cotations), le plan de traitement, et le schéma dentaire de la séance.
+    // La feuille s'ouvre avec ses lignes PRÊTES — code, lettre clé,
+    // coefficient, valeur de la clé, montant — et non avec un libellé à
+    // compléter.
+    const [cat, liste, duSchema] = await Promise.all([chargerCatalogueActes(), chargerCandidats(), actesDuSchema()])
     setCandidats(liste)
     const aujourdhui = new Date().toLocaleDateString('en-CA')
-    const duJour = liste.filter((c) => c.jour === aujourdhui)
-    if (duJour.length > 0) {
-      setLignes(duJour.map(ligneDepuis))
-    } else if (liste.length === 0 && suggestions.length > 0) {
-      // Plan de traitement illisible : on garde ce que le serveur avait
-      // préparé plutôt que d'ouvrir une feuille vide.
-      setLignes(suggestions.map((sg) => ({
-        ...LIGNE_VIDE,
-        tooth: sg.tooth ?? '',
-        label: sg.label,
-        amount: String(sg.amount || ''),
-        acteDate: aujourdhui,
-        lettreCle: dental ? 'D' : '',
-      })))
+
+    // 1. Les actes du plan de traitement cochés « fait » aujourd'hui.
+    const prets: Ligne[] = liste.filter((c) => c.jour === aujourdhui).map((c) => ligneDepuis(c, cat))
+
+    // 2. Les soins réalisés sur le schéma pendant la séance — sauf ceux que le
+    //    plan a déjà portés (même dent, même code).
+    for (const a of duSchema) {
+      if (prets.some((l) => l.tooth === a.tooth && l.code.toUpperCase() === a.code)) continue
+      prets.push(ligneDuCode(a.code, aujourdhui, cat, { tooth: a.tooth }))
     }
+
+    // 3. Rien de noté ? L'acte que le MOTIF du rendez-vous laisse prévoir —
+    //    le premier de sa liste ; les autres restent proposés au-dessus.
+    if (prets.length === 0) {
+      const prevu = actesSuggeres(motif)[0]
+      const montantRdv = suggestions.length === 1 ? suggestions[0].amount : null
+      if (prevu) {
+        prets.push(ligneDuCode(prevu.code, aujourdhui, cat, { montant: montantRdv }))
+      } else if (liste.length === 0 && suggestions.length > 0) {
+        // Ni plan, ni schéma, ni motif connu : ce que le serveur avait
+        // préparé, coté quand le libellé est celui d'un acte du catalogue.
+        for (const sg of suggestions) {
+          const code = codeDuLibelle(sg.label, ACTES_DENTAIRES)
+          prets.push(code
+            ? ligneDuCode(code, aujourdhui, cat, { tooth: sg.tooth ?? '', montant: sg.amount, label: sg.label })
+            : { ...LIGNE_VIDE, tooth: sg.tooth ?? '', label: sg.label, amount: String(sg.amount || ''), acteDate: aujourdhui, lettreCle: dental ? 'D' : '' })
+        }
+      }
+    }
+    if (prets.length > 0) setLignes(prets)
   }
 
   // Ouverture demandée de l'extérieur : on ouvre, puis on amène l'encart sous
@@ -356,14 +416,11 @@ export default function FeuilleSoinsCard({
     // ici, par code. Deux chemins mènent à cette fonction — la liste d'actes
     // et les raccourcis — et aucun ne doit poser une case vide sur un acte
     // dont le prix est connu.
-    const prix = montant ?? tarifs[acte.code.toUpperCase()]
+    const cote = ligneCotee(acte.code, { tarifs, cotations, montant, label: acte.libelle })
     setLignes((prev) => [...prev, {
       ...LIGNE_VIDE,
-      code: acte.code,
-      label: acte.libelle,
-      amount: prix ? String(prix) : '',
+      ...cote,
       acteDate: new Date().toLocaleDateString('en-CA'),
-      lettreCle: dental ? 'D' : '',
     }])
   }
 
@@ -378,7 +435,21 @@ export default function FeuilleSoinsCard({
   }
 
   function majLigne(i: number, champ: keyof Ligne, valeur: string) {
-    setLignes((prev) => prev.map((l, j) => (j === i ? { ...l, [champ]: valeur } : l)))
+    setLignes((prev) => prev.map((l, j) => {
+      if (j !== i) return l
+      const maj = { ...l, [champ]: valeur }
+      // Un code tapé à la main reçoit sa cotation officielle — sans écraser
+      // ce que le praticien a déjà écrit dans les autres cases.
+      if (champ === 'code' && cotationDe(valeur)) {
+        const cote = ligneCotee(valeur, { tarifs, cotations })
+        maj.lettreCle = l.lettreCle && l.lettreCle !== 'D' ? l.lettreCle : cote.lettreCle
+        maj.coefficient = l.coefficient || cote.coefficient
+        maj.valeurCle = l.valeurCle || cote.valeurCle
+        maj.amount = l.amount || cote.amount
+        maj.label = l.label || cote.label
+      }
+      return maj
+    }))
   }
 
   /** Acte choisi dans le catalogue : code et montant suivent, sans écraser ce
@@ -392,11 +463,15 @@ export default function FeuilleSoinsCard({
       // voisins (« Composite », « Composite 1 face ») portent le même code et
       // le même prix, et c'est le code qui fait foi sur la feuille.
       const memorise = code ? tarifs[code.toUpperCase()] : undefined
+      const cote = code ? ligneCotee(code, { tarifs, cotations }) : null
       return {
         ...l,
         label,
         code,
-        amount: l.amount || (memorise ? String(memorise) : '') || (connu ? String(connu.amount) : ''),
+        amount: l.amount || (memorise ? String(memorise) : '') || (connu ? String(connu.amount) : '') || (cote?.amount ?? ''),
+        lettreCle: l.lettreCle && l.lettreCle !== 'D' ? l.lettreCle : (cote?.lettreCle || l.lettreCle),
+        coefficient: l.coefficient || (cote?.coefficient ?? ''),
+        valeurCle: l.valeurCle || (cote?.valeurCle ?? ''),
       }
     }))
   }
@@ -632,11 +707,28 @@ export default function FeuilleSoinsCard({
           {/* ── Les lignes retenues, avec ce que le formulaire exige ─────── */}
           {lignes.length > 0 && (
             <div className="space-y-1.5">
+              {/* Les intitulés des colonnes : ceux de l'imprimé. Sans eux,
+                  « 10 » et « 17,5 » côte à côte ne se distinguent pas. */}
+              <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                {dental && <span className="w-[68px] shrink-0">Dent</span>}
+                <span className="flex-1 min-w-[200px]">Acte</span>
+                <span className="w-[125px] shrink-0">Date</span>
+                <span className="w-20 shrink-0">Code</span>
+                {organisme?.colonneCotation && (
+                  <>
+                    <span className="w-10 shrink-0 text-center">Lettre</span>
+                    <span className="w-16 shrink-0">Coef.</span>
+                    {aValeurCle(organisme) && <span className="w-20 shrink-0">Val. clé</span>}
+                  </>
+                )}
+                <span className="w-20 shrink-0">Montant</span>
+                <span className="w-3.5 shrink-0" />
+              </div>
               {lignes.map((l, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-1.5">
                   {dental && (
                     <select value={l.tooth} onChange={(e) => majLigne(i, 'tooth', e.target.value)}
-                      className={`${inputCls} w-[68px] bg-white`} title="Dent (FDI)">
+                      className={`${inputCls} shrink-0 w-[68px] bg-white`} title="Dent (FDI)">
                       <option value="">Dent</option>
                       <optgroup label="Haut">{FDI_UPPER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
                       <optgroup label="Bas">{FDI_LOWER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
@@ -645,33 +737,34 @@ export default function FeuilleSoinsCard({
                     </select>
                   )}
                   <input value={l.label} onChange={(e) => choisirActe(i, e.target.value)} placeholder="Acte"
-                    list="feuille-actes" autoComplete="off" className={`${inputCls} flex-1 min-w-[130px]`} />
+                    list="feuille-actes" autoComplete="off" className={`${inputCls} flex-1 min-w-[200px]`}
+                    title={l.label} />
                   <input value={l.acteDate} onChange={(e) => majLigne(i, 'acteDate', e.target.value)} type="date"
-                    title="Date de cet acte" className={`${inputCls} w-[125px]`} />
+                    title="Date de cet acte" className={`${inputCls} shrink-0 w-[125px]`} />
                   <input value={l.code} onChange={(e) => majLigne(i, 'code', e.target.value.toUpperCase())}
-                    placeholder="Code" title="Code de l'acte (D726…)" className={`${inputCls} w-20 uppercase`} />
+                    placeholder="Code" title="Code de l'acte (D726…)" className={`${inputCls} shrink-0 w-20 uppercase`} />
                   {/* La cotation : lettre clé, coefficient, valeur de la clé.
                       Trois colonnes distinctes sur le formulaire, et sans
                       elles le dossier revient au cabinet. */}
                   {organisme?.colonneCotation && (
                     <>
                       <input value={l.lettreCle} onChange={(e) => majLigne(i, 'lettreCle', e.target.value.toUpperCase())}
-                        placeholder="D" title="Lettre clé" className={`${inputCls} w-10 uppercase text-center`} />
+                        placeholder="D" title="Lettre clé" className={`${inputCls} shrink-0 w-10 uppercase text-center`} />
                       <input value={l.coefficient} onChange={(e) => majLigne(i, 'coefficient', e.target.value)} type="number" min="0"
-                        placeholder="Coef." title="Coefficient" className={`${inputCls} w-16`} />
+                        placeholder="Coef." title="Coefficient" className={`${inputCls} shrink-0 w-16`} />
                       {/* La valeur de la clé n'a pas sa colonne partout : la
                           feuille médecin de la CNSS a la cotation NGAP et
                           s'arrête là. */}
                       {aValeurCle(organisme) && (
                         <input value={l.valeurCle} onChange={(e) => majLigne(i, 'valeurCle', e.target.value)} type="number" min="0"
-                          placeholder="Val. clé" title="Valeur de la clé, en dirhams" className={`${inputCls} w-20`} />
+                          placeholder="Val. clé" title="Valeur de la clé, en dirhams" className={`${inputCls} shrink-0 w-20`} />
                       )}
                     </>
                   )}
                   <input value={l.amount} onChange={(e) => majLigne(i, 'amount', e.target.value)} type="number" min="0"
-                    placeholder="DH" className={`${inputCls} w-20`} />
+                    placeholder="DH" className={`${inputCls} shrink-0 w-20`} />
                   <button onClick={() => setLignes((prev) => prev.filter((_, j) => j !== i))}
-                    className="text-gray-300 hover:text-red-500" title="Retirer cette ligne">
+                    className="shrink-0 text-gray-300 hover:text-red-500" title="Retirer cette ligne">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>

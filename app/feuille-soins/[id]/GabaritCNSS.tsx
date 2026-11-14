@@ -102,31 +102,46 @@ export default function GabaritCNSS({ praticien, patientId, beneficiaire, feuill
   const items = actes.slice().sort((a, b) => a.position - b.position)
   const coche = (t: string) => feuille.typesSoins.includes(t)
 
-  const page1: MarqueFormulaire[] = [
-    // Entente préalable ou exécution, en tête de l'imprimé.
-    feuille.nature === 'entente_prealable'
-      ? { x: 738, y: 65, signe: 'croix', largeur: 14 }
-      : { x: 827, y: 65, signe: 'croix', largeur: 14 },
+  // ── LES POSITIONS DE LA PAGE 1 ────────────────────────────────────────────
+  //
+  // Relevées au pixel sur le scan (novembre 2026) : cases détectées par leurs
+  // traits verticaux, lignes pointillées par leur hauteur. Les premières
+  // positions, estimées à l'œil, posaient le nom du soigné entre deux lignes
+  // et faisaient glisser les chiffres d'une demi-case dès le troisième — le
+  // pas des grilles est de 9,7 millièmes, pas de 8,8.
+  //
+  // Les dates n'ont pas un pas régulier : « JJ », « MM » et « AAAA » sont trois
+  // groupes séparés d'un blanc. Chaque case a donc sa propre abscisse.
+  const NAISSANCE = [751.5, 761.2, 775.6, 785.3, 798.0, 808.1, 818.3, 828.4]
+  const DATE_PRATICIEN = [833.8, 843.5, 857.9, 867.6, 880.5, 890.8, 900.9, 910.9]
 
-    // Déclaration du Chirurgien Dentiste — le bénéficiaire des soins.
-    { x: 632, y: 262, texte: beneficiaire.nom, taille: 13 },
-    { x: 752, y: 280, texte: chiffres(beneficiaire.dateNaissance), pas: 11.06, taille: 11 },
-    { x: 759.5, y: 302, texte: beneficiaire.cin, pas: 8.73, taille: 10 },
-    ...(beneficiaire.sexe === 'M' ? [{ x: 815, y: 319, signe: 'croix' as const, largeur: 11 }] : []),
-    ...(beneficiaire.sexe === 'F' ? [{ x: 869, y: 319, signe: 'croix' as const, largeur: 11 }] : []),
+  const page1: MarqueFormulaire[] = [
+    // Entente préalable ou exécution, en tête de l'imprimé : la petite case à
+    // droite de chaque mention.
+    feuille.nature === 'entente_prealable'
+      ? { x: 742, y: 65, signe: 'croix', largeur: 11 }
+      : { x: 823.6, y: 65, signe: 'croix', largeur: 11 },
+
+    // Déclaration du Chirurgien Dentiste — le bénéficiaire des soins, sur la
+    // ligne pointillée « Nom et prénom », pas sur celle du titre.
+    { x: 633, y: 265, texte: beneficiaire.nom, taille: 12.5 },
+    { x: 0, y: 280.5, texte: chiffres(beneficiaire.dateNaissance), positions: NAISSANCE, taille: 10 },
+    { x: 759.1, y: 301.5, texte: beneficiaire.cin, pas: 9.74, taille: 10 },
+    ...(beneficiaire.sexe === 'M' ? [{ x: 815, y: 316, signe: 'croix' as const, largeur: 8 }] : []),
+    ...(beneficiaire.sexe === 'F' ? [{ x: 868.3, y: 316, signe: 'croix' as const, largeur: 8 }] : []),
 
     // Identification du Chirurgien Dentiste.
-    { x: 611.4, y: 355, texte: praticien.inpe, pas: 8.8, taille: 10 },
-    ...(coche('soins') ? [{ x: 767.5, y: 381, signe: 'croix' as const, largeur: 12 }] : []),
-    ...(coche('prothese') ? [{ x: 767.5, y: 397, signe: 'croix' as const, largeur: 12 }] : []),
-    ...(coche('orthodontie') ? [{ x: 767.5, y: 413, signe: 'croix' as const, largeur: 12 }] : []),
-    ...(coche('autres') ? [{ x: 767.5, y: 428, signe: 'croix' as const, largeur: 12 }] : []),
-    { x: 741.8, y: 450, texte: feuille.ententeNo, pas: 8.8, taille: 10 },
+    { x: 611.5, y: 354, texte: praticien.inpe, pas: 9.67, taille: 10 },
+    ...(coche('soins') ? [{ x: 767.3, y: 381, signe: 'croix' as const, largeur: 10 }] : []),
+    ...(coche('prothese') ? [{ x: 767.3, y: 396.7, signe: 'croix' as const, largeur: 10 }] : []),
+    ...(coche('orthodontie') ? [{ x: 767.3, y: 412, signe: 'croix' as const, largeur: 10 }] : []),
+    ...(coche('autres') ? [{ x: 767.3, y: 427, signe: 'croix' as const, largeur: 10 }] : []),
+    { x: 742.4, y: 448, texte: feuille.ententeNo, pas: 9.68, taille: 10 },
 
     // Le cadre de signature du praticien — celui de droite. Celui de gauche
     // est à l'assuré, et reste vierge.
-    { x: 835, y: 504, texte: praticien.ville, taille: 12 },
-    { x: 834, y: 523, texte: chiffres(feuille.jour), pas: 10.8, taille: 11 },
+    { x: 832, y: 509.5, texte: praticien.ville, taille: 12 },
+    { x: 0, y: 524, texte: chiffres(feuille.jour), positions: DATE_PRATICIEN, taille: 10.5 },
   ]
 
   const LIGNES = [84.7, 107.7, 130.7, 155.1, 178.1, 201.1, 225.5, 248.5, 271.5]
@@ -136,10 +151,14 @@ export default function GabaritCNSS({ praticien, patientId, beneficiaire, feuill
       return [
         { x: 591.5, y, texte: a.tooth ?? '', taille: 12, ancre: 'middle' },
         { x: 638, y, texte: a.code ?? '', taille: 12, ancre: 'middle' },
-        { x: 687, y, texte: jour(a.acte_date) || jour(feuille.jour), taille: 10, ancre: 'middle' },
+        // 52 millièmes de colonne : « 14/11/2026 » en corps 10 débordait sur
+        // les colonnes voisines.
+        { x: 686.7, y, texte: jour(a.acte_date) || jour(feuille.jour), taille: 8.6, ancre: 'middle' },
         { x: 737, y, texte: a.coefficient ? `${a.lettre_cle ?? ''} ${a.coefficient}`.trim() : '', taille: 12, ancre: 'middle' },
-        { x: 785, y, texte: a.valeur_cle != null ? String(a.valeur_cle) : '', taille: 12, ancre: 'middle' },
-        { x: 852, y, texte: dh(a.amount), taille: 12, ancre: 'end' },
+        { x: 785, y, texte: a.valeur_cle != null ? dh(Number(a.valeur_cle)) : '', taille: 11, ancre: 'middle' },
+        // 48 millièmes de colonne : « 2 500,00 » en corps 12 mordait sur la
+        // valeur de la clé.
+        { x: 853, y, texte: dh(a.amount), taille: Number(a.amount) >= 1000 ? 10 : 11.5, ancre: 'end' },
       ]
     }),
     // Le libellé de l'acte ne s'écrit nulle part : l'imprimé de l'ANAM ne lui

@@ -19,7 +19,7 @@
 // 3. Les SIX FAMILLES en dernier, repliées : on ne déroule cinquante actes
 //    sous les yeux de quelqu'un qui en cherche un.
 import { useMemo, useState } from 'react'
-import { GROUPES_ACTES, rechercherActes, acteParCode, type ActeDentaire } from '@/lib/actes-dentaires'
+import { GROUPES_ACTES, rechercherActes, acteParCode, cotationDe, type ActeDentaire } from '@/lib/actes-dentaires'
 import { ChevronDown, Search } from 'lucide-react'
 
 /** Un acte déjà posé par ce cabinet, tel que l'API le renvoie. */
@@ -61,6 +61,19 @@ export default function ChoixActesNgap({
   const [ouvert, setOuvert] = useState<string | null>(null)
 
   const trouves = useMemo(() => rechercherActes(q), [q])
+
+  // Les raccourcis ne reprennent que ce qui garde son SENS. Le catalogue a
+  // été recalé sur la NGAP officielle en novembre 2026 : un « D716 —
+  // Traitement d'urgence » posé avant cette date porte aujourd'hui le code
+  // d'une extraction de dent de lait. Le reproposer, c'était refaire la même
+  // erreur d'un clic. Un code hors catalogue, lui, reste : c'est celui du
+  // cabinet, et on ne fait pas disparaître le travail d'hier.
+  const memeSens = (a: string, b: string) =>
+    a.toLowerCase().replace(/\s+/g, ' ').trim() === b.toLowerCase().replace(/\s+/g, ' ').trim()
+  const recentsSurs = recents.filter((r) => {
+    const a = acteParCode(r.code)
+    return !a || memeSens(a.libelle, r.label)
+  })
   const porte = (code: string) => dejaChoisis.includes(code.toUpperCase())
 
   /** Le dernier tarif pratiqué pour ce code, s'il a déjà été posé. */
@@ -102,7 +115,18 @@ export default function ChoixActesNgap({
             ⚠ code à confirmer
           </span>
         )}
+        {a.note && <span className="block text-[10px] text-sky-700/80 leading-snug">{a.note}</span>}
       </span>
+      {/* La cotation NGAP et le tarif de référence : ce qui partira dans les
+          colonnes « Lettre clé – Cotation » et « Valeur clé ». */}
+      {a.coefficient != null && (
+        <span className="text-[10px] text-gray-400 shrink-0 mt-0.5 tabular-nums text-right leading-tight">
+          {a.lettre} {a.coefficient}
+          {cotationDe(a.code)?.tnr != null && (
+            <span className="block">TNR {cotationDe(a.code)!.tnr!.toLocaleString('fr-FR')} DH</span>
+          )}
+        </span>
+      )}
       {/* Le tarif retenu, montré AVANT de cocher. Sans lui, le praticien ne
           sait pas si le prix va venir tout seul, et le retape « au cas où ». */}
       {dernierTarif(a.code) !== undefined && (
@@ -154,11 +178,11 @@ export default function ChoixActesNgap({
       )}
 
       {/* ── Les raccourcis ────────────────────────────────────────────── */}
-      {recents.length > 0 && (
+      {recentsSurs.length > 0 && (
         <div>
           <p className="text-[10px] text-gray-400 mb-1">Récemment utilisés</p>
           <div className="flex flex-wrap gap-1">
-            {recents.map((r) => {
+            {recentsSurs.map((r) => {
               const a = acteParCode(r.code)
               return (
                 <button
@@ -168,7 +192,7 @@ export default function ChoixActesNgap({
                   // main sous l'ancienne version — garde son libellé et son
                   // code : on ne fait pas disparaître le travail d'hier.
                   onClick={() => onChoisir(
-                    a ?? { code: r.code ?? '', libelle: r.label, dent: null, face: false, accord: false },
+                    a ?? { code: r.code ?? '', libelle: r.label, lettre: 'D', dent: null, face: false, accord: false },
                     dernierTarif(r.code ?? '') ?? r.amount,
                   )}
                   title={a?.libelle ?? r.label}

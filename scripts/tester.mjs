@@ -34,6 +34,8 @@ const MODULES = [
   'lib/dental.ts',
   'lib/dental-history.ts',
   'lib/utils.ts',
+  'lib/actes-dentaires.ts',
+  'lib/feuille-preremplie.ts',
 ]
 
 rmSync(atelier, { recursive: true, force: true })

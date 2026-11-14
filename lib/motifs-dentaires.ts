@@ -45,8 +45,8 @@
 // praticien pose les siens, motif par motif.
 //
 // AUCUN CODE DE NOMENCLATURE. Les codes cotés vivent dans
-// lib/actes-dentaires.ts, avec leurs contraintes et leurs dix-huit codes
-// douteux. Un motif d'agenda n'est pas un acte coté : « Couronne — 2e séance :
+// lib/actes-dentaires.ts, repris de la NGAP avec leurs coefficients. Un
+// motif d'agenda n'est pas un acte coté : « Couronne — 2e séance :
 // essayage » ne se facture pas, c'est le traitement entier qui se cote.
 //
 // AUCUNE DURÉE QUI S'IMPOSE. Les minutes indiquées sont celles d'un cabinet
@@ -109,7 +109,7 @@ export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
     motifs: [
       { nom: 'Première consultation — bilan', minutes: 30, enLigne: true, actes: ['C'] },
       { nom: 'Consultation de contrôle', minutes: 15, enLigne: true, actes: ['C'] },
-      { nom: 'Urgence — douleur', minutes: 20, enLigne: true, actes: ['C', 'D716'] },
+      { nom: 'Urgence — douleur', minutes: 20, enLigne: true, actes: ['C', 'D703'] },
       { nom: 'Présentation du plan de traitement', minutes: 20 },
     ],
   },
@@ -119,8 +119,8 @@ export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
     motifs: [
       { nom: 'Détartrage', minutes: 30, enLigne: true, actes: ['D708'] },
       { nom: 'Détartrage et polissage', minutes: 45, enLigne: true, actes: ['D708'] },
-      { nom: 'Fluoration', minutes: 15, enLigne: true, actes: ['D719'] },
-      { nom: 'Scellement de sillons', minutes: 30, enLigne: true, actes: ['D719'] },
+      { nom: 'Fluoration', minutes: 15, enLigne: true },
+      { nom: 'Scellement de sillons', minutes: 30, enLigne: true, actes: ['D712'] },
       { nom: 'Enseignement de l’hygiène', minutes: 15, enLigne: true, actes: ['C'] },
     ],
   },
@@ -130,7 +130,7 @@ export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
     motifs: [
       { nom: 'Composite — 1 face', minutes: 30, actes: ['D700'] },
       { nom: 'Composite — 2 faces ou plus', minutes: 45, actes: ['D701', 'D702'] },
-      { nom: 'Reconstitution corono-radiculaire', minutes: 45, actes: ['D755'] },
+      { nom: 'Reconstitution corono-radiculaire', minutes: 45, actes: ['D707', 'D758', 'D759'] },
       { nom: 'Inlay/Onlay — 1re séance : préparation et empreinte', minutes: 45, labo: true },
       { nom: 'Inlay/Onlay — 2e séance : collage', minutes: 30, labo: true },
     ],
@@ -139,11 +139,11 @@ export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
     nom: 'Endodontie',
     couleur: 'violet',
     motifs: [
-      { nom: 'Coiffage pulpaire', minutes: 30, actes: ['D707'] },
-      { nom: 'Dévitalisation — 1re séance : pulpectomie', minutes: 45 },
+      { nom: 'Coiffage pulpaire', minutes: 30, actes: ['D703'] },
+      { nom: 'Dévitalisation — 1re séance : pulpectomie', minutes: 45, actes: ['D703'] },
       { nom: 'Dévitalisation — 2e séance : obturation canalaire', minutes: 45, actes: ['D704', 'D705', 'D706'] },
-      { nom: 'Dévitalisation — 3e séance : contrôle radiologique', minutes: 15, actes: ['T156'] },
-      { nom: 'Retraitement endodontique', minutes: 60 },
+      { nom: 'Dévitalisation — 3e séance : contrôle radiologique', minutes: 15 },
+      { nom: 'Retraitement endodontique', minutes: 60, actes: ['D704', 'D705', 'D706'] },
     ],
   },
   {
@@ -151,10 +151,10 @@ export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
     couleur: 'citron',
     motifs: [
       { nom: 'Bilan parodontal — sondage', minutes: 30, actes: ['C'] },
-      { nom: 'Surfaçage — 1re séance : secteur 1', minutes: 45, actes: ['D710'] },
-      { nom: 'Surfaçage — 2e séance : secteur 2', minutes: 45, actes: ['D710'] },
-      { nom: 'Surfaçage — 3e séance : secteur 3', minutes: 45, actes: ['D710'] },
-      { nom: 'Surfaçage — 4e séance : secteur 4', minutes: 45, actes: ['D710'] },
+      { nom: 'Surfaçage — 1re séance : secteur 1', minutes: 45 },
+      { nom: 'Surfaçage — 2e séance : secteur 2', minutes: 45 },
+      { nom: 'Surfaçage — 3e séance : secteur 3', minutes: 45 },
+      { nom: 'Surfaçage — 4e séance : secteur 4', minutes: 45 },
       { nom: 'Réévaluation parodontale', minutes: 20, actes: ['C'] },
     ],
   },
@@ -162,8 +162,8 @@ export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
     nom: 'Chirurgie et implantologie',
     couleur: 'rose',
     motifs: [
-      { nom: 'Extraction simple', minutes: 30, actes: ['D713', 'D714'] },
-      { nom: 'Extraction chirurgicale — dent de sagesse', minutes: 45, actes: ['D720', 'D725'] },
+      { nom: 'Extraction simple', minutes: 30, actes: ['D713', 'D714', 'D715'] },
+      { nom: 'Extraction chirurgicale — dent de sagesse', minutes: 45, actes: ['D720', 'D721'] },
       { nom: 'Contrôle post-opératoire — dépose des fils', minutes: 15 },
       { nom: 'Implant — 1re séance : pose', minutes: 60 },
       { nom: 'Implant — 2e séance : dépose des sutures', minutes: 15 },
@@ -175,19 +175,19 @@ export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
     nom: 'Prothèse et esthétique',
     couleur: 'indigo',
     motifs: [
-      { nom: 'Couronne — 1re séance : préparation et empreinte', minutes: 60, labo: true, actes: ['D757'] },
+      { nom: 'Couronne — 1re séance : préparation et empreinte', minutes: 60, labo: true },
       { nom: 'Couronne — 2e séance : essayage', minutes: 30, labo: true },
       { nom: 'Couronne — 3e séance : scellement', minutes: 30, labo: true, actes: ['D754'] },
       { nom: 'Bridge — 1re séance : préparation et empreinte', minutes: 75, labo: true },
       { nom: 'Bridge — 2e séance : essayage', minutes: 45, labo: true },
-      { nom: 'Bridge — 3e séance : scellement', minutes: 30, labo: true, actes: ['D756'] },
+      { nom: 'Bridge — 3e séance : scellement', minutes: 30, labo: true, actes: ['D757'] },
       { nom: 'Prothèse amovible — 1re séance : empreinte primaire', minutes: 30, labo: true },
       { nom: 'Prothèse amovible — 2e séance : empreinte secondaire', minutes: 30, labo: true },
       { nom: 'Prothèse amovible — 3e séance : essayage en cire', minutes: 30, labo: true },
-      { nom: 'Prothèse amovible — 4e séance : pose', minutes: 30, labo: true, actes: ['D748', 'D750', 'D752'] },
-      { nom: 'Rebasage ou réparation de prothèse', minutes: 30, labo: true, actes: ['D751', 'D749'] },
+      { nom: 'Prothèse amovible — 4e séance : pose', minutes: 30, labo: true, actes: ['D761', 'D773', 'D774'] },
+      { nom: 'Rebasage ou réparation de prothèse', minutes: 30, labo: true, actes: ['D778', 'D780'] },
       { nom: 'Facettes — 1re séance : préparation et empreinte', minutes: 60, labo: true },
-      { nom: 'Facettes — 2e séance : collage', minutes: 45, labo: true, actes: ['D760'] },
+      { nom: 'Facettes — 2e séance : collage', minutes: 45, labo: true },
       { nom: 'Blanchiment — 1re séance : empreintes et gouttières', minutes: 30, labo: true },
       { nom: 'Blanchiment — 2e séance : contrôle', minutes: 15 },
     ],
@@ -196,11 +196,11 @@ export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
     nom: 'Orthodontie',
     couleur: 'fuchsia',
     motifs: [
-      { nom: 'Bilan orthodontique — empreintes et radios', minutes: 45, labo: true, enLigne: true },
-      { nom: 'Orthodontie — pose de l’appareil', minutes: 60, actes: ['D626'] },
-      { nom: 'Orthodontie — activation mensuelle', minutes: 20, actes: ['D626'] },
-      { nom: 'Orthodontie — dépose de l’appareil', minutes: 45, actes: ['D630'] },
-      { nom: 'Orthodontie — pose de la contention', minutes: 30 },
+      { nom: 'Bilan orthodontique — empreintes et radios', minutes: 45, labo: true, enLigne: true, actes: ['D626', 'D627'] },
+      { nom: 'Orthodontie — pose de l’appareil', minutes: 60, actes: ['D629'] },
+      { nom: 'Orthodontie — activation mensuelle', minutes: 20 },
+      { nom: 'Orthodontie — dépose de l’appareil', minutes: 45 },
+      { nom: 'Orthodontie — pose de la contention', minutes: 30, actes: ['D636'] },
     ],
   },
 ]
@@ -327,22 +327,22 @@ export function posableAuCabinet(
  *  et « extraction dent de sagesse » doit tomber sur la sagesse avant
  *  l'extraction simple. */
 const INDICES: { mots: string[]; famille: string; actes: string[] }[] = [
-  { mots: ['sagesse'],                                   famille: 'Chirurgie et implantologie', actes: ['D720', 'D725'] },
-  { mots: ['extraction', 'avulsion'],                    famille: 'Chirurgie et implantologie', actes: ['D713', 'D714'] },
+  { mots: ['sagesse'],                                   famille: 'Chirurgie et implantologie', actes: ['D720', 'D721'] },
+  { mots: ['extraction', 'avulsion'],                    famille: 'Chirurgie et implantologie', actes: ['D713', 'D714', 'D715'] },
   { mots: ['implant', 'chirurgie', 'suture'],            famille: 'Chirurgie et implantologie', actes: [] },
   { mots: ['detartrage'],                                famille: 'Prévention',                 actes: ['D708'] },
-  { mots: ['fluor', 'sillon'],                           famille: 'Prévention',                 actes: ['D719'] },
-  { mots: ['surfacage', 'parodont', 'gingiv'],           famille: 'Parodontologie',             actes: ['D710'] },
+  { mots: ['fluor', 'sillon'],                           famille: 'Prévention',                 actes: ['D712'] },
+  { mots: ['surfacage', 'parodont', 'gingiv'],           famille: 'Parodontologie',             actes: ['D742', 'D743'] },
   { mots: ['devitalis', 'pulpectomie', 'endodon', 'canalaire', 'canal'], famille: 'Endodontie', actes: ['D704', 'D705', 'D706'] },
-  { mots: ['coiffage'],                                  famille: 'Endodontie',                 actes: ['D707'] },
+  { mots: ['coiffage'],                                  famille: 'Endodontie',                 actes: ['D703'] },
   { mots: ['composite', 'obturation', 'carie', 'plombage', 'amalgame'], famille: 'Soins conservateurs', actes: ['D700', 'D701', 'D702'] },
-  { mots: ['bridge'],                                    famille: 'Prothèse et esthétique',     actes: ['D756'] },
+  { mots: ['bridge'],                                    famille: 'Prothèse et esthétique',     actes: ['D757'] },
   { mots: ['couronne'],                                  famille: 'Prothèse et esthétique',     actes: ['D754'] },
-  { mots: ['facette'],                                   famille: 'Prothèse et esthétique',     actes: ['D760'] },
-  { mots: ['rebasage'],                                  famille: 'Prothèse et esthétique',     actes: ['D751'] },
+  { mots: ['facette'],                                   famille: 'Prothèse et esthétique',     actes: [] },
+  { mots: ['rebasage'],                                  famille: 'Prothèse et esthétique',     actes: ['D778', 'D780'] },
   { mots: ['prothese', 'empreinte', 'essayage', 'blanchiment', 'inlay', 'onlay'], famille: 'Prothèse et esthétique', actes: [] },
-  { mots: ['orthodon', 'odf', 'bague', 'appareil', 'contention'], famille: 'Orthodontie',       actes: ['D626'] },
-  { mots: ['urgence', 'douleur'],                        famille: 'Consultation et urgence',    actes: ['C', 'D716'] },
+  { mots: ['orthodon', 'odf', 'bague', 'appareil', 'contention'], famille: 'Orthodontie',       actes: ['D629'] },
+  { mots: ['urgence', 'douleur'],                        famille: 'Consultation et urgence',    actes: ['C', 'D703'] },
   { mots: ['consultation', 'controle', 'bilan', 'visite'], famille: 'Consultation et urgence',  actes: ['C'] },
 ]
 
