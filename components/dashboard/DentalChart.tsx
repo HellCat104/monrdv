@@ -19,7 +19,7 @@ import DessinDent, { dentDuHaut, lireDent } from '@/components/dashboard/DessinD
 import {
   DENTAL_STATES, DENTAL_COLOR, FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT,
   DENTAL_FACES, ETATS_AVEC_FACES, estDentDeLait,
-  normalizeTeeth, toggleToothState, toggleFace, toothFaces, facesLabel,
+  normalizeTeeth, toggleToothState, toggleFace, toothFaces, allToothFaces, facesLabel,
   primaryState, stateColors, statesLabel, statesWithFacesLabel,
   DENTAL_NATURES, natureDe,
   type DentalTeeth, type ToothStatus, type ToothFace, type ToothNature,
@@ -294,11 +294,11 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
         // rangée, et sans ce plafond elles s'étalaient plus LARGES que les
         // seize définitives au-dessus — des dents de lait plus grosses que
         // des molaires d'adulte, vu en production sur un dossier d'enfant.
-        className={`flex-1 basis-0 min-w-[18px] ${estDentDeLait(key) ? 'max-w-[22px]' : 'max-w-[38px]'} flex flex-col items-center gap-[3px] rounded-lg px-[1px] py-1 transition hover:bg-gray-50 ${
+        className={`flex-1 basis-0 min-w-[18px] ${estDentDeLait(key) ? 'max-w-[26px]' : 'max-w-[44px]'} flex flex-col items-center gap-[3px] rounded-lg px-[1px] py-1 transition hover:bg-gray-50 ${
           isActive ? 'bg-primary-50 ring-2 ring-primary-500' : ''}`}
       >
         {!haut && numero}
-        <DessinDent numero={n} etats={states} planifie={aPlanifie} />
+        <DessinDent numero={n} etats={states} planifie={aPlanifie} faces={allToothFaces(info)} />
         {haut && numero}
       </button>
     )

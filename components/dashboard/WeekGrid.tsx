@@ -48,12 +48,26 @@ interface WeekGridProps {
   postes?: Poste[]
 }
 
-const HEURE_PX = 56                   // hauteur d'une heure, en pixels
-const MINUTE_PX = HEURE_PX / 60
+// ── LA HAUTEUR D'UNE HEURE ──────────────────────────────────────────────────
+//
+// Elle était fixe : 56 px. Un rendez-vous de quinze minutes — courant chez un
+// dentiste (contrôle, retrait de fils, urgence glissée) — tenait alors dans
+// 14 px : une ligne de texte coupée, et deux rendez-vous qui se suivent
+// (11:00, 11:15) se lisaient comme un seul. Allonger le bloc ne marche pas :
+// il recouvrirait le suivant.
+//
+// C'est donc l'ÉCHELLE qui s'adapte : la semaine se dessine de sorte que son
+// plus court rendez-vous ait au moins LIGNE_MIN_PX de haut — une ligne lisible,
+// heure et prénom. Une semaine de consultations d'une demi-heure garde la
+// grille compacte d'avant.
+const HEURE_PX_MIN = 56
+const HEURE_PX_MAX = 120
+const LIGNE_MIN_PX = 22
 
-/** Position verticale d'un horaire, en pixels depuis le haut de la grille. */
-function y(minutes: number, debutGrille: number): number {
-  return (minutes - debutGrille) * MINUTE_PX
+/** Pixels par minute pour que le plus court rendez-vous reste lisible. */
+export function minutePx(plusCourt: number): number {
+  const heure = plusCourt > 0 ? (LIGNE_MIN_PX * 60) / plusCourt : HEURE_PX_MIN
+  return Math.min(HEURE_PX_MAX, Math.max(HEURE_PX_MIN, heure)) / 60
 }
 
 /**
@@ -101,6 +115,12 @@ export function WeekGrid({
   const colonnes = { gridTemplateColumns: `48px repeat(${nbJours}, 1fr)` }
   const largeur = nbJours === 1 ? 'min-w-[280px]' : 'min-w-[760px]'
   const aujourdhui = getNowInMaroc()
+
+  const plusCourt = appointments.reduce(
+    (m, a) => Math.min(m, a.duration_minutes || defaultDuration), Number.POSITIVE_INFINITY)
+  const MINUTE_PX = minutePx(Number.isFinite(plusCourt) ? plusCourt : 0)
+  /** Position verticale d'un horaire, en pixels depuis le haut de la grille. */
+  const y = (minutes: number, debutGrille: number) => (minutes - debutGrille) * MINUTE_PX
 
   // Amplitude de la grille : la plus large plage d'ouverture de la semaine,
   // élargie si un rendez-vous ou un blocage déborde (urgence, dépassement).
@@ -253,6 +273,11 @@ export function WeekGrid({
             {heures.map((h) => (
               <div key={h} className="absolute inset-x-0 border-t border-gray-100" style={{ top: y(h, debut) }} />
             ))}
+            {/* Quand l'heure s'allonge, la demi-heure se marque : sans elle,
+                on ne sait plus si un bloc commence à 10:15 ou à 10:30. */}
+            {MINUTE_PX * 60 >= 80 && heures.slice(0, -1).map((h) => (
+              <div key={`d${h}`} className="absolute inset-x-0 border-t border-dashed border-gray-100" style={{ top: y(h + 30, debut) }} />
+            ))}
           </div>
 
           {/* Une colonne par jour */}
@@ -373,7 +398,7 @@ export function WeekGrid({
                       // fauteuil s'écrit en toutes lettres dans le bloc.
                       style={{
                         top: y(r.start, debut),
-                        height: Math.max(16, (r.end - r.start) * MINUTE_PX - 2),
+                        height: Math.max(18, (r.end - r.start) * MINUTE_PX - 2),
                         left: `calc(${col * largeur}% + 2px)`,
                         width: `calc(${largeur}% - 4px)`,
                       }}
@@ -383,6 +408,9 @@ export function WeekGrid({
                     >
                       <div className="text-[10px] font-semibold leading-tight truncate">
                         {r.apt.time.substring(0, 5)} {r.apt.patient?.first_name ?? 'Patient'}
+                        {/* Un rendez-vous court n'a qu'une ligne : le fauteuil y tient. */}
+                        {montrerPoste && (r.end - r.start) < 30 && nomPoste(postes, r.apt.poste_id)
+                          ? <span className="font-normal opacity-75"> · {nomPoste(postes, r.apt.poste_id)}</span> : null}
                       </div>
                       {(r.end - r.start) >= 30 && (
                         <div className="text-[10px] leading-tight truncate opacity-75">
