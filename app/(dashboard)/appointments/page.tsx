@@ -9,7 +9,8 @@ import { AppointmentList, type PaymentPayload } from '@/components/dashboard/App
 import { AddAppointmentDialog } from '@/components/dashboard/AddAppointmentDialog'
 import { WeekGrid } from '@/components/dashboard/WeekGrid'
 import { MonthGrid } from '@/components/dashboard/MonthGrid'
-import { posteUtile, posteActifs, type Poste } from '@/lib/postes'
+import { posteUtile, posteActifs, nomPoste, type Poste } from '@/lib/postes'
+import { couleurDuRdv } from '@/lib/motifs-couleurs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,7 +20,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import type { Appointment, Doctor, AppointmentStatus, AppointmentAttendance } from '@/types'
-import { Plus, Search, Calendar, Ban, X, FileText, Armchair } from 'lucide-react'
+import { Plus, Search, Calendar, Ban, X, FileText, Armchair, CalendarClock } from 'lucide-react'
 import DaySheet from '@/components/shared/DaySheet'
 import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDialog'
 import { UserPlus } from 'lucide-react'
@@ -41,6 +42,16 @@ export default function AppointmentsPage() {
   const [creneauVise, setCreneauVise] = useState<{ date: string; heure: string } | null>(null)
   // Rendez-vous touché dans la grille : ses actions s'ouvrent sur place.
   const [actionsFor, setActionsFor] = useState<Appointment | null>(null)
+  // Changer le jour ou l'heure depuis cette même fenêtre. Glisser le bloc
+  // dans la grille ne suffisait pas : impossible de changer de SEMAINE en
+  // glissant, et sur un téléphone le geste est hasardeux.
+  const [modifOuverte, setModifOuverte] = useState(false)
+  const [modifDate, setModifDate] = useState('')
+  const [modifHeure, setModifHeure] = useState('')
+  const [modifCreneaux, setModifCreneaux] = useState<string[]>([])
+  const [modifChargement, setModifChargement] = useState(false)
+  const [modifEnCours, setModifEnCours] = useState(false)
+  const [modifErreur, setModifErreur] = useState('')
   const [walkInOpen, setWalkInOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('day')
@@ -86,14 +97,67 @@ export default function AppointmentsPage() {
   // Charge les rendez-vous selon la vue
   /** Déplacer un rendez-vous en le faisant glisser dans la grille.
    *
-   *  Le médecin écrit directement en base — c'est ainsi que fait le reste de
-   *  cet écran — et la RLS le limite à son cabinet. En cas de refus on le DIT :
-   *  un rendez-vous qui revient tout seul à sa place ferait croire que le
-   *  geste n'a pas été compris, et on recommencerait. */
+   *  On passe par la route du médecin, comme la secrétaire passe par la
+   *  sienne : c'est elle qui PRÉVIENT LE PATIENT par e-mail et propose le
+   *  créneau libéré à la liste d'attente. Écrire directement en base
+   *  déplaçait le rendez-vous sans que personne le sache.
+   *
+   *  En cas de refus on le DIT : un rendez-vous qui revient tout seul à sa
+   *  place ferait croire que le geste n'a pas été compris. */
+  async function deplacerRdv(apt: Appointment, jour: string, heure: string): Promise<string | null> {
+    const res = await fetch(`/api/appointments/${apt.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: jour, time: heure }),
+    })
+    if (res.ok) return null
+    const d = await res.json().catch(() => ({}))
+    return res.status === 409
+      ? (d.error || 'Ce créneau chevauche un autre rendez-vous.')
+      : 'La modification a échoué. Le rendez-vous n’a pas bougé.'
+  }
+
   async function deplacerDepuisCalendrier(apt: Appointment, jour: string, heure: string) {
-    const { error } = await supabase.from('appointments')
-      .update({ date: jour, time: heure }).eq('id', apt.id)
-    if (error) { alert('Le déplacement a échoué. Le rendez-vous n’a pas bougé.'); return }
+    const erreur = await deplacerRdv(apt, jour, heure)
+    if (erreur) { alert(erreur); return }
+    await loadAppointments(true)
+  }
+
+  // Chaque rendez-vous ouvert repart de SA date et de SON heure.
+  useEffect(() => {
+    setModifOuverte(false)
+    setModifErreur('')
+    setModifDate(actionsFor?.date ?? '')
+    setModifHeure(actionsFor?.time.substring(0, 5) ?? '')
+  }, [actionsFor?.id])
+
+  // Les créneaux libres du jour choisi, à la durée de CE motif et sur CE
+  // fauteuil : ce sont ceux que la prise de rendez-vous proposerait.
+  useEffect(() => {
+    if (!modifOuverte || !modifDate || !doctor || !actionsFor) { setModifCreneaux([]); return }
+    let annule = false
+    setModifChargement(true)
+    const params = new URLSearchParams({ doctor_id: doctor.id, date: modifDate })
+    if (actionsFor.consultation_type_id) params.set('type', actionsFor.consultation_type_id)
+    if (actionsFor.poste_id) params.set('poste', actionsFor.poste_id)
+    fetch(`/api/slots?${params.toString()}`)
+      .then((r) => r.json())
+      .then((d: { slots?: { time: string; available: boolean }[] }) => {
+        if (!annule) setModifCreneaux((d.slots ?? []).filter((c) => c.available).map((c) => c.time))
+      })
+      .catch(() => { if (!annule) setModifCreneaux([]) })
+      .finally(() => { if (!annule) setModifChargement(false) })
+    return () => { annule = true }
+  }, [modifOuverte, modifDate, doctor?.id, actionsFor?.id])
+
+  async function enregistrerModif() {
+    const a = actionsFor
+    if (!a || !modifDate || !/^\d{2}:\d{2}$/.test(modifHeure)) { setModifErreur('Choisissez un jour et une heure.'); return }
+    if (modifDate === a.date && modifHeure === a.time.substring(0, 5)) { setModifOuverte(false); return }
+    setModifEnCours(true); setModifErreur('')
+    const erreur = await deplacerRdv(a, modifDate, modifHeure)
+    setModifEnCours(false)
+    if (erreur) { setModifErreur(erreur); return }
+    setActionsFor(null)
     await loadAppointments(true)
   }
 
@@ -721,6 +785,72 @@ export default function AppointmentsPage() {
               <p className="text-sm text-gray-500 capitalize">
                 {format(new Date(actionsFor.date + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })} à {actionsFor.time.substring(0, 5)}
               </p>
+              {/* Le motif : ce que le patient vient faire, dans la couleur
+                  qui le désigne sur la grille. */}
+              <div className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${couleurDuRdv(actionsFor)?.point ?? 'bg-primary-500'}`} />
+                <div className="min-w-0 text-sm">
+                  <p className="font-medium text-gray-900">
+                    {actionsFor.consultation_type?.name || <span className="text-gray-500 font-normal">Motif non précisé</span>}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {actionsFor.duration_minutes || actionsFor.consultation_type?.duration_minutes || doctor?.appointment_duration || 30} min
+                    {posteUtile(postes) && nomPoste(postes, actionsFor.poste_id) ? ` · ${nomPoste(postes, actionsFor.poste_id)}` : ''}
+                  </p>
+                  {actionsFor.notes && actionsFor.notes !== actionsFor.consultation_type?.name && (
+                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{actionsFor.notes}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Changer le jour ou l'heure. */}
+              {!modifOuverte ? (
+                <Button variant="outline" className="w-full justify-start" onClick={() => setModifOuverte(true)}>
+                  <CalendarClock className="h-4 w-4 mr-2" /> Modifier le jour ou l’heure
+                </Button>
+              ) : (
+                <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-3 space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Jour</Label>
+                      <Input type="date" value={modifDate}
+                        onChange={(e) => { setModifDate(e.target.value); setModifErreur('') }} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Heure</Label>
+                      <Input type="time" step={300} value={modifHeure}
+                        onChange={(e) => { setModifHeure(e.target.value); setModifErreur('') }} />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-500 mb-1">
+                      {modifChargement ? 'Recherche des créneaux libres…'
+                        : modifCreneaux.length > 0 ? 'Créneaux libres ce jour-là :'
+                        : 'Aucun créneau libre ce jour-là — vous pouvez quand même saisir une heure.'}
+                    </p>
+                    {!modifChargement && modifCreneaux.length > 0 && (
+                      <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                        {modifCreneaux.map((t) => (
+                          <button key={t} type="button" onClick={() => { setModifHeure(t); setModifErreur('') }}
+                            className={`rounded-md border px-2 py-1 text-xs font-medium transition ${
+                              modifHeure === t ? 'border-primary-500 bg-primary-500 text-white'
+                                               : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300'}`}>
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {modifErreur && <p className="text-xs text-red-600 bg-red-50 rounded p-2">{modifErreur}</p>}
+                  <div className="flex gap-2 justify-end">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setModifOuverte(false)}>Annuler</Button>
+                    <Button type="button" size="sm" onClick={enregistrerModif} disabled={modifEnCours}>
+                      {modifEnCours ? 'Enregistrement…' : 'Enregistrer'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <Button variant="outline" className="w-full justify-start"
                 onClick={() => { const a = actionsFor; setActionsFor(null); if (a.patient_id) router.push(`/patients/${a.patient_id}`) }}>
                 Ouvrir le dossier du patient
@@ -741,7 +871,7 @@ export default function AppointmentsPage() {
                 <X className="h-4 w-4 mr-2" /> Annuler le rendez-vous
               </Button>
               <p className="text-[11px] text-gray-400 pt-1">
-                Pour changer l’heure, faites glisser le rendez-vous dans la grille.
+                Pour un simple changement d’heure, vous pouvez aussi faire glisser le rendez-vous dans la grille.
               </p>
             </div>
           )}
