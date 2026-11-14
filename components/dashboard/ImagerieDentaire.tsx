@@ -25,18 +25,25 @@ import { messageQuota } from '@/lib/stockage'
 import { FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT } from '@/lib/dental'
 import {
   TYPES_IMAGE, typeImage, libelleType, imagesDeLaDent, comparableSurLaDent,
-  jourImage, poidsLisible, estImagerie, type ImageDentaire,
+  jourImage, poidsLisible, estImagerie, formatCliche, type ImageDentaire,
 } from '@/lib/imagerie'
-import { Images, Upload, X, Columns2 } from 'lucide-react'
+import { Images, Upload, X, Columns2, FileText } from 'lucide-react'
 
 const BUCKET = 'patient-documents'
 const TOUTES = '__toutes__'
 
 export default function ImagerieDentaire({
-  patientId, doctorId, onImages,
+  patientId, doctorId, onImages, seance = null, compact = false,
 }: {
   patientId: string
   doctorId: string
+  /** Le rendez-vous en cours, en mode Consultation. Un cliché déposé pendant
+   *  la séance lui est rattaché (v100), daté du jour par défaut, et marqué
+   *  « cette séance » dans la liste. */
+  seance?: string | null
+  /** Sans la phrase d'aide sous le dépôt : en consultation, l'écran est déjà
+   *  chargé, et le praticien la connaît. */
+  compact?: boolean
   /** Remonte les images au parent, qui s'en sert pour marquer l'odontogramme.
    *  Un seul chargement sert les deux écrans : deux requêtes finiraient par
    *  afficher deux vérités. */
@@ -54,15 +61,29 @@ export default function ImagerieDentaire({
   // Saisie du dépôt
   const [type, setType] = useState('retro')
   const [dents, setDents] = useState<string[]>([])
-  const [dateExamen, setDateExamen] = useState('')
+  // En consultation, le cliché est presque toujours pris le jour même.
+  const [dateExamen, setDateExamen] = useState(() => (seance ? new Date().toLocaleDateString('en-CA') : ''))
 
   const charger = useCallback(async () => {
-    const { data, error } = await supabase
+    const COLONNES = 'id, file_path, file_name, file_type, file_size, created_at, dents, type_image, date_examen'
+    // La séance (v100) d'abord, sans elle ensuite : une migration en retard
+    // coûte le badge « cette séance », jamais la liste.
+    let { data, error } = await supabase
       .from('patient_documents')
-      .select('id, file_path, file_name, file_type, file_size, created_at, dents, type_image, date_examen')
+      .select(`${COLONNES}, appointment_id`)
       .eq('patient_id', patientId)
       .not('type_image', 'is', null)
       .order('created_at', { ascending: false })
+    if (error) {
+      const repli = await supabase
+        .from('patient_documents')
+        .select(COLONNES)
+        .eq('patient_id', patientId)
+        .not('type_image', 'is', null)
+        .order('created_at', { ascending: false })
+      data = repli.data as typeof data
+      error = repli.error
+    }
     // Pas de migration, pas de fonctionnalité — mais jamais d'écran cassé.
     if (error) { setIndisponible(true); return }
     const liste = (data ?? []) as ImageDentaire[]
@@ -117,20 +138,27 @@ export default function ImagerieDentaire({
         .upload(chemin, file, { contentType: file.type || undefined })
       if (upErr) throw upErr
 
-      const { data, error: insErr } = await supabase.from('patient_documents').insert({
+      const ligne: Record<string, unknown> = {
         doctor_id: doctorId, patient_id: patientId,
         file_path: chemin, file_name: file.name.substring(0, 200),
         file_type: file.type || null, file_size: file.size,
         type_image: type, dents: t?.cible ? dents : [],
         date_examen: dateExamen || null,
-      }).select('id, file_path, file_name, file_type, file_size, created_at, dents, type_image, date_examen').single()
+      }
+      // Rattaché à la séance quand on est en consultation (v100) ; sans la
+      // migration, l'insertion est rejouée sans la colonne.
+      let { error: insErr } = await supabase.from('patient_documents')
+        .insert(seance ? { ...ligne, appointment_id: seance } : ligne)
+      if (insErr && seance && (insErr.code === '42703' || insErr.code === 'PGRST204')) {
+        ;({ error: insErr } = await supabase.from('patient_documents').insert(ligne))
+      }
 
       // L'enregistrement peut échouer APRÈS l'envoi : quota du cabinet atteint,
       // coupure réseau. Sans ce nettoyage, le fichier resterait dans le dépôt
       // sans ligne pour le désigner — invisible, mais décompté du quota.
       if (insErr) { await supabase.storage.from(BUCKET).remove([chemin]); throw insErr }
 
-      setDents([]); setDateExamen('')
+      setDents([]); setDateExamen(seance ? new Date().toLocaleDateString('en-CA') : '')
       await charger()
     } catch (err) {
       setErreur(messageQuota(err) ?? 'L’image n’a pas pu être envoyée.')
@@ -138,6 +166,8 @@ export default function ImagerieDentaire({
   }
 
   function basculerCompare(id: string) {
+    const img = images.find((x) => x.id === id)
+    if (img && formatCliche(img) === 'pdf') return
     setCompare((c) => c.includes(id) ? c.filter((x) => x !== id)
       // Jamais plus de deux : une comparaison, c'est un avant et un après.
       : c.length >= 2 ? [c[1], id] : [...c, id])
@@ -219,10 +249,12 @@ export default function ImagerieDentaire({
             <input type="file" accept="image/*,application/pdf" onChange={deposer} disabled={envoi} className="hidden" />
           </label>
         </div>
-        <p className="text-[10px] text-gray-400">
-          L’image est conservée telle quelle, sans compression : une radio redimensionnée perd
-          ce qu’on y cherche. La date de l’examen n’est pas celle de l’import.
-        </p>
+        {!compact && (
+          <p className="text-[10px] text-gray-400">
+            L’image est conservée telle quelle, sans compression : une radio redimensionnée perd
+            ce qu’on y cherche. La date de l’examen n’est pas celle de l’import.
+          </p>
+        )}
       </div>
 
       {erreur && <p className="text-xs text-red-600">{erreur}</p>}
@@ -275,8 +307,16 @@ export default function ImagerieDentaire({
                   title={`${i.file_name} · ${poidsLisible(i.file_size)}`}
                   className={`text-left rounded-lg border overflow-hidden transition ${
                     choisi ? 'border-primary-500 ring-2 ring-primary-200' : 'border-gray-200 hover:border-gray-300'}`}>
-                  {urls[i.file_path] ? (
-                    <img src={urls[i.file_path]} alt={i.file_name} className="w-full h-24 object-cover bg-black" />
+                  {formatCliche(i) === 'pdf' ? (
+                    // Un PDF n'est pas une image : on l'annonce, et un clic
+                    // l'ouvre plutôt que d'afficher une vignette cassée.
+                    <a href={urls[i.file_path] ?? undefined} target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full h-24 bg-gray-100 flex flex-col items-center justify-center gap-1 text-gray-500">
+                      <FileText className="h-6 w-6" /><span className="text-[10px]">Ouvrir le PDF</span>
+                    </a>
+                  ) : urls[i.file_path] ? (
+                    <img src={urls[i.file_path]} alt={i.file_name} loading="lazy" className="w-full h-24 object-cover bg-black" />
                   ) : <div className="w-full h-24 bg-gray-100 animate-pulse" />}
                   <div className="px-1.5 py-1">
                     <p className="text-[10px] font-medium text-gray-700 truncate">
@@ -285,6 +325,7 @@ export default function ImagerieDentaire({
                     </p>
                     <p className="text-[10px] text-gray-400">
                       {j.estime && 'importé le '}{formatDateShort(j.jour)}
+                      {seance && i.appointment_id === seance && <span className="text-primary-600"> · cette séance</span>}
                     </p>
                   </div>
                 </button>

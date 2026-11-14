@@ -17,11 +17,17 @@ import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne } from '@/l
 
 export const dynamic = 'force-dynamic'
 
+/** D'où l'on vient : une adresse du site, jamais une URL externe. */
+function retourSur(back?: string): string | null {
+  if (back && back.startsWith('/') && !back.startsWith('//')) return back
+  return null
+}
+
 export default async function PageConsultation({
   params, searchParams,
 }: {
   params: { patientId: string }
-  searchParams: { apt?: string; id?: string }
+  searchParams: { apt?: string; id?: string; back?: string }
 }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -57,12 +63,23 @@ export default async function PageConsultation({
     aptId = apt?.id ?? null
   }
 
+  // La consultation à reprendre : celle qu'on désigne, sinon CELLE DE LA
+  // SÉANCE. Sans cette seconde recherche, revenir depuis le fauteuil ouvrait
+  // une consultation vierge, et la séance finissait avec deux brouillons.
   let existant = null
   if (searchParams.id) {
     const { data } = await supabase.from('consultations').select('*')
       .eq('id', searchParams.id).eq('doctor_id', doctor.id).eq('patient_id', patient.id).maybeSingle()
-    if (data && data.statut === 'validee') redirect(`/dentaire/consultation/cr/${data.id}`)
     existant = data
+  } else if (aptId) {
+    const { data } = await supabase.from('consultations').select('*')
+      .eq('appointment_id', aptId).eq('doctor_id', doctor.id).eq('patient_id', patient.id)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    existant = data
+  }
+  if (existant && existant.statut === 'validee') {
+    const suite = searchParams.back ? `?back=${encodeURIComponent(searchParams.back)}` : ''
+    redirect(`/dentaire/consultation/cr/${existant.id}${suite}`)
   }
 
   // Les dernières constantes, si le cabinet en relève. On les propose, le médecin les corrige.
@@ -104,6 +121,7 @@ export default async function PageConsultation({
       rubriques={RUBRIQUES_CONSULTATION_DENTAIRE}
       trames={TRAMES_CONSULTATION_DENTAIRE}
       retourCr="/dentaire/consultation/cr"
+      retour={retourSur(searchParams.back)}
       dentaire
       alertes={{
         risques: risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }),

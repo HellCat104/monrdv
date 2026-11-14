@@ -18,30 +18,38 @@ import { Stethoscope, Plus } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ligne = Record<string, any>
 
-export default function BlocConsultationsDentaires({ patientId }: { patientId: string }) {
+export default function BlocConsultationsDentaires({ patientId, horsSeance = false }: {
+  patientId: string
+  /** Seulement les consultations écrites HORS rendez-vous. Celles d'une séance
+   *  figurent déjà dans l'historique par visite, juste au-dessus : les lister
+   *  deux fois ferait douter qu'il s'agisse des mêmes. */
+  horsSeance?: boolean
+}) {
   const supabase = createClient()
   const router = useRouter()
   const [consultations, setConsultations] = useState<Ligne[]>([])
   const [indisponible, setIndisponible] = useState(false)
 
   const charger = useCallback(async () => {
-    const { data, error } = await supabase
+    let q = supabase
       .from('consultations')
       .select('id, date_consultation, motif, statut, dents')
       .eq('patient_id', patientId)
+    if (horsSeance) q = q.is('appointment_id', null)
+    const { data, error } = await q
       .order('date_consultation', { ascending: false })
       .limit(20)
     // Pas de migration, pas de fonctionnalité — mais jamais d'écran cassé.
     if (error) { setIndisponible(true); return }
     setConsultations(data ?? [])
-  }, [supabase, patientId])
+  }, [supabase, patientId, horsSeance])
   useEffect(() => { charger() }, [charger])
 
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-primary-600 flex items-center gap-1.5">
-          <Stethoscope className="h-4 w-4" /> Consultations
+          <Stethoscope className="h-4 w-4" /> {horsSeance ? 'Consultations hors rendez-vous' : 'Consultations'}
         </h3>
         <button
           onClick={() => router.push(`/dentaire/consultation/${patientId}`)}
@@ -57,7 +65,9 @@ export default function BlocConsultationsDentaires({ patientId }: { patientId: s
         </p>
       ) : consultations.length === 0 ? (
         <p className="text-[11px] text-gray-400 italic">
-          Aucune consultation enregistrée. Motif, examen, diagnostic, actes réalisés et matériaux employés.
+          {horsSeance
+            ? 'Pour un conseil par téléphone ou une urgence sans rendez-vous. Les consultations d’une séance sont dans l’historique ci-dessus.'
+            : 'Aucune consultation enregistrée. Motif, examen, diagnostic, actes réalisés et matériaux employés.'}
         </p>
       ) : (
         <ul className="space-y-1">

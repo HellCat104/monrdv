@@ -716,3 +716,21 @@ La chaîne `DATABASE_URL` se trouve dans Supabase → Project Settings → Datab
      Additive. Sans elle, la question se pose quand même et le stock est bien
      déduit ; c'est la liste habituelle du motif qui n'est ni pré-remplie ni
      retenue, et la fenêtre le dit.
+
+100. `migration_v100_seance_des_dents_et_cliches.sql`
+     Migration v100 — LA SÉANCE DERRIÈRE CHAQUE DENT ET CHAQUE CLICHÉ.
+     CORRIGE deux défauts du journal des dents (`tooth_history`) :
+     · un changement de FACE seul était refusé par la contrainte v55
+       (`tooth_history_modification_reelle`, jamais assouplie en v66), et le
+       lot entier partait avec — tout l'historique de l'enregistrement perdu ;
+     · le passage « à faire » → « réalisé » n'était pas tracé. Colonnes
+       `natures_before` / `natures_after`.
+     AJOUTE la séance : `tooth_history.appointment_id` (sans clé étrangère :
+     le journal ne se modifie pas) et `patient_documents.appointment_id`
+     (clé étrangère, `on delete set null`). Un déclencheur À PART fige les
+     nouvelles colonnes du journal ; la fonction append-only de la v91 n'est
+     pas redéfinie, parce qu'elle dépend de la v91.
+     Additive. Sans elle : l'historique s'écrit comme avant (sans les lignes
+     faces seules ni les natures), le dossier ne sait pas quelle séance a
+     produit quoi, et l'historique par visite ne rattache que ce qui a une
+     date d'examen.

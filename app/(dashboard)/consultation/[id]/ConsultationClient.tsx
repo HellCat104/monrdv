@@ -20,6 +20,14 @@ import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import OrthoCard from '@/components/dashboard/OrthoCard'
 import PerioCard from '@/components/dashboard/PerioCard'
 import ActesDuJourCard from './ActesDuJourCard'
+import ImagerieDentaire from '@/components/dashboard/ImagerieDentaire'
+import QuotesCard from '@/components/dashboard/QuotesCard'
+import BarreModes from '@/components/dentaire/BarreModes'
+import SyntheseConsultation from '@/components/dentaire/SyntheseConsultation'
+import PanneauContexteDent from '@/components/dentaire/PanneauContexteDent'
+import AvantDeTerminer from '@/components/dentaire/AvantDeTerminer'
+import { dentsAvecImage as calculerDentsAvecImage, type ImageDentaire } from '@/lib/imagerie'
+import type { SyntheseDentaire } from '@/lib/espace-dentaire'
 import {
   ArrowLeft, HeartPulse, Pill, Activity, Check, Save, FileText, FileSpreadsheet, Wallet, Printer,
   AlertTriangle, CheckCircle2, Plus, ChevronDown, RotateCcw, CalendarPlus, CalendarClock, BellRing, MessageSquare,
@@ -63,7 +71,7 @@ export default function ConsultationClient({
   prochainRdv = null, mots: motsInitiaux = [], v77 = false, doctorName = '',
   existingNoteId, existingNote, noteSigned = false, vitalDefs, vitalDefsAll, isPsy = false,
   isDental = false, mutuelle = null, suggestionsFeuille = [], doctorInpe = null, regleSurDevis = false, alertes,
-  preparation = null, lienConsultationStructuree = null,
+  preparation = null, lienConsultationStructuree = null, syntheseDentaire = null,
 }: {
   doctorId: string
   appointmentId: string
@@ -133,6 +141,10 @@ export default function ConsultationClient({
    *  cette spécialité. Null = la note libre reste le seul chemin, et aucun
    *  bouton ne promet un écran qui n'existe pas. */
   lienConsultationStructuree?: string | null
+  /** DENTISTE — la synthèse avant consultation (lib/espace-dentaire), calculée
+   *  côté serveur à partir du dossier : dernière visite, plan en cours,
+   *  dernière radio. Absente hors dentisterie. */
+  syntheseDentaire?: SyntheseDentaire | null
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -180,6 +192,14 @@ export default function ConsultationClient({
   // drapeau, une clôture qui échoue APRÈS la déduction rouvrirait la fenêtre
   // au second essai, et le stock descendrait deux fois.
   const [stockRegle, setStockRegle] = useState(false)
+  // DENTISTE — les clichés du patient, remontés par le bloc d'imagerie pour
+  // marquer les dents sur le schéma (un seul chargement, comme au dossier).
+  const [imagerie, setImagerie] = useState<ImageDentaire[]>([])
+  // La vérification « Avant de terminer », et sa réponse : une fois vue et
+  // confirmée, on ne la repose pas si le paiement ou le stock interrompent
+  // la clôture.
+  const [verifOuverte, setVerifOuverte] = useState(false)
+  const [verifVue, setVerifVue] = useState(false)
   useEffect(() => {
     if (!isDental) return
     let vivant = true
@@ -484,24 +504,31 @@ export default function ConsultationClient({
   const savingRef = useRef(false)
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const saveNote = useCallback(async () => {
+  /** Enregistre la note. Rend `false` si la base l'a REFUSÉE — le client
+   *  Supabase ne lève pas d'exception, il renvoie l'erreur : sans ce retour,
+   *  la clôture continuait et le praticien quittait l'écran en croyant sa
+   *  note enregistrée. `true` aussi quand il n'y a rien à enregistrer. */
+  const saveNote = useCallback(async (): Promise<boolean> => {
     // Rien à enregistrer si vide, si c'est le modèle non modifié, ou si la note
     // est signée (verrouillée en base : l'écriture échouerait silencieusement).
-    if (noteSigned || !note.trim() || estTrameVierge(note) || savingRef.current) return
+    if (noteSigned || !note.trim() || estTrameVierge(note) || savingRef.current) return true
     savingRef.current = true
     setNoteState('saving')
     try {
       if (noteId) {
-        await supabase.from('consultation_notes').update({ note }).eq('id', noteId)
+        const { error } = await supabase.from('consultation_notes').update({ note }).eq('id', noteId)
+        if (error) { setNoteState('idle'); return false }
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('consultation_notes')
           .insert({ doctor_id: doctorId, patient_id: patient.id, appointment_id: appointmentId, note })
           .select('id').single()
+        if (error) { setNoteState('idle'); return false }
         if (data) setNoteId(data.id)
       }
       setNoteState('saved')
       setTimeout(() => setNoteState((s) => (s === 'saved' ? 'idle' : s)), 2000)
+      return true
     } finally {
       savingRef.current = false
     }
@@ -600,7 +627,19 @@ export default function ConsultationClient({
   }
 
   // Clôture le RDV : note enregistrée, patient marqué présent et « parti »
-  async function terminer() {
+  // Après « Terminer » dans la vérification : l'état `verifVue` n'est pas
+  // encore relu par `terminer` dans ce même tour, d'où le drapeau passé.
+  function terminerApresVerification() { terminer(true) }
+
+  async function terminer(verifiee = false) {
+    // DENTISTE : ce que la séance a laissé, relu en base, avant de fermer.
+    // Rien n'est bloquant : le praticien voit, puis termine.
+    if (isDental && !verifVue && !verifiee) {
+      if (noteTimer.current) clearTimeout(noteTimer.current)
+      if (note.trim()) await saveNote()
+      setVerifOuverte(true)
+      return
+    }
     // Une fois clôturé, le RDV quitte la file du jour : si rien n'a été encaissé,
     // la recette se perd facilement. On demande confirmation explicite.
     //
@@ -621,23 +660,31 @@ export default function ConsultationClient({
   async function cloturer() {
     setFinishing(true)
     try {
-      if (note.trim()) await saveNote()
+      // Les erreurs sont LUES : le client Supabase ne lève pas d'exception, il
+      // renvoie l'erreur. Sans ce contrôle, l'écran quittait la séance et
+      // affichait l'agenda même quand la note ou la clôture avaient échoué.
+      if (note.trim() && !(await saveNote())) throw new Error('note')
       // La consultation structurée du jour devient définitive avec la
       // clôture : on ne ferme pas un patient en laissant son compte rendu
       // au brouillon.
       await validerConsultationStructuree()
-      await supabase
+      const { error } = await supabase
         .from('appointments')
         // On ne repose « présent » que si rien de plus précis n'est noté : un
         // « en retard » constaté à l'arrivée est la seule trace que le patient
         // est venu après l'heure, et la clôture l'effaçait à chaque fois.
         .update({ queue_status: 'parti', ...(attendanceActuelle === 'late' ? {} : { attendance: 'present' }) })
         .eq('id', appointmentId)
-      router.push('/appointments')
+      if (error) throw error
+      // DENTISTE : retour au DOSSIER, la visite qu'on vient de terminer en
+      // tête de l'historique. Le travail fait au fauteuil s'y voit tout de
+      // suite — c'est le même dossier. Les autres branches retrouvent l'agenda.
+      router.push(isDental ? `/patients/${patient.id}?visite=${appointmentId}` : '/appointments')
       router.refresh()
     } catch {
       setFinishing(false)
-      alert('La clôture a échoué. Réessayez.')
+      setVerifOuverte(false)
+      alert('La clôture a échoué : la séance reste ouverte. Réessayez.')
     }
   }
 
@@ -655,15 +702,21 @@ export default function ConsultationClient({
               {(formatAge(patient.birth_date) ?? (patient.age != null ? `${patient.age} ans` : null)) &&
                 <span className="text-gray-400 font-normal text-base"> · {formatAge(patient.birth_date) ?? `${patient.age} ans`}</span>}
             </h1>
-            <p className="text-xs text-gray-500">Consultation en cours</p>
+            {!isDental && <p className="text-xs text-gray-500">Consultation en cours</p>}
           </div>
+          {/* DENTISTE : le même dossier, deux modes. On repasse au dossier
+              sans quitter le patient ; le schéma et la note s'enregistrent
+              avant de partir. */}
+          {isDental && (
+            <BarreModes patientId={patient.id} mode="consultation" rdv={{ id: appointmentId }} />
+          )}
         </div>
         {/* Clôturer verrouille aussi la consultation structurée du jour : on
             le dit AVANT, sous le bouton. Un praticien qui l'apprend en
             retrouvant son compte rendu figé n'a plus que la confiance en
             moins. */}
         <div className="flex flex-col items-end gap-1">
-          <Button onClick={terminer} disabled={finishing}>
+          <Button onClick={() => terminer()} disabled={finishing}>
             <CheckCircle2 className="h-4 w-4 mr-1.5" /> {finishing ? 'Clôture…' : 'Terminer la consultation'}
           </Button>
           {lienConsultationStructuree && (
@@ -676,7 +729,7 @@ export default function ConsultationClient({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* ── Colonne gauche : dossier ─────────────────────────────── */}
-        <aside className="lg:col-span-4 space-y-3">
+        <aside className={`${isDental ? 'lg:col-span-3' : 'lg:col-span-4'} space-y-3`}>
           {/* EN TÊTE du dossier, pas au milieu : le patient est au fauteuil.
               Dentisterie seulement — c'est la branche qui porte le
               questionnaire, et un pédiatre n'a pas à être invité à le
@@ -692,6 +745,11 @@ export default function ConsultationClient({
               consultation, c'est le traitement en cours et la tension de la
               dernière fois. L'un est une fiche, l'autre est le dossier. */}
           {preparation && <ResumePatient preparation={preparation} titre="Ce qu’il faut savoir" compact />}
+          {/* DENTISTE : la synthèse avant consultation — dernière visite et son
+              diagnostic, plan en cours, dernière radio. Rien n'y est saisi. */}
+          {isDental && syntheseDentaire && (
+            <SyntheseConsultation synthese={syntheseDentaire} retour={`/consultation/${appointmentId}`} />
+          )}
 
           <div className="bg-white border border-gray-100 rounded-xl p-4 text-sm space-y-2">
             <p className="text-gray-600">📞 {patient.phone || '—'}</p>
@@ -800,7 +858,9 @@ export default function ConsultationClient({
             « Actes du jour » passe AU-DESSUS de la note, pas entre les deux :
             c'est le programme de la séance, qu'on lit avant d'écrire, et le
             glisser sous la note décollerait le schéma dentaire de celle-ci. */}
-        <section className="lg:col-span-5 space-y-3">
+        {/* Chez le dentiste, le centre porte le schéma et les clichés : il
+            prend la place, le dossier à gauche se résume. */}
+        <section className={`${isDental ? 'lg:col-span-6' : 'lg:col-span-5'} space-y-3`}>
           {/* LA CONSULTATION STRUCTURÉE, quand la branche en a une.
               La note libre reste là, et reste utilisable : certaines
               consultations tiennent en trois lignes et n'ont pas besoin de
@@ -814,9 +874,13 @@ export default function ConsultationClient({
             >
               <Stethoscope className="h-5 w-5 text-primary-600 shrink-0" />
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-primary-800">Consultation structurée</span>
+                <span className="block text-sm font-semibold text-primary-800">
+                  {isDental ? 'Examen et diagnostic de la séance' : 'Consultation structurée'}
+                </span>
                 <span className="block text-[11.5px] text-primary-700/80 leading-snug">
-                  Motif, examen, diagnostic, traitement — avec les trames par motif et un compte rendu imprimable.
+                  {isDental
+                    ? 'Motif, examen clinique (tissus mous, gencives, occlusion), diagnostic principal et secondaires, actes, matériaux et dents — rattachés à ce rendez-vous.'
+                    : 'Motif, examen, diagnostic, traitement — avec les trames par motif et un compte rendu imprimable.'}
                 </span>
               </span>
             </a>
@@ -915,8 +979,30 @@ export default function ConsultationClient({
               est retiré ici : il est déjà dans sa propre carte. */}
           {isDental && (
             <div className="bg-white border border-gray-100 rounded-xl p-4 [&>div]:border-t-0 [&>div]:pt-0">
-              <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId} />
+              <DentalChart
+                key={patient.id} patientId={patient.id} doctorId={doctorId}
+                // Chaque changement est rattaché à CETTE séance : le dossier
+                // saura dire ce qui a été fait aujourd'hui, et sur quelles dents.
+                appointmentId={appointmentId}
+                dentsAvecImage={calculerDentsAvecImage(imagerie)}
+                panneauDent={(dent) => (
+                  <PanneauContexteDent patientId={patient.id} dent={dent} seance={appointmentId} version={imagerie.length} />
+                )}
+              />
             </div>
+          )}
+
+          {/* DENTISTE : le plan de traitement complet, sans quitter la séance —
+              ajouter un acte, le chiffrer, le faire accepter. C'est le même
+              bloc que dans le dossier, donc les mêmes données : ce qui est
+              ajouté ici y est aussitôt. Replié par défaut ; les actes du jour
+              se cochent dans l'encart du haut. */}
+          {isDental && <QuotesCard key={`plan-${patient.id}`} patientId={patient.id} dental />}
+
+          {/* DENTISTE : les clichés, sans quitter la séance. Un cliché déposé
+              ici est rattaché à ce rendez-vous et daté du jour. */}
+          {isDental && (
+            <ImagerieDentaire patientId={patient.id} doctorId={doctorId} onImages={setImagerie} seance={appointmentId} compact />
           )}
 
           {/* Ordonnances de cette consultation (plusieurs possibles) */}
@@ -1288,6 +1374,16 @@ export default function ConsultationClient({
 
           Les feuilles PASSÉES ne sont pas ici : elles vivent dans le dossier
           du patient. Cette fenêtre ne sert qu'à celle du jour. */}
+      {isDental && (
+        <AvantDeTerminer
+          rdvId={appointmentId}
+          ouvert={verifOuverte}
+          enCours={finishing}
+          onAnnuler={() => setVerifOuverte(false)}
+          onTerminer={() => { setVerifVue(true); setVerifOuverte(false); terminerApresVerification() }}
+        />
+      )}
+
       {stock && (
         <ConsommationStock
           ouvert={stockOuvert}

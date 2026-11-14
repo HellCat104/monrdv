@@ -24,6 +24,8 @@ import { risquesActifs, aVerifier, anamneseRemplie, anamneseAncienne, type Anamn
 import QuotesCard from '@/components/dashboard/QuotesCard'
 import BlocGastro from '@/components/gastro/BlocGastro'
 import BlocConsultationsDentaires from '@/components/dashboard/BlocConsultationsDentaires'
+import HistoriqueVisites from '@/components/dentaire/HistoriqueVisites'
+import PanneauContexteDent from '@/components/dentaire/PanneauContexteDent'
 import BlocGeneraliste from '@/components/dashboard/BlocGeneraliste'
 import SuiviPoids from '@/components/gastro/SuiviPoids'
 import SynthesePathologie from '@/components/gastro/SynthesePathologie'
@@ -75,7 +77,7 @@ const ACTIONS_LISIBLES: Record<string, string> = {"dossier_consulte": "Dossier c
 export default function PatientDossier({
   doctorId, doctorName, doctorSlug, specialties, enabledVitals, vitalDefsAll, initialPatient,
   doctorInpe = null,
-  facturation = false, resume = null,
+  facturation = false, resume = null, barreModes = null, visiteTerminee = null,
 }: {
   doctorId: string
   doctorName: string
@@ -95,6 +97,11 @@ export default function PatientDossier({
    *  navigateur auraient retardé l'ouverture du dossier d'une seconde.
    *  Absent = aucun encart, et surtout pas un cadre vide. */
   resume?: ReactNode
+  /** Les deux modes du dossier dentaire (Dossier / Consultation en cours),
+   *  sous le nom du patient. Absent hors dentisterie : rien ne change. */
+  barreModes?: ReactNode
+  /** La visite qu'on vient de terminer : l'historique la met en évidence. */
+  visiteTerminee?: string | null
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -942,6 +949,8 @@ export default function PatientDossier({
         </div>
       </div>
 
+      {barreModes}
+
       {/* L'allergie ne se range pas dans un onglet : elle reste sous les yeux.
           Chez le dentiste, la même place porte TOUT ce qui change un geste —
           anticoagulant, valve, bisphosphonates — et dit explicitement quand
@@ -1255,7 +1264,12 @@ export default function PatientDossier({
             {/* Dentisterie : par où l'on crée une consultation, et où on les
                 retrouve. En tête de l'onglet, parce que c'est le premier geste
                 de la séance. */}
-            {estDentiste && <BlocConsultationsDentaires patientId={patient.id} />}
+            {/* L'historique, VISITE PAR VISITE : ce qui a été écrit, fait,
+                pris et prescrit le même jour, au même endroit. Puis les
+                consultations écrites hors rendez-vous (conseil téléphonique,
+                urgence), qui n'appartiennent à aucune visite. */}
+            {estDentiste && <HistoriqueVisites patientId={patient.id} enEvidence={visiteTerminee} />}
+            {estDentiste && <BlocConsultationsDentaires patientId={patient.id} horsSeance />}
 
             {/* MÉDECINE GÉNÉRALE : la consultation structurée et les six
                 documents du quotidien. En tête de l'onglet — c'est le premier
@@ -1396,7 +1410,10 @@ export default function PatientDossier({
                   d'imagerie ci-dessous, et remontées ici — deux requêtes
                   finiraient par afficher deux vérités sur la même arcade. */}
               <DentalChart key={patient.id} patientId={patient.id} doctorId={doctorId}
-                dentsAvecImage={calculerDentsAvecImage(imagerie)} />
+                dentsAvecImage={calculerDentsAvecImage(imagerie)}
+                // Ce que le dossier sait de la dent ouverte, hors du schéma :
+                // ses lignes de plan de traitement et ses clichés.
+                panneauDent={(dent) => <PanneauContexteDent patientId={patient.id} dent={dent} version={imagerie.length} />} />
               <ImagerieDentaire patientId={patient.id} doctorId={doctorId} onImages={setImagerie} />
               {/* La note se prend devant l'arcade, pas trois onglets plus
                   loin : c'est en regardant la dent qu'on écrit ce qu'on en

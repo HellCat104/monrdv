@@ -14,7 +14,15 @@ import DocumentGastro from '@/components/gastro/DocumentGastro'
 
 export const dynamic = 'force-dynamic'
 
-export default async function PageCrConsultation({ params }: { params: { id: string } }) {
+/** D'où l'on vient : une adresse du site, jamais une URL externe. Sans elle,
+ *  le compte rendu renvoyait toujours au dossier, même ouvert depuis la
+ *  consultation en cours — le praticien perdait sa séance. */
+function retourSurDoc(back?: string): string | null {
+  if (back && back.startsWith('/') && !back.startsWith('//')) return back
+  return null
+}
+
+export default async function PageCrConsultation({ params, searchParams }: { params: { id: string }; searchParams: { back?: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -65,7 +73,7 @@ export default async function PageCrConsultation({ params }: { params: { id: str
       patient={identite}
       blocs={blocs}
       brouillon={c.statut !== 'validee'}
-      backHref={`/patients/${c.patient_id}`}
+      backHref={retourSurDoc(searchParams.back) ?? `/patients/${c.patient_id}`}
     />
   )
 }

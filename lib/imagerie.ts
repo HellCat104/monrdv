@@ -29,7 +29,13 @@ export const TYPES_IMAGE: TypeImage[] = [
   { cle: 'bitewing',    label: 'Bitewing',         cible: true,  aide: 'Rétro-coronaire : les caries interproximales' },
   { cle: 'occlusale',   label: 'Occlusale',        cible: true,  aide: 'Vue du plan occlusal' },
   { cle: 'panoramique', label: 'Panoramique',      cible: false, aide: 'Les deux arcades d’un coup' },
-  { cle: 'teleradio',   label: 'Téléradiographie', cible: false, aide: 'Profil, céphalométrie' },
+  // La clé `teleradio` reste : des clichés existants la portent. Seul le
+  // libellé dit désormais ce que le praticien cherche — la céphalométrie.
+  { cle: 'teleradio',   label: 'Céphalométrie',    cible: false, aide: 'Téléradiographie de profil, pour l’orthodontie' },
+  // Le CBCT est un volume 3D, livré en DICOM par le radiologue. Ce qu'on dépose
+  // ici, ce sont ses coupes exportées en image ou son compte rendu en PDF :
+  // MonRDV n'ouvre pas de DICOM (voir plus bas, « Pour plus tard »).
+  { cle: 'cbct',        label: 'CBCT (cone beam)', cible: true,  aide: 'Coupes exportées en image, ou compte rendu PDF' },
   { cle: 'photo',       label: 'Photo clinique',   cible: true,  aide: 'Intra-orale ou de face' },
   { cle: 'autre',       label: 'Autre image',      cible: true,  aide: '' },
 ]
@@ -53,6 +59,33 @@ export interface ImageDentaire {
   dents?: string[] | null
   type_image?: string | null
   date_examen?: string | null
+  /** La séance pendant laquelle le cliché a été déposé (v100). */
+  appointment_id?: string | null
+}
+
+// ── POUR PLUS TARD : LE DICOM ───────────────────────────────────────────────
+//
+// Aucun capteur, aucun panoramique, aucun CBCT n'est relié à MonRDV
+// aujourd'hui, et ce module ne fait pas semblant : il conserve l'image que le
+// logiciel du capteur a exportée (JPEG, PNG, PDF).
+//
+// Le jour où un appareil enverra du DICOM, le chemin est tracé SANS casser ce
+// qui existe :
+//   · une table `imaging_studies` (study_uid, modalité, appareil, séries),
+//     reliée à `patient_documents` par une clé : la ligne de document reste la
+//     porte d'entrée unique — quota, export du droit d'accès, effacement et
+//     fusion de dossiers continuent de fonctionner sans changement ;
+//   · le fichier .dcm dans un dépôt séparé (la limite de 10 Mo du dépôt
+//     actuel ne tient pas un volume CBCT), avec une vignette JPEG générée à la
+//     réception, que l'écran affiche comme aujourd'hui ;
+//   · `type_image` garde sa liste fermée : la modalité DICOM (IO, PX, CT…) se
+//     traduit vers ces clés, l'écran n'a rien à apprendre.
+// Rien de tout cela n'est créé tant qu'aucun appareil ne parle DICOM.
+
+/** La forme sous laquelle le fichier s'affiche. Une radio en PDF (compte
+ *  rendu de CBCT) ne s'affiche pas dans une balise image. */
+export function formatCliche(d: { file_type?: string | null; file_name?: string | null }): 'image' | 'pdf' {
+  return d.file_type === 'application/pdf' || /\.pdf$/i.test(d.file_name ?? '') ? 'pdf' : 'image'
 }
 
 /** Un document est une image d'imagerie DENTAIRE dès qu'il porte un type.

@@ -36,6 +36,9 @@ const NOTE_MAX = 300
 // L'historique est lu d'un bloc au chargement de l'odontogramme, puis filtré
 // dent par dent à l'écran : un seul aller-retour plutôt qu'un par dent cliquée.
 const HISTORY_MAX = 400
+const COLONNE_ABSENTE = new Set(['42703', 'PGRST204'])
+const COLONNES_BASE = 'id, tooth, states_before, states_after, note, actor_role, actor_email, created_at'
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Contexte commun aux deux verbes : médecin connecté, forfait, patient à lui. */
 async function resolveContext(patientId: string) {
@@ -68,19 +71,38 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // `tooth_history` est sous RLS sans aucune policy (v55) : elle n'est
   // accessible qu'au service_role, jamais depuis le navigateur.
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('tooth_history')
-    .select('id, tooth, states_before, states_after, note, actor_role, actor_email, created_at')
-    .eq('doctor_id', ctx.doctorId)
-    .eq('patient_id', ctx.patientId)
-    .order('created_at', { ascending: false })
-    .limit(HISTORY_MAX)
+
+  // Les faces (v66), les natures et la séance (v100) étaient écrites mais
+  // jamais RELUES : un changement de face disparaissait de l'historique dès
+  // le rechargement. On les lit, du plus complet au plus ancien schéma de
+  // table, pour qu'une migration en retard coûte une colonne, pas la liste.
+  const SCHEMAS = [
+    `${COLONNES_BASE}, faces_before, faces_after, natures_before, natures_after, appointment_id`,
+    `${COLONNES_BASE}, faces_before, faces_after`,
+    COLONNES_BASE,
+  ]
+  let data: Record<string, unknown>[] | null = null
+  let error: { code?: string; message: string } | null = null
+  for (const colonnes of SCHEMAS) {
+    const r = await admin
+      .from('tooth_history')
+      .select(colonnes)
+      .eq('doctor_id', ctx.doctorId)
+      .eq('patient_id', ctx.patientId)
+      .order('created_at', { ascending: false })
+      .limit(HISTORY_MAX)
+    data = r.data as Record<string, unknown>[] | null
+    error = r.error
+    if (!error || !COLONNE_ABSENTE.has(error.code ?? '')) break
+  }
 
   // La table peut ne pas exister si la migration v55 n'a pas encore été passée :
   // l'odontogramme doit continuer de fonctionner sans son historique plutôt que
   // de tomber en panne.
   if (error) return NextResponse.json({ history: [], indisponible: true })
-  return NextResponse.json({ history: (data ?? []).map(parseToothEvent) })
+  return NextResponse.json({
+    history: (data ?? []).map((r) => parseToothEvent(r as Parameters<typeof parseToothEvent>[0])),
+  })
 }
 
 // POST — enregistre le schéma et journalise les dents réellement modifiées.
@@ -120,6 +142,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const admin = createAdminClient()
 
+  // LA SÉANCE. Quand le schéma est modifié depuis une consultation, le
+  // changement est rattaché à ce rendez-vous : c'est ce qui permet au
+  // dossier de dire, pour une visite passée, ce qui a été fait sur quelles
+  // dents ce jour-là. Le rendez-vous doit être celui de CE patient, dans CE
+  // cabinet — un identifiant inventé est ignoré, pas suivi.
+  let appointmentId: string | null = null
+  const brut = typeof body?.appointment_id === 'string' ? body.appointment_id : ''
+  if (UUID.test(brut)) {
+    const { data: rdv } = await admin
+      .from('appointments').select('id')
+      .eq('id', brut).eq('doctor_id', ctx.doctorId).eq('patient_id', ctx.patientId)
+      .maybeSingle()
+    appointmentId = rdv?.id ?? null
+  }
+
   // L'état de référence, lu à l'instant même de l'écriture : c'est LUI qui fait
   // foi, pas ce que le navigateur croit être l'état précédent.
   const { data: existing } = await admin
@@ -134,8 +171,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (changes.length === 0) return NextResponse.json({ ok: true, events: [] })
 
-  const COLONNE_ABSENTE = new Set(['42703', 'PGRST204'])
-  const ligneHistorique = (c: (typeof changes)[number], avecFaces: boolean) => ({
+  // Trois générations de la table, de la plus récente à la plus ancienne :
+  //   v100 — natures et séance ; v66 — faces ; v55 — états seuls.
+  type Niveau = 'v100' | 'v66' | 'v55'
+  const ligneHistorique = (c: (typeof changes)[number], niveau: Niveau) => ({
     doctor_id: ctx.doctorId,
     patient_id: ctx.patientId,
     tooth: c.tooth,
@@ -143,7 +182,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     states_after: c.after,
     // Colonnes de la v66. Tant qu'elle n'est pas passée, l'insertion est
     // rejouée sans elles : le journal perd la face, jamais la ligne.
-    ...(avecFaces ? { faces_before: c.facesBefore, faces_after: c.facesAfter } : {}),
+    ...(niveau !== 'v55' ? { faces_before: c.facesBefore, faces_after: c.facesAfter } : {}),
+    ...(niveau === 'v100'
+      ? { natures_before: c.naturesBefore, natures_after: c.naturesAfter, appointment_id: appointmentId }
+      : {}),
     note: c.note,
     // L'odontogramme n'est affiché qu'au praticien (PatientDossier et la
     // fiche patient) ; la colonne accepte 'secretaire' pour le jour où le
@@ -153,25 +195,33 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     actor_email: ctx.email,
   })
 
-  const COLONNES_LUES = 'id, tooth, states_before, states_after, note, actor_role, actor_email, created_at'
+  const COLONNES_LUES: Record<Niveau, string> = {
+    v100: `${COLONNES_BASE}, faces_before, faces_after, natures_before, natures_after, appointment_id`,
+    v66: `${COLONNES_BASE}, faces_before, faces_after`,
+    v55: COLONNES_BASE,
+  }
 
-  // Typé large : les deux tentatives ne renvoient pas les mêmes colonnes, et
-  // parseToothEvent accepte l'absence de faces.
-  const premiere = await admin
-    .from('tooth_history')
-    .insert(changes.map((c) => ligneHistorique(c, true)))
-    .select(`${COLONNES_LUES}, faces_before, faces_after`)
+  // Avant la v100, la base refusait une ligne dont SEULES les faces ou la
+  // nature changeaient (contrainte `tooth_history_modification_reelle`). On
+  // ne lui envoie donc ces lignes-là qu'à partir de la v100 : sinon tout le
+  // lot était rejeté, et le journal perdait aussi les vrais changements
+  // d'état faits dans le même enregistrement.
+  const aEcrire = (niveau: Niveau) => (niveau === 'v100'
+    ? changes
+    : changes.filter((c) => c.before.join() !== c.after.join()))
 
-  let inserted: Record<string, unknown>[] | null = premiere.data
-  let histError = premiere.error
-
-  if (histError && COLONNE_ABSENTE.has(histError.code ?? '')) {
-    const repli = await admin
+  let inserted: Record<string, unknown>[] | null = null
+  let histError: { code?: string; message: string } | null = null
+  for (const niveau of ['v100', 'v66', 'v55'] as Niveau[]) {
+    const lignes = aEcrire(niveau)
+    if (lignes.length === 0) { inserted = []; histError = null; break }
+    const r = await admin
       .from('tooth_history')
-      .insert(changes.map((c) => ligneHistorique(c, false)))
-      .select(COLONNES_LUES)
-    inserted = repli.data
-    histError = repli.error
+      .insert(lignes.map((c) => ligneHistorique(c, niveau)))
+      .select(COLONNES_LUES[niveau])
+    inserted = r.data as Record<string, unknown>[] | null
+    histError = r.error
+    if (!histError || !COLONNE_ABSENTE.has(histError.code ?? '')) break
   }
 
   // Même arbitrage que lib/audit.ts : un journal muet doit se voir dans les

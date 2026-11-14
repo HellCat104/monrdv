@@ -12,6 +12,7 @@ import { preparerUn } from '@/lib/preparation-serveur'
 import { getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
 import ConsultationClient from './ConsultationClient'
+import { chargerEspaceDentaire } from '@/lib/espace-dentaire-serveur'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,9 +72,14 @@ export default async function ConsultationPage({ params }: { params: { id: strin
   // à clôturer. Sans ce retour, il atterrissait sur un compte rendu
   // imprimable sans aucun chemin pour revenir.
   const retourIci = `&back=${encodeURIComponent(`/consultation/${apt.id}`)}`
+  const estDentiste = isDentalDoctor(specialites)
   const lienStructuree =
     isGeneralDoctor(specialites) ? `/generaliste/consultation/${patient.id}?apt=${apt.id}${retourIci}`
     : isGastroDoctor(specialites) ? `/gastro/consultation/${patient.id}?apt=${apt.id}${retourIci}`
+    // Le dentiste avait sa consultation structurée (motif, examen, diagnostic,
+    // actes, matériaux, dents), mais seulement depuis le dossier et sans lien
+    // avec la séance : depuis le fauteuil, rien n'y menait.
+    : estDentiste ? `/dentaire/consultation/${patient.id}?apt=${apt.id}${retourIci}`
     : null
   // Généraliste seulement, même raison que dans le dossier : les règles du
   // moteur sont celles de la médecine générale. Les autres branches gardent
@@ -85,7 +91,9 @@ export default async function ConsultationPage({ params }: { params: { id: strin
   // Feuille de soins : les lignes arrivent pré-remplies avec les actes du plan
   // de traitement marqués « réalisés » AUJOURD'HUI. À défaut, l'acte du jour
   // est la consultation elle-même. Le praticien relit au lieu de ressaisir.
-  const aujourdhui = new Date().toISOString().slice(0, 10)
+  // Le jour AU MAROC : toISOString() donne le jour UTC, qui n'est pas le même
+  // après 23 h l'heure d'été.
+  const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd')
   const { data: devisPatient } = await supabase
     .from('quotes')
     .select('items:quote_items(tooth, label, unit_price, quantity, done, done_at)')
@@ -155,6 +163,18 @@ export default async function ConsultationPage({ params }: { params: { id: strin
     .from('patients').select('anamnese, anamnese_maj')
     .eq('id', patient.id).maybeSingle()
 
+  // ── DENTISTE : la synthèse avant consultation, et le rendez-vous du jour
+  // pour la barre des modes. Lue ici, côté serveur, pour qu'elle s'affiche
+  // avec l'écran.
+  const espaceDentaire = estDentiste
+    ? await chargerEspaceDentaire(
+        supabase, doctor.id,
+        { id: patient.id as string, allergies: patient.allergies as string | null, current_treatments: patient.current_treatments as string | null },
+        risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }).map((r) => r.titre),
+        aujourdhui,
+      )
+    : null
+
   const vitalDefsAll = allVitalDefs((doctor.custom_vitals as VitalDef[] | null) ?? [])
   const enabled = resolveEnabledVitals(doctor.enabled_vitals, doctor.specialty)
   const vitalDefs = vitalDefsAll.filter((v) => enabled.includes(v.key))
@@ -217,6 +237,7 @@ export default async function ConsultationPage({ params }: { params: { id: strin
       // Le rendez-vous est passé en paramètre : c'est lui qui rattache la
       // consultation à la séance et évite de ressaisir qui, quand, pourquoi.
       lienConsultationStructuree={lienStructuree}
+      syntheseDentaire={espaceDentaire?.synthese ?? null}
       alertes={{
         risques: risquesActifs({ anamnese: anam?.anamnese, allergies: patient.allergies }),
         verifier: aVerifier(anam?.anamnese),

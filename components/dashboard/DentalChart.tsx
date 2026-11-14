@@ -37,9 +37,19 @@ import {
   type ToothEvent,
 } from '@/lib/dental-history'
 
-export default function DentalChart({ patientId, dentsAvecImage }: {
+export default function DentalChart({ patientId, dentsAvecImage, appointmentId = null, onDentActive, panneauDent }: {
   patientId: string
   doctorId: string
+  /** Le rendez-vous en cours, quand le schéma est ouvert en consultation.
+   *  Chaque changement est alors rattaché à cette séance dans l'historique
+   *  (v100) : le dossier saura dire ce qui a été fait ce jour-là. */
+  appointmentId?: string | null
+  /** Prévient l'écran parent de la dent ouverte — l'espace patient s'en sert
+   *  pour montrer, à côté du schéma, les clichés et le plan de cette dent. */
+  onDentActive?: (dent: string | null) => void
+  /** Ce que l'écran parent veut ajouter au panneau de la dent ouverte
+   *  (clichés, lignes du plan de traitement…). */
+  panneauDent?: (dent: string) => React.ReactNode
   /** Les dents qui portent au moins un cliché ciblé (v94). Le parent les
    *  calcule une fois à partir des images déjà chargées : deux requêtes
    *  finiraient par afficher deux vérités sur la même arcade.
@@ -51,6 +61,7 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
   const [teeth, setTeeth] = useState<DentalTeeth>({})
   const [history, setHistory] = useState<ToothEvent[]>([])
   const [active, setActive] = useState<string | null>(null)
+  useEffect(() => { onDentActive?.(active) }, [active, onDentActive])
   const [loaded, setLoaded] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   // L'enregistrement a réussi mais sa trace n'a pas pu être écrite : le
@@ -65,6 +76,12 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
   // n'a plus à la préciser dent après dent.
   const [natureParDefaut, setNatureParDefaut] = useState<ToothNature>('constate')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Le dernier schéma pas encore envoyé. Si le praticien quitte l'écran dans
+  // les 600 ms qui suivent un clic, il part quand même : l'enregistrement
+  // différé était ANNULÉ au démontage, et le dernier geste se perdait.
+  const enAttente = useRef<DentalTeeth | null>(null)
+  const seance = useRef<string | null>(appointmentId)
+  seance.current = appointmentId
 
   useEffect(() => {
     let cancelled = false
@@ -84,20 +101,37 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
         setLoaded(true)
       }
     })()
-    return () => { cancelled = true; if (timer.current) clearTimeout(timer.current) }
+    return () => {
+      cancelled = true
+      if (timer.current) clearTimeout(timer.current)
+      // Envoi immédiat de ce qui attendait, `keepalive` pour qu'il survive à
+      // un changement de page.
+      if (enAttente.current) {
+        fetch(`/api/dental/${patientId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teeth: enAttente.current, appointment_id: seance.current }),
+          keepalive: true,
+        }).catch(() => {})
+        enAttente.current = null
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientId])
 
   function scheduleSave(next: DentalTeeth) {
     setSaveState('saving')
+    enAttente.current = next
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
+      timer.current = null
+      enAttente.current = null
       let res: Response
       try {
         res = await fetch(`/api/dental/${patientId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ teeth: next }),
+          body: JSON.stringify({ teeth: next, appointment_id: seance.current }),
         })
       } catch { setSaveState('error'); return }
       if (!res.ok) { setSaveState('error'); return }
@@ -538,6 +572,7 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
                 {activeHistory.map((e, i) => {
                   const { kind, texte } = describeToothChange(
                     e.states_before, e.states_after, e.faces_before, e.faces_after,
+                    e.natures_before, e.natures_after,
                   )
                   // La liste est du plus récent au plus ancien : la dernière
                   // ligne est le plus vieil événement connu de cette dent.
@@ -557,6 +592,12 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
                             rendrait faux dès qu'une dent effacée est ressaisie. */}
                         {premiere && <span className="text-gray-400"> · première mention</span>}
                         {e.actor_role !== 'medecin' && <span className="text-gray-400"> · saisi par le secrétariat</span>}
+                        {/* Fait pendant la séance en cours : le praticien
+                            distingue ce qu'il vient de poser de ce qui était
+                            déjà au dossier. */}
+                        {appointmentId && e.appointment_id === appointmentId && (
+                          <span className="text-primary-600"> · aujourd&apos;hui</span>
+                        )}
                       </span>
                     </li>
                   )
@@ -564,6 +605,12 @@ export default function DentalChart({ patientId, dentsAvecImage }: {
               </ul>
             </div>
           )}
+
+          {/* Ce que l'écran autour du schéma sait de cette dent : ses
+              clichés, ses lignes du plan de traitement. Fourni par l'espace
+              patient, qui a ces données sous la main ; le schéma ne les
+              recharge pas lui-même. */}
+          {panneauDent && panneauDent(active)}
         </div>
       )}
     </div>

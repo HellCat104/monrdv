@@ -1,4 +1,4 @@
-// Dossier patient — pleine page, 3 colonnes (identité / historique / suivi).
+// Dossier patient — pleine page, en onglets.
 // Forfait Agenda : fiche minimale (nom, prénom, téléphone, notes) sans données de santé.
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -11,10 +11,13 @@ import { getNowInMaroc } from '@/lib/utils'
 import { format } from 'date-fns'
 import PatientDossierLite from '@/components/dashboard/PatientDossierLite'
 import { logAccesDossier } from '@/lib/audit'
+import { isDentalDoctor } from '@/lib/dental'
+import { rdvDuJour } from '@/lib/espace-dentaire'
+import BarreModes from '@/components/dentaire/BarreModes'
 
 export const dynamic = 'force-dynamic'
 
-export default async function PatientDossierPage({ params }: { params: { id: string } }) {
+export default async function PatientDossierPage({ params, searchParams }: { params: { id: string }; searchParams: { visite?: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -62,8 +65,23 @@ export default async function PatientDossierPage({ params }: { params: { id: str
     ? await preparerUn(supabase, doctor.id, patient.id, format(getNowInMaroc(), 'yyyy-MM-dd'))
     : null
 
+  // ── DENTISTE : UN DOSSIER, DEUX MODES ───────────────────────────────────
+  // Le rendez-vous du jour ouvre le mode Consultation depuis le dossier. Une
+  // seule petite lecture : les rendez-vous de CE patient, AUJOURD'HUI.
+  let barreModes = null
+  if (isDentalDoctor(specialties)) {
+    const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd')
+    const { data: rdvs } = await supabase.from('appointments')
+      .select('id, date, time, status, queue_status')
+      .eq('doctor_id', doctor.id).eq('patient_id', patient.id).eq('date', aujourdhui)
+    const rdv = rdvDuJour((rdvs ?? []) as Parameters<typeof rdvDuJour>[0], aujourdhui)
+    barreModes = <BarreModes patientId={patient.id} mode="dossier" rdv={rdv ? { id: rdv.id, time: rdv.time } : null} />
+  }
+
   return (
     <PatientDossier
+      barreModes={barreModes}
+      visiteTerminee={typeof searchParams.visite === 'string' ? searchParams.visite : null}
       doctorId={doctor.id}
       doctorName={doctor.name ?? ''}
       doctorSlug={doctor.slug ?? ''}
