@@ -8,6 +8,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { actesDeLaSeance, ligneCotee, codeDuLibelle } from './feuille-preremplie.js'
 import { cotationDe, acteParCode, canalairePourDent, ACTES_DENTAIRES } from './actes-dentaires.js'
+import { alertesNgap, ageAu } from './feuille-regles.js'
 
 const RDV = 'rdv-1'
 const ev = (tooth, after, natures, sur = {}) => ({
@@ -42,9 +43,54 @@ test('catalogue : les codes corrigés désignent bien l\'acte du texte', () => {
   assert.equal(acteParCode('D719'), null)                     // anesthésie générale : pas au cabinet
 })
 
-test('catalogue : chaque code n\'y est qu\'une fois', () => {
-  const codes = ACTES_DENTAIRES.map((a) => a.code)
+test('catalogue : chaque acte de la nomenclature n\'y est qu\'une fois', () => {
+  const codes = ACTES_DENTAIRES.filter((a) => !a.assimile).map((a) => a.code)
   assert.equal(new Set(codes).size, codes.length)
+})
+
+test('assimilation : le code de référence garde son acte, l\'assimilé emprunte sa cotation', () => {
+  assert.match(acteParCode('D510').libelle, /bride fibreuse/)
+  const frenectomie = ACTES_DENTAIRES.find((a) => a.assimile && /Frénectomie/.test(a.libelle))
+  assert.equal(frenectomie.code, 'D510')
+  assert.equal(frenectomie.coefficient, 10)
+  assert.equal(frenectomie.accord, true)
+  // Prothèse maxillo-faciale : la convention ne fixe pas la valeur, on ne l'invente pas.
+  assert.equal(cotationDe('D806').valeurCle, null)
+})
+
+test('NGAP art. 9 A : consultation et acte le même jour', () => {
+  const al = alertesNgap([
+    { code: 'C', label: 'Consultation', lettre_cle: 'C', coefficient: 1, amount: 200, acte_date: '2026-11-14', tooth: null },
+    { code: 'D708', label: 'Détartrage', lettre_cle: 'D', coefficient: 12, amount: 400, acte_date: '2026-11-14', tooth: null },
+  ], '2026-11-14')
+  assert.ok(al.some((a) => /Consultation et acte/.test(a.titre)))
+})
+
+test('NGAP art. 9 B : le deuxième acte à 50 %, les extractions suivantes exclues', () => {
+  const al = alertesNgap([
+    { code: 'D700', label: 'o', lettre_cle: 'D', coefficient: 10, amount: 0, tooth: '16' },
+    { code: 'D706', label: 'c', lettre_cle: 'D', coefficient: 25, amount: 0, tooth: '36' },
+  ], '2026-11-14')
+  const r = al.find((a) => /même séance/.test(a.titre))
+  assert.match(r.detail, /D706 D 25, D700 D 10\/2/)
+  const ext = alertesNgap([
+    { code: 'D713', label: 'e', lettre_cle: 'D', coefficient: 10, amount: 0, tooth: '18' },
+    { code: 'D714', label: 'e', lettre_cle: 'D', coefficient: 5, amount: 0, tooth: '28' },
+  ], '2026-11-14')
+  assert.ok(!ext.some((a) => /même séance/.test(a.titre)))
+})
+
+test('NGAP chap. VII : majoration enfant sur dent permanente seulement', () => {
+  const ligne = (tooth) => [{ code: 'D706', label: 'c', lettre_cle: 'D', coefficient: 25, amount: 0, tooth }]
+  assert.ok(alertesNgap(ligne('36'), '2026-11-14', '2016-03-01').some((a) => /D 37.5/.test(a.detail)))
+  assert.ok(!alertesNgap(ligne('75'), '2026-11-14', '2016-03-01').some((a) => /majoration/.test(a.titre)))
+  assert.ok(!alertesNgap(ligne('36'), '2026-11-14', '2010-03-01').some((a) => /majoration/.test(a.titre)))
+})
+
+test('âge : années révolues', () => {
+  assert.equal(ageAu('2013-11-15', '2026-11-14'), 12)
+  assert.equal(ageAu('2013-11-14', '2026-11-14'), 13)
+  assert.equal(ageAu(null, '2026-11-14'), null)
 })
 
 test('canalaire : le groupe de dents fait le code', () => {

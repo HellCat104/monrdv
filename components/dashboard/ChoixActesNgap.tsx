@@ -19,7 +19,7 @@
 // 3. Les SIX FAMILLES en dernier, repliées : on ne déroule cinquante actes
 //    sous les yeux de quelqu'un qui en cherche un.
 import { useMemo, useState } from 'react'
-import { GROUPES_ACTES, rechercherActes, acteParCode, cotationDe, type ActeDentaire } from '@/lib/actes-dentaires'
+import { GROUPES_ACTES, rechercherActes, acteParCode, cotationDe, cleActe, valeurCleDe, type ActeDentaire } from '@/lib/actes-dentaires'
 import { ChevronDown, Search } from 'lucide-react'
 
 /** Un acte déjà posé par ce cabinet, tel que l'API le renvoie. */
@@ -85,7 +85,7 @@ export default function ChoixActesNgap({
    *  que c'est lui qu'on relit sur la feuille imprimée. */
   const ligne = (a: ActeDentaire) => (
     <button
-      key={a.code}
+      key={cleActe(a)}
       type="button"
       onClick={() => { onChoisir(a, dernierTarif(a.code)); setQ('') }}
       className="w-full flex items-start gap-2 px-2 py-1.5 text-left rounded-lg hover:bg-primary-50/70"
@@ -122,8 +122,11 @@ export default function ChoixActesNgap({
       {a.coefficient != null && (
         <span className="text-[10px] text-gray-400 shrink-0 mt-0.5 tabular-nums text-right leading-tight">
           {a.lettre} {a.coefficient}
-          {cotationDe(a.code)?.tnr != null && (
-            <span className="block">TNR {cotationDe(a.code)!.tnr!.toLocaleString('fr-FR')} DH</span>
+          {valeurCleDe(a) != null && a.code !== 'D629' && (
+            <span className="block">TNR {(Math.round(a.coefficient * valeurCleDe(a)! * 100) / 100).toLocaleString('fr-FR')} DH</span>
+          )}
+          {a.code === 'D629' && cotationDe('D629')?.tnr != null && (
+            <span className="block">Forfait {cotationDe('D629')!.tnr!.toLocaleString('fr-FR')} DH</span>
           )}
         </span>
       )}
@@ -153,7 +156,7 @@ export default function ChoixActesNgap({
           <div className="flex flex-wrap gap-1">
             {suggeres.map((a) => (
               <button
-                key={`suggere-${a.code}`}
+                key={`suggere-${cleActe(a)}`}
                 type="button"
                 onClick={() => onChoisir(a, dernierTarif(a.code))}
                 title={a.aVerifier ? `${a.libelle} — code à confirmer : ${a.aVerifier}` : a.libelle}

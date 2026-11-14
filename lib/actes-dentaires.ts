@@ -11,10 +11,17 @@
 // ── D'OÙ VIENNENT LES CHIFFRES (novembre 2026) ──────────────────────────────
 //
 // CODES ET COEFFICIENTS — la Nomenclature Générale des Actes Professionnels
-// (NGAP) du Maroc, chapitre VII « Dents, gencives » (codes D700 à D785) et
-// l'article 5 « Orthopédie dento-faciale » (D626 à D641). Chaque ligne
-// ci-dessous reprend le numéro, l'intitulé et le coefficient du texte, sans
-// interprétation.
+// (NGAP) du Maroc, arrêté n° 177-06 du 27 janvier 2006 : chapitre VII
+// « Dents, gencives » (D700 à D785), article 5 « Orthopédie dento-faciale »
+// (D626 à D641), les actes des chapitres « Bouche » et « Maxillaires » qu'un
+// chirurgien-dentiste pratique au cabinet, et la page « Assimilations
+// dentaires ». Chaque ligne reprend le numéro, l'intitulé et le coefficient du
+// texte, sans interprétation. Quand un acte porte deux nombres au texte
+// (« 50 30 »), le second est celui de l'ANESTHÉSIE, honorée à l'anesthésiste :
+// il ne figure pas ici.
+//
+// La lettre clé dépend de QUI exécute l'acte (NGAP, art. 2) : D pour le
+// chirurgien-dentiste, même pour un acte des chapitres Bouche ou Maxillaires.
 //
 // VALEUR DE LA LETTRE CLÉ D — Convention nationale AMO organismes
 // gestionnaires / chirurgiens-dentistes du 28 juillet 2006, titre II :
@@ -79,6 +86,15 @@ export interface ActeDentaire {
   /** Une précision réglementaire à afficher à côté de l'acte (radio
    *  obligatoire, majoration enfant, limite d'âge…). */
   note?: string
+  /** Acte absent de la nomenclature, coté PAR ASSIMILATION à l'acte dont il
+   *  porte le code (NGAP, « Assimilations dentaires »). La feuille doit
+   *  porter la mention « acte assimilable », et l'acte passe par un accord
+   *  préalable (NGAP, dispositions générales, articles 3 et 5). */
+  assimile?: boolean
+  /** La valeur de la clé n'est pas fixée par la convention pour cet acte
+   *  (prothèse maxillo-faciale : ni « soins » ni « prothèses dentaires »
+   *  au sens strict). On ne l'invente pas : le praticien la complète. */
+  sansValeurCle?: boolean
 }
 
 export interface GroupeActes {
@@ -169,6 +185,31 @@ export const GROUPES_ACTES: GroupeActes[] = [
       extraction('D736', 'Régularisation de crête — hémi-maxillaire ou canine à canine', 15, { dent: 'bloc' }),
       extraction('D737', 'Régularisation de crête — totalité', 30, { dent: null }),
       extraction('D733', 'Trépanation du sinus pour recherche d’une racine', 40),
+      extraction('D728', 'Dent en désinclusion non enclavée, couronne sous-muqueuse', 20, { note: RADIO_PRE_OP }),
+      extraction('D729', 'Dent en désinclusion, couronne sous-muqueuse palatine ou linguale', 50, { note: RADIO_PRE_OP }),
+      extraction('D730', 'Dent ectopique et incluse (coroné, gonion, branche montante, sinus…)', 80, { note: RADIO_PRE_OP }),
+      extraction('D731', 'Extraction chirurgicale d’une dent incluse, réimplantation, contention — une dent', 100, { note: RADIO_PRE_OP }),
+      extraction('D732', 'Extraction chirurgicale d’une dent incluse, réimplantation, contention — deux dents', 150, { note: RADIO_PRE_OP }),
+      extraction('D741', 'Kyste étendu à un segment important du maxillaire', 50, { note: 'Radiographie obligatoire. Par marsupialisation : 50 % du coefficient.' }),
+      extraction('D745', 'Chirurgie préprothétique — désinsertion d’un vestibule', 40, { dent: null }),
+      extraction('D746', 'Chirurgie préprothétique — plancher de la bouche (section des mylohyoïdiens)', 60, { dent: null }),
+      extraction('D747', 'Chirurgie préprothétique — approfondissement d’un vestibule par greffe', 40, { dent: null }),
+    ],
+  },
+  {
+    cle: 'bouche',
+    titre: 'Bouche, maxillaires et ATM',
+    actes: [
+      extraction('D510', 'Excision et suture d’une bride fibreuse ou du frein hypertrophié', 10, { dent: null }),
+      extraction('D509', 'Incision d’un abcès de la langue ou du plancher, par voie buccale', 20, { dent: null }),
+      extraction('D435', 'Collection suppurée de la face, extractions éventuelles comprises', 40, { dent: null }),
+      extraction('D535', 'Prélèvement (biopsie) d’une lésion intrabuccale', 5, { dent: null }),
+      extraction('D537', 'Exérèse d’une tumeur bénigne de la bouche', 15, { dent: null }),
+      extraction('D539', 'Diathermo-coagulation d’une leucoplasie ou d’une tumeur bénigne', 5, { dent: null }),
+      extraction('D529', 'Lithiase salivaire — calcul antérieur, incision muqueuse simple', 10, { dent: null }),
+      extraction('D600', 'Fracture des procès alvéolaires, dents mobiles conservées', 50, { dent: 'bloc', note: 'Traitement radiculaire non compris.' }),
+      extraction('D607', 'Curetage et ablation de séquestres — région alvéolaire', 10, { dent: 'bloc' }),
+      extraction('D621', 'Luxation récente de la mandibule — traitement orthopédique', 5, { dent: null }),
     ],
   },
   {
@@ -203,6 +244,7 @@ export const GROUPES_ACTES: GroupeActes[] = [
       adjointe('D781', 'Dent ou crochet ajouté / remplacé — chacun des suivants', 5),
       adjointe('D782', 'Dent ou crochet soudé sur appareil métallique (par élément)', 20),
       adjointe('D784', 'Remplacement de facette', 8),
+      adjointe('D783', 'Dent ou crochet remonté après réparation de plaque métallique (par élément)', 3),
     ],
   },
   {
@@ -215,14 +257,55 @@ export const GROUPES_ACTES: GroupeActes[] = [
       odf('D631', 'Séance de surveillance (interruption du traitement)', 5, { accord: true }),
       odf('D636', 'Contention — première année', 75, { accord: true }),
       odf('D637', 'Contention — deuxième année', 50, { accord: true }),
+      odf('D628', 'Rééducation de la déglutition / de la parole, par séance (série de 12)', 5, { accord: true, note: 'Ne se cumule pas avec le traitement ODF du même praticien.' }),
+      odf('D632', 'Interruption provisoire du traitement — première année', 75, { accord: true }),
+      odf('D633', 'Interruption provisoire du traitement — deuxième année', 50, { accord: true }),
+      odf('D634', 'Mise en place sur l’arcade d’une canine incluse (avant 18 ans)', 150, { accord: true }),
+      odf('D635', 'Mise en place sur l’arcade de deux canines incluses (avant 18 ans)', 200, { accord: true }),
+      odf('D638', 'Disjonction intermaxillaire rapide (insuffisance respiratoire confirmée)', 180, { accord: true }),
+      odf('D641', 'ODF après 16 ans, préalable à une chirurgie des maxillaires (6 mois)', 90, { accord: true }),
+      odf('D639', 'Orthopédie des fentes labio-palatines — forfait annuel', 200, { accord: true }),
+      odf('D640', 'Orthopédie des fentes labio-palatines — période d’attente', 60, { accord: true }),
+    ],
+  },
+  {
+    // NGAP, « Assimilations dentaires ». Ces gestes n'ont pas de ligne à la
+    // nomenclature : ils se cotent comme l'acte de référence, avec la mention
+    // « acte assimilable », et après accord préalable.
+    cle: 'assimilations',
+    titre: 'Actes assimilés (accord préalable)',
+    actes: [
+      soin('D510', 'Frénectomie, excision du frein labial (acte assimilé)', 10, { dent: null, accord: true, assimile: true, famille: 'extraction' }),
+      soin('D710', 'Réimplantation et contention d’une dent expulsée (acte assimilé)', 40, { accord: true, assimile: true, note: 'Comprend les soins post-opératoires et la surveillance.' }),
+      soin('D728', 'Ligature sur une dent sous-muqueuse en vue d’un traitement ODF (acte assimilé)', 20, { accord: true, assimile: true, note: 'Seulement si un autre praticien fait (ou fera) le traitement ODF.' }),
+      soin('D600', 'Réduction sanglante simple d’une fracture du zygoma (acte assimilé)', 50, { dent: null, accord: true, assimile: true }),
+      soin('D806', 'Gouttière pour syndrome algo-dysfonctionnel de l’ATM (acte assimilé)', 60, { dent: null, accord: true, assimile: true, sansValeurCle: true, note: 'Joindre un diagnostic complet et le plan de traitement à la demande.' }),
+      soin('D806', 'Appareil anti-bavage (acte assimilé)', 60, { dent: null, accord: true, assimile: true, sansValeurCle: true }),
+      adjointe('D776', 'Dent prothétique massive sur plaque résine (acte assimilé)', 10, { accord: true, assimile: true }),
+      soin('D800', 'Plaque palatine du nourrisson, fente palatine (acte assimilé)', 25, { dent: null, accord: true, assimile: true, sansValeurCle: true, note: 'Renouvelable jusqu’à l’intervention chirurgicale réparatrice.' }),
     ],
   },
 ]
 
-/** Tous les actes, à plat. */
+/** Tous les actes, à plat. Un acte ASSIMILÉ porte le code de son acte de
+ *  référence : le code n'est donc pas une clé unique — `cle` l'est. */
 export const ACTES_DENTAIRES: ActeDentaire[] = GROUPES_ACTES.flatMap((g) => g.actes)
 
-const PAR_CODE = new Map(ACTES_DENTAIRES.map((a) => [a.code.toUpperCase(), a]))
+/** Clé unique d'un acte du catalogue (le code, suivi de « ~a » pour un acte
+ *  assimilé et de son rang). Sert de clé d'affichage. */
+export function cleActe(a: ActeDentaire): string {
+  if (!a.assimile) return a.code
+  const memes = ACTES_DENTAIRES.filter((x) => x.assimile && x.code === a.code)
+  return `${a.code}~a${memes.indexOf(a)}`
+}
+
+/** Par code, l'acte de la NOMENCLATURE (jamais un acte assimilé, qui ne fait
+ *  qu'emprunter son code). */
+const PAR_CODE = new Map<string, ActeDentaire>()
+for (const a of ACTES_DENTAIRES) {
+  const c = a.code.toUpperCase()
+  if (!PAR_CODE.has(c) || (PAR_CODE.get(c)!.assimile && !a.assimile)) PAR_CODE.set(c, a)
+}
 
 /** L'acte que désigne un code, s'il est au catalogue. Tolère « d 704 ». */
 export function acteParCode(code: string | null | undefined): ActeDentaire | null {
@@ -243,6 +326,7 @@ export interface Cotation {
 export function valeurCleDe(a: ActeDentaire): number | null {
   if (a.lettre !== 'D') return null
   if (a.famille === 'odf') return null // forfait, pas une valeur de clé
+  if (a.sansValeurCle) return null
   return a.famille === 'prothese_conjointe' || a.famille === 'prothese_adjointe'
     ? VALEUR_D_PROTHESE
     : VALEUR_D_SOINS

@@ -190,6 +190,13 @@ export default function FeuilleSoinsCard({
   const [erreur, setErreur] = useState(false)
   /** Les clichés, quand l'écran appelant ne les a pas. */
   const [imagesLues, setImagesLues] = useState<ImageDentaire[]>([])
+  // La date de naissance du patient, pour la majoration enfant de la NGAP.
+  const [dateNaissance, setDateNaissance] = useState<string | null>(null)
+  useEffect(() => {
+    if (!dental) return
+    createClient().from('patients').select('birth_date').eq('id', patientId).maybeSingle()
+      .then(({ data }) => setDateNaissance((data as { birth_date?: string | null } | null)?.birth_date ?? null))
+  }, [patientId, dental])
   const cliches = images ?? imagesLues
   const bloc = useRef<HTMLDivElement>(null)
 
@@ -557,6 +564,7 @@ export default function FeuilleSoinsCard({
         images: cliches,
         inpe,
         ententePrealable: nature === 'entente_prealable',
+        dateNaissance,
         ententeNo,
       })
     : []

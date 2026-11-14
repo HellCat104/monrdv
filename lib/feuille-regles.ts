@@ -138,7 +138,21 @@ export interface ContexteFeuille {
   ententePrealable?: boolean
   /** Le numéro d'accord déjà obtenu, s'il y en a un. */
   ententeNo?: string | null
+  /** La date de naissance du patient (« AAAA-MM-JJ ») : la NGAP majore de
+   *  50 % les soins de la pulpe sur dent permanente avant 13 ans. */
+  dateNaissance?: string | null
 }
+
+/** L'âge en années révolues à une date donnée. Null si une date manque. */
+export function ageAu(naissance: string | null | undefined, jour: string): number | null {
+  const n = String(naissance ?? '').slice(0, 10)
+  if (!EST_JOUR.test(n) || !EST_JOUR.test(jour)) return null
+  const [an, mn, jn] = n.split('-').map(Number)
+  const [aj, mj, jj] = jour.split('-').map(Number)
+  return aj - an - (mj < mn || (mj === mn && jj < jn) ? 1 : 0)
+}
+
+const estDentDeLait = (t: string | null | undefined) => Math.floor(Number(String(t ?? '').trim()) / 10) >= 5
 
 export function alertesFeuille(ctx: ContexteFeuille): AlerteFeuille[] {
   const { organisme: org, actes, jourFeuille, aujourdhui } = ctx
@@ -239,14 +253,10 @@ export function alertesFeuille(ctx: ContexteFeuille): AlerteFeuille[] {
     })
   }
 
-  // 4 quater. Les codes dont le numéro contredit le référentiel officiel.
-  //
-  //    Le catalogue des actes vient d'un document qui porte lui-même la
-  //    mention « AI responses may include mistakes ». Dix-huit de ses codes
-  //    tombent, au référentiel de l'ANAM, dans une plage qui désigne autre
-  //    chose. On ne les interdit pas — un référentiel peut avoir changé
-  //    depuis — mais on ne laisse pas partir une feuille qui en porte un
-  //    sans que le praticien l'ait lu.
+  // 4 quater. Un code du catalogue porteur d'une réserve (`aVerifier`). Le
+  //    catalogue est recalé sur la NGAP depuis novembre 2026 et n'en porte
+  //    plus ; la règle reste pour le jour où un code demandera une
+  //    vérification.
   const douteux = actes
     .map((a) => ({ code: a.code, raison: acteParCode(a.code)?.aVerifier }))
     .filter((x): x is { code: string | null; raison: string } => !!x.raison)
@@ -291,6 +301,11 @@ export function alertesFeuille(ctx: ContexteFeuille): AlerteFeuille[] {
     }
   }
 
+  // 5 bis. Les règles de la NGAP elle-même (arrêté n° 177-06, dispositions
+  //    générales et chapitre VII). Elles ne dépendent pas de l'organisme :
+  //    c'est la nomenclature qui dit comment une séance se note.
+  alertes.push(...alertesNgap(actes, jourFeuille, ctx.dateNaissance))
+
   // 6. Les règles propres à l'organisme, citées pour mémoire quand elles
   //    peuvent s'appliquer — elles dépendent de l'âge ou du contrat, que le
   //    logiciel ne doit pas trancher à la place du praticien.
@@ -299,6 +314,116 @@ export function alertesFeuille(ctx: ContexteFeuille): AlerteFeuille[] {
       niveau: 'info',
       titre: `Ce que ${org.nom} demande avant de poser`,
       detail: org.accordPrealable.join(' '),
+    })
+  }
+
+  return alertes
+}
+
+/** Les règles de notation de la NGAP, ligne à ligne et séance par séance.
+ *
+ *  Rien n'est corrigé d'office : la nomenclature laisse des exceptions que
+ *  seul le praticien peut juger (un « acte isolé et distinct » au cours d'un
+ *  traitement global, art. 9 B 4 c). On dit la règle, avec la cotation
+ *  qu'elle donnerait. */
+export function alertesNgap(
+  actes: ActeFeuille[],
+  jourFeuille: string,
+  dateNaissance?: string | null,
+): AlerteFeuille[] {
+  const alertes: AlerteFeuille[] = []
+  const coef = (a: ActeFeuille) => Number(String(a.coefficient ?? '').replace(',', '.')) || 0
+  const lettre = (a: ActeFeuille) => String(a.lettre_cle ?? '').trim().toUpperCase()
+
+  // Les actes, séance par séance (un jour = une séance).
+  const parJour = new Map<string, ActeFeuille[]>()
+  for (const a of actes) {
+    const j = jourActe(a, jourFeuille)
+    parJour.set(j, [...(parJour.get(j) ?? []), a])
+  }
+
+  parJour.forEach((duJour, jour) => {
+    const consult = duJour.filter((a) => ['C', 'V'].includes(lettre(a)))
+    const techniques = duJour.filter((a) => lettre(a) === 'D' && coef(a) > 0)
+
+    // Art. 9 A — la consultation ne se cumule pas avec un acte de la séance.
+    if (consult.length > 0 && techniques.length > 0) {
+      alertes.push({
+        niveau: 'attention',
+        titre: 'Consultation et acte le même jour',
+        detail: `NGAP, art. 9 A : la consultation ne se cumule pas avec les autres actes de la même séance — seul l'acte le mieux rémunéré est noté sur la feuille. Retirez la consultation du ${jour.split('-').reverse().join('/')} si l'acte est plus élevé.`,
+      })
+    }
+
+    // Art. 9 B — plusieurs actes en D dans la séance : le plus fort à 100 %,
+    // le deuxième à 50 %, les suivants ne se notent pas. Les codes « chacune
+    // des suivantes » (D714, D716, D721) portent déjà la règle.
+    const soumis = techniques.filter((a) => !['D714', 'D716', 'D721'].includes(String(a.code ?? '').toUpperCase()))
+    if (soumis.length >= 2) {
+      const tries = soumis.slice().sort((x, y) => coef(y) - coef(x))
+      const notation = tries.map((a, i) => (
+        i === 0 ? `${a.code} D ${coef(a)}` : i === 1 ? `${a.code} D ${coef(a)}/2` : `${a.code} non noté`
+      )).join(', ')
+      alertes.push({
+        niveau: 'info',
+        titre: `${soumis.length} actes dans la même séance`,
+        detail: `NGAP, art. 9 B : l'acte au coefficient le plus fort est noté en entier, le deuxième à 50 %, les suivants ne sont pas notés — sauf acte isolé et distinct au cours d'un traitement global. Soit : ${notation}.`,
+      })
+    }
+
+    // Chapitre VII — plusieurs cavités simples sur la même face ne font
+    // qu'une obturation composée deux faces.
+    const parDent = new Map<string, number>()
+    for (const a of duJour) {
+      if (String(a.code ?? '').toUpperCase() !== 'D700' || !a.tooth) continue
+      parDent.set(a.tooth, (parDent.get(a.tooth) ?? 0) + 1)
+    }
+    parDent.forEach((n, dent) => {
+      if (n < 2) return
+      alertes.push({
+        niveau: 'attention',
+        titre: `Dent ${dent} : ${n} cavités simples`,
+        detail: 'NGAP, chap. VII : plusieurs cavités simples sur la MÊME face ne se comptent que pour une seule obturation composée deux faces (D701). Sur des faces différentes, gardez les lignes.',
+      })
+    })
+  })
+
+  // Chapitre VII — soins de la pulpe sur dent permanente avant 13 ans : +50 %.
+  for (const a of actes) {
+    const code = String(a.code ?? '').toUpperCase()
+    if (!['D703', 'D704', 'D705', 'D706'].includes(code) || !a.tooth || estDentDeLait(a.tooth)) continue
+    const age = ageAu(dateNaissance, jourActe(a, jourFeuille))
+    if (age === null || age >= 13) continue
+    const base = acteParCode(code)?.coefficient ?? coef(a)
+    if (coef(a) >= base * 1.5) continue
+    alertes.push({
+      niveau: 'attention',
+      titre: `Dent ${a.tooth} : majoration enfant de 50 %`,
+      detail: `NGAP, chap. VII : les soins de la pulpe sur dent permanente d'un enfant de moins de 13 ans sont majorés de 50 %. ${code} se cote D ${base * 1.5} au lieu de D ${base}.`,
+    })
+  }
+
+  // Art. 3 — un acte assimilé se déclare comme tel, après accord préalable.
+  const assimiles = actes.filter((a) => /assimil/i.test(a.label))
+  if (assimiles.length > 0) {
+    alertes.push({
+      niveau: 'info',
+      titre: 'Acte assimilé',
+      detail: `NGAP, art. 3 et 5 : ${assimiles.map((a) => a.label).join(', ')} — l'acte n'est pas à la nomenclature ; il se cote comme son acte de référence, avec la mention « acte assimilable » (imprimée sur la feuille), et passe par un accord préalable.`,
+    })
+  }
+
+  // Art. 10 — un acte global en plusieurs temps (prothèse) : la feuille se
+  // signe une fois tous les temps terminés, ou porte la quotité réalisée.
+  const globaux = actes.filter((a) => {
+    const f = acteParCode(a.code)?.famille
+    return f === 'prothese_conjointe' || f === 'prothese_adjointe'
+  })
+  if (globaux.length > 0) {
+    alertes.push({
+      niveau: 'info',
+      titre: 'Prothèse : acte en plusieurs temps',
+      detail: 'NGAP, art. 10 : un acte global en plusieurs séances ne se déclare qu\'une fois tous les temps terminés. Si le traitement s\'est interrompu, indiquez la part réalisée (par exemple D 180 × 1/3).',
     })
   }
 

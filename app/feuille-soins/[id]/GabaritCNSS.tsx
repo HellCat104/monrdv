@@ -155,6 +155,11 @@ export default function GabaritCNSS({ praticien, patientId, beneficiaire, feuill
         // les colonnes voisines.
         { x: 686.7, y, texte: jour(a.acte_date) || jour(feuille.jour), taille: 8.6, ancre: 'middle' },
         { x: 737, y, texte: a.coefficient ? `${a.lettre_cle ?? ''} ${a.coefficient}`.trim() : '', taille: 12, ancre: 'middle' },
+        // NGAP, art. 3 : un acte assimilé porte la mention « acte
+        // assimilable » sur la feuille — sous sa cotation, en petit.
+        ...(/assimil/i.test(a.label ?? '')
+          ? [{ x: 737, y: y + 7, texte: 'acte assimilable', taille: 6.5, ancre: 'middle' as const }]
+          : []),
         { x: 785, y, texte: a.valeur_cle != null ? dh(Number(a.valeur_cle)) : '', taille: 11, ancre: 'middle' },
         // 48 millièmes de colonne : « 2 500,00 » en corps 12 mordait sur la
         // valeur de la clé.
