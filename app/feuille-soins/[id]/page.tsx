@@ -44,7 +44,7 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
 
   const { data: feuille } = await supabase
     .from('care_sheets')
-    .select('*, items:care_sheet_items(tooth, code, label, amount, position), patient:patients(first_name, last_name, cin, birth_date, sex, mutuelle, address)')
+    .select('*, items:care_sheet_items(tooth, code, label, amount, position), patient:patients(first_name, last_name, cin, birth_date, sex, mutuelle, address, phone)')
     .eq('id', params.id)
     .eq('doctor_id', doctor.id)
     .maybeSingle()
@@ -53,7 +53,7 @@ export default async function FeuilleSoinsPage({ params }: { params: { id: strin
   // Pas de logo ici : un imprimé officiel n'en porte pas, et le cadre
   // « Cachet et signature » est fait pour le tampon du cabinet.
   const patient = (Array.isArray(feuille.patient) ? feuille.patient[0] : feuille.patient) as
-    { first_name?: string; last_name?: string; cin?: string | null; birth_date?: string | null; sex?: string | null; mutuelle?: string | null; address?: string | null } | null
+    { first_name?: string; last_name?: string; cin?: string | null; birth_date?: string | null; sex?: string | null; mutuelle?: string | null; address?: string | null; phone?: string | null } | null
   const patientNom = patient ? `${patient.first_name ?? ''} ${patient.last_name ?? ''}`.trim() : ''
   // L'organisme du document.
   //

@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   // la feuille le RECOPIE (migration v65), elle ne le pointe pas.
   const { data: patient } = await supabase
     .from('patients')
-    .select('id, mutuelle, insurer_data, first_name, last_name, cin, address')
+    .select('id, mutuelle, insurer_data, first_name, last_name, cin, address, phone')
     .eq('id', patientId).eq('doctor_id', doctor.id).maybeSingle()
   if (!patient) return NextResponse.json({ error: 'Patient introuvable' }, { status: 404 })
 
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
         ...nettoyerDonneesAssure(body.insurer_data ?? patient.insurer_data),
         ...instantaneAssure(
           (body.insurer_data ?? patient.insurer_data) as Record<string, unknown> | null,
-          patient as { first_name?: string | null; last_name?: string | null; cin?: string | null; address?: string | null },
+          patient as { first_name?: string | null; last_name?: string | null; cin?: string | null; address?: string | null; phone?: string | null },
         ),
       }),
       care_date: careDate,

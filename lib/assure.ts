@@ -20,6 +20,10 @@
 //   lien             « Lui même », « Conjoint » ou « Enfant »
 //   cin_assure       CIN de l'assuré, s'il n'est pas le patient
 //   adresse_assure   adresse de l'assuré, si elle diffère de celle du patient
+//   telephone_assure téléphone de l'assuré, s'il n'est pas le patient
+//   grade, unite     FAR : grade et unité de l'adhérent
+//   police           assureur privé (RMA…) : n° de police / contrat
+//   souscripteur     assureur privé : l'employeur ou l'organisme souscripteur
 // Les anciennes clés `affiliation`, `matricule`, `reference` sont relues comme
 // un numéro d'assuré.
 //
@@ -36,6 +40,11 @@ export interface Assure {
   cin: string | null
   adresse: string | null
   lien: LienAssure | null
+  telephone: string | null
+  grade: string | null
+  unite: string | null
+  police: string | null
+  souscripteur: string | null
 }
 
 const texte = (v: unknown) => {
@@ -67,7 +76,7 @@ export function numeroAssure(data: Record<string, unknown> | null | undefined): 
  *  suppose rien — le cadre reste vierge. */
 export function assureDe(
   data: Record<string, unknown> | null | undefined,
-  patient: { first_name?: string | null; last_name?: string | null; cin?: string | null; address?: string | null } = {},
+  patient: { first_name?: string | null; last_name?: string | null; cin?: string | null; address?: string | null; phone?: string | null } = {},
 ): Assure {
   const d = data ?? {}
   const numero = numeroAssure(d)
@@ -76,8 +85,14 @@ export function assureDe(
   const luiMeme = lienSaisi === 'Lui même' || (!lienSaisi && !autre && !!numero)
   const nomPatient = texte(`${patient.first_name ?? ''} ${patient.last_name ?? ''}`)
 
+  // Ces champs ne désignent pas une personne : ils s'impriment dès qu'ils
+  // sont saisis, même sans lien ni numéro.
+  const extra = {
+    grade: texte(d.grade), unite: texte(d.unite),
+    police: texte(d.police), souscripteur: texte(d.souscripteur),
+  }
   if (!numero && !lienSaisi && !autre) {
-    return { nom: null, immatriculation: null, cin: null, adresse: null, lien: null }
+    return { nom: null, immatriculation: null, cin: null, adresse: null, lien: null, telephone: null, ...extra }
   }
   return {
     nom: luiMeme ? (nomPatient ?? autre) : autre,
@@ -85,6 +100,8 @@ export function assureDe(
     cin: texte(d.cin_assure) ?? (luiMeme ? texte(patient.cin) : null),
     adresse: texte(d.adresse_assure) ?? (luiMeme ? texte(patient.address) : null),
     lien: luiMeme ? 'Lui même' : lienSaisi,
+    telephone: texte(d.telephone_assure) ?? (luiMeme ? texte(patient.phone) : null),
+    ...extra,
   }
 }
 
@@ -102,6 +119,11 @@ export function instantaneAssure(
   if (a.lien) sortie.lien = a.lien
   if (a.cin) sortie.cin_assure = a.cin
   if (a.adresse) sortie.adresse_assure = a.adresse
+  if (a.telephone) sortie.telephone_assure = a.telephone
+  if (a.grade) sortie.grade = a.grade
+  if (a.unite) sortie.unite = a.unite
+  if (a.police) sortie.police = a.police
+  if (a.souscripteur) sortie.souscripteur = a.souscripteur
   return sortie
 }
 
@@ -109,7 +131,17 @@ export function instantaneAssure(
 export function libelleNumeroAssure(mutuelle: string | null | undefined): string {
   const m = String(mutuelle ?? '').toLowerCase()
   if (m.includes('cnops')) return 'N° d’affiliation'
-  if (m.includes('far')) return 'Matricule'
+  if (m.includes('far')) return 'N° de matricule'
+  if (m.includes('rma')) return 'N° d’affiliation'
   if (m.includes('cnss') || m.includes('amo')) return 'N° d’immatriculation'
   return 'N° d’assuré / de police'
+}
+
+/** L'organisme demande-t-il grade et unité (FAR), ou police et souscripteur
+ *  (assureur privé) ? Sert à n'afficher que les champs utiles. */
+export function champsAssurePour(mutuelle: string | null | undefined): { far: boolean; prive: boolean } {
+  const m = String(mutuelle ?? '').toLowerCase()
+  const far = /\bfar\b|forces arm/.test(m)
+  const prive = !far && !/cnss|cnops|amo/.test(m) && m.trim() !== '' && m !== 'aucune'
+  return { far, prive }
 }

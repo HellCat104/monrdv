@@ -37,7 +37,7 @@ import VitalsTrend from '@/components/dashboard/VitalsTrend'
 import { organismePour } from '@/lib/organismes'
 import AlerteAdresseEmail, { memeAdresse } from '@/components/shared/AlerteAdresseEmail'
 import { isDentalDoctor } from '@/lib/dental'
-import { LIENS_ASSURE, assureDe, libelleNumeroAssure, normaliserLien, numeroAssure } from '@/lib/assure'
+import { LIENS_ASSURE, assureDe, champsAssurePour, libelleNumeroAssure, normaliserLien, numeroAssure } from '@/lib/assure'
 import { isNonPrescriber } from '@/lib/profession'
 import { nettoyerEtiquettes, normaliserEtiquette, dejaPosee, suggestions } from '@/lib/pathologies'
 import { Button } from '@/components/ui/button'
@@ -1125,6 +1125,32 @@ export default function PatientDossier({
                       <Input value={numeroAssure(assureData) ?? ''} placeholder="Recopié de la carte"
                         onChange={(e) => setAssureData((d) => ({ ...d, immatriculation: e.target.value.toUpperCase() }))} className="h-9" />
                     </div>
+                    {/* FAR : grade et unité de l'adhérent (page 1 du carnet). */}
+                    {champsAssurePour(editMutuelle).far && (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-gray-400">Grade de l’adhérent</Label>
+                          <Input value={assureData.grade ?? ''} onChange={(e) => setAssureData((d) => ({ ...d, grade: e.target.value }))} className="h-9" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-gray-400">Unité</Label>
+                          <Input value={assureData.unite ?? ''} onChange={(e) => setAssureData((d) => ({ ...d, unite: e.target.value }))} className="h-9" />
+                        </div>
+                      </>
+                    )}
+                    {/* Assureur privé (RMA…) : police et souscripteur. */}
+                    {champsAssurePour(editMutuelle).prive && (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-gray-400">N° de police / contrat</Label>
+                          <Input value={assureData.police ?? ''} onChange={(e) => setAssureData((d) => ({ ...d, police: e.target.value.toUpperCase() }))} className="h-9" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-gray-400">Souscripteur (employeur)</Label>
+                          <Input value={assureData.souscripteur ?? ''} onChange={(e) => setAssureData((d) => ({ ...d, souscripteur: e.target.value }))} className="h-9" />
+                        </div>
+                      </>
+                    )}
                     {normaliserLien(assureData.lien) && normaliserLien(assureData.lien) !== 'Lui même' && (
                       <>
                         <div className="space-y-1">
@@ -1137,6 +1163,11 @@ export default function PatientDossier({
                             onChange={(e) => setAssureData((d) => ({ ...d, cin_assure: e.target.value.toUpperCase() }))} className="h-9" />
                         </div>
                         <div className="space-y-1">
+                          <Label className="text-[11px] text-gray-400">Téléphone de l’assuré</Label>
+                          <Input type="tel" value={assureData.telephone_assure ?? ''}
+                            onChange={(e) => setAssureData((d) => ({ ...d, telephone_assure: e.target.value }))} className="h-9" />
+                        </div>
+                        <div className="space-y-1">
                           <Label className="text-[11px] text-gray-400">Adresse de l’assuré</Label>
                           <Input value={assureData.adresse_assure ?? ''} placeholder="Si différente de celle du patient"
                             onChange={(e) => setAssureData((d) => ({ ...d, adresse_assure: e.target.value }))} className="h-9" />
@@ -1145,7 +1176,7 @@ export default function PatientDossier({
                     )}
                   </div>
                   {normaliserLien(assureData.lien) === 'Lui même' && (
-                    <p className="text-[10.5px] text-gray-400">Nom, CIN et adresse de l’assuré : ceux du patient.</p>
+                    <p className="text-[10.5px] text-gray-400">Nom, CIN, adresse et téléphone de l’assuré : ceux du patient.</p>
                   )}
                 </div>
               )}
