@@ -17,6 +17,7 @@
 //
 // Le logiciel s'arrête maintenant où s'arrête le praticien : la feuille est
 // établie, imprimée, rendue. La suite appartient au patient.
+import { acteParCode } from '@/lib/actes-dentaires'
 
 export interface LigneFeuille {
   id?: string
@@ -169,4 +170,24 @@ export interface FeuilleImprimee {
   typesSoins: string[]
   ententeNo: string | null
   total: number
+}
+
+
+/** Les cases « Type de soins » à cocher sur l'imprimé : celles que le
+ *  praticien a cochées, ou — s'il n'en a coché aucune — celles que ses actes
+ *  désignent (soins courants, prothèse, orthodontie), d'après le catalogue. */
+export function typesSoinsDeduits(
+  coches: string[],
+  actes: { code?: string | null }[],
+): string[] {
+  const choisis = coches.filter((t) => ['soins', 'prothese', 'orthodontie', 'autres'].includes(t))
+  if (choisis.length > 0) return choisis
+  const out = new Set<string>()
+  for (const a of actes) {
+    const f = acteParCode(a.code)?.famille
+    if (f === 'odf') out.add('orthodontie')
+    else if (f === 'prothese_conjointe' || f === 'prothese_adjointe') out.add('prothese')
+    else out.add('soins')
+  }
+  return Array.from(out)
 }

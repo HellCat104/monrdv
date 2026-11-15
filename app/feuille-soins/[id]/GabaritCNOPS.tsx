@@ -5,13 +5,15 @@
 // en page, seulement OÙ chaque valeur se pose, en millièmes de la largeur de
 // la page.
 //
-// ── CE QU'IL ÉCRIT, ET CE QU'IL LAISSE ──────────────────────────────────────
+// ── CE QU'IL ÉCRIT (novembre 2026 : au maximum) ────────────────────────────
 //
-// Il remplit la DÉCLARATION du médecin traitant — l'imprimé veut que le nom du
-// soigné soit porté par le praticien lui-même —, son IDENTIFICATION, le
-// tableau des actes, le schéma dentaire, et son cadre de signature. Il ne
-// touche pas à « Partie réservée à l'assuré(e) » : l'assuré l'écrit de sa main
-// et signe dessous.
+// « Partie réservée à l'assuré(e) » : nom, n° d'affiliation, CIN, lien de
+// parenté, adresse et montant des frais — d'après le bloc « Assuré » de la
+// fiche patient. La DÉCLARATION du médecin traitant, son IDENTIFICATION (avec
+// le type de soins déduit des actes si le praticien n'a rien coché), le
+// tableau des actes, le schéma dentaire — dents de lait comprises — et son
+// cadre de signature. Restent à la main : les signatures, le n° de bordereau
+// et de dossier, le nombre de pièces jointes.
 //
 // ── UNE DIFFÉRENCE AVEC LA CNSS, ET ELLE VIENT DU SCAN ──────────────────────
 //
@@ -27,6 +29,8 @@ import type {
   ActeImprime, BeneficiaireImprime, FeuilleImprimee, PraticienImprime,
 } from '@/lib/feuilles-soins'
 import type { Organisme } from '@/lib/organismes'
+import type { Assure } from '@/lib/assure'
+import { typesSoinsDeduits } from '@/lib/feuilles-soins'
 
 export interface Props {
   organisme: Organisme
@@ -35,6 +39,8 @@ export interface Props {
   beneficiaire: BeneficiaireImprime
   feuille: FeuilleImprimee
   actes: ActeImprime[]
+  /** L'assuré, d'après la fiche patient (lib/assure.ts). */
+  assure?: Assure
 }
 
 const L = 1700
@@ -66,16 +72,24 @@ const ARCADE: Record<number, [number, number][]> = {
   4: [[753.3, 592.5], [744.0, 589.7], [735.5, 585.2], [729.8, 576.1],
       [725.3, 564.5], [720.1, 552.0], [716.8, 535.7], [713.3, 517.3]],
 }
+/** Les dents de LAIT, sur l'anneau intérieur de l'arcade : relevées sur le
+ *  scan de la CNSS (même dessin, contours nets) et portées à l'échelle du
+ *  CNOPS par la même correspondance que les dents définitives — dont l'écart
+ *  mesuré est de 0,05 millième. */
+const LAIT: Record<string, [number, number]> = {
+  '51': [756.0, 429.7], '52': [750.0, 432.9], '53': [746.5, 436.1], '54': [742.4, 442.4], '55': [740.1, 449.2],
+  '61': [761.9, 429.7], '62': [768.0, 432.9], '63': [771.9, 436.1], '64': [775.2, 442.4], '65': [777.5, 449.2],
+  '81': [756.2, 569.9], '82': [750.0, 568.3], '83': [744.1, 565.1], '84': [740.9, 559.5], '85': [738.5, 552.8],
+  '71': [761.2, 569.9], '72': [766.8, 568.3], '73': [772.8, 565.1], '74': [775.5, 559.2], '75': [778.3, 552.8],
+}
+
 /** Diamètre du cercle : les incisives sont étroites, les molaires larges. */
 const DIAMETRE = [10, 12, 13, 14, 16, 17, 18, 20]
 
-/** Le centre d'une dent sur l'arcade.
- *
- *  Rien pour les dents de LAIT : l'imprimé les dessine à l'intérieur de
- *  l'arcade, minuscules, et on ne sait pas les situer assez sûrement pour
- *  marquer un document de remboursement. Leur numéro figure dans la colonne
- *  « Dents traitées », qui est ce que l'organisme lit. */
+/** Le centre d'une dent sur l'arcade, définitive ou de lait. */
 function dentSurArcade(fdi: string | null | undefined): { x: number; y: number; d: number } | null {
+  const lait = LAIT[String(fdi ?? '').trim()]
+  if (lait) return { x: lait[0], y: lait[1], d: 6 }
   const m = /^([1-4])([1-8])$/.exec(String(fdi ?? '').trim())
   if (!m) return null
   const [x, y] = ARCADE[Number(m[1])][Number(m[2]) - 1]
@@ -87,10 +101,27 @@ const TYPES: [string, number][] = [
   ['soins', 506], ['prothese', 520], ['orthodontie', 534], ['autres', 547],
 ]
 
-export default function GabaritCNOPS({ praticien, patientId, beneficiaire, feuille, actes }: Props) {
+export default function GabaritCNOPS({ praticien, patientId, beneficiaire, feuille, actes, assure }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
+  const types = typesSoinsDeduits(feuille.typesSoins, items)
+
+  // La partie de l'assuré. Ses cases à cocher sont effacées sur le scan : la
+  // croix se pose entre le libellé français et le libellé arabe.
+  const adresse = (assure?.adresse ?? '').replace(/\s+/g, ' ').trim()
+  const coupe = adresse.length > 64 ? adresse.lastIndexOf(' ', 64) : -1
+  const LIENS_X: Record<string, number> = { 'Conjoint': 714, 'Enfant': 803 }
+  const partieAssure: MarqueFormulaire[] = assure ? [
+    { x: 602, y: 188, texte: assure.nom, taille: 12 },
+    { x: 590, y: 206, texte: assure.immatriculation, taille: 12 },
+    { x: 560, y: 240, texte: assure.cin, taille: 12 },
+    ...(assure.lien && LIENS_X[assure.lien] ? [{ x: LIENS_X[assure.lien], y: 271, signe: 'croix' as const, largeur: 10 }] : []),
+    { x: 566, y: 290, texte: coupe > 0 ? adresse.slice(0, coupe) : adresse.slice(0, 74), taille: 11 },
+    ...(coupe > 0 ? [{ x: 523, y: 307, texte: adresse.slice(coupe + 1, coupe + 80), taille: 11 }] : []),
+  ] : []
 
   const page1: MarqueFormulaire[] = [
+    ...partieAssure,
+    { x: 640, y: 324.5, texte: feuille.total > 0 ? dh(feuille.total) : '', taille: 12 },
     // Entente préalable ou exécution, en tête de l'imprimé. Ces deux cases-là
     // sont encadrées sur le scan : la croix tombe bien dedans.
     feuille.nature === 'entente_prealable'
@@ -106,18 +137,18 @@ export default function GabaritCNOPS({ praticien, patientId, beneficiaire, feuil
 
     // Identification du chirurgien dentiste.
     { x: 553, y: 476, texte: praticien.inpe, taille: 13 },
-    ...TYPES.filter(([cle]) => feuille.typesSoins.includes(cle))
+    ...TYPES.filter(([cle]) => types.includes(cle))
       .map(([, y]): MarqueFormulaire => ({ x: 580, y, signe: 'croix', largeur: 12 })),
     { x: 625, y: 561, texte: feuille.ententeNo, taille: 13 },
 
     // Le cadre de signature du praticien — celui de droite. Celui de gauche
     // est à l'assuré, et reste vierge.
-    { x: 805, y: 642, texte: praticien.ville, taille: 12 },
-    { x: 792, y: 659, texte: jour(feuille.jour), taille: 12 },
+    { x: 804, y: 641, texte: praticien.ville, taille: 12 },
+    { x: 790, y: 655, texte: jour(feuille.jour), taille: 12 },
   ]
 
-  // Huit lignes, relevées sur les filets du tableau.
-  const LIGNES = [142, 162, 182, 203, 223, 244, 264, 284]
+  // Neuf lignes, relevées sur les filets du tableau.
+  const LIGNES = [141, 161, 181, 201, 222, 243, 263, 283, 303]
   const page2: MarqueFormulaire[] = [
     ...items.slice(0, LIGNES.length).flatMap((a, i): MarqueFormulaire[] => {
       const y = LIGNES[i]
@@ -126,8 +157,8 @@ export default function GabaritCNOPS({ praticien, patientId, beneficiaire, feuil
         { x: 614.6, y, texte: a.code ?? '', taille: 12, ancre: 'middle' },
         { x: 675.9, y, texte: jour(a.acte_date) || jour(feuille.jour), taille: 10, ancre: 'middle' },
         { x: 734.6, y, texte: a.coefficient ? `${a.lettre_cle ?? ''} ${a.coefficient}`.trim() : '', taille: 12, ancre: 'middle' },
-        { x: 793.0, y, texte: a.valeur_cle != null ? String(a.valeur_cle) : '', taille: 12, ancre: 'middle' },
-        { x: 878, y, texte: dh(a.amount), taille: 12, ancre: 'end' },
+        { x: 793.0, y, texte: a.valeur_cle != null ? dh(Number(a.valeur_cle)) : '', taille: 11, ancre: 'middle' },
+        { x: 879, y, texte: dh(a.amount), taille: Number(a.amount) >= 1000 ? 10.5 : 12, ancre: 'end' },
       ]
     }),
     // « Le praticien est prié de préciser la dent traitée. »

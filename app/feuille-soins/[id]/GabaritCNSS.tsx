@@ -20,6 +20,7 @@ import { fichierPublic } from '@/lib/fichiers-publics'
 import type {
   ActeImprime, BeneficiaireImprime, FeuilleImprimee, PraticienImprime,
 } from '@/lib/feuilles-soins'
+import { typesSoinsDeduits } from '@/lib/feuilles-soins'
 import type { Organisme } from '@/lib/organismes'
 import type { Assure } from '@/lib/assure'
 
@@ -87,14 +88,19 @@ const ARCADE: Record<number, [number, number][]> = {
  *  larges. Mesuré sur le dessin, du centre vers le fond. */
 const DIAMETRE = [9, 11, 12, 13, 15, 16, 17, 18]
 
-/** Le centre d'une dent sur l'arcade dessinée.
- *
- *  Rien pour les dents de LAIT : l'imprimé les dessine à l'intérieur de
- *  l'arcade, minuscules et à contour ouvert par endroits — on ne sait pas les
- *  situer assez sûrement pour marquer un document de remboursement. Leur
- *  numéro figure dans la colonne « Dents traitées », qui est ce que
- *  l'organisme lit ; le praticien entoure la dent au stylo. */
+/** Les dents de LAIT, sur l'anneau intérieur de l'arcade : relevées une à une
+ *  sur le scan, à fort grossissement (novembre 2026). */
+const LAIT: Record<string, [number, number]> = {
+  '51': [751.5, 363.4], '52': [746.0, 366.3], '53': [742.7, 369.3], '54': [739.0, 375.1], '55': [736.8, 381.4],
+  '61': [757.0, 363.4], '62': [762.6, 366.3], '63': [766.2, 369.3], '64': [769.2, 375.1], '65': [771.4, 381.4],
+  '81': [751.7, 492.8], '82': [746.0, 491.3], '83': [740.5, 488.4], '84': [737.6, 483.2], '85': [735.4, 477.0],
+  '71': [756.3, 492.8], '72': [761.5, 491.3], '73': [767.0, 488.4], '74': [769.5, 482.9], '75': [772.1, 477.0],
+}
+
+/** Le centre d'une dent sur l'arcade dessinée, définitive ou de lait. */
 function dentSurArcade(fdi: string | null | undefined): { x: number; y: number; d: number } | null {
+  const lait = LAIT[String(fdi ?? '').trim()]
+  if (lait) return { x: lait[0], y: lait[1], d: 5.5 }
   const m = /^([1-4])([1-8])$/.exec(String(fdi ?? '').trim())
   if (!m) return null
   const [x, y] = ARCADE[Number(m[1])][Number(m[2]) - 1]
@@ -103,7 +109,9 @@ function dentSurArcade(fdi: string | null | undefined): { x: number; y: number; 
 
 export default function GabaritCNSS({ praticien, patientId, beneficiaire, feuille, actes, assure }: Props) {
   const items = actes.slice().sort((a, b) => a.position - b.position)
-  const coche = (t: string) => feuille.typesSoins.includes(t)
+  // Les cases cochées par le praticien, ou celles que ses actes désignent.
+  const types = typesSoinsDeduits(feuille.typesSoins, items)
+  const coche = (t: string) => types.includes(t)
 
   // ── LES POSITIONS DE LA PAGE 1 ────────────────────────────────────────────
   //
