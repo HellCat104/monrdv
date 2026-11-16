@@ -13,16 +13,10 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const { pathname } = req.nextUrl
 
-  // Ancienne URL de production → domaine officiel (301, bon pour le SEO).
-  // Les previews de branche (monrdv-git-*.vercel.app) ne sont PAS redirigées.
-  const host = req.headers.get('host') ?? ''
-  if (host === 'monrdv.vercel.app') {
-    const url = req.nextUrl.clone()
-    url.protocol = 'https:'
-    url.host = 'www.monrdv.co.ma'
-    url.port = ''
-    return NextResponse.redirect(url, 301)
-  }
+  // La redirection de l'ancienne adresse monrdv.vercel.app vers le domaine
+  // officiel n'est plus ici : elle est dans next.config.js (`redirects`), qui
+  // s'applique à TOUTES les pages sans faire tourner ce fichier — voir
+  // `config.matcher` en bas.
 
   // ── Rate limiting simple sur les routes sensibles ─────────────────────────
   // L'IP vient de la plateforme, pas d'un en-tête. `x-forwarded-for` est fourni
@@ -136,8 +130,28 @@ export async function middleware(req: NextRequest) {
   return res
 }
 
+// ── OÙ CE FICHIER S'EXÉCUTE : LÀ OÙ IL SERT, ET NULLE PART AILLEURS ─────────
+//
+// Il tournait sur TOUTES les requêtes de pages : l'accueil, chaque fiche
+// médecin, chaque page ville/spécialité, chaque préchargement de lien — pour
+// n'y rien faire d'autre que `NextResponse.next()`. Or chaque exécution
+// réveille une fonction séparée (89 ko, client Supabase compris), et quand
+// personne n'est passé depuis un moment elle démarre à froid : mesuré le
+// 16-11-2026, une page d'accueil DÉJÀ EN CACHE mettait 0,97 s à répondre à
+// froid contre 0,12 s à chaud. C'est le « lent à la première ouverture ».
+//
+// Désormais il ne s'exécute que sur les préfixes qu'il traite réellement :
+// `sensitiveRoutes` (quotas) et `protectedRoutes` / `adminRoutes` (session).
+// Le motif reprend la logique `startsWith` du code ci-dessus : tout chemin qui
+// COMMENCE par l'un de ces préfixes passe ici, exactement comme avant.
+// Toutes les autres pages ne le déclenchent plus — elles n'y faisaient rien.
+//
+// ⚠ Ajouter une route à protéger = l'ajouter AUSSI ici (Next exige un motif
+// écrit en dur, il ne peut pas être calculé depuis les tableaux).
+// `npm test` le vérifie (scripts/tests/middleware-matcher.test.mjs) : une
+// route listée plus haut mais absente du motif fait échouer les tests.
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?:dashboard|appointments|patients|settings|abonnement|equipe|cabinet|statistiques|factures|consultation|admin|patient/login|api/doctors/register|api/auth|api/appointments|api/slots|api/search|api/cancel|api/waitlist).*)',
   ],
 }

@@ -3,8 +3,10 @@ import * as Sentry from '@sentry/nextjs'
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-  // Capture 10% des transactions en production pour limiter le quota
-  tracesSampleRate: 0.1,
+  // Pas de suivi des performances dans le navigateur : son code est retiré à
+  // la compilation (`__SENTRY_TRACING__`, voir next.config.js) — 100 % des
+  // visiteurs le téléchargeaient pour 10 % de mesures. Les ERREURS du
+  // navigateur restent toutes remontées ; le côté serveur n'est pas concerné.
 
   // Capture 100% des replays sur erreur, 0% en navigation normale
   replaysOnErrorSampleRate: 1.0,

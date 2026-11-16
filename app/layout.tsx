@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
+import Script from 'next/script'
 import './globals.css'
 import VersionPerimee from '@/components/shared/VersionPerimee'
 
@@ -69,7 +70,9 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <head>
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-J76BEBZT5D" />
+        {/* La file `dataLayer` est créée tout de suite (quelques octets) : les
+            mesures émises avant l'arrivée du script Google y attendent, rien
+            n'est perdu. Le script lui-même est chargé plus bas, après coup. */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
@@ -82,6 +85,24 @@ export default function RootLayout({
         {/* Un onglet resté ouvert sur une version remplacée se recharge de
             lui-même au lieu de rester cassé (components/shared/VersionPerimee). */}
         <VersionPerimee />
+        {/* Google Analytics APRÈS que la page est devenue utilisable.
+            Mesuré le 16-11-2026 : gtag.js pèse 196 ko compressés (595 ko
+            bruts) — plus que tout le code de l'accueil hors Sentry. Placé
+            `async` dans le <head>, il partait dès la première milliseconde et
+            se disputait la bande passante avec la feuille de style, la police
+            et le code de la page ; sur un partage de connexion 4G, c'est la
+            page elle-même qui arrivait plus tard. `lazyOnload` (Next.js, pas
+            l'hébergeur) ne l'injecte qu'une fois la page entièrement chargée,
+            quand le navigateur est au repos : la visite est toujours comptée
+            (la file `dataLayer` l'attend), la page n'attend plus pour elle.
+            ⚠ Pas `afterInteractive` : dans l'App Router, Next émet alors un
+            <link rel="preload"> dans le <head> — le script repartirait en
+            tête de file, en priorité haute, soit pire qu'avant. Vérifié dans
+            le HTML produit. */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-J76BEBZT5D"
+          strategy="lazyOnload"
+        />
       </body>
     </html>
   )

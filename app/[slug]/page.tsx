@@ -133,37 +133,54 @@ export default async function BookingPage({ params }: Props) {
   // page publique. Sans la migration v86 la colonne n'existe pas : on retombe
   // alors sur l'ancienne requête, qui montrait tout — le comportement d'avant.
   const colonnes = 'id, doctor_id, name, duration_minutes, default_price, active, created_at'
-  let { data: consultationTypes, error: typesError } = await supabase
-    .from('consultation_types')
-    .select(colonnes)
-    .eq('doctor_id', doctor.id)
-    .eq('active', true)
-    .eq('rdv', true)
-    .order('created_at', { ascending: true })
-  if (typesError && (typesError.code === '42703' || typesError.code === 'PGRST204')) {
-    const repli = await supabase
-      .from('consultation_types').select(colonnes)
-      .eq('doctor_id', doctor.id).eq('active', true)
+  const lireMotifs = async () => {
+    const lecture = await supabase
+      .from('consultation_types')
+      .select(colonnes)
+      .eq('doctor_id', doctor.id)
+      .eq('active', true)
+      .eq('rdv', true)
       .order('created_at', { ascending: true })
-    consultationTypes = repli.data; typesError = repli.error
+    if (lecture.error && (lecture.error.code === '42703' || lecture.error.code === 'PGRST204')) {
+      return supabase
+        .from('consultation_types').select(colonnes)
+        .eq('doctor_id', doctor.id).eq('active', true)
+        .order('created_at', { ascending: true })
+    }
+    return lecture
   }
+
+  // ── LES QUATRE LECTURES PARTENT ENSEMBLE ────────────────────────────────
+  //
+  // Elles ne dépendent que de `doctor.id`, jamais l'une de l'autre. Faites
+  // l'une après l'autre, elles additionnaient quatre allers-retours vers la
+  // base avant le premier octet de la page — la page par laquelle arrive le
+  // patient qui a reçu le lien sur WhatsApp. En parallèle, l'attente est celle
+  // de la plus lente. Chacune garde SON repli : une colonne absente (migration
+  // pas encore passée) masque sa seule section, comme avant — `Promise.all`
+  // ne voit jamais d'exception, Supabase rend les erreurs dans `error`.
+  //
+  // Liste d'attente (v56), photos (v74), coordonnées GPS (v60) sont lues À
+  // PART de getDoctor : ajoutées à sa projection, une colonne absente ferait
+  // échouer toute la requête — et la page de réservation tomberait en 404
+  // pour tous les médecins. Ici, une erreur cache simplement la section.
+  const [motifs, liste, photos, position] = await Promise.all([
+    lireMotifs(),
+    supabase.from('doctors').select('waitlist_enabled').eq('id', doctor.id).maybeSingle(),
+    supabase.from('doctors').select('photos').eq('id', doctor.id).maybeSingle(),
+    supabase.from('doctors').select('latitude, longitude, map_url').eq('id', doctor.id).maybeSingle(),
+  ])
+
+  const { data: consultationTypes, error: typesError } = motifs
   if (typesError) console.error('[Motifs de consultation]', typesError)
 
-  // Liste d'attente (v56) : lue À PART de la fiche. Ajoutée à la projection de
-  // getDoctor, une colonne absente (migration pas encore passée) ferait
-  // échouer toute la requête — et la page de réservation tomberait en 404
-  // pour tous les médecins. Ici, une erreur cache simplement la case.
-  const { data: reglageListe, error: listeError } = await supabase
-    .from('doctors').select('waitlist_enabled').eq('id', doctor.id).maybeSingle()
+  // Liste d'attente : une erreur cache simplement la case.
+  const { data: reglageListe, error: listeError } = liste
   if (listeError) console.error('[Liste d\'attente] réglage illisible :', listeError.message)
   const waitlistEnabled = !listeError && reglageListe?.waitlist_enabled === true
 
-  // Photos du cabinet (v74) — lues À PART, pour la raison rappelée juste
-  // au-dessus : ajoutées à la projection de getDoctor, une colonne absente
-  // ferait tomber TOUTES les fiches en 404 tant que la migration n'est pas
-  // passée. Ici, une erreur masque simplement la galerie.
-  const { data: ligne, error: photosError } = await supabase
-    .from('doctors').select('photos').eq('id', doctor.id).maybeSingle()
+  // Photos du cabinet : une erreur masque simplement la galerie.
+  const { data: ligne, error: photosError } = photos
   if (photosError) console.error('[Photos cabinet] illisibles :', photosError.message)
   // `photosValides` écarte tout chemin qui n'appartient pas à CE médecin :
   // l'adresse publique n'est construite qu'à partir d'une valeur vérifiée.
@@ -171,13 +188,8 @@ export default async function BookingPage({ params }: Props) {
     (chemin) => supabase.storage.from(PHOTOS_BUCKET).getPublicUrl(chemin).data.publicUrl
   )
 
-  // Coordonnées GPS du cabinet (v60) — lues À PART, pour la raison exacte
-  // rappelée juste au-dessus : tant que la migration n'est pas passée, ces
-  // colonnes n'existent pas, et les ajouter à la projection de getDoctor ferait
-  // échouer TOUTE la requête — la fiche de chaque médecin tomberait en 404.
-  // Ici, une erreur retire simplement le balisage `geo`.
-  const { data: coord, error: coordError } = await supabase
-    .from('doctors').select('latitude, longitude, map_url').eq('id', doctor.id).maybeSingle()
+  // Coordonnées GPS du cabinet : une erreur retire simplement le balisage `geo`.
+  const { data: coord, error: coordError } = position
   if (coordError) console.error('[Coordonnées cabinet] illisibles :', coordError.message)
 
   // PostgREST renvoie les `numeric` sous forme de chaînes : sans conversion,

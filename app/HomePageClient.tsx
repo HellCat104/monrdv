@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, MapPin, User, Stethoscope, Clock, Shield, Star, Calendar, FolderHeart, Receipt, BellRing, Users2, FileText, Download } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import { SPECIALITES_LIST, VILLES_MAROC } from '@/types'
 import { LogoMonRDV } from '@/components/shared/LogoMonRDV'
 import { fichierPublic } from '@/lib/fichiers-publics'
@@ -40,9 +39,32 @@ export default function HomePageClient({ children }: { children?: React.ReactNod
   const [dashboardUrl, setDashboardUrl] = useState('/patient/dashboard')
 
   useEffect(() => {
+    // ── POURQUOI SUPABASE N'EST PLUS CHARGÉ D'OFFICE SUR L'ACCUEIL ──────────
+    //
+    // Le client Supabase pèse ~60 ko compressés (~220 ko bruts). Importé en
+    // tête de ce fichier, il faisait partie du code que TOUT visiteur
+    // téléchargeait avant que l'accueil ne réagisse — alors qu'il ne sert qu'à
+    // une chose : afficher le prénom d'une personne déjà connectée. Pire, un
+    // défaut de Next 14 rattache les morceaux de cette page à chaque `<Link>`
+    // rendu côté serveur : /login et /recherche les téléchargeaient aussi.
+    //
+    // 1. Sans cookie de session Supabase (`sb-…-auth-token`, lisible ici :
+    //    @supabase/ssr le pose sans `httpOnly`, le client navigateur le lit
+    //    lui-même), personne n'est connecté — c'est le cas de presque tous les
+    //    visiteurs. Rien à télécharger : « Se connecter », affiché par défaut,
+    //    est déjà le bon bouton.
+    // 2. Avec ce cookie, le client est importé à la demande, et la suite est
+    //    identique à avant : `getUser()` vérifie la session auprès de Supabase.
+    //    Un cookie périmé donne `user = null`, donc le même affichage.
+    if (!/(?:^|;\s*)sb-[^=]*-auth-token/.test(document.cookie)) return
     // Différé de 100ms pour ne pas bloquer le rendu initial de la page
-    const timer = setTimeout(() => {
-      const supabase = createClient()
+    const timer = setTimeout(async () => {
+      // Morceau introuvable (réseau coupé, version remplacée) : on garde le
+      // bouton « Se connecter » plutôt que de recharger l'accueil pour un
+      // simple prénom dans l'en-tête.
+      const lib = await import('@/lib/supabase/client').catch(() => null)
+      if (!lib) return
+      const supabase = lib.createClient()
       supabase.auth.getUser().then(async ({ data: { user } }) => {
         if (user) {
           const name = user.user_metadata?.full_name || user.email?.split('@')[0] || null

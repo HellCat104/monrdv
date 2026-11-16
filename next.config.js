@@ -80,6 +80,34 @@ const nextConfig = {
     // au bundling webpack et provoqueraient une erreur au runtime serverless.
     serverComponentsExternalPackages: ['twilio', 'pdfkit'],
   },
+  // ── SENTRY DANS LE NAVIGATEUR : LES ERREURS, PAS LE CHRONOMÈTRE ───────────
+  //
+  // Mesuré le 16-11-2026 : le SDK Sentry était le plus gros morceau de code
+  // de TOUTES les pages, 104 ko compressés (357 ko bruts), téléchargé et
+  // exécuté avant que la page ne réponde. Une bonne part est le « suivi des
+  // performances » (browserTracing : chronométrage des chargements, des
+  // navigations, des appels réseau), échantillonné à 10 % — soit un code payé
+  // par 100 % des visiteurs pour une mesure prise sur un sur dix, et dont les
+  // tableaux ne servent pas au quotidien.
+  //
+  // Ces deux constantes, définies pour le NAVIGATEUR seulement, laissent le
+  // compilateur retirer ce code mort (mécanisme documenté par Sentry,
+  // « tree shaking » par DefinePlugin) :
+  //   — __SENTRY_TRACING__ : le suivi des performances côté navigateur.
+  //   — __SENTRY_DEBUG__ : les messages de débogage, déjà éteints (`debug: false`).
+  // Ce qui RESTE intact : la remontée de TOUTES les erreurs du navigateur
+  // (instrumentation-client.ts, filtre des extensions compris). Le code
+  // serveur n'est pas touché : `isServer` l'exclut d'ici.
+  // Réglage de compilation standard (webpack) : rien de propre à Vercel.
+  webpack(config, { isServer, webpack }) {
+    if (!isServer) {
+      config.plugins.push(new webpack.DefinePlugin({
+        __SENTRY_TRACING__: false,
+        __SENTRY_DEBUG__: false,
+      }))
+    }
+    return config
+  },
   images: {
     remotePatterns: [
       {
@@ -93,6 +121,27 @@ const nextConfig = {
     imageSizes: [64, 128, 256],
   },
   compress: true,
+  // Ancienne URL de production → domaine officiel (301, bon pour le SEO).
+  // Les previews de branche (monrdv-git-*.vercel.app) ne sont PAS redirigées.
+  //
+  // Déplacée ici depuis middleware.ts le 16-11-2026 : pour l'appliquer à toutes
+  // les pages, le middleware devait tourner sur TOUTES les requêtes — et son
+  // démarrage à froid ralentissait la première ouverture de chaque page
+  // publique (voir `config.matcher` dans middleware.ts). Ici, la règle est
+  // évaluée par le routeur de Next, sans fonction à réveiller. Même hôte, mêmes
+  // exclusions (fichiers statiques, images, sitemap, robots) que l'ancien motif
+  // du middleware, même code 301 ; le chemin et les paramètres sont conservés.
+  // Fonction standard de Next.js : identique sur un serveur au Maroc.
+  async redirects() {
+    return [
+      {
+        source: '/:chemin((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+        has: [{ type: 'host', value: 'monrdv.vercel.app' }],
+        destination: 'https://www.monrdv.co.ma/:chemin',
+        statusCode: 301,
+      },
+    ]
+  },
   async headers() {
     return [
       {

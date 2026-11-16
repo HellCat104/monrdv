@@ -222,10 +222,24 @@ export function formatPhoneMaroc(phone: string): string {
   return `+212${cleaned}`
 }
 
-// Génère un token cryptographiquement sécurisé pour l'annulation
+// Génère un token cryptographiquement sécurisé pour l'annulation.
+//
+// POURQUOI LA CRYPTO STANDARD (`globalThis.crypto`) ET PAS `require('crypto')` :
+// ce fichier est importé par presque tous les écrans (`cn`, les dates…). Un
+// `require('crypto')` y suffisait pour que webpack embarque, côté NAVIGATEUR,
+// l'imitation complète du module `crypto` de Node — courbes elliptiques, RSA,
+// grands nombres : 91 ko compressés (325 ko bruts) téléchargés et analysés à
+// la première ouverture de 56 pages, dont la fiche publique de réservation et
+// la page de connexion, pour une fonction qui ne s'exécute QUE sur le serveur.
+// Sur un partage de connexion 4G, c'est à lui seul près d'une seconde.
+//
+// `crypto.getRandomValues` est la même source d'aléa système, présente sans
+// import dans Node ≥ 19 (Vercel aujourd'hui, un serveur au Maroc demain) comme
+// dans le navigateur. Même format qu'avant : 32 octets → 64 caractères hex.
 export function generateCancelToken(): string {
-  const { randomBytes } = require('crypto')
-  return randomBytes(32).toString('hex')
+  const octets = new Uint8Array(32)
+  globalThis.crypto.getRandomValues(octets)
+  return Array.from(octets, (o) => o.toString(16).padStart(2, '0')).join('')
 }
 
 // Retourne les initiales d'un nom
