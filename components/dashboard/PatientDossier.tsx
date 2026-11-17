@@ -30,6 +30,8 @@ import BlocGeneraliste from '@/components/dashboard/BlocGeneraliste'
 import SuiviPoids from '@/components/gastro/SuiviPoids'
 import SynthesePathologie from '@/components/gastro/SynthesePathologie'
 import FeuilleSoinsCard from '@/components/dashboard/FeuilleSoinsCard'
+import RegistreActes from '@/components/dentaire/RegistreActes'
+import type { ChangementSchema } from '@/lib/actes-patient'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
 import PerioCard from '@/components/dashboard/PerioCard'
 import OrthoCard from '@/components/dashboard/OrthoCard'
@@ -172,6 +174,11 @@ export default function PatientDossier({
   // Les clichés du patient (v94), chargés par le bloc d'imagerie et partagés
   // avec l'odontogramme, qui en tire ses repères.
   const [imagerie, setImagerie] = useState<ImageDentaire[]>([])
+  // Dentiste : les dents choisies sur le schéma ouvrent « Ajouter un acte »
+  // dans la liste des actes ; ce que l'acte change revient sur le schéma.
+  const [demandeActe, setDemandeActe] = useState<{ jeton: number; dents: string[]; faces: string[] } | null>(null)
+  const [apresActe, setApresActe] = useState<{ jeton: number; changements: ChangementSchema[] } | null>(null)
+  const [actesActifs, setActesActifs] = useState(true)
   const [suivisOuverts, setSuivisOuverts] = useState(false)
   const [ouvrirAnamnese, setOuvrirAnamnese] = useState(false)
   const [editChronic, setEditChronic] = useState(patient.chronic_conditions ?? '')
@@ -1488,7 +1495,18 @@ export default function PatientDossier({
                 dentsAvecImage={calculerDentsAvecImage(imagerie)}
                 // Ce que le dossier sait de la dent ouverte, hors du schéma :
                 // ses lignes de plan de traitement et ses clichés.
-                panneauDent={(dent) => <PanneauContexteDent patientId={patient.id} dent={dent} version={imagerie.length} />} />
+                panneauDent={(dent) => <PanneauContexteDent patientId={patient.id} dent={dent} version={imagerie.length} />}
+                onAjouterActe={actesActifs ? (dents, faces) => setDemandeActe({ jeton: Date.now(), dents, faces }) : undefined}
+                apresActe={apresActe} />
+              {/* La liste des actes, juste sous l'arcade : on touche les
+                  dents, on ajoute l'acte, il apparaît ici. Dans le dossier,
+                  un acte ajouté est d'abord « à faire » (on y prépare le
+                  plan) ; en consultation, il est « fini ». */}
+              <RegistreActes key={`actes-${patient.id}`} patientId={patient.id}
+                mutuelle={editMutuelle || null} inpe={doctorInpe}
+                demande={demandeActe} statutParDefaut="a_faire"
+                onSchema={(changements) => setApresActe({ jeton: Date.now(), changements })}
+                onIndisponible={() => setActesActifs(false)} />
               <ImagerieDentaire patientId={patient.id} doctorId={doctorId} onImages={setImagerie} />
               {/* La note se prend devant l'arcade, pas trois onglets plus
                   loin : c'est en regardant la dent qu'on écrit ce qu'on en

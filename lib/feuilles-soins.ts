@@ -55,7 +55,10 @@ export function normaliserLigne(brut: unknown, position: number): LigneFeuille |
   if (!label) return null
   const montant = Number(String(l.amount ?? '0').replace(',', '.'))
   return {
-    tooth: l.tooth ? String(l.tooth).trim().slice(0, 4) : null,
+    // Une dent (« 16 ») le plus souvent ; plusieurs pour un acte de bloc venu
+    // de la liste des actes (« 41 31 »). Coupé à 4 caractères, le bloc
+    // devenait « 41 3 ».
+    tooth: l.tooth ? String(l.tooth).trim().replace(/\s+/g, ' ').slice(0, 48) || null : null,
     code: l.code ? String(l.code).trim().toUpperCase().slice(0, 20) : null,
     label,
     amount: Number.isFinite(montant) && montant >= 0 ? Math.round(montant * 100) / 100 : 0,

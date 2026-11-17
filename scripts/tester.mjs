@@ -39,6 +39,7 @@ const MODULES = [
   'lib/feuille-regles.ts',
   'lib/organismes.ts',
   'lib/nomenclature-anam.ts',
+  'lib/actes-patient.ts',
 ]
 
 rmSync(atelier, { recursive: true, force: true })

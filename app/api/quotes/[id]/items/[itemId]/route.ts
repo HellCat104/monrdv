@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireQuoteDoctor, loadOwnedQuote, quoteNotFound } from '@/lib/devis-server'
 import { isValidTooth } from '@/lib/dental'
+import { suivreLigneDevis } from '@/lib/actes-patient-serveur'
+import type { LigneDevisLue } from '@/lib/actes-patient'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,6 +131,11 @@ export async function PATCH(
 
   await supabase.from('quotes').update({ updated_at: new Date().toISOString() })
     .eq('id', quote.id).eq('doctor_id', doctor.id)
+
+  // La liste des actes du dentiste (v101) suit la ligne : cochée « faite »,
+  // l'acte qui en vient est fini ; décochée, il redevient « à faire ». Sans
+  // la migration, rien ne se passe.
+  await suivreLigneDevis(supabase, doctor.id, data as LigneDevisLue)
 
   // LIBÉRATION DU RENDEZ-VOUS
   //

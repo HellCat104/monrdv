@@ -13,10 +13,12 @@
 // bien voulu déclarer.
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Check, ChevronLeft, ChevronRight, Maximize2, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, ClipboardPlus, Maximize2, PanelRightOpen, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import DentDevis from '@/components/dashboard/DentDevis'
 import DessinDent, { dentDuHaut, lireDent } from '@/components/dashboard/DessinDent'
+import DentDessus from '@/components/dentaire/DentDessus'
+import type { ChangementSchema } from '@/lib/actes-patient'
 import {
   DENTAL_STATES, DENTAL_COLOR, FDI_UPPER, FDI_LOWER, FDI_UPPER_LAIT, FDI_LOWER_LAIT,
   ETATS_AVEC_FACES, estDentDeLait,
@@ -38,7 +40,7 @@ import {
   type ToothEvent,
 } from '@/lib/dental-history'
 
-export default function DentalChart({ patientId, dentsAvecImage, appointmentId = null, onDentActive, panneauDent }: {
+export default function DentalChart({ patientId, dentsAvecImage, appointmentId = null, onDentActive, panneauDent, onAjouterActe, apresActe }: {
   patientId: string
   doctorId: string
   /** Le rendez-vous en cours, quand le schéma est ouvert en consultation.
@@ -57,6 +59,16 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
    *  Les panoramiques en sont exclues — elles marqueraient les trente-deux
    *  dents, et un repère qui s'allume partout ne signale plus rien. */
   dentsAvecImage?: Set<string>
+  /** LE GESTE DES ACTES. Fourni, il change ce que fait un clic : on
+   *  SÉLECTIONNE les dents (plusieurs), puis « Ajouter un acte » remonte la
+   *  sélection à l'écran parent, qui ouvre la fenêtre de l'acte. La fiche
+   *  d'une dent reste à un double-clic, ou au bouton « Fiche de la dent ».
+   *  Absent, un clic ouvre la fiche, comme avant. */
+  onAjouterActe?: (dents: string[], faces: string[]) => void
+  /** Ce qu'un acte enregistré change sur le schéma (lib/actes-patient,
+   *  `changementsSchema`). Chaque nouveau `jeton` applique ses changements
+   *  — enregistrés et journalisés comme un clic — puis vide la sélection. */
+  apresActe?: { jeton: number; changements: ChangementSchema[] } | null
 }) {
   const supabase = createClient()
   const [teeth, setTeeth] = useState<DentalTeeth>({})
@@ -78,6 +90,24 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
   const [natureParDefaut, setNatureParDefaut] = useState<ToothNature>('constate')
   // La vue agrandie : l'arcade en grand et la fiche de la dent côte à côte.
   const [agrandi, setAgrandi] = useState(false)
+  // Les dents touchées en vue d'un acte, dans l'ordre du clic.
+  const [selection, setSelection] = useState<string[]>([])
+  // Les faces touchées sur la vue de dessus : elles valent pour l'acte, donc
+  // pour toutes les dents sélectionnées (la fenêtre de l'acte les corrige).
+  const [facesChoisies, setFacesChoisies] = useState<string[]>([])
+  const modeActes = !!onAjouterActe
+  const basculerSelection = (dent: string) =>
+    setSelection((prev) => {
+      const next = prev.includes(dent) ? prev.filter((d) => d !== dent) : [...prev, dent]
+      if (next.length === 0) setFacesChoisies([])
+      return next
+    })
+  /** Une face touchée sur la vue de dessus : la dent est sélectionnée (si elle
+   *  ne l'était pas) et la face s'ajoute — ou se retire si elle y était. */
+  const toucherFace = (dent: string, face: string) => {
+    setSelection((prev) => (prev.includes(dent) ? prev : [...prev, dent]))
+    setFacesChoisies((prev) => (prev.includes(face) ? prev.filter((f) => f !== face) : [...prev, face]))
+  }
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Le dernier schéma pas encore envoyé. Si le praticien quitte l'écran dans
   // les 600 ms qui suivent un clic, il part quand même : l'enregistrement
@@ -230,11 +260,54 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
     })
   }
 
+  /** Pose sur le schéma ce qu'un acte vient de changer : l'état, sa nature
+   *  (à faire / réalisé), sa date et ses faces. Même enregistrement qu'un
+   *  clic — donc même journal, dent par dent. */
+  function appliquerChangements(changements: ChangementSchema[]) {
+    if (changements.length === 0) return
+    setTeeth((prev) => {
+      const next = { ...prev }
+      for (const c of changements) {
+        const cur = next[c.dent]
+        let etats = cur?.s ?? []
+        // Une extraction faite remplace l'extraction prévue.
+        if (c.etat === 'extraite') etats = etats.filter((e) => e !== 'a_extraire')
+        if (!etats.includes(c.etat)) etats = toggleToothState(etats, c.etat)
+        const garde = <T,>(o: Partial<Record<ToothStatus, T>> | undefined) =>
+          Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => etats.includes(k as ToothStatus))) as Partial<Record<ToothStatus, T>>
+        const p = { ...garde(cur?.p), [c.etat]: c.nature }
+        const d = { ...garde(cur?.d), [c.etat]: aujourdhui() }
+        const f = garde(cur?.f)
+        if (c.faces.length > 0) f[c.etat] = Array.from(new Set([...(f[c.etat] ?? []), ...c.faces]))
+        next[c.dent] = {
+          s: etats,
+          ...(cur?.n ? { n: cur.n } : {}),
+          ...(Object.keys(f).length > 0 ? { f } : {}),
+          p, d,
+        }
+      }
+      scheduleSave(next)
+      return next
+    })
+  }
+
+  // Un acte vient d'être enregistré : le schéma suit, la sélection se vide.
+  const dernierJeton = useRef<number | null>(null)
+  useEffect(() => {
+    if (!apresActe || !loaded || dernierJeton.current === apresActe.jeton) return
+    dernierJeton.current = apresActe.jeton
+    appliquerChangements(apresActe.changements)
+    setSelection([])
+    setFacesChoisies([])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apresActe, loaded])
+
   const Tooth = ({ n, grand = false }: { n: number; grand?: boolean }) => {
     const key = String(n)
     const info = teeth[key]
     const states = info?.s ?? []
     const isActive = active === key
+    const choisie = selection.includes(key)
     const haut = dentDuHaut(n)
     // Toutes les faces notées sur cette dent, sans doublon : « O » d'une carie
     // et « O » d'une obturation ne s'affichent qu'une fois.
@@ -286,7 +359,15 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
     return (
       <button
         type="button"
-        onClick={() => setActive(key)}
+        onClick={(e) => {
+          if (!modeActes) { setActive(key); return }
+          // Touché sur une FACE de la vue de dessus : la face compte aussi.
+          const face = (e.target as Element).closest?.('[data-face]')?.getAttribute('data-face')
+          if (face) toucherFace(key, face)
+          else basculerSelection(key)
+        }}
+        onDoubleClick={modeActes ? () => setActive(key) : undefined}
+        aria-pressed={modeActes ? choisie : undefined}
         title={`${states.length > 0 ? `Dent ${n} — ${statesWithFacesLabel(info)}${info?.n ? ` · ${info.n}` : ''}` : `Dent ${n}`}${
           dentsAvecImage?.has(key) ? ' · image au dossier' : ''}`}
         // ÉLASTIQUE : la dent occupe la place disponible, sans jamais dépasser
@@ -300,10 +381,17 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
         className={`flex-1 basis-0 min-w-[18px] ${grand
           ? (estDentDeLait(key) ? 'max-w-[40px]' : 'max-w-[64px]')
           : (estDentDeLait(key) ? 'max-w-[26px]' : 'max-w-[44px]')} flex flex-col items-center gap-[3px] rounded-lg px-[1px] py-1 transition hover:bg-gray-50 ${
-          isActive ? 'bg-primary-50 ring-2 ring-primary-500' : ''}`}
+          choisie ? 'bg-sky-50 ring-2 ring-sky-500' : isActive ? 'bg-primary-50 ring-2 ring-primary-500' : ''}`}
       >
+        {/* Le profil (couronne et racines), puis la face de mastication vue
+            de dessus, puis le numéro — dans l'ordre inverse pour le bas, pour
+            que les deux arcades se regardent comme dans la bouche. */}
         {!haut && numero}
+        {!haut && <DentDessus numero={n} etats={states} planifie={aPlanifie} faces={allToothFaces(info)}
+          selectionnable={modeActes} facesChoisies={choisie ? facesChoisies : undefined} />}
         <DessinDent numero={n} etats={states} planifie={aPlanifie} faces={allToothFaces(info)} />
+        {haut && <DentDessus numero={n} etats={states} planifie={aPlanifie} faces={allToothFaces(info)}
+          selectionnable={modeActes} facesChoisies={choisie ? facesChoisies : undefined} />}
         {haut && numero}
       </button>
     )
@@ -618,6 +706,57 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
     </div>
   )
 
+  // Les dents affichées de chaque arcade : ce que « Tout le haut » et « Tout
+  // le bas » sélectionnent (pas une dent de lait si on ne les montre pas).
+  const dentsDuHaut = [...(denture !== 'lait' ? FDI_UPPER : []), ...(denture !== 'definitive' ? FDI_UPPER_LAIT : [])].map(String)
+  const dentsDuBas = [...(denture !== 'definitive' ? FDI_LOWER_LAIT : []), ...(denture !== 'lait' ? FDI_LOWER : [])].map(String)
+  const toutesChoisies = (ids: string[]) => ids.length > 0 && ids.every((d) => selection.includes(d))
+  const choisirArcade = (ids: string[]) => setSelection((prev) => (
+    toutesChoisies(ids) ? prev.filter((d) => !ids.includes(d)) : Array.from(new Set([...prev, ...ids]))
+  ))
+
+  /** LA BARRE DES ACTES : ce qui est sélectionné, et ce qu'on en fait. */
+  const barreActes = modeActes && (
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-sky-100 bg-sky-50/60 px-2.5 py-2 mb-3">
+      <span className="text-[12px] text-sky-900 mr-1 min-w-0">
+        {selection.length === 0
+          ? 'Touchez les dents concernées, puis ajoutez l’acte.'
+          : <>Dent{selection.length > 1 ? 's' : ''} <strong>{[...selection].sort((a, b) => ordre.indexOf(Number(a)) - ordre.indexOf(Number(b))).join(', ')}</strong>
+            {facesChoisies.length > 0 && <> · face{facesChoisies.length > 1 ? 's' : ''} <strong>{facesChoisies.join(' ')}</strong></>}</>}
+      </span>
+      <button type="button" onClick={() => {
+        // La fenêtre de l'acte s'ouvre par-dessus le schéma : la vue agrandie
+        // se referme d'abord, sinon deux fenêtres se disputeraient le clavier.
+        setAgrandi(false); setActive(null)
+        onAjouterActe?.([...selection], [...facesChoisies])
+      }}
+        className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded-lg px-2.5 py-1.5">
+        <ClipboardPlus className="h-3.5 w-3.5" /> Ajouter un acte{selection.length > 0 ? ` (${selection.length})` : ''}
+      </button>
+      {selection.length === 1 && (
+        <button type="button" onClick={() => setActive(selection[0])}
+          className="inline-flex items-center gap-1 text-[12px] text-gray-700 bg-white border border-gray-200 hover:border-gray-300 rounded-lg px-2.5 py-1.5">
+          <PanelRightOpen className="h-3.5 w-3.5" /> Fiche de la dent {selection[0]}
+        </button>
+      )}
+      <span className="flex-1" />
+      <button type="button" onClick={() => choisirArcade(dentsDuHaut)} aria-pressed={toutesChoisies(dentsDuHaut)}
+        className={`text-[11px] rounded-lg px-2 py-1 border ${toutesChoisies(dentsDuHaut) ? 'bg-sky-500 text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>
+        Tout le haut
+      </button>
+      <button type="button" onClick={() => choisirArcade(dentsDuBas)} aria-pressed={toutesChoisies(dentsDuBas)}
+        className={`text-[11px] rounded-lg px-2 py-1 border ${toutesChoisies(dentsDuBas) ? 'bg-sky-500 text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>
+        Tout le bas
+      </button>
+      {selection.length > 0 && (
+        <button type="button" onClick={() => { setSelection([]); setFacesChoisies([]) }}
+          className="text-[11px] text-gray-500 hover:text-gray-800 px-1.5 py-1">
+          Désélectionner
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <div className="border-t border-gray-100 pt-4">
       <div className="flex items-center justify-between gap-2 mb-1">
@@ -632,7 +771,11 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
           <Maximize2 className="h-3.5 w-3.5" /> Agrandir
         </button>
       </div>
-      <p className="text-[11px] text-gray-400 mb-3">Touchez une dent pour ouvrir sa fiche : ce qu’elle porte, sur quelles faces, et où en est chaque soin.</p>
+      <p className="text-[11px] text-gray-400 mb-3">
+        {modeActes
+          ? 'Touchez une ou plusieurs dents pour leur ajouter un acte — ou directement une face sur la vue de dessus. La fiche d’une dent (ce qu’elle porte) s’ouvre d’un double-clic, ou par « Fiche de la dent » quand elle est seule sélectionnée.'
+          : 'Touchez une dent pour ouvrir sa fiche : ce qu’elle porte, sur quelles faces, et où en est chaque soin.'}
+      </p>
       {journalKo && (
         <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1.5 mb-3">
           Le schéma est enregistré, mais l&apos;historique de la dent n&apos;a pas pu être écrit. Signalez-le : c&apos;est cette trace datée qui fait foi en cas de contestation.
@@ -650,6 +793,7 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
         ))}
       </div>
 
+      {barreActes}
       {arcades(false)}
       {legende}
 
@@ -665,6 +809,7 @@ export default function DentalChart({ patientId, dentsAvecImage, appointmentId =
           <DialogHeader><DialogTitle>Schéma dentaire</DialogTitle></DialogHeader>
           <div className={`grid gap-5 ${active ? 'lg:grid-cols-[1fr_440px]' : ''}`}>
             <div>
+              {barreActes}
               {arcades(true)}
               {legende}
             </div>

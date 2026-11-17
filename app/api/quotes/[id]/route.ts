@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireQuoteDoctor, loadOwnedQuote, quoteNotFound, colonneValiditeAbsente, VALIDITE_NON_ACTIVEE } from '@/lib/devis-server'
 import { normaliserValidite } from '@/lib/devis'
+import { annulerActesDuDevis } from '@/lib/actes-patient-serveur'
 import type { QuoteStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -95,6 +96,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: VALIDITE_NON_ACTIVEE }, { status: 503 })
     }
     return NextResponse.json({ error: 'Modification impossible' }, { status: 500 })
+  }
+  // Devis abandonné : ce qui n'était pas fait dans la liste des actes ne le
+  // sera pas (les actes finis restent finis — ils ont été faits).
+  if (updates.status === 'annule' || updates.status === 'refuse') {
+    await annulerActesDuDevis(supabase, doctor.id, quote.id)
   }
   // Écriture relue : « enregistré » ne s'affiche que si la base contient bien
   // la mention envoyée — c'est elle qui sera imprimée sur le devis.

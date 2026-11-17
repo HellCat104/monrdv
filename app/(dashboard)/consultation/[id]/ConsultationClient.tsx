@@ -14,6 +14,8 @@ import { formatDateFr, formatAge, getNowInMaroc } from '@/lib/utils'
 import { NOTE_TEMPLATE, PSY_NOTE_TEMPLATE, type VitalDef } from '@/types'
 import DentalChart from '@/components/dashboard/DentalChart'
 import FeuilleSoinsCard, { type ActeSuggere } from '@/components/dashboard/FeuilleSoinsCard'
+import RegistreActes from '@/components/dentaire/RegistreActes'
+import type { ChangementSchema } from '@/lib/actes-patient'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import ConsommationStock, { type DonneesConsommation } from '@/components/dashboard/ConsommationStock'
 import LabWorksCard from '@/components/dashboard/LabWorksCard'
@@ -195,6 +197,11 @@ export default function ConsultationClient({
   // DENTISTE — les clichés du patient, remontés par le bloc d'imagerie pour
   // marquer les dents sur le schéma (un seul chargement, comme au dossier).
   const [imagerie, setImagerie] = useState<ImageDentaire[]>([])
+  // Dentiste : sélection sur le schéma → « Ajouter un acte » → la liste ; et
+  // retour de l'acte sur le schéma.
+  const [demandeActe, setDemandeActe] = useState<{ jeton: number; dents: string[]; faces: string[] } | null>(null)
+  const [apresActe, setApresActe] = useState<{ jeton: number; changements: ChangementSchema[] } | null>(null)
+  const [actesActifs, setActesActifs] = useState(true)
   // La vérification « Avant de terminer », et sa réponse : une fois vue et
   // confirmée, on ne la repose pas si le paiement ou le stock interrompent
   // la clôture.
@@ -910,8 +917,21 @@ export default function ConsultationClient({
                 panneauDent={(dent) => (
                   <PanneauContexteDent patientId={patient.id} dent={dent} seance={appointmentId} version={imagerie.length} />
                 )}
+                onAjouterActe={actesActifs ? (dents, faces) => setDemandeActe({ jeton: Date.now(), dents, faces }) : undefined}
+                apresActe={apresActe}
               />
             </div>
+          )}
+
+          {/* DENTISTE : la liste des actes, sous l'arcade. Un acte ajouté
+              pendant la séance est rattaché à ce rendez-vous et « fini » par
+              défaut ; on coche ensuite ceux qui partent sur la feuille. */}
+          {isDental && (
+            <RegistreActes patientId={patient.id} appointmentId={appointmentId}
+              mutuelle={mutuelle} inpe={doctorInpe}
+              demande={demandeActe} statutParDefaut="fini"
+              onSchema={(changements) => setApresActe({ jeton: Date.now(), changements })}
+              onIndisponible={() => setActesActifs(false)} />
           )}
 
           {/* DENTISTE : les clichés, sans quitter la séance. Un cliché déposé

@@ -92,6 +92,7 @@ interface Feuille {
 export default function FeuilleSoinsCard({
   patientId, appointmentId = null, dental = false, mutuelle = null, suggestions = [],
   images = null, inpe = null, declencheur = 0, enFenetre = false, onFerme, motif = null,
+  actesChoisis = null, onEtablie,
 }: {
   patientId: string
   appointmentId?: string | null
@@ -134,6 +135,13 @@ export default function FeuilleSoinsCard({
    *  feuille, les actes qu'il amène le plus souvent. Absent dans le dossier du
    *  patient, où la feuille ne se rattache à aucun rendez-vous. */
   motif?: string | null
+  /** LES ACTES COCHÉS DANS LA LISTE DES ACTES DU DENTISTE. Fournis, la feuille
+   *  s'ouvre avec exactement ces lignes — code, cotation, prix, date — et
+   *  rien d'autre : le praticien a déjà choisi ce qui part sur cette feuille. */
+  actesChoisis?: { id: string; dents: string[]; libelle: string; code: string | null; prix: number; date: string }[] | null
+  /** La feuille vient d'être établie (son identifiant). La liste des actes
+   *  s'en sert pour marquer les actes qu'elle emporte. */
+  onEtablie?: (feuilleId: string) => void
 }) {
   // L'organisme de CETTE feuille.
   //
@@ -358,6 +366,20 @@ export default function FeuilleSoinsCard({
     setOuvert(true)
     if (images === null) chargerCliches()
     if (lignes.length > 0 || candidats.length > 0) return
+
+    // Les actes cochés dans la liste : ce sont EUX, et eux seuls.
+    if (actesChoisis && actesChoisis.length > 0) {
+      const cat = await chargerCatalogueActes()
+      setLignes(actesChoisis.map((a) => {
+        const tooth = a.dents.join(' ')
+        // Le prix de l'acte est celui que le patient paie : il passe devant
+        // la mémoire des tarifs, que `ligneCotee` consulterait d'abord.
+        return a.code && cotationDe(a.code)
+          ? { ...ligneDuCode(a.code, a.date, cat, { tooth, montant: a.prix, label: a.libelle }), amount: String(a.prix || '') }
+          : { ...LIGNE_VIDE, tooth, code: a.code ?? '', label: a.libelle, amount: String(a.prix || ''), acteDate: a.date, lettreCle: dental ? 'D' : '' }
+      }))
+      return
+    }
     // Tout est relu ici, ensemble : le catalogue du cabinet (ses tarifs, ses
     // cotations), le plan de traitement, et le schéma dentaire de la séance.
     // La feuille s'ouvre avec ses lignes PRÊTES — code, lettre clé,
@@ -520,6 +542,7 @@ export default function FeuilleSoinsCard({
       // chargement de l'écran.
       chargerCatalogueActes()
       if (imprimer) window.open(`/feuille-soins/${data.id}`, '_blank', 'noopener')
+      if (data.id) onEtablie?.(String(data.id))
       onFerme?.()
     } finally {
       setBusy(false)
@@ -741,6 +764,10 @@ export default function FeuilleSoinsCard({
                     <select value={l.tooth} onChange={(e) => majLigne(i, 'tooth', e.target.value)}
                       className={`${inputCls} shrink-0 w-[68px] bg-white`} title="Dent (FDI)">
                       <option value="">Dent</option>
+                      {/* Un acte de bloc venu de la liste des actes porte
+                          plusieurs dents (« 41 31 ») : on les garde telles
+                          quelles plutôt que de les perdre. */}
+                      {l.tooth && !/^\d{2}$/.test(l.tooth) && <option value={l.tooth}>{l.tooth}</option>}
                       <optgroup label="Haut">{FDI_UPPER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
                       <optgroup label="Bas">{FDI_LOWER.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
                       <optgroup label="Lait — haut">{FDI_UPPER_LAIT.map((n) => <option key={n} value={String(n)}>{n}</option>)}</optgroup>
