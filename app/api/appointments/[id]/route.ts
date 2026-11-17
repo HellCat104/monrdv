@@ -22,9 +22,12 @@ export async function PATCH(
   // est une valeur VOULUE — « remettre sans poste » — et doit donc se
   // distinguer de « champ non envoyé ».
   const posteFourni = body.poste_id !== undefined
+  // Changer le MOTIF d'un rendez-vous déjà pris (agenda du dentiste,
+  // 17 nov. 2026). `null` = « sans motif ».
+  const motifFourni = body.consultation_type_id !== undefined
 
   if (!status && date === undefined && time === undefined
-      && doctor_notes === undefined && attendance === undefined && !posteFourni
+      && doctor_notes === undefined && attendance === undefined && !posteFourni && !motifFourni
       && amount_paid === undefined && amount_due === undefined && payment_method === undefined) {
     return NextResponse.json({ error: 'Paramètre manquant' }, { status: 400 })
   }
@@ -88,6 +91,23 @@ export async function PATCH(
   }
 
   const updates: Record<string, unknown> = {}
+
+  // Le motif est validé contre CEUX DU CABINET. Sa durée suit : un
+  // « Traitement canalaire » d'une heure ne tient pas dans la demi-heure
+  // d'une « Première consultation ». Si la nouvelle durée déborde sur le
+  // rendez-vous suivant, la contrainte de non-chevauchement le refuse (409).
+  if (motifFourni) {
+    if (body.consultation_type_id) {
+      const { data: motif } = await supabase
+        .from('consultation_types').select('id, duration_minutes')
+        .eq('id', String(body.consultation_type_id)).eq('doctor_id', doctor.id).eq('active', true).maybeSingle()
+      if (!motif) return NextResponse.json({ error: 'Motif introuvable' }, { status: 404 })
+      updates.consultation_type_id = motif.id
+      if (motif.duration_minutes) updates.duration_minutes = motif.duration_minutes
+    } else {
+      updates.consultation_type_id = null
+    }
+  }
   if (posteFourni)         updates.poste_id     = body.poste_id ? String(body.poste_id) : null
   if (status)              updates.status       = status
   if (date)                updates.date         = date
@@ -219,7 +239,9 @@ export async function PATCH(
     // avec un RDV existant — index unique ou contrainte d'exclusion.
     if (error?.code === '23505' || error?.code === '23P01') {
       return NextResponse.json({
-        error: updates.poste_id !== undefined && !isReschedule
+        error: updates.consultation_type_id !== undefined && !isReschedule
+          ? 'Avec la durée de ce motif, le rendez-vous chevaucherait le suivant. Déplacez-le d’abord.'
+          : updates.poste_id !== undefined && !isReschedule
           ? 'Ce poste est déjà occupé à cette heure'
           : 'Ce créneau chevauche un rendez-vous existant',
       }, { status: 409 })

@@ -29,6 +29,7 @@ import { PhotosCabinet } from '@/components/dashboard/PhotosCabinet'
 import ReglageBonLabo from '@/components/dashboard/ReglageBonLabo'
 import ReglagePostes from '@/components/dashboard/ReglagePostes'
 import ReglageLaboratoires from '@/components/dashboard/ReglageLaboratoires'
+import TarifsActes from '@/components/dentaire/TarifsActes'
 import { espaceOccupe, formatOctets, QUOTA_DEFAUT_MO } from '@/lib/stockage'
 
 // Intertitre de section.
@@ -1416,12 +1417,10 @@ export default function SettingsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-800">Catalogue dentaire</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {NOMBRE_MOTIFS_DENTAIRES} motifs tout prêts, rangés en {MOTIFS_DENTAIRES.length} familles,
-                        chacune avec sa couleur. Les traitements qui tiennent en plusieurs rendez-vous
-                        portent leur séance et ce qu&apos;on y fait — « Couronne — 2<sup>e</sup> séance : essayage »
-                        dit à l&apos;assistante que le travail doit être revenu du laboratoire ce jour-là.
-                        Aucun tarif n&apos;est posé : les honoraires sont les vôtres. Vous supprimez
-                        ensuite ce que vous ne pratiquez pas.
+                        {NOMBRE_MOTIFS_DENTAIRES} motifs courts, un par grande famille de soin, chacun
+                        dans sa couleur : l&apos;agenda se lit d&apos;un coup d&apos;œil. Le détail d&apos;une
+                        séance (essayage, 2<sup>e</sup> séance…) se note en remarque sur le rendez-vous.
+                        Aucun tarif n&apos;est posé : les honoraires sont les vôtres.
                       </p>
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
                         {MOTIFS_DENTAIRES.map((f) => {
@@ -1431,7 +1430,7 @@ export default function SettingsPage() {
                               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${
                                 c ? `${c.fond} ${c.texte}` : 'bg-gray-100 text-gray-600'}`}>
                               <span className={`h-1.5 w-1.5 rounded-full ${c?.point ?? 'bg-gray-400'}`} />
-                              {f.nom} · {f.motifs.length}
+                              {f.nom}
                             </span>
                           )
                         })}
@@ -1630,6 +1629,9 @@ export default function SettingsPage() {
             </p>
           </CardContent>
         </Card>
+
+        {/* Dentiste : la liste des actes de « Ajouter un acte », et SES prix. */}
+        {estDentiste && <TarifsActes />}
 
         <Card>
           <CardHeader>

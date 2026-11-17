@@ -99,7 +99,47 @@ export interface FamilleMotifs {
   motifs: MotifPret[]
 }
 
+// ── HUIT MOTIFS, HUIT COULEURS (17 nov. 2026) ──────────────────────────────
+//
+// Le premier catalogue posait une cinquantaine de motifs, une par séance de
+// chaque traitement. Dans la pratique, la liste était trop longue pour être
+// lue : on cherchait son motif au lieu de prendre le rendez-vous, et
+// l'agenda alignait des libellés que personne ne lisait. Les logiciels
+// dentaires installés dans les cabinets en proposent une demi-douzaine.
+//
+// D'où HUIT motifs, un par grande famille de soin, chacun dans SA couleur :
+// la couleur seule dit ce que la journée contient. Le détail d'une séance
+// (« essayage de la couronne ») s'écrit en remarque sur le rendez-vous, et
+// les actes faits se notent dans la liste des actes du patient.
+//
+// L'ancien catalogue est gardé plus bas (MOTIFS_ANCIENS) pour une seule
+// raison : les rendez-vous déjà pris sous ces libellés doivent garder leurs
+// actes suggérés et leurs rayons de stock.
 export const MOTIFS_DENTAIRES: FamilleMotifs[] = [
+  { nom: 'Première consultation', couleur: 'ardoise',
+    motifs: [{ nom: 'Première consultation', minutes: 30, enLigne: true, actes: ['C'] }] },
+  { nom: 'Contrôle et détartrage', couleur: 'menthe',
+    motifs: [{ nom: 'Contrôle et détartrage', minutes: 30, enLigne: true, actes: ['C', 'D708'] }] },
+  { nom: 'Urgence', couleur: 'rose',
+    motifs: [{ nom: 'Urgence', minutes: 20, enLigne: true, actes: ['C', 'D703'] }] },
+  { nom: 'Soins', couleur: 'turquoise',
+    motifs: [{ nom: 'Soins', minutes: 45, actes: ['D700', 'D701', 'D702'] }] },
+  { nom: 'Traitement canalaire', couleur: 'violet',
+    motifs: [{ nom: 'Traitement canalaire', minutes: 60, actes: ['D704', 'D705', 'D706'] }] },
+  { nom: 'Extraction et chirurgie', couleur: 'citron',
+    motifs: [{ nom: 'Extraction et chirurgie', minutes: 45, actes: ['D713', 'D714', 'D720'] }] },
+  // Plusieurs séances, dont la plupart ne se cotent pas (empreinte,
+  // essayage) : aucun acte proposé, la couronne se note quand elle est posée.
+  { nom: 'Prothèse et implant', couleur: 'indigo',
+    motifs: [{ nom: 'Prothèse et implant', minutes: 45, labo: true }] },
+  { nom: 'Orthodontie', couleur: 'fuchsia',
+    motifs: [{ nom: 'Orthodontie', minutes: 30 }] },
+]
+
+/** L'ancien catalogue (jusqu'au 17 nov. 2026), une cinquantaine de séances.
+ *  On ne l'INSTALLE plus ; il sert seulement à relire les rendez-vous pris
+ *  sous ces libellés (actes suggérés, famille, rayons de stock). */
+const MOTIFS_ANCIENS: FamilleMotifs[] = [
   {
     nom: 'Consultation et urgence',
     // Ardoise : le gris de la famille qui ne soigne pas encore. C'est la
@@ -276,21 +316,36 @@ export function motifsAInstaller(existants: { name: string }[]): MotifAInstaller
 export function grouperParFamille<T extends { categorie?: string | null }>(
   types: T[],
 ): [string, T[]][] {
+  // Les huit motifs d'aujourd'hui sont chacun LEUR propre famille : un titre
+  // « Soins » au-dessus du seul motif « Soins » ne range rien. Ils forment
+  // donc un seul groupe sans titre, en tête, dans l'ordre du catalogue.
+  const huit = new Map(MOTIFS_DENTAIRES.map((f, i) => [f.nom, i]))
+  const enTete = types
+    .filter((t) => huit.has((t.categorie ?? '').trim()))
+    .sort((a, b) => huit.get((a.categorie ?? '').trim())! - huit.get((b.categorie ?? '').trim())!)
   const par = new Map<string, T[]>()
   for (const t of types) {
     const famille = (t.categorie ?? '').trim()
+    if (huit.has(famille)) continue
     if (!par.has(famille)) par.set(famille, [])
     par.get(famille)!.push(t)
   }
-  return Array.from(par.keys())
+  const autres = Array.from(par.keys())
     .sort((a, b) => rangFamille(a) - rangFamille(b))
     .map((famille) => [famille, par.get(famille)!] as [string, T[]])
+  if (enTete.length === 0) return autres
+  // Des motifs sans famille à côté des huit : ils les suivent, sans titre.
+  const sansFamille = autres.find(([f]) => f === '')
+  return [['', [...enTete, ...(sansFamille?.[1] ?? [])]], ...autres.filter(([f]) => f !== '')]
 }
 
 function rangFamille(nom: string): number {
   if (!nom) return 999 // sans famille : en dernier
   const i = MOTIFS_DENTAIRES.findIndex((f) => f.nom === nom)
-  return i === -1 ? 900 : i // une famille inventée par le cabinet passe après le catalogue
+  if (i !== -1) return i
+  // Une famille de l'ancien catalogue, puis une famille inventée par le cabinet.
+  const j = MOTIFS_ANCIENS.findIndex((f) => f.nom === nom)
+  return j === -1 ? 900 : 100 + j
 }
 
 /** Ce motif peut-il être posé en rendez-vous PAR LE CABINET ?
@@ -327,29 +382,30 @@ export function posableAuCabinet(
  *  et « extraction dent de sagesse » doit tomber sur la sagesse avant
  *  l'extraction simple. */
 const INDICES: { mots: string[]; famille: string; actes: string[] }[] = [
-  { mots: ['sagesse'],                                   famille: 'Chirurgie et implantologie', actes: ['D720', 'D721'] },
-  { mots: ['extraction', 'avulsion'],                    famille: 'Chirurgie et implantologie', actes: ['D713', 'D714', 'D715'] },
-  { mots: ['implant', 'chirurgie', 'suture'],            famille: 'Chirurgie et implantologie', actes: [] },
-  { mots: ['detartrage'],                                famille: 'Prévention',                 actes: ['D708'] },
-  { mots: ['fluor', 'sillon'],                           famille: 'Prévention',                 actes: ['D712'] },
-  { mots: ['surfacage', 'parodont', 'gingiv'],           famille: 'Parodontologie',             actes: ['D742', 'D743'] },
-  { mots: ['devitalis', 'pulpectomie', 'endodon', 'canalaire', 'canal'], famille: 'Endodontie', actes: ['D704', 'D705', 'D706'] },
-  { mots: ['coiffage'],                                  famille: 'Endodontie',                 actes: ['D703'] },
-  { mots: ['composite', 'obturation', 'carie', 'plombage', 'amalgame'], famille: 'Soins conservateurs', actes: ['D700', 'D701', 'D702'] },
-  { mots: ['bridge'],                                    famille: 'Prothèse et esthétique',     actes: ['D757'] },
-  { mots: ['couronne'],                                  famille: 'Prothèse et esthétique',     actes: ['D754'] },
-  { mots: ['facette'],                                   famille: 'Prothèse et esthétique',     actes: [] },
-  { mots: ['rebasage'],                                  famille: 'Prothèse et esthétique',     actes: ['D778', 'D780'] },
-  { mots: ['prothese', 'empreinte', 'essayage', 'blanchiment', 'inlay', 'onlay'], famille: 'Prothèse et esthétique', actes: [] },
-  { mots: ['orthodon', 'odf', 'bague', 'appareil', 'contention'], famille: 'Orthodontie',       actes: ['D629'] },
-  { mots: ['urgence', 'douleur'],                        famille: 'Consultation et urgence',    actes: ['C', 'D703'] },
-  { mots: ['consultation', 'controle', 'bilan', 'visite'], famille: 'Consultation et urgence',  actes: ['C'] },
+  { mots: ['sagesse'],                                   famille: 'Extraction et chirurgie',    actes: ['D720', 'D721'] },
+  { mots: ['extraction', 'avulsion'],                    famille: 'Extraction et chirurgie',    actes: ['D713', 'D714', 'D715'] },
+  { mots: ['implant'],                                   famille: 'Prothèse et implant',        actes: [] },
+  { mots: ['chirurgie', 'suture'],                       famille: 'Extraction et chirurgie',    actes: [] },
+  { mots: ['detartrage'],                                famille: 'Contrôle et détartrage',     actes: ['D708'] },
+  { mots: ['fluor', 'sillon'],                           famille: 'Soins',                       actes: ['D712'] },
+  { mots: ['surfacage', 'parodont', 'gingiv'],           famille: 'Soins',                       actes: ['D742', 'D743'] },
+  { mots: ['devitalis', 'pulpectomie', 'endodon', 'canalaire', 'canal'], famille: 'Traitement canalaire', actes: ['D704', 'D705', 'D706'] },
+  { mots: ['coiffage'],                                  famille: 'Traitement canalaire',       actes: ['D703'] },
+  { mots: ['composite', 'obturation', 'carie', 'plombage', 'amalgame'], famille: 'Soins', actes: ['D700', 'D701', 'D702'] },
+  { mots: ['bridge'],                                    famille: 'Prothèse et implant',     actes: ['D757'] },
+  { mots: ['couronne'],                                  famille: 'Prothèse et implant',     actes: ['D754'] },
+  { mots: ['facette'],                                   famille: 'Prothèse et implant',     actes: [] },
+  { mots: ['rebasage'],                                  famille: 'Prothèse et implant',     actes: ['D778', 'D780'] },
+  { mots: ['prothese', 'empreinte', 'essayage', 'blanchiment', 'inlay', 'onlay'], famille: 'Prothèse et implant', actes: [] },
+  { mots: ['orthodon', 'odf', 'bague', 'appareil', 'contention'], famille: 'Orthodontie',                 actes: ['D629'] },
+  { mots: ['urgence', 'douleur'],                        famille: 'Urgence',                    actes: ['C', 'D703'] },
+  { mots: ['consultation', 'controle', 'bilan', 'visite'], famille: 'Première consultation',      actes: ['C'] },
 ]
 
 /** Le motif du catalogue qui porte ce libellé, avec sa famille. */
 function motifDuCatalogue(nom: string): { famille: FamilleMotifs; motif: MotifPret } | null {
   const c = cle(nom)
-  for (const famille of MOTIFS_DENTAIRES) {
+  for (const famille of [...MOTIFS_DENTAIRES, ...MOTIFS_ANCIENS]) {
     const motif = famille.motifs.find((m) => cle(m.nom) === c)
     if (motif) return { famille, motif }
   }
@@ -397,6 +453,15 @@ export function familleDuMotif(nomMotif: string | null | undefined): string | nu
 // seconde, le cabinet a dit ce qu'il utilise vraiment, et c'est cette liste-là
 // qui revient (migration v99).
 const RAYONS_PAR_FAMILLE: Record<string, string[]> = {
+  // Les huit motifs d'aujourd'hui…
+  'Première consultation':      ['Consommables'],
+  'Contrôle et détartrage':     ['Consommables', 'Hygiène et stérilisation'],
+  'Urgence':                    ['Anesthésie', 'Consommables'],
+  'Soins':                      ['Anesthésie', 'Restauration et composites', 'Consommables'],
+  'Traitement canalaire':       ['Anesthésie', 'Endodontie', 'Consommables'],
+  'Extraction et chirurgie':    ['Anesthésie', 'Chirurgie et sutures', 'Consommables'],
+  'Prothèse et implant':        ['Anesthésie', 'Empreintes et prothèse', 'Consommables'],
+  // … et les familles de l'ancien catalogue, pour les rendez-vous déjà pris.
   'Consultation et urgence':    ['Consommables'],
   'Prévention':                 ['Consommables', 'Hygiène et stérilisation'],
   'Soins conservateurs':        ['Anesthésie', 'Restauration et composites', 'Consommables'],

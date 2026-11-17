@@ -3,6 +3,7 @@
 import { getStaffContext } from '@/lib/cabinet'
 import AgendaClient from '@/components/cabinet/AgendaClient'
 import ConversationsAReprendre from '@/components/dashboard/ConversationsAReprendre'
+import { isDentalDoctor } from '@/lib/dental'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,8 @@ export default async function CabinetAgendaPage() {
   return (
     <div className="space-y-4">
       <ConversationsAReprendre />
-      <AgendaClient permissions={ctx.permissions} doctorName={ctx.doctor.name} />
+      <AgendaClient permissions={ctx.permissions} doctorName={ctx.doctor.name}
+        dentaire={isDentalDoctor([ctx.doctor.specialty])} />
     </div>
   )
 }

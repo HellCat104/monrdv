@@ -46,6 +46,12 @@ interface WeekGridProps {
    *  jusqu'ici impossibles ; maintenant qu'ils le sont, la grille doit dire
    *  LEQUEL est où — sinon deux colonnes côte à côte ne veulent rien dire. */
   postes?: Poste[]
+  /** COULEURS FRANCHES (agenda des dentistes, 17 nov. 2026). Chaque
+   *  rendez-vous est un bloc plein, dans la couleur de son motif, avec le
+   *  motif écrit dedans et une légende au-dessus de la grille : la semaine
+   *  se lit d'un coup d'œil, comme dans les logiciels dentaires installés.
+   *  Absent = l'apparence d'avant (fonds pâles) pour les autres spécialités. */
+  vif?: boolean
 }
 
 // ── LA HAUTEUR D'UNE HEURE ──────────────────────────────────────────────────
@@ -105,7 +111,7 @@ function repartir(items: { start: number; end: number }[]): { col: number; total
 export function WeekGrid({
   weekStart, appointments, blocks, workingHours,
   defaultDuration, onSelectDay, onSelectAppointment, onCreate, onMove, nbJours = 7,
-  postes = [],
+  postes = [], vif = false,
 }: WeekGridProps) {
   // Avec un seul poste, la grille reste celle d'avant : rien à distinguer.
   const montrerPoste = posteUtile(postes)
@@ -182,8 +188,26 @@ export function WeekGrid({
   const enTexte = (m: number) =>
     `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 
+  // La légende : les motifs présents sur la période affichée, dans leur
+  // couleur. Sans elle, une couleur franche se devine au lieu de se lire.
+  const legende = vif
+    ? Array.from(new Map(appointments
+        .filter((a) => a.status !== 'cancelled' && a.consultation_type?.name && couleurDuRdv(a))
+        .map((a) => [a.consultation_type!.name, couleurDuRdv(a)!] as const)).entries())
+        .sort((a, b) => a[0].localeCompare(b[0], 'fr'))
+    : []
+
   return (
     <div className="overflow-x-auto">
+      {legende.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          {legende.map(([nom, c]) => (
+            <span key={nom} className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ${c.plein}`}>{nom}</span>
+          ))}
+          <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-300">À confirmer</span>
+          <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium bg-gray-100 text-gray-500 line-through">Absent</span>
+        </div>
+      )}
       <div className={largeur}>
 
         {/* En-tête : les sept jours */}
@@ -382,12 +406,13 @@ export function WeekGrid({
                         setGlisse({ id: r.apt.id, dejaBouge: false })
                       }}
                       onClick={() => { if (!glisse) onSelectAppointment(r.apt) }}
-                      className={`absolute rounded px-1 pt-0.5 text-left overflow-hidden border-l-2 transition-shadow hover:shadow-md ${
+                      className={`absolute rounded px-1 pt-0.5 text-left overflow-hidden transition-shadow hover:shadow-md ${
+                        vif && teinte ? `${teinte.plein} shadow-sm` : 'border-l-2'} ${
                         onMove ? 'cursor-grab active:cursor-grabbing touch-none' : ''
                       } ${glisse?.id === r.apt.id ? 'opacity-40' : ''} ${
                         absent      ? 'bg-gray-100 border-gray-400 text-gray-500 line-through'
                         : enAttente ? 'bg-amber-50 border-amber-400 text-amber-900'
-                        : teinte    ? `${teinte.caseFond} ${teinte.bord} ${teinte.texte}`
+                        : teinte    ? (vif ? '' : `${teinte.caseFond} ${teinte.bord} ${teinte.texte}`)
                                     : 'bg-primary-50 border-primary-500 text-primary-900'
                       }`}
                       // UNE COULEUR, UN SENS. Le bloc prenait la couleur du
@@ -406,6 +431,21 @@ export function WeekGrid({
                         r.apt.consultation_type?.name ? ` · ${r.apt.consultation_type.name}` : ''}${
                         montrerPoste && nomPoste(postes, r.apt.poste_id) ? ` · ${nomPoste(postes, r.apt.poste_id)}` : ''}`}
                     >
+                      {vif ? (
+                        <>
+                          {/* Couleurs franches : l'heure, une coche si le
+                              patient est venu, le nom ; puis le MOTIF. */}
+                          <div className="text-[10.5px] font-bold leading-tight truncate">
+                            {r.apt.time.substring(0, 5)}{r.apt.attendance === 'present' ? ' ✓' : ''} {r.apt.patient?.first_name ?? 'Patient'} {r.apt.patient?.last_name ?? ''}
+                          </div>
+                          {(r.end - r.start) >= 30 && r.apt.consultation_type?.name && (
+                            <div className="text-[10px] leading-tight truncate font-medium opacity-90">{r.apt.consultation_type.name}</div>
+                          )}
+                          {montrerPoste && (r.end - r.start) >= 45 && nomPoste(postes, r.apt.poste_id) && (
+                            <div className="text-[10px] leading-tight truncate opacity-80">{nomPoste(postes, r.apt.poste_id)}</div>
+                          )}
+                        </>
+                      ) : (<>
                       <div className="text-[10px] font-semibold leading-tight truncate">
                         {r.apt.time.substring(0, 5)} {r.apt.patient?.first_name ?? 'Patient'}
                         {/* Un rendez-vous court n'a qu'une ligne : le fauteuil y tient. */}
@@ -424,6 +464,7 @@ export function WeekGrid({
                           {nomPoste(postes, r.apt.poste_id)}
                         </div>
                       )}
+                      </>)}
                     </button>
                   )
                 })}

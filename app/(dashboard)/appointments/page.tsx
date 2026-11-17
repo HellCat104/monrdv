@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isDentalDoctor } from '@/lib/dental'
@@ -11,6 +11,8 @@ import { WeekGrid } from '@/components/dashboard/WeekGrid'
 import { MonthGrid } from '@/components/dashboard/MonthGrid'
 import { posteUtile, posteActifs, nomPoste, type Poste } from '@/lib/postes'
 import { couleurDuRdv } from '@/lib/motifs-couleurs'
+import { posableAuCabinet } from '@/lib/motifs-dentaires'
+import ChoixMotif, { type MotifChoisissable } from '@/components/shared/ChoixMotif'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -120,6 +122,44 @@ export default function AppointmentsPage() {
     const erreur = await deplacerRdv(apt, jour, heure)
     if (erreur) { alert(erreur); return }
     await loadAppointments(true)
+  }
+
+  // DENTISTE : les motifs du cabinet, pour changer celui d'un rendez-vous
+  // depuis sa fenêtre. Chargés une fois ; huit motifs, une requête légère.
+  const estDentiste = !!doctor && isDentalDoctor([doctor.specialty, ...((doctor.specialties as string[] | null) ?? [])])
+  const [motifs, setMotifs] = useState<MotifChoisissable[]>([])
+  // Un dentiste ouvre son agenda sur la SEMAINE en couleurs, comme dans les
+  // logiciels dentaires : la journée en liste reste à un clic. Une seule fois,
+  // à l'arrivée — on ne lui reprend pas la vue qu'il a choisie ensuite.
+  const semaineOuverte = useRef(false)
+  useEffect(() => {
+    if (estDentiste && !semaineOuverte.current) { semaineOuverte.current = true; setViewMode('week') }
+  }, [estDentiste])
+  useEffect(() => {
+    if (!estDentiste || !doctor) return
+    supabase.from('consultation_types').select('*').eq('doctor_id', doctor.id).eq('active', true).order('name')
+      .then(({ data }) => setMotifs(((data ?? []) as (MotifChoisissable & { acte?: boolean | null; rdv?: boolean | null })[]).filter(posableAuCabinet)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estDentiste, doctor?.id])
+
+  async function changerMotif(apt: Appointment, typeId: string): Promise<string | null> {
+    const res = await fetch(`/api/appointments/${apt.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consultation_type_id: typeId }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      return d.error || 'Le motif n’a pas pu être changé.'
+    }
+    const m = motifs.find((x) => x.id === typeId)
+    // La fenêtre montre aussitôt le nouveau motif ; la grille se relit.
+    setActionsFor((a) => (a && a.id === apt.id ? {
+      ...a, consultation_type_id: typeId,
+      duration_minutes: m?.duration_minutes ?? a.duration_minutes,
+      consultation_type: { ...(a.consultation_type ?? {}), ...(m ?? {}) } as Appointment['consultation_type'],
+    } : a))
+    await loadAppointments(true)
+    return null
   }
 
   // Chaque rendez-vous ouvert repart de SA date et de SON heure.
@@ -712,6 +752,7 @@ export default function AppointmentsPage() {
               onSelectAppointment={(apt) => setActionsFor(apt)}
               onCreate={(jour, heure) => { setCreneauVise({ date: jour, heure }); setAddOpen(true) }}
               onMove={(apt, jour, heure) => deplacerDepuisCalendrier(apt, jour, heure)}
+              vif={estDentiste}
             />
           ) : (
             <AppointmentList
@@ -802,6 +843,12 @@ export default function AppointmentsPage() {
                   )}
                 </div>
               </div>
+
+              {/* DENTISTE : changer le motif en un geste. */}
+              {estDentiste && motifs.length > 0 && (
+                <ChoixMotif motifs={motifs} actuel={actionsFor.consultation_type_id}
+                  onChoisir={(id) => changerMotif(actionsFor, id)} />
+              )}
 
               {/* Changer le jour ou l'heure. */}
               {!modifOuverte ? (

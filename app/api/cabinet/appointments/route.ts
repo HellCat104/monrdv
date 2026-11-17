@@ -589,6 +589,21 @@ export async function PATCH(req: NextRequest) {
     patch.status = 'cancelled'
   }
 
+  // Changer le motif (agenda du dentiste, 17 nov. 2026). Même règle que la
+  // route médecin : un motif DU CABINET, et sa durée suit.
+  if ('consultation_type_id' in body) {
+    if (!ctx.permissions.manage_appointments) return NextResponse.json({ error: 'Permission manquante (gestion des RDV)' }, { status: 403 })
+    if (body.consultation_type_id) {
+      const { data: motif } = await admin.from('consultation_types').select('id, duration_minutes')
+        .eq('id', String(body.consultation_type_id)).eq('doctor_id', ctx.doctor.id).eq('active', true).maybeSingle()
+      if (!motif) return NextResponse.json({ error: 'Motif introuvable' }, { status: 404 })
+      patch.consultation_type_id = motif.id
+      if (motif.duration_minutes) patch.duration_minutes = motif.duration_minutes
+    } else {
+      patch.consultation_type_id = null
+    }
+  }
+
   // Déplacement (nouvelle date / heure)
   if ('date' in body || 'time' in body) {
     if (!ctx.permissions.manage_appointments) return NextResponse.json({ error: 'Permission manquante (gestion des RDV)' }, { status: 403 })
@@ -606,7 +621,11 @@ export async function PATCH(req: NextRequest) {
     .update(patch).eq('id', id).eq('doctor_id', ctx.doctor.id).select('id, date, time, status, attendance, queue_status, urgent, amount_paid, amount_due, payment_method, quote_id, notes, duration_minutes, consultation_type_id, cancel_token, consultation_type:consultation_types(name, couleur), patient:patients(first_name, last_name, phone)').single()
   if (error) {
     if (error.code === '23505' || error.code === '23P01') {
-      return NextResponse.json({ error: 'Ce créneau chevauche un rendez-vous existant.' }, { status: 409 })
+      return NextResponse.json({
+        error: 'consultation_type_id' in patch && !('date' in body || 'time' in body)
+          ? 'Avec la durée de ce motif, le rendez-vous chevaucherait le suivant. Déplacez-le d’abord.'
+          : 'Ce créneau chevauche un rendez-vous existant.',
+      }, { status: 409 })
     }
     return NextResponse.json({ error: 'Échec de la mise à jour' }, { status: 500 })
   }

@@ -33,6 +33,7 @@ import { WalkInDialog, type PatientLite } from '@/components/dashboard/WalkInDia
 import { FileText, UserPlus } from 'lucide-react'
 import { couleurDuRdv } from '@/lib/motifs-couleurs'
 import { grouperParFamille } from '@/lib/motifs-dentaires'
+import ChoixMotif from '@/components/shared/ChoixMotif'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Apt = Record<string, any>
@@ -49,7 +50,13 @@ const NO_TYPE = '__none__'
 // « Sans poste précisé » est une valeur, pas une absence de choix (v89).
 const NO_POSTE = '__aucun__'
 
-export default function AgendaClient({ permissions, doctorName = 'Cabinet médical' }: { permissions: StaffPermissions; doctorName?: string }) {
+export default function AgendaClient({ permissions, doctorName = 'Cabinet médical', dentaire = false }: {
+  permissions: StaffPermissions
+  doctorName?: string
+  /** Cabinet dentaire : couleurs franches dans la grille, et le motif d'un
+   *  rendez-vous se change depuis sa fenêtre (17 nov. 2026). */
+  dentaire?: boolean
+}) {
   const [date, setDate] = useState(() => format(getNowInMaroc(), 'yyyy-MM-dd'))
   const aujourdhui = format(getNowInMaroc(), 'yyyy-MM-dd')
   // Fil de messages ouvert sur un rendez-vous (v77)
@@ -569,6 +576,7 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
               onMove={permissions.manage_appointments ? (a, jour, heure) => {
                 deplacerDepuisCalendrier(a as unknown as Apt, jour, heure)
               } : undefined}
+              vif={dentaire}
             />
           </div>
         )
@@ -862,6 +870,23 @@ export default function AgendaClient({ permissions, doctorName = 'Cabinet médic
                 {format(new Date(actionsFor.date + 'T12:00:00'), 'EEEE d MMMM', { locale: fr })} à {formatTime(actionsFor.time)}
                 {actionsFor.consultation_type?.name ? ` · ${actionsFor.consultation_type.name}` : ''}
               </p>
+              {/* DENTISTE : changer le motif en un geste (la durée suit). */}
+              {dentaire && permissions.manage_appointments && types.length > 0 && (
+                <ChoixMotif motifs={types} actuel={actionsFor.consultation_type_id}
+                  onChoisir={async (id) => {
+                    const res = await fetch('/api/cabinet/appointments', {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ id: actionsFor.id, consultation_type_id: id }),
+                    })
+                    const d = await res.json().catch(() => ({}))
+                    if (!res.ok) return d.error || 'Le motif n’a pas pu être changé.'
+                    const t = types.find((x) => x.id === id)
+                    setActionsFor((a) => (a ? { ...a, consultation_type_id: id, duration_minutes: t?.duration_minutes ?? a.duration_minutes,
+                      consultation_type: { ...(a.consultation_type ?? {}), name: t?.name, couleur: t?.couleur } } : a))
+                    await rechargerCalendrier()
+                    return null
+                  }} />
+              )}
               <Button variant="outline" className="w-full justify-start"
                 onClick={() => { const a = actionsFor; setActionsFor(null); setDate(a.date); setMode('liste') }}>
                 Voir dans la liste du jour
